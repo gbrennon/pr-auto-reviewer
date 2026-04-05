@@ -100,9 +100,6 @@ Edit your `.env` file:
 # Required: Your Codeberg API token
 CODEBERG_TOKEN=your_token_here
 
-# Optional: GitHub support (for GitHub repos)
-GITHUB_PAT=your_github_token
-
 # Optional: Ollama settings
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=code-review
@@ -168,19 +165,46 @@ OLLAMA_MODEL=qwen2.5-coder:14b bash scripts/watch-prs.sh
 
 ## Project Structure
 
+See `docs/structure.md` for a detailed breakdown of files and directories.
+
 ```
 pr-auto-reviewer/
 ├── scripts/
 │   ├── bootstrap.sh          # Entry point - starts everything
 │   ├── watch-prs.sh          # Main daemon that watches and reviews
 │   ├── reload.sh             # Trigger config reload
-│   ├── autostart/            # Systemd-like service manager
+│   ├── autostart/            # Service manager
 │   └── lib/                  # Shared helper scripts
 ├── docs/
+│   ├── structure.md          # File structure explanation
+│   ├── features.md           # Implemented and planned features
 │   └── permissions.md        # Token scope documentation
 ├── .env.example              # Configuration template
 └── runner-data/              # State storage (PR reviews, PIDs)
 ```
+
+## Current Status
+
+### Implemented
+
+- **Codeberg PR watching** - Watches all your repos or specific ones
+- **AI code review** - Uses local Ollama to review PRs
+- **Review posting** - Posts comments and formal reviews to Codeberg
+- **Draft PR skipping** - Skips draft PRs automatically
+- **Duplicate prevention** - Won't re-review unchanged PRs
+- **Hot reload** - Config changes detected without restart
+- **Autostart system** - Background service management
+- **Single cycle mode** - Run once for testing
+
+### Not Yet Implemented
+
+- **GitHub support** - Not tested, API not implemented
+- **Webhook mode** - Currently polling only (60s interval)
+- **Per-repo config** - Same settings for all repos
+- **Docker container** - Not available yet
+- **Systemd units** - Not available yet
+
+See `docs/features.md` for the complete feature list.
 
 ## Troubleshooting
 
