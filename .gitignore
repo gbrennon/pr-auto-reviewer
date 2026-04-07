@@ -1,1 +1,7 @@
 .env
+logs/
+runner-data/
+*.log
+*.lock
+*.pid
+*.service
