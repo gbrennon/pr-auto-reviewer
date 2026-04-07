@@ -88,10 +88,12 @@ start_project() {
     log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
   fi
 
-  log_info "Stopping any stale processes..."
-  bash "$REPO_ROOT/scripts/autostart/autostart.sh" --stop
+  if bash "$REPO_ROOT/scripts/autostart/autostart.sh" --status 2>/dev/null | grep -q "watch-prs.*running"; then
+    log_info "watch-prs is already running, skipping start"
+    return 0
+  fi
 
-  log_info "Starting services..."
+  log_info "watch-prs not running, starting..."
   bash "$REPO_ROOT/scripts/autostart/autostart.sh"
 }
 
