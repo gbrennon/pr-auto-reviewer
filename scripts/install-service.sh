@@ -12,11 +12,25 @@ SERVICE_NAME="pr-ai-auto-reviewer.service"
 
 install_service() {
     echo "Installing $SERVICE_NAME to $SYSTEMD_DIR/"
-
     mkdir -p "$SYSTEMD_DIR"
 
-    sed "s|%h|${HOME}|g; s|%u|${USER}|g" \
-        "$REPO_ROOT/$SERVICE_FILE" > "$SYSTEMD_DIR/$SERVICE_FILE"
+    cat > "$SYSTEMD_DIR/$SERVICE_FILE" <<EOF
+[Unit]
+Description=PR AI Auto-Reviewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${USER}
+WorkingDirectory=${REPO_ROOT}
+ExecStart=/usr/bin/bash ${REPO_ROOT}/scripts/watch-prs.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
 
     echo "Reloading systemd user daemon..."
     systemctl --user daemon-reload
@@ -34,7 +48,7 @@ install_service() {
 
 main() {
     if [[ -f "$SYSTEMD_DIR/$SERVICE_FILE" ]]; then
-        echo "Service already installed, reinstalling..."
+        echo "Service already installed, updating..."
         systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
         install_service
     else
