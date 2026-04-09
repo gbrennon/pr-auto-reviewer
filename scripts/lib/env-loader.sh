@@ -39,8 +39,6 @@ get_env() {
 init_env() {
   load_env
 
-  export CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
-  export GITHUB_PAT="${GITHUB_PAT:-}"
   export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
   export OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
   export POLL_INTERVAL="${POLL_INTERVAL:-60}"
