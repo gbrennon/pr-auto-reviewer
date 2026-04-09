@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build review comment body from Ollama JSON response."""
 
-import sys
 import json
 import os
 import re
@@ -14,13 +13,11 @@ def extract_json(text):
 
     text = text.strip()
 
-    # Try direct parse first
     try:
         return json.loads(text)
     except:
         pass
 
-    # Try to find JSON in markdown code blocks
     match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if match:
         try:
@@ -28,7 +25,6 @@ def extract_json(text):
         except:
             pass
 
-    # Try to find any {...} block
     match = re.search(r'\{[^{}]*"[^"]+":\s*[^{}]*\}', text, re.DOTALL)
     if match:
         try:
@@ -59,7 +55,6 @@ def build_review_payload(review, verdict, model):
         type_tag = f"[{typ}]" if typ else ""
         body = f"[{sev}]{type_tag} {desc}"
 
-        # find matching suggestion for this file/line
         for s in suggestions:
             if s.get("file") == path and s.get("line") == line:
                 body += f"\n\n**Suggestion:** {s.get('description', '')}"
@@ -110,11 +105,9 @@ def determine_verdict(review):
 def main():
     review_json = os.environ.get("REVIEW_JSON", "")
 
-    # Try to extract and parse JSON from the response
     review = extract_json(review_json)
 
     if review is None:
-        # If no valid JSON found, treat the whole thing as summary
         review = {"summary": review_json, "issues": [], "suggestions": [], "praise": []}
 
     issues = review.get("issues", [])
@@ -123,10 +116,8 @@ def main():
     summary = review.get("summary", "")
     model = os.environ.get("OLLAMA_MODEL", "ollama")
 
-    # Determine verdict
     verdict = determine_verdict(review)
 
-    # Determine text for verdict
     if verdict == "approved":
         verdict_text = "Approved"
     else:
@@ -173,7 +164,6 @@ def main():
 
     body += f"\n---\n*Review by {model} via local Forgejo*"
 
-    # Print verdict to stdout for capture by caller
     print(verdict)
     print(body)
 
