@@ -1,175 +1,154 @@
 #!/usr/bin/env bash
-# watch-prs.sh — Daemon that watches Codeberg repos for open PRs and posts AI reviews.
-#
-# Flow:
-#   1. Poll configured Codeberg repos for open PRs
-#   2. Check SHA against state file
-#   3. If new/updated: fetch diff, send to Ollama, post review
-#
-# Usage:
-#   ./watch-prs.sh                    # daemon mode, 60s interval
-#   ./watch-prs.sh -i 30             # custom interval
-#   ./watch-prs.sh -r owner/repo     # watch specific repo
-#   ./watch-prs.sh --once            # single cycle
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Lock
 WATCHER_LOCK_FILE="${REPO_ROOT}/watcher-prs.lock"
 WATCHER_PID_FILE="${REPO_ROOT}/watcher-prs.pid"
+
 exec 9>"$WATCHER_LOCK_FILE"
 if ! flock -n 9; then
   echo "watch-prs.sh is already running. Exiting." >&2
   exit 1
 fi
-echo $$ > "$WATCHER_PID_FILE"
 
+echo $$ > "$WATCHER_PID_FILE"
 trap 'rm -f "$WATCHER_PID_FILE"' EXIT INT TERM
 
-# Hot-reload support
 source "${SCRIPT_DIR}/lib/hot-reload.sh"
-init_hot_reload "$REPO_ROOT"
 
-# Load env
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 
-# Config
-CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
+FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
 GITHUB_PAT="${GITHUB_PAT:-}"
+
+if [[ "${FORGEJO_MODE:-codeberg}" == "local" ]]; then
+  FORGEJO_HOST="${FORGEJO_HOST:-http://forgejo.local}"
+else
+  FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
+fi
+
+API_BASE="${FORGEJO_HOST}/api/v1"
+DEBUG="${DEBUG:-0}"
 INTERVAL="${POLL_INTERVAL:-60}"
 REPOS_FILTER=""
 RUN_ONCE=false
 STATE_FILE="${REPO_ROOT}/runner-data/pr-reviews.json"
 
-# Ollama settings
 source "${SCRIPT_DIR}/lib/ollama-client.sh"
+
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
 
-usage() {
-  cat <<EOF
-Usage: $(basename "$0") [options]
-
-Watch Codeberg repos for open PRs and post AI reviews.
-
-Options:
-  -i <seconds>      Poll interval (default: ${INTERVAL})
-  -r <repo>         Watch specific repo (e.g., gbrennon/BitPill)
-  --once            Single cycle
-  -h, --help        This help
-
-Environment:
-  POLL_INTERVAL     Interval in seconds (default: 60)
-  CODEBERG_TOKEN   API token for Codeberg (required for private repos)
-  OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
-  OLLAMA_MODEL      Model to use (default: code-review)
-
-State:
-  ${STATE_FILE}
-EOF
-  exit 0
-}
+init_hot_reload "$REPO_ROOT"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i) INTERVAL="$2"; shift 2 ;;
     -r) REPOS_FILTER="$2"; shift 2 ;;
     --once) RUN_ONCE=true; shift ;;
-    -h|--help) usage ;;
-    *) echo "Unknown: $1" >&2; usage ;;
+    *) echo "Unknown: $1" >&2; exit 1 ;;
   esac
 done
 
-init_state() {
-  mkdir -p "$(dirname "$STATE_FILE")"
-  if [[ ! -f "$STATE_FILE" ]]; then
-    echo '{"reviewed":{}}' > "$STATE_FILE"
+debug_log() {
+  if [[ "$DEBUG" == "1" ]]; then
+    echo "[DEBUG] $(date '+%H:%M:%S') $1" >&2
   fi
 }
 
+init_state() {
+  mkdir -p "$(dirname "$STATE_FILE")"
+  [[ -f "$STATE_FILE" ]] || echo '{"reviewed":{}}' > "$STATE_FILE"
+}
+
 load_state() {
-  if [[ -f "$STATE_FILE" ]]; then
-    cat "$STATE_FILE"
-  else
-    echo '{"reviewed":{}}'
-  fi
+  cat "$STATE_FILE" 2>/dev/null || echo '{"reviewed":{}}'
 }
 
 is_reviewed() {
   local owner_repo="$1"
   local pr_number="$2"
   local sha="$3"
-  
+
   local state
   state=$(load_state)
-  
-  python3 -c "
-import sys, json
-try:
-    d = json.loads('${state}')
-except:
-    print('false')
-    sys.exit(0)
 
-key = '${owner_repo}/${pr_number}'
-entry = d.get('reviewed', {}).get(key, {})
-if entry.get('sha') == '${sha}':
-    print('true')
-else:
-    print('false')
-" 2>/dev/null || echo "false"
+  python3 - <<EOF
+import json
+try:
+    d = json.loads('''$state''')
+    key = "$owner_repo/$pr_number"
+    print("true" if d.get("reviewed", {}).get(key, {}).get("sha") == "$sha" else "false")
+except:
+    print("false")
+EOF
 }
 
 get_repos() {
-  if [[ -n "$REPOS_FILTER" ]]; then
-    echo "$REPOS_FILTER"
+  [[ -n "$REPOS_FILTER" ]] && { echo "$REPOS_FILTER"; return; }
+
+  local response
+  response=$(curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/user/repos?limit=50" 2>&1)
+
+  if [[ -z "$response" ]]; then
+    echo "  -> empty response from API" >&2
     return
   fi
-  
-  if [[ -z "$CODEBERG_TOKEN" ]]; then
-    echo "ERROR: CODEBERG_TOKEN required for listing repos" >&2
-    return
-  fi
-  
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
-    "https://codeberg.org/api/v1/user/repos?limit=50" \
-    | python3 -c "
+
+  printf '%s' "$response" | python3 -c '
 import sys, json
-data = json.load(sys.stdin)
-for r in data:
-    print(r['full_name'])
-" 2>/dev/null || true
+try:
+    data = json.load(sys.stdin)
+    for r in data:
+        print(r["full_name"])
+except Exception as e:
+    sys.stderr.write(f"Error: {e}\n")
+' || true
 }
 
 get_open_prs() {
   local repo="$1"
-  
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
-    "https://codeberg.org/api/v1/repos/${repo}/pulls?state=open&limit=20" \
-    | python3 -c "
+
+  local response
+  response=$(curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/repos/${repo}/pulls?state=open&limit=20" 2>/dev/null) || true
+
+  if [[ -z "$response" ]]; then
+    return
+  fi
+
+  python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 prs = data if isinstance(data, list) else data.get('data', [])
 for pr in prs:
-    if pr.get('draft', False):
-        continue
-    num = pr.get('number', '')
-    title = pr.get('title', '')
-    sha = pr.get('head', {}).get('sha', '')
-    if num and sha:
-        print(f'{num}|{sha}|{title}')
-" 2>/dev/null || true
+    if pr.get('draft'): continue
+    print(f\"{pr['number']}|{pr['head']['sha']}|{pr['title']}\")
+" <<< "$response" || true
 }
 
 get_diff() {
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/repos/$1/pulls/$2.diff" || true
+}
+
+post_formal_review() {
   local repo="$1"
   local pr_number="$2"
-  
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
-    "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
+  local event="$3"
+  local escaped_body="$4"
+
+  local body
+  body=$(echo "$escaped_body" | python3 -c 'import sys,json; print(json.loads(sys.stdin.read()))')
+
+  "${REPO_ROOT}/post-formal-review.sh" \
+    "$repo" \
+    "$pr_number" \
+    "$event" \
+    "$body"
 }
 
 process_pr() {
@@ -177,197 +156,105 @@ process_pr() {
   local pr_number="$2"
   local pr_sha="$3"
   local pr_title="$4"
-  
+
   echo "  PR #${pr_number}: ${pr_title:0:50}..."
-  
+
   if [[ "$(is_reviewed "$repo" "$pr_number" "$pr_sha")" == "true" ]]; then
-    echo "    -> already reviewed (SHA: ${pr_sha:0:7})"
-    return 0
+    echo "    -> already reviewed"
+    return
   fi
-  
-  echo "    -> NEW/UPDATED, analyzing..."
-  
-  if ! ollama_available; then
-    echo "    -> ERROR: Ollama not available"
-    return 1
-  fi
-  
+
   local diff
   diff=$(get_diff "$repo" "$pr_number")
-  
-  if [[ -z "$diff" ]] || [[ ${#diff} -lt 50 ]]; then
-    echo "    -> SKIP: No diff available"
-    return 0
-  fi
-  
-  echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
-  
-  local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
-  
-  local ollama_host
-  ollama_host=$(resolve_ollama_host)
-  
-  local response
-  response=$(python3 -c "
-import json
-import os
-import sys
+  debug_log "Fetched diff: ${#diff} bytes"
 
-data = {
-    'model': os.environ.get('OLLAMA_MODEL', 'code-review'),
-    'prompt': sys.stdin.read(),
-    'stream': False
-}
-print(json.dumps(data))
-" <<< "$review_prompt" | curl -sf -X POST "${ollama_host}/api/generate" \
+  [[ -z "$diff" || ${#diff} -lt 50 ]] && {
+    echo "    -> no diff"
+    return
+  }
+
+  local prompt
+  prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
+  debug_log "Built prompt: ${#prompt} chars"
+
+  local payload
+  payload=$(python3 -c "import json,sys; print(json.dumps({'model': '${OLLAMA_MODEL}', 'prompt': '''$prompt''', 'stream': False}))")
+  debug_log "Ollama payload: model=${OLLAMA_MODEL}, prompt_len=${#prompt}"
+
+  local start_time
+  start_time=$(date +%s)
+
+  local response
+  response=$(curl -sf -X POST "$(resolve_ollama_host)/api/generate" \
     -H "Content-Type: application/json" \
-    -d @- 2>&1) || {
-      echo "    -> ERROR: Ollama request failed"
-      return 1
-    }
-  
+    -d "$payload" 2>&1) || {
+    echo "    -> ollama failed (response: $response)" >&2
+    return
+  }
+
+  local end_time
+  end_time=$(date +%s)
+  debug_log "Ollama response: ${#response} bytes in $((end_time - start_time))s"
+
   local review
-  review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
-  
-  if [[ -z "$review" ]]; then
-    echo "    -> ERROR: No review from Ollama"
-    return 1
-  fi
-  
-  echo "    -> Posting review to Codeberg..."
-  
-  local api_token="${CODEBERG_TOKEN:-${GITHUB_PAT}}"
-  if [[ -z "$api_token" ]]; then
-    echo "    -> ERROR: No API token"
-    return 1
-  fi
-  
-  local verdict comment_body build_output
-  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build-comment.py")
+  review=$(echo "$response" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("response",""))')
+  debug_log "Extracted review: ${#review} chars"
+
+  [[ -z "$review" ]] && { echo "    -> empty review"; return; }
+
+  local build_output verdict body
+  build_output=$(REVIEW_JSON="$review" python3 "${SCRIPT_DIR}/lib/build-comment.py")
   verdict=$(echo "$build_output" | head -1)
-  comment_body=$(echo "$build_output" | tail -n +2)
-  
-  echo "    -> Verdict: ${verdict}"
-  
-    # Post comment
-    local escaped_body
-    escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-    
-    local post_result
-    post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
-      -H "Authorization: token $api_token" \
-      -H "Content-Type: application/json" \
-      -d "{\"body\": ${escaped_body}}" 2>&1) || true
-    
-    if [[ -n "$post_result" ]]; then
-      echo "    -> Review comment posted!"
-      
-      # Try to submit formal review (only works for others' PRs, not your own)
-      # Codeberg rejects approving/requesting changes on your own PRs
-      local review_result
-      review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
-        -H "Authorization: token $api_token" \
-        -H "Content-Type: application/json" \
-        -d "{\"event\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
-      
-      local review_id
-      review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
-      
-      if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
-        echo "    -> Review (${verdict}) submitted!"
-      else
-        # Check if it's a "reject your own pull" error
-        if echo "$review_result" | grep -q "reject your own pull"; then
-          echo "    -> Note: Cannot approve own PRs via API (Codeberg limitation)"
-        fi
-      fi
-      
-      # Update state
-      local state
-      state=$(load_state)
-      STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
-import os, json
-state = json.loads(os.environ.get('STATE_JSON', '{}'))
-repo = os.environ.get('REPO', '')
-pr_num = os.environ.get('PR_NUMBER', '')
-pr_sha = os.environ.get('PR_SHA', '')
-key = f'{repo}/{pr_num}'
-if 'reviewed' not in state:
-    state['reviewed'] = {}
-state['reviewed'][key] = {'sha': pr_sha}
-print(json.dumps(state))
-" > "$STATE_FILE"
-      
-      echo "    -> State updated"
-    else
-      echo "    -> ERROR: Failed to post to Codeberg"
-      return 1
-    fi
-    
-    return 0
+  body=$(echo "$build_output" | tail -n +2)
+
+  local event
+  case "$verdict" in
+    approved) event="APPROVED" ;;
+    changes_requested) event="REQUEST_CHANGES" ;;
+    *) event="COMMENT" ;;
+  esac
+  debug_log "Verdict: $verdict -> Event: $event"
+
+  local escaped
+  escaped=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+
+  debug_log "Posting formal review to ${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews"
+  local review_start
+  review_start=$(date +%s)
+
+  post_formal_review "$repo" "$pr_number" "$event" "$escaped"
+
+  local review_end
+  review_end=$(date +%s)
+  debug_log "Formal review posted in $((review_end - review_start))s"
+
+  echo "    -> review posted (verdict: $verdict)"
+
+  local state
+  state=$(load_state)
+
+  STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" \
+  python3 - <<EOF > "$STATE_FILE"
+import os,json
+s=json.loads(os.environ["STATE_JSON"])
+s.setdefault("reviewed",{})[f"{os.environ['REPO']}/{os.environ['PR_NUMBER']}"]={"sha":os.environ["PR_SHA"]}
+print(json.dumps(s))
+EOF
 }
 
 cycle() {
-  local cycle_num="$1"
-  echo ""
-  echo "=== Cycle #${cycle_num} ==="
-  
-  local repos
-  repos=$(get_repos)
-  
-  if [[ -z "$repos" ]]; then
-    echo "No repos found"
-    return
-  fi
-  
-  local repo_count
-  repo_count=$(echo "$repos" | wc -l)
-  echo "Watching ${repo_count} repo(s)"
-  
-  echo "$repos" | while read -r repo; do
-    [[ -z "$repo" ]] && continue
-    
-    echo ""
+  get_repos | while read -r repo; do
     echo "Repo: $repo"
-    
-    local prs
-    prs=$(get_open_prs "$repo")
-    
-    if [[ -z "$prs" ]]; then
-      echo "  No open PRs"
-      continue
-    fi
-    
-    echo "$prs" | while IFS='|' read -r pr_number pr_sha pr_title; do
-      process_pr "$repo" "$pr_number" "$pr_sha" "$pr_title" || true
+    get_open_prs "$repo" | while IFS='|' read -r n sha title; do
+      process_pr "$repo" "$n" "$sha" "$title"
     done
   done
 }
 
 init_state
 
-if ! ollama_available; then
-  echo "WARNING: Ollama not available. PR reviews will fail."
-fi
-
-echo "==> AI PR Review Watcher (Codeberg)"
-echo "    Interval: ${INTERVAL}s"
-echo "    Repos: ${REPOS_FILTER:-all}"
-echo "    Ollama: $(resolve_ollama_host)"
-echo "    Model: ${OLLAMA_MODEL}"
-echo "    Hot-reload: ENABLED (edit .env to reload)"
-echo "    Ctrl+C to stop"
-
-cycle_num=0
-
 while true; do
-  cycle_num=$((cycle_num + 1))
-  cycle "$cycle_num" || true
-  
-  if [[ "$RUN_ONCE" == true ]]; then
-    break
-  fi
-  
-  interruptible_sleep "$INTERVAL"
+  cycle
+  [[ "$RUN_ONCE" == true ]] && break
+  sleep "$INTERVAL"
 done

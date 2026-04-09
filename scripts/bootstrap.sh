@@ -84,8 +84,8 @@ start_project() {
     return 1
   fi
 
-  if [[ -z "$CODEBERG_TOKEN" ]]; then
-    log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
+  if [[ -z "$FORGEJO_TOKEN" ]]; then
+    log_warn "FORGEJO_TOKEN is empty. Reviews will fail for private repos."
   fi
 
   if bash "$REPO_ROOT/scripts/autostart/autostart.sh" --status 2>/dev/null | grep -q "watch-prs.*running"; then

@@ -39,6 +39,57 @@ def extract_json(text):
     return None
 
 
+def build_review_payload(review, verdict, model):
+    issues = review.get("issues", [])
+    suggestions = review.get("suggestions", [])
+    summary = review.get("summary", "")
+
+    comments = []
+
+    for issue in issues:
+        sev = issue.get("severity", "medium").upper()
+        typ = issue.get("type", "")
+        path = issue.get("file", "")
+        line = issue.get("line", "")
+        desc = issue.get("description", "")
+
+        if not path:
+            continue
+
+        type_tag = f"[{typ}]" if typ else ""
+        body = f"[{sev}]{type_tag} {desc}"
+
+        # find matching suggestion for this file/line
+        for s in suggestions:
+            if s.get("file") == path and s.get("line") == line:
+                body += f"\n\n**Suggestion:** {s.get('description', '')}"
+
+        try:
+            position = int(line)
+        except (ValueError, TypeError):
+            position = 1
+
+        comments.append(
+            {
+                "path": path,
+                "position": position,
+                "body": body,
+            }
+        )
+
+    summary_body = (
+        f"**Summary:** {summary}\n\n---\n*Review by {model} via local Forgejo*"
+    )
+
+    payload = {
+        "event": "REQUEST_CHANGES" if verdict == "changes_requested" else "APPROVE",
+        "body": summary_body,
+        "comments": comments,
+    }
+
+    print(json.dumps(payload))
+
+
 def determine_verdict(review):
     """Determine review verdict based on issues.
 
@@ -75,15 +126,13 @@ def main():
     # Determine verdict
     verdict = determine_verdict(review)
 
-    # Determine emoji and text for verdict
+    # Determine text for verdict
     if verdict == "approved":
-        verdict_emoji = "✅"
         verdict_text = "Approved"
     else:
-        verdict_emoji = "❌"
         verdict_text = "Changes Requested"
 
-    body = f"## AI Code Review {verdict_emoji}\n\n"
+    body = f"## AI Code Review\n\n"
     body += f"**Verdict:** {verdict_text}\n\n"
 
     if issues:
