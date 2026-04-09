@@ -21,7 +21,6 @@ source "${SCRIPT_DIR}/lib/hot-reload.sh"
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 
 FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
-GITHUB_PAT="${GITHUB_PAT:-}"
 
 if [[ "${FORGEJO_MODE:-codeberg}" == "local" ]]; then
   FORGEJO_HOST="${FORGEJO_HOST:-http://forgejo.local}"

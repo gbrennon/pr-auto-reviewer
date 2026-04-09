@@ -80,11 +80,7 @@ get_forgejo_api_base_url() {
 }
 
 get_repository_owner_token() {
-  if [[ "${FORGEJO_MODE:-}" == "local" ]]; then
-    echo "${FORGEJO_TOKEN:-}"
-  else
-    echo "${CODEBERG_TOKEN:-}"
-  fi
+  echo "${FORGEJO_TOKEN:-}"
 }
 
 get_reviewer_token() {
