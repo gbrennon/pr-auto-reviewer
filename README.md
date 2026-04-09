@@ -1,12 +1,12 @@
 # PR Auto Reviewer
 
-An AI-powered code review assistant that automatically reviews pull requests on Codeberg using local Ollama AI models. Think of it as having an extra team member who never sleeps and always provides constructive feedback on your PRs.
+An AI-powered code review assistant that automatically reviews pull requests on Forgejo or Codeberg using local Ollama AI models. Think of it as having an extra team member who never sleeps and always provides constructive feedback on your PRs.
 
 ## How It Works
 
-This project sits between your Codeberg repositories and a local Ollama instance. Here's the flow:
+This project sits between your Forgejo/Codeberg repositories and a local Ollama instance. Here's the flow:
 
-1. **Watches for PRs** - Continuously polls your Codeberg repos for open pull requests
+1. **Watches for PRs** - Continuously polls your repositories for open pull requests
 2. **Fetches the diff** - When a new or updated PR is found, it downloads the changes
 3. **Sends to AI** - The diff is sent to your Ollama model for analysis
 4. **Posts review** - A formatted review comment is posted directly on the PR
@@ -20,15 +20,27 @@ This project sits between your Codeberg repositories and a local Ollama instance
 
 ## What It Does NOT Do
 
-- It does not approve or merge PRs automatically (verdict is informational only)
+- It does not merge PRs automatically (verdict is informational only)
 - It does not replace human code review
 - It does not store your code anywhere
+- It does not self-review (reviewer must be a different account than PR author)
 
 ## Requirements
 
-- **Ollama** - A local AI inference server. Ollama runs entirely on your machine.
-- **Codeberg account** - Where your repositories live
-- **API token** - Required to read PRs and post review comments
+- **Ollama** - A local AI inference server. [Install from ollama.ai](https://ollama.ai)
+- **Forgejo or Codeberg account** - Where your repositories live
+- **Two API tokens** - One from your account, one from a reviewer account
+
+## Supported Platforms
+
+Currently supports:
+- Forgejo (local and self-hosted)
+- Codeberg
+
+Planned support (not yet available):
+- GitHub
+- GitLab
+- Other Git-based platforms
 
 ## Quick Start
 
@@ -40,26 +52,46 @@ cd pr-auto-reviewer
 # Create your configuration file
 cp .env.example .env
 
-# Edit .env with your Codeberg API token
-# Generate one at: https://codeberg.org/settings/applications
-# See docs/permissions.md for required scopes
+# Edit .env with your tokens
+# Generate tokens at: https://codeberg.org/settings/applications
 
 # Bootstrap starts everything
 bash scripts/bootstrap.sh
 ```
 
-## Understanding the Scopes
+## Understanding the Tokens
 
-When generating your Codeberg token, you'll need specific scopes:
+You need **two** different API tokens:
 
-| Scope | Why It's Needed |
-|-------|-----------------|
-| `user` (read) | To identify your account and list your repositories |
-| `repository` (read) | To fetch PR details and diffs |
-| `repository` (write) | To submit formal reviews |
-| `issue` (write) | To post review comments on PRs |
+| Token | Purpose | Required Scopes |
+|-------|---------|-----------------|
+| `FORGEJO_TOKEN` | Your account - fetches repos, requests reviewers | `repo`, `read:user` |
+| `FORGEJO_REVIEWER_TOKEN` | Different user - posts the formal review | `repo` |
 
-See `docs/permissions.md` for the full breakdown.
+The reviewer must be a **different account** than the PR author because you cannot review your own PRs.
+
+Generate tokens at https://codeberg.org/settings/applications
+
+## Understanding FORGEJO_MODE
+
+The mode tells the system where your repositories live:
+
+```
+FORGEJO_MODE=codeberg   # Your repos are on codeberg.org (default)
+FORGEJO_MODE=local      # Your repos are on a self-hosted Forgejo instance
+```
+
+**For codeberg (default):**
+```bash
+FORGEJO_MODE=codeberg
+FORGEJO_HOST=https://codeberg.org  # This is the default, can omit
+```
+
+**For local Forgejo:**
+```bash
+FORGEJO_MODE=local
+FORGEJO_HOST=http://forgejo.local  # Your Forgejo instance URL
+```
 
 ## Usage
 
@@ -97,14 +129,24 @@ bash scripts/autostart/autostart.sh --status
 Edit your `.env` file:
 
 ```bash
-# Required: Your Codeberg API token
-CODEBERG_TOKEN=your_token_here
+# === FORGEJO CONFIGURATION ===
+# Your account token - fetches repos and requests reviewers
+FORGEJO_TOKEN=your_token_here
 
-# Optional: Ollama settings
+# "codeberg" or "local" (default: codeberg)
+FORGEJO_MODE=codeberg
+
+# Your Forgejo instance URL
+FORGEJO_HOST=https://codeberg.org
+
+# === REVIEWER CONFIGURATION ===
+# A DIFFERENT user's token - posts the formal review
+FORGEJO_REVIEWER_TOKEN=reviewer_token_here
+FORGEJO_REVIEWER_USERNAME=reviewer_username
+
+# === OLLAMA CONFIGURATION ===
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=code-review
-
-# Optional: How often to check for new PRs (in seconds)
 POLL_INTERVAL=60
 ```
 
@@ -113,7 +155,7 @@ POLL_INTERVAL=60
 When the AI reviews a PR, it posts a comment that looks like this:
 
 ```markdown
-## AI Code Review ✅
+## AI Code Review
 
 **Verdict:** Approved
 
@@ -156,6 +198,9 @@ The watcher will pick up the changes within 10 seconds.
 The default model is `code-review`. If you don't have it:
 
 ```bash
+# Pull the model
+ollama pull code-review
+
 # List available models
 ollama list
 
@@ -164,8 +209,6 @@ OLLAMA_MODEL=qwen2.5-coder:14b bash scripts/watch-prs.sh
 ```
 
 ## Project Structure
-
-See `docs/structure.md` for a detailed breakdown of files and directories.
 
 ```
 pr-auto-reviewer/
@@ -183,36 +226,17 @@ pr-auto-reviewer/
 └── runner-data/              # State storage (PR reviews, PIDs)
 ```
 
-## Current Status
-
-### Implemented
-
-- **Codeberg PR watching** - Watches all your repos or specific ones
-- **AI code review** - Uses local Ollama to review PRs
-- **Review posting** - Posts comments and formal reviews to Codeberg
-- **Draft PR skipping** - Skips draft PRs automatically
-- **Duplicate prevention** - Won't re-review unchanged PRs
-- **Hot reload** - Config changes detected without restart
-- **Autostart system** - Background service management
-- **Single cycle mode** - Run once for testing
-
-### Not Yet Implemented
-
-- **GitHub support** - Not tested, API not implemented
-- **Webhook mode** - Currently polling only (60s interval)
-- **Per-repo config** - Same settings for all repos
-- **Docker container** - Not available yet
-- **Systemd units** - Not available yet
-
-See `docs/features.md` for the complete feature list.
-
 ## Troubleshooting
 
-### "No repos found"
-Your token might be missing the `read:user` scope. Check your token at https://codeberg.org/settings/applications
+### "token does not have at least one of required scope(s)"
+Your `FORGEJO_TOKEN` is missing the `read:user` scope. Regenerate at https://codeberg.org/settings/applications with both `repo` and `read:user` scopes.
 
-### "Failed to post to Codeberg"
-Your token might be missing the `issue` (write) scope.
+### "Self-review detected"
+The reviewer token belongs to the same account as the PR author. Use a different account's token for `FORGEJO_REVIEWER_TOKEN`.
+
+### "Target couldn't be found"
+- For `FORGEJO_MODE=local`: Check that `FORGEJO_HOST` points to your local Forgejo
+- For `FORGEJO_MODE=codeberg`: Verify the repo exists on codeberg.org
 
 ### "Ollama not available"
 Make sure Ollama is running:
