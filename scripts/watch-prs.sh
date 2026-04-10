@@ -33,12 +33,14 @@ trap 'rm -f "$WATCHER_PID_FILE"' EXIT INT TERM
 source "${SCRIPT_DIR}/lib/hot-reload.sh"
 init_hot_reload "$REPO_ROOT"
 
-# Load env
-source "${REPO_ROOT}/.env" 2>/dev/null || true
+# Load config from ~/.config/pr-auto-reviewer/config or repo .env
+source "${SCRIPT_DIR}/lib/config-loader.sh"
+load_config
 
 # Config
-CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
-GITHUB_PAT="${GITHUB_PAT:-}"
+FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
+FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
+API_BASE="${FORGEJO_HOST}/api/v1"
 INTERVAL="${POLL_INTERVAL:-60}"
 REPOS_FILTER=""
 RUN_ONCE=false
@@ -63,7 +65,7 @@ Options:
 
 Environment:
   POLL_INTERVAL     Interval in seconds (default: 60)
-  CODEBERG_TOKEN   API token for Codeberg (required for private repos)
+  FORGEJO_TOKEN   API token for Codeberg (required for private repos)
   OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
   OLLAMA_MODEL      Model to use (default: code-review)
 
@@ -129,12 +131,12 @@ get_repos() {
     return
   fi
   
-  if [[ -z "$CODEBERG_TOKEN" ]]; then
-    echo "ERROR: CODEBERG_TOKEN required for listing repos" >&2
+  if [[ -z "$FORGEJO_TOKEN" ]]; then
+    echo "ERROR: FORGEJO_TOKEN required for listing repos" >&2
     return
   fi
   
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
     "https://codeberg.org/api/v1/user/repos?limit=50" \
     | python3 -c "
 import sys, json
@@ -147,7 +149,7 @@ for r in data:
 get_open_prs() {
   local repo="$1"
   
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
     "https://codeberg.org/api/v1/repos/${repo}/pulls?state=open&limit=20" \
     | python3 -c "
 import sys, json
@@ -168,7 +170,7 @@ get_diff() {
   local repo="$1"
   local pr_number="$2"
   
-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
     "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
 }
 
@@ -237,7 +239,7 @@ print(json.dumps(data))
   
   echo "    -> Posting review to Codeberg..."
   
-  local api_token="${CODEBERG_TOKEN:-${GITHUB_PAT}}"
+  local api_token="${FORGEJO_TOKEN:-}"
   if [[ -z "$api_token" ]]; then
     echo "    -> ERROR: No API token"
     return 1
@@ -249,44 +251,60 @@ print(json.dumps(data))
   comment_body=$(echo "$build_output" | tail -n +2)
   
   echo "    -> Verdict: ${verdict}"
-  
-    # Post comment
-    local escaped_body
-    escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-    
-    local post_result
-    post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
-      -H "Authorization: token $api_token" \
-      -H "Content-Type: application/json" \
-      -d "{\"body\": ${escaped_body}}" 2>&1) || true
-    
-    if [[ -n "$post_result" ]]; then
-      echo "    -> Review comment posted!"
-      
-      # Try to submit formal review (only works for others' PRs, not your own)
-      # Codeberg rejects approving/requesting changes on your own PRs
-      local review_result
-      review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
-        -H "Authorization: token $api_token" \
-        -H "Content-Type: application/json" \
-        -d "{\"event\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
-      
-      local review_id
-      review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
-      
-      if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
-        echo "    -> Review (${verdict}) submitted!"
-      else
-        # Check if it's a "reject your own pull" error
-        if echo "$review_result" | grep -q "reject your own pull"; then
-          echo "    -> Note: Cannot approve own PRs via API (Codeberg limitation)"
-        fi
-      fi
-      
-      # Update state
-      local state
-      state=$(load_state)
-      STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
+
+  # Post formal review using reviewer token (not comment)
+  local escaped_body
+  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+
+  local reviewer_token="${FORGEJO_REVIEWER_TOKEN:-}"
+  local reviewer_username="${FORGEJO_REVIEWER_USERNAME:-}"
+
+  if [[ -z "$reviewer_token" ]]; then
+    echo "    -> ERROR: FORGEJO_REVIEWER_TOKEN not set"
+    return 1
+  fi
+
+  if [[ -z "$reviewer_username" ]]; then
+    echo "    -> ERROR: FORGEJO_REVIEWER_USERNAME not set"
+    return 1
+  fi
+
+  # Convert verdict to event
+  local event
+  case "$verdict" in
+    approved) event="APPROVED" ;;
+    changes_requested) event="REQUEST_CHANGES" ;;
+    *) event="COMMENT" ;;
+  esac
+
+  # Request reviewer using owner token
+  local request_result
+  request_result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/requested_reviewers" \
+    -H "Authorization: token $api_token" \
+    -H "Content-Type: application/json" \
+    -d "{\"reviewers\":[\"$reviewer_username\"]}" 2>&1) || true
+
+  # Post formal review using reviewer token
+  local review_result
+  review_result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews" \
+    -H "Authorization: token $reviewer_token" \
+    -H "accept: application/json" \
+    -H "Content-Type: application/json" \
+    -d "{\"event\":\"${event}\",\"body\":${escaped_body}}" 2>&1) || true
+
+  local review_id
+  review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+
+  if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
+    echo "    -> Review (${verdict}) submitted!"
+  else
+    echo "    -> ERROR: Failed to submit formal review: $review_result"
+    return 1
+  fi
+
+  local state
+  state=$(load_state)
+  STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
 import os, json
 state = json.loads(os.environ.get('STATE_JSON', '{}'))
 repo = os.environ.get('REPO', '')
@@ -298,14 +316,9 @@ if 'reviewed' not in state:
 state['reviewed'][key] = {'sha': pr_sha}
 print(json.dumps(state))
 " > "$STATE_FILE"
-      
-      echo "    -> State updated"
-    else
-      echo "    -> ERROR: Failed to post to Codeberg"
-      return 1
-    fi
-    
-    return 0
+
+  echo "    -> State updated"
+  return 0
 }
 
 cycle() {
