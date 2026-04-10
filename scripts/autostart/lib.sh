@@ -6,10 +6,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Load environment
-if [[ -f "${REPO_ROOT}/.env" ]]; then
+CONFIG_FILE="${HOME}/.config/pr-auto-reviewer/config"
+REPO_ENV="${REPO_ROOT}/.env"
+
+if [[ -f "$CONFIG_FILE" ]]; then
   set -a
-  source "${REPO_ROOT}/.env"
+  source "$CONFIG_FILE"
+  set +a
+elif [[ -f "$REPO_ENV" ]]; then
+  set -a
+  source "$REPO_ENV"
   set +a
 fi
 
@@ -77,7 +83,11 @@ run_background() {
   
   {
     set -a
-    source "${REPO_ROOT}/.env"
+    if [[ -f "$CONFIG_FILE" ]]; then
+      source "$CONFIG_FILE"
+    elif [[ -f "$REPO_ENV" ]]; then
+      source "$REPO_ENV"
+    fi
     set +a
     exec bash "$script"
   } >> "$logs" 2>&1 &

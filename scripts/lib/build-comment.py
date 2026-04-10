@@ -75,15 +75,12 @@ def main():
     # Determine verdict
     verdict = determine_verdict(review)
 
-    # Determine emoji and text for verdict
     if verdict == "approved":
-        verdict_emoji = "✅"
         verdict_text = "Approved"
     else:
-        verdict_emoji = "❌"
         verdict_text = "Changes Requested"
 
-    body = f"## AI Code Review {verdict_emoji}\n\n"
+    body = f"## AI Code Review\n\n"
     body += f"**Verdict:** {verdict_text}\n\n"
 
     if issues:

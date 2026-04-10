@@ -35,14 +35,65 @@ check_deps() {
 }
 
 setup_env() {
-  if [[ -f "$REPO_ROOT/.env" ]]; then
-    log_info ".env loaded"
-  else
-    log_error ".env not found. Create it from .env.example template."
-    return 1
+  if [[ -f "${HOME}/.config/pr-auto-reviewer/config" ]]; then
+    log_info "Using user config: ~/.config/pr-auto-reviewer/config"
+    set -a
+    source "${HOME}/.config/pr-auto-reviewer/config"
+    set +a
+    return 0
   fi
 
-  init_env
+  if [[ -f "$REPO_ROOT/.env" ]]; then
+    log_info ".env loaded from repo"
+    set -a
+    source "$REPO_ROOT/.env"
+    set +a
+    return 0
+  fi
+
+  log_error "No config found. Either:"
+  log_error "  - Install: bash scripts/install-service.sh"
+  log_error "  - Manual: cp .env.example .env and edit"
+  return 1
+}
+
+check_service_status() {
+  if systemctl --user is-active --quiet pr-ai-auto-reviewer.service 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+pause_service() {
+  if check_service_status; then
+    log_info "Pausing systemd service..."
+    
+    systemctl --user stop pr-ai-auto-reviewer.service 2>/dev/null || true
+    systemctl --user disable --now pr-ai-auto-reviewer.service 2>/dev/null || true
+    
+    sleep 2
+    
+    local pids
+    pids=$(pgrep -f "/scripts/watch-prs.sh" 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+      log_info "Killing old watch-prs: $pids"
+      for pid in $pids; do
+        kill -9 "$pid" 2>/dev/null || true
+      done
+    fi
+    
+    rm -f "$REPO_ROOT/watcher-prs.lock" 2>/dev/null || true
+    rm -f "$REPO_ROOT/watcher-prs.pid" 2>/dev/null || true
+    
+    sleep 1
+    return 0
+  fi
+  return 1
+}
+
+resume_service() {
+  log_info "Resuming systemd service..."
+  systemctl --user enable --now pr-ai-auto-reviewer.service 2>/dev/null || true
 }
 
 check_ollama() {
@@ -79,22 +130,32 @@ create_dirs() {
 start_project() {
   log_info "Starting PR AI Auto-Reviewer..."
 
-  if [[ ! -f "$REPO_ROOT/.env" ]]; then
-    log_error ".env file missing. Run bootstrap again after configuring."
-    return 1
+  local service_was_running=false
+
+  if check_service_status; then
+    log_info "Systemd service is running, pausing for manual validation..."
+    pause_service
+    service_was_running=true
   fi
 
-  if [[ -z "$CODEBERG_TOKEN" ]]; then
-    log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
+  if [[ -z "$FORGEJO_TOKEN" ]]; then
+    log_warn "FORGEJO_TOKEN is empty. Reviews will fail for private repos."
   fi
 
-  if bash "$REPO_ROOT/scripts/autostart/autostart.sh" --status 2>/dev/null | grep -q "watch-prs.*running"; then
-    log_info "watch-prs is already running, skipping start"
-    return 0
+  log_info "Running watch-prs.sh --once (single cycle)..."
+  log_info "To stop early: Ctrl+C"
+  log_info "Service will resume after this completes or is interrupted."
+
+  if timeout 300 bash "$REPO_ROOT/scripts/watch-prs.sh" --once; then
+    log_info "watch-prs.sh completed"
+  else
+    log_warn "watch-prs.sh interrupted or timed out"
   fi
 
-  log_info "watch-prs not running, starting..."
-  bash "$REPO_ROOT/scripts/autostart/autostart.sh"
+  if [[ "$service_was_running" == "true" ]]; then
+    log_info "Resuming systemd service..."
+    resume_service
+  fi
 }
 
 main() {
