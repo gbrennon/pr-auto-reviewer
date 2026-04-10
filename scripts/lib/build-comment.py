@@ -75,6 +75,11 @@ def main():
     # Determine verdict
     verdict = determine_verdict(review)
 
+    if verdict == "approved":
+        verdict_text = "Approved"
+    else:
+        verdict_text = "Changes Requested"
+
     body = f"## AI Code Review\n\n"
     body += f"**Verdict:** {verdict_text}\n\n"
 

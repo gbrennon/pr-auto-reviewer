@@ -21,6 +21,7 @@ load_config() {
     fi
 
     echo "ERROR: No config file found at $CONFIG_FILE or $REPO_CONFIG" >&2
+    echo "       Run 'bash scripts/install-service.sh' to create one, or create $CONFIG_FILE manually." >&2
     return 1
 }
 

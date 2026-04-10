@@ -4,6 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+if ! command -v systemctl &>/dev/null; then
+    echo "ERROR: systemd is required. This script uses systemd user services." >&2
+    exit 1
+fi
+
+if ! command -v bash &>/dev/null; then
+    echo "ERROR: bash is required to run this script." >&2
+    exit 1
+fi
+
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
 SERVICE_FILE="pr-ai-auto-reviewer.service"
 SERVICE_NAME="pr-ai-auto-reviewer.service"
