@@ -17,6 +17,7 @@ This project sits between your Forgejo/Codeberg repositories and a local Ollama 
 - **Privacy-first** - Your code never leaves your machine; it runs entirely locally
 - **Learning tool** - The AI suggestions can help developers grow their skills
 - **Catches basics** - Frees up human reviewers to focus on architecture and logic, not style nits
+- **Multi-platform** - Works with both Forgejo (local/self-hosted) and Codeberg
 
 ## What It Does NOT Do
 
@@ -29,6 +30,7 @@ This project sits between your Forgejo/Codeberg repositories and a local Ollama 
 
 - **Ollama** - A local AI inference server. [Install from ollama.ai](https://ollama.ai)
 - **Forgejo or Codeberg account** - Where your repositories live
+- **systemd** - Required for the service (Linux systems with systemd)
 - **Two API tokens** - One from your account, one from a reviewer account
 
 ## Supported Platforms
@@ -85,6 +87,16 @@ POLL_INTERVAL=60
 2. **Reviewer token** (FORGEJO_REVIEWER_TOKEN): Generate from a different account
    - Scopes: `repo`
    - Get the username from the reviewer's account
+
+### Switching Between Forgejo and Codeberg
+
+By default, the app connects to Codeberg. To use a local Forgejo instance:
+
+```bash
+FORGEJO_HOST=http://forgejo.local:3000
+```
+
+Set `FORGEJO_HOST` to your Forgejo instance URL in your config file. The API path (`/api/v1`) is automatically appended.
 
 ## Usage
 
