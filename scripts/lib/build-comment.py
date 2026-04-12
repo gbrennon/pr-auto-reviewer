@@ -85,7 +85,7 @@ def main():
 
     if issues:
         body += "### Issues\n"
-        for i in issues:
+        for idx, i in enumerate(issues, 1):
             sev = i.get("severity", "medium").upper()
             typ = i.get("type", "")
             file = i.get("file", "")
@@ -94,18 +94,19 @@ def main():
 
             location = f"{file}:{line}" if file and line else (file or line or "?")
             type_tag = f" [{typ}]" if typ else ""
-            body += f"- [{sev}]{type_tag} {location}: {desc}\n"
+            body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
         body += "\n"
 
     if suggestions:
         body += "### Suggestions\n"
-        for s in suggestions:
+        start_idx = len(issues) + 1
+        for idx, s in enumerate(suggestions, start_idx):
             file = s.get("file", "")
             line = s.get("line", "?")
             desc = s.get("description", "")
 
             location = f"{file}:{line}" if file and line else (file or line or "?")
-            body += f"- {location}: {desc}\n"
+            body += f"{idx}. {location}: {desc}\n"
         body += "\n"
 
     if praise:
