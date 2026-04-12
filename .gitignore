@@ -5,3 +5,4 @@ runner-data/
 *.lock
 *.pid
 *.service
+__pycache__

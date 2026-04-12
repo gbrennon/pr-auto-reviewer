@@ -44,6 +44,8 @@ API_BASE="${FORGEJO_HOST}/api/v1"
 INTERVAL="${POLL_INTERVAL:-60}"
 REPOS_FILTER=""
 RUN_ONCE=false
+FORCE_PR=""
+LIST_ITEMS=false
 STATE_FILE="${REPO_ROOT}/runner-data/pr-reviews.json"
 
 # Ollama settings
@@ -61,6 +63,8 @@ Options:
   -i <seconds>      Poll interval (default: ${INTERVAL})
   -r <repo>         Watch specific repo (e.g., gbrennon/BitPill)
   --once            Single cycle
+  -p <pr-number>    Force re-review specific PR number
+  --list-items     List items from existing review (for testing)
   -h, --help        This help
 
 Environment:
@@ -80,6 +84,8 @@ while [[ $# -gt 0 ]]; do
     -i) INTERVAL="$2"; shift 2 ;;
     -r) REPOS_FILTER="$2"; shift 2 ;;
     --once) RUN_ONCE=true; shift ;;
+    -p) FORCE_PR="$2"; shift 2 ;;
+    --list-items) LIST_ITEMS=true; shift ;;
     -h|--help) usage ;;
     *) echo "Unknown: $1" >&2; usage ;;
   esac
@@ -123,6 +129,66 @@ if entry.get('sha') == '${sha}':
 else:
     print('false')
 " 2>/dev/null || echo "false"
+}
+
+is_comment_processed() {
+  local owner_repo="$1"
+  local pr_number="$2"
+  local comment_id="$3"
+  
+  local state
+  state=$(load_state)
+  
+  python3 -c "
+import sys, json
+try:
+    d = json.loads('${state}')
+except:
+    print('false')
+    sys.exit(0)
+
+key = '${owner_repo}/${pr_number}'
+entry = d.get('reviewed', {}).get(key, {})
+processed = entry.get('processed_comments', [])
+if '${comment_id}' in processed:
+    print('true')
+else:
+    print('false')
+" 2>/dev/null || echo "false"
+}
+
+mark_comment_processed() {
+  local owner_repo="$1"
+  local pr_number="$2"
+  local comment_id="$3"
+  
+  local state
+  state=$(load_state)
+  
+  STATE_JSON="$state" REPO="$owner_repo" PR_NUM="$pr_number" COMMENT_ID="$comment_id" python3 -c "
+import os, json
+
+state = json.loads(os.environ.get('STATE_JSON', '{}'))
+repo_key = os.environ.get('REPO', '')
+pr_num = os.environ.get('PR_NUM', '')
+comment_id = os.environ.get('COMMENT_ID', '')
+
+key = f'{repo_key}/{pr_num}'
+
+if 'reviewed' not in state:
+    state['reviewed'] = {}
+
+if key not in state['reviewed']:
+    state['reviewed'][key] = {'sha': '', 'processed_comments': []}
+
+if 'processed_comments' not in state['reviewed'][key]:
+    state['reviewed'][key]['processed_comments'] = []
+
+if comment_id not in state['reviewed'][key]['processed_comments']:
+    state['reviewed'][key]['processed_comments'].append(comment_id)
+
+print(json.dumps(state))
+" > "$STATE_FILE"
 }
 
 get_repos() {
@@ -181,20 +247,221 @@ get_diff() {
     "${API_BASE}/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
 }
 
+get_pr_comments() {
+  local repo="$1"
+  local pr_number="$2"
+  
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    comments = data if isinstance(data, list) else data.get('data', [])
+    for c in comments:
+        body = c.get('body', '')
+        id = c.get('id', '')
+        created = c.get('created_at', '')
+        if body:
+            print(f'{id}|{created}|{body}')
+except Exception:
+    pass
+" 2>/dev/null || true
+}
+
+get_pr_reviews() {
+  local repo="$1"
+  local pr_number="$2"
+  
+  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    reviews = data if isinstance(data, list) else data.get('data', [])
+    for r in reviews:
+        body = r.get('body', '')
+        verdict = r.get('state', '')
+        id = r.get('id', '')
+        if body:
+            print(f'{id}|{verdict}|{body}')
+except Exception:
+    pass
+" 2>/dev/null || true
+}
+
+get_latest_review() {
+  local repo="$1"
+  local pr_number="$2"
+  
+  get_pr_reviews "$repo" "$pr_number" | tail -1 | cut -d'|' -f3-
+}
+
+list_review_items() {
+  if [[ -z "$FORCE_PR" ]]; then
+    echo "ERROR: -p <pr-number> required with --list-items" >&2
+    return 1
+  fi
+  
+  local review_body
+  review_body=$(get_latest_review "$REPOS_FILTER" "$FORCE_PR")
+  
+  if [[ -z "$review_body" ]]; then
+    echo "No review found for PR #${FORCE_PR}"
+    return 1
+  fi
+  
+  echo "=== Review Items for PR #${FORCE_PR} ==="
+  echo ""
+  extract_review_items "$review_body"
+}
+
+parse_issue_command() {
+  local comment="$1"
+  
+  local cmd_numbers
+  cmd_numbers=$(python3 -c "
+import re
+import sys
+
+comment = sys.stdin.read().strip().lower()
+# Support: 'create issue for 1, 2' and 'issue 1, 2'
+pattern = r'(?:create\s+issue\s+for\s+|issue\s+)([0-9,\s]+)'
+match = re.search(pattern, comment)
+if match:
+    nums = match.group(1)
+    numbers = [n.strip() for n in re.split(r'[,\s]+', nums) if n.strip() and n.strip().isdigit()]
+    if numbers:
+        print(','.join(numbers))
+" <<< "$comment" 2>/dev/null) || true
+  
+  echo "$cmd_numbers"
+}
+
+extract_review_items() {
+  local review_body="$1"
+  
+  python3 -c "
+import re
+import sys
+
+body = sys.stdin.read()
+
+issues = []
+suggestions = []
+
+lines = body.split('\n')
+in_issues = False
+in_suggestions = False
+next_num = 1
+
+for line in lines:
+    line = line.strip()
+    if line.lower() == '### issues' or line.lower() == '### issues\n':
+        in_issues = True
+        in_suggestions = False
+        continue
+    elif line.lower() == '### suggestions' or line.lower() == '### suggestions\n':
+        in_suggestions = True
+        in_issues = False
+        continue
+    elif line.lower().startswith('### '):
+        in_issues = False
+        in_suggestions = False
+        continue
+    
+    if in_issues or in_suggestions:
+        match = re.match(r'^\d+[\.\)]\s+(.*)', line)
+        if match:
+            num = int(re.match(r'^(\d+)', line).group(1))
+            text = match.group(1).strip()
+            
+            severity = ''
+            issue_type = ''
+            location = ''
+            
+            sev_match = re.search(r'\[(\w+)\]', text)
+            if sev_match:
+                severity = sev_match.group(1)
+            
+            type_match = re.search(r'\[(\w+)\]', text)
+            matches = re.findall(r'\[(\w+)\]', text)
+            if len(matches) > 1:
+                issue_type = matches[1] if matches[0] == matches[1] else matches[-1]
+            
+            loc_match = re.match(r'([^\s]+)', text)
+            if loc_match:
+                location = loc_match.group(1)
+            
+            if in_issues:
+                issues.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
+            else:
+                suggestions.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
+        elif line.startswith('- ') or line.startswith('* '):
+            text = line.lstrip('-* ')
+            if text:
+                if in_issues:
+                    issues.append(f'{next_num}|| | |{text}')
+                else:
+                    suggestions.append(f'{next_num}|| | |{text}')
+                next_num += 1
+
+for i in issues:
+    print(i)
+for s in suggestions:
+    print(s)
+" <<< "$review_body" 2>/dev/null || true
+}
+
+create_issue() {
+  local repo="$1"
+  local title="$2"
+  local body="$3"
+  
+  local escaped_title
+  local escaped_body
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  
+  local result
+  result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
+    -H "Authorization: token ${FORGEJO_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"title\":${escaped_title},\"body\":${escaped_body}}" 2>&1) || true
+  
+  local issue_number
+  issue_number=$(echo "$result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('number',''))" 2>/dev/null || true)
+  
+  echo "$issue_number"
+}
+
 process_pr() {
   local repo="$1"
   local pr_number="$2"
   local pr_sha="$3"
   local pr_title="$4"
   
-  echo "  PR #${pr_number}: ${pr_title:0:50}..."
-  
-  if [[ "$(is_reviewed "$repo" "$pr_number" "$pr_sha")" == "true" ]]; then
-    echo "    -> already reviewed (SHA: ${pr_sha:0:7})"
+  if [[ -n "$FORCE_PR" ]] && [[ "$FORCE_PR" != "$pr_number" ]]; then
     return 0
   fi
   
-  echo "    -> NEW/UPDATED, analyzing..."
+  echo "  PR #${pr_number}: ${pr_title:0:50}..."
+  
+  local should_force=false
+  if [[ -n "$FORCE_PR" ]] && [[ "$FORCE_PR" == "$pr_number" ]]; then
+    should_force=true
+  fi
+  
+  if [[ "$should_force" != "true" ]] && [[ "$(is_reviewed "$repo" "$pr_number" "$pr_sha")" == "true" ]]; then
+    echo "    -> already reviewed (SHA: ${pr_sha:0:7}), checking for commands..."
+    process_issue_commands "$repo" "$pr_number" "$pr_sha" ""
+    return 0
+  fi
+  
+  if [[ "$should_force" == "true" ]]; then
+    echo "    -> Force re-reviewing..."
+  else
+    echo "    -> NEW/UPDATED, analyzing..."
+  fi
   
   if ! ollama_available; then
     echo "    -> ERROR: Ollama not available"
@@ -325,11 +592,174 @@ print(json.dumps(state))
 " > "$STATE_FILE"
 
   echo "    -> State updated"
+  
+  if [[ "$verdict" == "approved" ]]; then
+    process_issue_commands "$repo" "$pr_number" "$pr_sha" "$comment_body" || true
+  else
+    echo "    -> Skipping command check (verdict: changes_requested)"
+  fi
+  
+  return 0
+}
+
+process_issue_commands() {
+  local repo="$1"
+  local pr_number="$2"
+  local pr_sha="$3"
+  local review_body="$4"
+  
+  if [[ -z "$review_body" ]]; then
+    echo "    -> Fetching existing review body..."
+    review_body=$(get_latest_review "$repo" "$pr_number")
+  fi
+  
+  echo "    -> Checking for issue creation commands..."
+  
+  local review_items
+  review_items=$(extract_review_items "$review_body")
+  
+  if [[ -z "$review_items" ]]; then
+    echo "    -> No actionable items found in review"
+    return 0
+  fi
+  
+  local comments
+  comments=$(get_pr_comments "$repo" "$pr_number")
+  
+  if [[ -z "$comments" ]]; then
+    echo "    -> No new comments"
+    return 0
+  fi
+  
+  local cmd_response=""
+  
+  local owner_repo="$repo/$pr_number"
+  
+  echo "$comments" | while IFS='|' read -r comment_id created_at body; do
+    [[ -z "$body" ]] && continue
+    
+    if [[ "$(is_comment_processed "$owner_repo" "$pr_number" "$comment_id")" == "true" ]]; then
+      continue
+    fi
+    
+    local cmd_numbers
+    cmd_numbers=$(parse_issue_command "$body")
+    
+    if [[ -z "$cmd_numbers" ]]; then
+      continue
+    fi
+    
+    mark_comment_processed "$owner_repo" "$pr_number" "$comment_id"
+    
+    echo "    -> Found command in comment ${comment_id}: create issue for ${cmd_numbers}"
+    
+    local valid_items=()
+    local invalid_items=()
+    
+    for num in $(echo "$cmd_numbers" | tr ',' '\n'); do
+      if echo "$review_items" | grep -q "^${num}|"; then
+        valid_items+=("$num")
+      else
+        invalid_items+=("$num")
+      fi
+    done
+    
+    if [[ ${#invalid_items[@]} -gt 0 ]]; then
+      local error_msg
+      error_msg="I couldn't find items ${invalid_items[*]} in the review. Available items: $(echo '$review_items' | tr '\n' ', ' | sed 's/,$//')"
+      
+      curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/comments" \
+        -H "Authorization: token ${FORGEJO_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"body\":\"$error_msg\"}" 2>/dev/null || true
+      
+      echo "    -> Invalid items: ${invalid_items[*]}"
+      continue
+    fi
+    
+    for num in "${valid_items[@]}"; do
+      local item_data
+      item_data=$(echo "$review_items" | grep "^${num}|" | head -1) || true
+      
+      if [[ -z "$item_data" ]]; then
+        continue
+      fi
+      
+      local severity type location item_text
+      severity=$(echo "$item_data" | cut -d'|' -f2)
+      type=$(echo "$item_data" | cut -d'|' -f3)
+      location=$(echo "$item_data" | cut -d'|' -f4)
+      item_text=$(echo "$item_data" | cut -d'|' -f5-)
+      
+      if [[ -z "$item_text" ]]; then
+        item_text="$item_data"
+      fi
+      
+      local severity_line=""
+      if [[ -n "$severity" ]]; then
+        severity_line="- **Severity:** ${severity}"
+      fi
+      
+      local type_line=""
+      if [[ -n "$type" ]]; then
+        type_line="- **Type:** ${type}"
+      fi
+      
+      local location_line=""
+      if [[ -n "$location" ]]; then
+        location_line="- **File:** ${location}"
+      fi
+      
+      local item_title_text="${item_text:0:200}"
+      local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
+      local issue_body="## Original Review (PR #${pr_number})
+
+**Description:**
+${item_text}
+${severity_line:+}
+${severity_line}
+${type_line:+}
+${type_line}
+${location_line:+}
+${location_line}
+
+---
+*Auto-created from PR #${pr_number} via PR AI Reviewer*"
+      
+      local issue_num
+      issue_num=$(create_issue "$repo" "$issue_title" "$issue_body")
+      
+      if [[ -n "$issue_num" ]]; then
+        cmd_response="${cmd_response}${issue_num}, "
+        echo "    -> Created issue #${issue_num} for item ${num}"
+      else
+        echo "    -> Failed to create issue for item ${num}"
+      fi
+    done
+    
+    if [[ -n "$cmd_response" ]]; then
+      cmd_response="${cmd_response%, }"
+      local success_msg
+      success_msg="Created issue(s): ${cmd_response} from your request."
+      
+      curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/comments" \
+        -H "Authorization: token ${FORGEJO_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"body\":\"$success_msg\"}" 2>/dev/null || true
+    fi
+  done
+  
   return 0
 }
 
 cycle() {
   local cycle_num="$1"
+  
+  if [[ "$LIST_ITEMS" == "true" ]]; then
+    list_review_items
+    return
+  fi
+  
   echo ""
   echo "=== Cycle #${cycle_num} ==="
   
