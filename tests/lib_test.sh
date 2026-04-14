@@ -58,6 +58,36 @@ function test_extract_review_items_extracts_medium_and_architecture() {
     assert_equals 1 "$contains"
 }
 
+function test_extract_review_items_location_format() {
+    local review_body='## AI Code Review
+
+### Issues
+1. [LOW] [quality] scripts/lib/extract-review-items.py:85: Magic number
+'
+
+    local result
+    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
+
+    local has_location
+    has_location=$(echo "$result" | grep -c 'scripts/lib/extract-review-items.py:85' || true)
+    assert_equals 1 "$has_location"
+}
+
+function test_extract_review_items_severity_not_in_location() {
+    local review_body='## AI Code Review
+
+### Issues
+1. [LOW] [quality] src/file.rs:10: Some issue
+'
+
+    local result
+    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
+
+    local has_low_in_location
+    has_low_in_location=$(echo "$result" | grep -c '^1|LOW|quality|LOW|' || true)
+    assert_equals 0 "$has_low_in_location"
+}
+
 function test_parse_issue_command_create_issue_for() {
     local result
     result=$(echo "create issue for 1, 2, 3" | python3 "${LIB_DIR}/parse-issue-command.py")

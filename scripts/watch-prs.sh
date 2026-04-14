@@ -596,9 +596,9 @@ process_issue_commands() {
         severity_line="- **Severity:** ${severity}"
       fi
       
-      local type_line=""
+      local category_line=""
       if [[ -n "$type" ]]; then
-        type_line="- **Type:** ${type}"
+        category_line="- **Category:** ${type}"
       fi
       
       local location_line=""
@@ -606,7 +606,18 @@ process_issue_commands() {
         location_line="- **File:** ${location}"
       fi
       
-      local item_title_text="${item_text:0:200}"
+      local clean_title="${item_text}"
+      for tag in "$severity" "$type"; do
+        if [[ -n "$tag" ]]; then
+          clean_title="${clean_title#\[${tag}\]}"
+          clean_title="${clean_title#\[${tag}\] }"
+        fi
+      done
+      clean_title="${clean_title#${location}}"
+      clean_title="${clean_title#: }"
+      clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
+      
+      local item_title_text="${clean_title:0:200}"
       local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
       local issue_body="## Original Review (PR #${pr_number})
 
@@ -614,8 +625,8 @@ process_issue_commands() {
 ${item_text}
 ${severity_line:+}
 ${severity_line}
-${type_line:+}
-${type_line}
+${category_line:+}
+${category_line}
 ${location_line:+}
 ${location_line}
 

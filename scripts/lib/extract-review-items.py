@@ -58,17 +58,25 @@ def extract_review_items(review_body, debug=False):
                 issue_type = ""
                 location = ""
 
-                sev_match = re.search(r"\[(\w+)\]", text)
-                if sev_match:
-                    severity = sev_match.group(1)
-
                 matches = re.findall(r"\[(\w+)\]", text)
-                if len(matches) > 1:
-                    issue_type = matches[1] if matches[0] == matches[1] else matches[-1]
+                if len(matches) >= 1:
+                    severity = matches[0]
+                if len(matches) >= 2:
+                    issue_type = matches[1]
 
-                loc_match = re.match(r"([^\s]+)", text)
-                if loc_match:
-                    location = loc_match.group(1)
+                remaining = text
+                for _ in matches:
+                    remaining = re.sub(r"\[\w+\]\s*", "", remaining, count=1)
+                remaining = remaining.strip()
+
+                if remaining:
+                    loc_match = re.match(r"^([^:]+:\d+)", remaining)
+                    if loc_match:
+                        location = loc_match.group(1)
+                    else:
+                        loc_match = re.match(r"^(\S+)", remaining)
+                        if loc_match:
+                            location = loc_match.group(1)
 
                 item = f"{num}|{severity}|{issue_type}|{location}|{text}"
                 if in_issues:
