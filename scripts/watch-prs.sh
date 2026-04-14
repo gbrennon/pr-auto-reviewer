@@ -253,7 +253,7 @@ get_pr_comments() {
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
     "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/lib/get-pr-comments.py" 2>/dev/null || true
+    python3 "${SCRIPT_DIR}/lib/get_pr_comments.py" 2>/dev/null || true
 }
 
 get_pr_reviews() {
@@ -262,7 +262,7 @@ get_pr_reviews() {
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
     "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | \
-    python3 "${SCRIPT_DIR}/lib/get-pr-reviews.py" 2>/dev/null || true
+    python3 "${SCRIPT_DIR}/lib/get_pr_reviews.py" 2>/dev/null || true
 }
 
 get_latest_review() {
@@ -294,13 +294,13 @@ list_review_items() {
 parse_issue_command() {
   local comment="$1"
   
-  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse-issue-command.py" 2>/dev/null || true
+  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse_issue_command.py" 2>/dev/null || true
 }
 
 extract_review_items() {
   local review_body="$1"
   
-  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract-review-items.py" 2>/dev/null || true
+  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract_review_items.py" 2>/dev/null || true
 }
 
 create_issue() {
@@ -310,8 +310,8 @@ create_issue() {
   
   local escaped_title
   local escaped_body
-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   local result
   result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
@@ -370,7 +370,7 @@ process_pr() {
   echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
   
   local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
+  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
   
   local ollama_host
   ollama_host=$(resolve_ollama_host)
@@ -411,7 +411,7 @@ print(json.dumps(data))
   fi
   
   local verdict comment_body build_output
-  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build-comment.py")
+  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build_comment.py")
   verdict=$(echo "$build_output" | head -1)
   comment_body=$(echo "$build_output" | tail -n +2)
   
@@ -419,7 +419,7 @@ print(json.dumps(data))
 
   # Post formal review using reviewer token (not comment)
   local escaped_body
-  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
 
   local reviewer_token="${FORGEJO_REVIEWER_TOKEN:-}"
   local reviewer_username="${FORGEJO_REVIEWER_USERNAME:-}"
@@ -618,17 +618,18 @@ process_issue_commands() {
       clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
       
       local item_title_text="${clean_title:0:200}"
-      local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
+      local issue_title="[PR #${pr_number}] ${item_title_text}"
       local issue_body="## Original Review (PR #${pr_number})
 
 **Description:**
 ${item_text}
-${severity_line:+}
-${severity_line}
-${category_line:+}
-${category_line}
+
 ${location_line:+}
 ${location_line}
+${category_line:+}
+${category_line}
+${severity_line:+}
+${severity_line}
 
 ---
 *Auto-created from PR #${pr_number} via PR AI Reviewer*"
