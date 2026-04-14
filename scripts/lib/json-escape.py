@@ -4,4 +4,4 @@
 import sys
 import json
 
-print(json.dumps(sys.stdin.read()))
+print(json.dumps(sys.stdin.read()).rstrip("\n"))

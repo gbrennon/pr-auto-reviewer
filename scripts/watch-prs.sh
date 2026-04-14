@@ -252,20 +252,8 @@ get_pr_comments() {
   local pr_number="$2"
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    comments = data if isinstance(data, list) else data.get('data', [])
-    for c in comments:
-        body = c.get('body', '')
-        id = c.get('id', '')
-        created = c.get('created_at', '')
-        if body:
-            print(f'{id}|{created}|{body}')
-except Exception:
-    pass
-" 2>/dev/null || true
+    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | \
+    python3 "${SCRIPT_DIR}/lib/get-pr-comments.py" 2>/dev/null || true
 }
 
 get_pr_reviews() {
@@ -273,27 +261,15 @@ get_pr_reviews() {
   local pr_number="$2"
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    reviews = data if isinstance(data, list) else data.get('data', [])
-    for r in reviews:
-        body = r.get('body', '')
-        verdict = r.get('state', '')
-        id = r.get('id', '')
-        if body:
-            print(f'{id}|{verdict}|{body}')
-except Exception:
-    pass
-" 2>/dev/null || true
+    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | \
+    python3 "${SCRIPT_DIR}/lib/get-pr-reviews.py" 2>/dev/null || true
 }
 
 get_latest_review() {
   local repo="$1"
   local pr_number="$2"
   
-  get_pr_reviews "$repo" "$pr_number" | tail -1 | cut -d'|' -f3-
+  get_pr_reviews "$repo" "$pr_number" | cut -d'|' -f4-
 }
 
 list_review_items() {
@@ -318,98 +294,13 @@ list_review_items() {
 parse_issue_command() {
   local comment="$1"
   
-  local cmd_numbers
-  cmd_numbers=$(python3 -c "
-import re
-import sys
-
-comment = sys.stdin.read().strip().lower()
-# Support: 'create issue for 1, 2' and 'issue 1, 2'
-pattern = r'(?:create\s+issue\s+for\s+|issue\s+)([0-9,\s]+)'
-match = re.search(pattern, comment)
-if match:
-    nums = match.group(1)
-    numbers = [n.strip() for n in re.split(r'[,\s]+', nums) if n.strip() and n.strip().isdigit()]
-    if numbers:
-        print(','.join(numbers))
-" <<< "$comment" 2>/dev/null) || true
-  
-  echo "$cmd_numbers"
+  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse-issue-command.py" 2>/dev/null || true
 }
 
 extract_review_items() {
   local review_body="$1"
   
-  python3 -c "
-import re
-import sys
-
-body = sys.stdin.read()
-
-issues = []
-suggestions = []
-
-lines = body.split('\n')
-in_issues = False
-in_suggestions = False
-next_num = 1
-
-for line in lines:
-    line = line.strip()
-    if line.lower() == '### issues' or line.lower() == '### issues\n':
-        in_issues = True
-        in_suggestions = False
-        continue
-    elif line.lower() == '### suggestions' or line.lower() == '### suggestions\n':
-        in_suggestions = True
-        in_issues = False
-        continue
-    elif line.lower().startswith('### '):
-        in_issues = False
-        in_suggestions = False
-        continue
-    
-    if in_issues or in_suggestions:
-        match = re.match(r'^\d+[\.\)]\s+(.*)', line)
-        if match:
-            num = int(re.match(r'^(\d+)', line).group(1))
-            text = match.group(1).strip()
-            
-            severity = ''
-            issue_type = ''
-            location = ''
-            
-            sev_match = re.search(r'\[(\w+)\]', text)
-            if sev_match:
-                severity = sev_match.group(1)
-            
-            type_match = re.search(r'\[(\w+)\]', text)
-            matches = re.findall(r'\[(\w+)\]', text)
-            if len(matches) > 1:
-                issue_type = matches[1] if matches[0] == matches[1] else matches[-1]
-            
-            loc_match = re.match(r'([^\s]+)', text)
-            if loc_match:
-                location = loc_match.group(1)
-            
-            if in_issues:
-                issues.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
-            else:
-                suggestions.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
-        elif line.startswith('- ') or line.startswith('* '):
-            text = line.lstrip('-* ')
-            if text:
-                if in_issues:
-                    issues.append(f'{next_num}|| | |{text}')
-                else:
-                    suggestions.append(f'{next_num}|| | |{text}')
-                next_num += 1
-
-for i in issues:
-    print(i)
-for s in suggestions:
-    print(s)
-" <<< "$review_body" 2>/dev/null || true
+  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract-review-items.py" 2>/dev/null || true
 }
 
 create_issue() {
@@ -613,15 +504,20 @@ process_issue_commands() {
     review_body=$(get_latest_review "$repo" "$pr_number")
   fi
   
+  echo "    -> Review body (${#review_body} chars):"
+  echo "$review_body" | head -5 | sed 's/^/      /'
   echo "    -> Checking for issue creation commands..."
   
   local review_items
-  review_items=$(extract_review_items "$review_body")
+  review_items=$(DEBUG=1 extract_review_items "$review_body" 2>&1) || true
   
   if [[ -z "$review_items" ]]; then
     echo "    -> No actionable items found in review"
     return 0
   fi
+  
+  echo "    -> Found review items:"
+  echo "$review_items" | sed 's/^/      /'
   
   local comments
   comments=$(get_pr_comments "$repo" "$pr_number")
@@ -700,9 +596,9 @@ process_issue_commands() {
         severity_line="- **Severity:** ${severity}"
       fi
       
-      local type_line=""
+      local category_line=""
       if [[ -n "$type" ]]; then
-        type_line="- **Type:** ${type}"
+        category_line="- **Category:** ${type}"
       fi
       
       local location_line=""
@@ -710,7 +606,18 @@ process_issue_commands() {
         location_line="- **File:** ${location}"
       fi
       
-      local item_title_text="${item_text:0:200}"
+      local clean_title="${item_text}"
+      for tag in "$severity" "$type"; do
+        if [[ -n "$tag" ]]; then
+          clean_title="${clean_title#\[${tag}\]}"
+          clean_title="${clean_title#\[${tag}\] }"
+        fi
+      done
+      clean_title="${clean_title#${location}}"
+      clean_title="${clean_title#: }"
+      clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
+      
+      local item_title_text="${clean_title:0:200}"
       local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
       local issue_body="## Original Review (PR #${pr_number})
 
@@ -718,8 +625,8 @@ process_issue_commands() {
 ${item_text}
 ${severity_line:+}
 ${severity_line}
-${type_line:+}
-${type_line}
+${category_line:+}
+${category_line}
 ${location_line:+}
 ${location_line}
 

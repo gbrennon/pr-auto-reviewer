@@ -2,7 +2,7 @@
 # ollama-client.sh — Ollama API wrapper for code review.
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-code-review:latest}"
 
 # Resolve Ollama host - always try localhost first for local development
 resolve_ollama_host() {
@@ -62,23 +62,8 @@ ollama_generate() {
 ollama_review() {
   local diff="$1"
   
-  local review_prompt="You are a code reviewer. Review the following git diff and provide constructive feedback. Focus on bugs, security issues, code quality, and potential improvements. Output in JSON format:
-
-{
-  \"issues\": [
-    {\"line\": \"10\", \"severity\": \"high\", \"description\": \"issue description\"}
-  ],
-  \"suggestions\": [
-    {\"line\": \"15\", \"description\": \"suggestion\"}
-  ],
-  \"summary\": \"one sentence overall assessment\"
-}
-
-DIFF:
-${diff}"
-
   local response
-  response=$(ollama_generate "$review_prompt")
+  response=$(ollama_generate "$diff" "$OLLAMA_MODEL")
   
   # Extract response field
   echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true
