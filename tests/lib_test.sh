@@ -189,3 +189,57 @@ function test_python_files_use_snake_case() {
     
     assert_equals 1 "$all_found"
 }
+
+function test_build_comment_parses_explicit_verdict_approve() {
+    local review_json='{"verdict": "approve", "issues": [], "suggestions": [], "praise": [], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
+    assert_equals "approved" "$result"
+}
+
+function test_build_comment_parses_explicit_verdict_request_changes() {
+    local review_json='{"verdict": "request_changes", "issues": [{"severity": "high"}], "suggestions": [], "praise": [], "summary": "Fix it"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
+    assert_equals "changes_requested" "$result"
+}
+
+function test_build_comment_parses_explicit_verdict_comment() {
+    local review_json='{"verdict": "comment", "issues": [{"severity": "low"}], "suggestions": [], "praise": [], "summary": "Consider this"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
+    assert_equals "comment" "$result"
+}
+
+function test_build_comment_includes_verdict_reason() {
+    local review_json='{"verdict": "approve", "verdict_reason": "No critical issues found", "issues": [], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c 'Reason:' || true)
+    assert_equals 1 "$found"
+}
+
+function test_build_comment_shows_current_code_in_issues() {
+    local review_json='{"verdict": "approve", "issues": [{"file": "test.js", "line": 10, "current_code": "if (x == 1)", "description": "magic number", "suggested_fix": "const ONE = 1"}], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_code
+    found_code=$(echo "$result" | grep -c 'if (x == 1)' || true)
+    local found_suggested
+    found_suggested=$(echo "$result" | grep -c 'const ONE = 1' || true)
+    assert_equals 1 "$found_code"
+    assert_equals 1 "$found_suggested"
+}
+
+function test_build_comment_shows_current_code_in_suggestions() {
+    local review_json='{"verdict": "comment", "suggestions": [{"file": "test.js", "line": 20, "current_code": "function x()", "suggested_code": "function processData()", "description": "Better name"}], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_code
+    found_code=$(echo "$result" | grep -c 'function x()' || true)
+    local found_suggested
+    found_suggested=$(echo "$result" | grep -c 'function processData()' || true)
+    assert_equals 1 "$found_code"
+    assert_equals 1 "$found_suggested"
+}

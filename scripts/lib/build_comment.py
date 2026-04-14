@@ -46,6 +46,16 @@ def determine_verdict(review):
         'approved' if no critical/high issues
         'changes_requested' if there are critical/high issues
     """
+    # Check for explicit verdict in response
+    verdict = review.get("verdict", "").lower()
+    if verdict in ("approve", "approved"):
+        return "approved"
+    if verdict in ("request_changes", "changes_requested"):
+        return "changes_requested"
+    if verdict == "comment":
+        return "comment"
+
+    # Fallback: determine from issue severity
     issues = review.get("issues", [])
 
     for issue in issues:
@@ -70,6 +80,7 @@ def main():
     suggestions = review.get("suggestions", [])
     praise = review.get("praise", [])
     summary = review.get("summary", "")
+    verdict_reason = review.get("verdict_reason", "")
     model = os.environ.get("OLLAMA_MODEL", "ollama")
 
     # Determine verdict
@@ -77,11 +88,16 @@ def main():
 
     if verdict == "approved":
         verdict_text = "Approved"
-    else:
+    elif verdict == "changes_requested":
         verdict_text = "Changes Requested"
+    else:
+        verdict_text = "Comment"
 
     body = f"## AI Code Review\n\n"
-    body += f"**Verdict:** {verdict_text}\n\n"
+    body += f"**Verdict:** {verdict_text}\n"
+    if verdict_reason:
+        body += f"**Reason:** {verdict_reason}\n"
+    body += "\n"
 
     if issues:
         body += "### Issues\n"
@@ -91,10 +107,16 @@ def main():
             file = i.get("file", "")
             line = i.get("line", "?")
             desc = i.get("description", "")
+            current_code = i.get("current_code", "")
+            suggested_fix = i.get("suggested_fix", "")
 
             location = f"{file}:{line}" if file and line else (file or line or "?")
             type_tag = f" [{typ}]" if typ else ""
             body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
+            if current_code:
+                body += f"    ```\n    {current_code}\n    ```\n"
+            if suggested_fix:
+                body += f"    **Suggested:**\n    ```\n    {suggested_fix}\n    ```\n"
         body += "\n"
 
     if suggestions:
@@ -104,9 +126,15 @@ def main():
             file = s.get("file", "")
             line = s.get("line", "?")
             desc = s.get("description", "")
+            current_code = s.get("current_code", "")
+            suggested_code = s.get("suggested_code", "")
 
             location = f"{file}:{line}" if file and line else (file or line or "?")
             body += f"{idx}. {location}: {desc}\n"
+            if current_code:
+                body += f"    ```\n    {current_code}\n    ```\n"
+            if suggested_code:
+                body += f"    **Suggested:**\n    ```\n    {suggested_code}\n    ```\n"
         body += "\n"
 
     if praise:

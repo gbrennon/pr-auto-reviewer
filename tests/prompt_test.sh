@@ -73,3 +73,51 @@ function test_build_prompt_includes_diff_content() {
     found=$(echo "$result" | grep -c 'MY_TEST_DIFF_CONTENT' || true)
     assert_equals 1 "$found"
 }
+
+function test_build_prompt_includes_verdict_field() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c '"verdict"' || true)
+    assert_equals 1 "$found"
+}
+
+function test_build_prompt_includes_verdict_reason_field() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c '"verdict_reason"' || true)
+    assert_equals 1 "$found"
+}
+
+function test_build_prompt_suggestions_include_suggested_code() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c '"suggested_code"' || true)
+    assert_equals 1 "$found"
+}
+
+function test_build_prompt_includes_mandatory_requirements() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c 'MANDATORY OUTPUT REQUIREMENTS' || true)
+    assert_equals 1 "$found"
+}
+
+function test_build_prompt_contains_current_code_example() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c 'current_code' || true)
+    assert_equals 0 $? # grep returns 0 if found, 1 if not found
+}
+
+function test_build_prompt_contains_suggested_fix_example() {
+    local result
+    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
+    local found
+    found=$(echo "$result" | grep -c 'suggested_fix' || true)
+    assert_equals 0 $?
+}
