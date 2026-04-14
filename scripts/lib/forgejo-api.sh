@@ -103,7 +103,7 @@ forgejo_post_pr_review() {
   local reviewer_token="$5"
   
   local escaped_body
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/reviews" \
     "{\"event\":\"${event}\",\"body\":${escaped_body}}" \
@@ -127,8 +127,8 @@ forgejo_create_issue() {
   
   local escaped_title
   local escaped_body
-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   local result
   result=$(forgejo_api_post "/repos/${repo}/issues" \
@@ -143,7 +143,7 @@ forgejo_post_comment() {
   local body="$3"
   
   local escaped_body
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
     "{\"body\":${escaped_body}}" 2>/dev/null || true

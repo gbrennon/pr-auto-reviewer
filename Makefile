@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit test-unit
+.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit
 
 SHELL := /usr/bin/env bash
 SCRIPT_DIR := scripts
@@ -17,18 +17,17 @@ help:
 	@echo "  make restart        Restart the service"
 	@echo "  make logs           Show service logs (follow)"
 	@echo "  make watch          Run watcher once (manual mode)"
-	@echo "  make test           Run test on a repo"
+	@echo "  make test           Run unit tests"
 	@echo "  make issues         Create issues from PR commands"
 	@echo "  make list-items     List review items from PR"
 	@echo "  make clean          Clean state files"
 	@echo "  make install-bashunit  Install bashunit testing framework"
-	@echo "  make test-unit      Run unit tests with bashunit"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make test REPO=gbrennon/pr-auto-reviewer"
+	@echo "  make test"
+	@echo "  make watch"
 	@echo "  make issues REPO=owner/repo PR=8"
 	@echo "  make list-items REPO=owner/repo PR=8"
-	@echo "  make test-unit"
 
 install:
 	@bash $(SCRIPT_DIR)/install-service.sh
@@ -52,39 +51,16 @@ watch:
 	@bash $(SCRIPT_DIR)/watch.sh
 
 test:
-ifndef REPO
-	@echo "Usage: make test REPO=owner/repo"
-	@exit 1
-endif
-	@bash $(SCRIPT_DIR)/test-pr.sh $(REPO)
+	@bash $(SCRIPT_DIR)/test-unit.sh
 
 issues:
-ifndef REPO
-	@echo "Usage: make issues REPO=owner/repo PR=number"
-	@exit 1
-endif
-ifndef PR
-	@echo "Usage: make issues REPO=owner/repo PR=number"
-	@exit 1
-endif
-	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh $(REPO) $(PR)
+	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
 
 list-items:
-ifndef REPO
-	@echo "Usage: make list-items REPO=owner/repo PR=number"
-	@exit 1
-endif
-ifndef PR
-	@echo "Usage: make list-items REPO=owner/repo PR=number"
-	@exit 1
-endif
-	@bash $(SCRIPT_DIR)/list-items.sh $(REPO) $(PR)
+	@bash $(SCRIPT_DIR)/list-items.sh
 
 clean:
 	@bash $(SCRIPT_DIR)/clean.sh
 
 install-bashunit:
 	@bash $(SCRIPT_DIR)/install-bashunit.sh
-
-test-unit:
-	@bash $(SCRIPT_DIR)/test-unit.sh

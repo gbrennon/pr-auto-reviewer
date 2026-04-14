@@ -139,8 +139,8 @@ create_issue() {
   
   local escaped_title
   local escaped_body
-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   local result
   result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
@@ -160,7 +160,7 @@ post_comment() {
   local body="$3"
   
   local escaped_body
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   curl -sf -X POST "${API_BASE}/repos/${repo}/issues/${pr_number}/comments" \
     -H "Authorization: token ${FORGEJO_TOKEN}" \
