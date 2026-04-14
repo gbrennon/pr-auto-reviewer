@@ -61,6 +61,8 @@ Output ONLY valid JSON (no markdown, no explanation):
 - Prioritize: critical issues first, then architectural, then quality
 - No emojis in any output
 - Reply in English only
+- NEVER suggest adding comments. Instead, suggest using expressive variable/function names, extracting logic into well-named functions, or restructuring code to make it self-documenting
+- NEVER suggest adding explanatory comments. Code should be self-explanatory through good naming and structure
 
 DIFF:
 {diff}"""
