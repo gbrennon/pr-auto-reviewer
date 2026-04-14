@@ -7,3 +7,4 @@ runner-data/
 *.service
 __pycache__
 lib/bashunit
+coverage/
