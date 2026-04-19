@@ -31,7 +31,16 @@ def parse_comments(json_data):
 
 
 def main():
-    json_data = json.load(sys.stdin)
+    try:
+        json_data = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        # No input or invalid JSON — treat as no comments
+        return
+    except Exception as e:
+        # Unexpected error — write to stderr so caller or logs can capture it
+        print(f"ERROR parsing comments JSON: {e}", file=sys.stderr)
+        return
+
     comments = parse_comments(json_data)
 
     for c in comments:

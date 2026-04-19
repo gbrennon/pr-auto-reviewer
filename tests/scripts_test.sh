@@ -65,6 +65,18 @@ function test_create_issue_does_not_use_reviewer_token() {
     assert_equals 0 "$found"
 }
 
+function test_watch_prs_lists_owner_repos() {
+    local found
+    found=$(grep -F -c '/user/repos?limit=50' "${WATCH_PRS}" || true)
+    assert_equals 1 "$found"
+}
+
+function test_watch_prs_reports_repo_auth_failure() {
+    local found
+    found=$(grep -F -c 'authentication failed while listing repos' "${WATCH_PRS}" || true)
+    assert_equals 1 "$found"
+}
+
 function test_create_issues_uses_owner_token() {
     local found
     found=$(grep 'Authorization: token.*FORGEJO_TOKEN' "${CREATE_ISSUES}" | wc -l)
@@ -81,4 +93,16 @@ function test_create_issues_does_not_use_reviewer_token() {
     local found
     found=$(grep 'Authorization: token.*FORGEJO_REVIEWER_TOKEN' "${CREATE_ISSUES}" | wc -l)
     assert_equals 0 "$found"
+}
+
+function test_forgejo_api_lists_owner_repos() {
+    local found
+    found=$(grep -F -c '/user/repos?limit=50' "${SCRIPT_DIR}/lib/forgejo-api.sh" || true)
+    assert_equals 1 "$found"
+}
+
+function test_watch_prs_reports_ollama_failure_details() {
+    local found
+    found=$(grep -c 'Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http:' "${WATCH_PRS}" || true)
+    assert_equals 1 "$found"
 }

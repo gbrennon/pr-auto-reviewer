@@ -114,9 +114,11 @@ def main():
             type_tag = f" [{typ}]" if typ else ""
             body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
             if current_code:
-                body += f"    ```\n    {current_code}\n    ```\n"
+                body += f"    `````\n    {current_code}\n    `````\n"
             if suggested_fix:
-                body += f"    **Suggested:**\n    ```\n    {suggested_fix}\n    ```\n"
+                body += (
+                    f"    **Suggested:**\n    `````\n    {suggested_fix}\n    `````\n"
+                )
         body += "\n"
 
     if suggestions:
@@ -132,9 +134,11 @@ def main():
             location = f"{file}:{line}" if file and line else (file or line or "?")
             body += f"{idx}. {location}: {desc}\n"
             if current_code:
-                body += f"    ```\n    {current_code}\n    ```\n"
+                body += f"    `````\n    {current_code}\n    `````\n"
             if suggested_code:
-                body += f"    **Suggested:**\n    ```\n    {suggested_code}\n    ```\n"
+                body += (
+                    f"    **Suggested:**\n    `````\n    {suggested_code}\n    `````\n"
+                )
         body += "\n"
 
     if praise:
