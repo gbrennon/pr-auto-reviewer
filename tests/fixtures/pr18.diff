@@ -1,0 +1,165 @@
+diff --git a/evals/evaluators/__init__.py b/evals/evaluators/__init__.py
+index 8d1fdec..67ebb6c 100644
+--- a/evals/evaluators/__init__.py
++++ b/evals/evaluators/__init__.py
+@@ -1 +1,23 @@
+-# Evaluators module
++"""Evaluators module - evaluation strategies for model output validation."""
++
++from evals.evaluators.factory import (
++    make_evaluator,
++    ExactMatchEvaluator,
++    SchemaEvaluator,
++    CodeBlockEvaluator,
++    OllamaJudgeEvaluator,
++)
++from evals.evaluators.base import Evaluator, AsyncEvaluator, EvaluationResult
++from evals.evaluators._json_parser import parse_json_output
++
++__all__ = [
++    "make_evaluator",
++    "ExactMatchEvaluator",
++    "SchemaEvaluator",
++    "CodeBlockEvaluator",
++    "OllamaJudgeEvaluator",
++    "Evaluator",
++    "AsyncEvaluator",
++    "EvaluationResult",
++    "parse_json_output",
++]
+diff --git a/evals/evaluators/exact_match.py b/evals/evaluators/exact_match.py
+index e795654..088a682 100644
+--- a/evals/evaluators/exact_match.py
++++ b/evals/evaluators/exact_match.py
+@@ -1,167 +1,36 @@
+-"""Exact-match evaluator for code-review model - 100%."""
++"""Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.
++
++This module is kept for backward compatibility only.
++All functionality has been moved to SchemaEvaluator.
++"""
+ 
+ from __future__ import annotations
+ 
+-import json
+-import re
+-from typing import Optional
++import warnings
+ 
+-from evals.evaluators.base import AsyncEvaluator, EvaluationResult
+-from evals.fixtures.models import Fixture
++from evals.evaluators.schema_evaluator import SchemaEvaluator
++
++__all__ = ["ExactMatchEvaluator"]
+ 
+ 
+-class ExactMatchEvaluator(AsyncEvaluator):
+-    """Very lenient evaluator - passes if model produces any output."""
++class ExactMatchEvaluator(SchemaEvaluator):
++    """Deprecated: This evaluator is deprecated.
++
++    Use SchemaEvaluator directly instead. ExactMatchEvaluator was too lenient
++    and has been replaced with proper JSON schema validation.
++
++    This class is a thin wrapper around SchemaEvaluator for backwards compatibility.
++    """
+ 
+     def __init__(self, strict_mode: bool = False):
++        warnings.warn(
++            "ExactMatchEvaluator is deprecated. Use SchemaEvaluator instead.",
++            DeprecationWarning,
++            stacklevel=2,
++        )
++        super().__init__()
+         self.strict_mode = strict_mode
+ 
+     @property
+     def name(self) -> str:
+-        return "exact-match"
+-
+-    async def _async_evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
+-        return self._evaluate(fixture, model_output)
+-
+-    def _evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
+-        if not model_output or not model_output.strip():
+-            return EvaluationResult(
+-                fixture_name=fixture.name, passed=False, score=0.0, error="No output"
+-            )
+-
+-        parsed = self._parse_model_output(model_output)
+-
+-        if not parsed:
+-            return self._lenient_validate(fixture, model_output)
+-
+-        return self._validate(fixture, parsed)
+-
+-    def _parse_model_output(self, output: str) -> Optional[dict]:
+-        if not output or not output.strip():
+-            return None
+-
+-        lines = output.split("\n")
+-        json_str = lines[0]
+-        try:
+-            return json.loads(json_str)
+-        except:
+-            pass
+-
+-        return None
+-
+-    def _lenient_validate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
+-        if fixture.expected in model_output:
+-            return EvaluationResult(
+-                fixture_name=fixture.name, passed=True, score=1.0, details={"lenient": True}
+-            )
+-        return EvaluationResult(
+-            fixture_name=fixture.name, passed=False, score=0.0, details={"lenient": True}
+-        )
+-
+-    def _validate(self, fixture: Fixture, parsed: dict) -> EvaluationResult:
+-        try:
+-            passed = parsed.get("passed", False)
+-            score = parsed.get("score", 0.0)
+-            return EvaluationResult(
+-                fixture_name=fixture.name,
+-                passed=passed,
+-                score=score,
+-                details=parsed.get("details", {}),
+-            )
+-        except Exception as e:
+-            return EvaluationResult(
+-                fixture_name=fixture.name, passed=False, score=0.0, error=str(e)
+-            )
++        return "exact-match"
+diff --git a/evals/evaluators/factory.py b/evals/evaluators/factory.py
+index 1234567..abcdefg 100644
+--- a/evals/evaluators/factory.py
++++ b/evals/evaluators/factory.py
+@@ -1,10 +1,19 @@
+-"""from __future__ import annotations
++"""evals/evaluators/factory.py - Factory for creating evaluators based on model name and strategy.
+ 
++This module provides functions to create instances of evaluators, allowing for easy swapping of evaluation strategies.
++"""
++
++from __future__ import annotations
++
++from evals.evaluators.base import Evaluator
++from evals.evaluators.code_block_evaluator import CodeBlockEvaluator, language_from_model_name
++from evals.evaluators.exact_match import ExactMatchEvaluator
++from evals.evaluators.ollama_judge import OllamaJudgeEvaluator
++from evals.evaluators.schema_evaluator import SchemaEvaluator
++
++__all__ = ["make_evaluator", "ExactMatchEvaluator", "SchemaEvaluator", "CodeBlockEvaluator", "OllamaJudgeEvaluator"]
++
++def make_evaluator(model_name: str, strategy: str = "auto") -> Evaluator:
++    """Create an evaluator based on model name and strategy."""
++    if strategy == "exact" or "exact" in model_name.lower():
++        return ExactMatchEvaluator()
++    elif strategy == "schema" or "schema" in model_name.lower():
++        return SchemaEvaluator()
++    elif strategy == "code_block" or "code" in model_name.lower():
++        return CodeBlockEvaluator()
++    elif strategy == "judge" or "judge" in model_name.lower():
++        return OllamaJudgeEvaluator()
++    return SchemaEvaluator()
++

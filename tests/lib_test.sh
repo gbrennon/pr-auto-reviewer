@@ -180,13 +180,13 @@ function test_json_escape_escapes_quotes() {
 function test_python_files_use_snake_case() {
     local expected_files="build_comment.py build_prompt.py extract_review_items.py get_pr_comments.py get_pr_reviews.py json_escape.py parse_issue_command.py"
     local all_found=1
-    
+
     for file in $expected_files; do
         if [[ ! -f "${LIB_DIR}/${file}" ]]; then
             all_found=0
         fi
     done
-    
+
     assert_equals 1 "$all_found"
 }
 
@@ -242,4 +242,89 @@ function test_build_comment_shows_current_code_in_suggestions() {
     found_suggested=$(echo "$result" | grep -c 'function processData()' || true)
     assert_equals 1 "$found_code"
     assert_equals 1 "$found_suggested"
+}
+
+# Happy path - simple code without special characters
+function test_build_comment_uses_five_backticks_for_simple_code() {
+    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 1, "current_code": "x = 1", "description": "simple", "suggested_fix": "x = 2"}], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_opens
+    found_opens=$(echo "$result" | grep -cF '`````' || true)
+    local found_closes
+    found_closes=$(echo "$result" | grep -cF '`````' || true)
+    assert_equals 4 "$found_opens"
+    assert_equals 4 "$found_closes"
+}
+
+# Happy path - multi-line code with docstrings (contains triple quotes)
+function test_build_comment_uses_five_backticks_for_multiline() {
+    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 10, "current_code": "def foo():\n    return 1", "description": "add docstring", "suggested_fix": "def foo():\n    \"\"\"Docstring.\"\"\"\n    return 1"}], "summary": "Good"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_opens
+    found_opens=$(echo "$result" | grep -cF '`````' || true)
+    assert_equals 4 "$found_opens"
+}
+
+# Edge case - both current_code and suggested_code contain triple quotes (docstrings)
+function test_build_comment_handles_both_code_fields_with_triple_quotes() {
+    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 1, "current_code": "def foo():\n    \"\"\"Old doc\"\"\"", "description": "update", "suggested_fix": "def foo():\n    \"\"\"New doc\"\"\"\n    pass"}], "summary": "Ok"}'
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_opens
+    found_opens=$(echo "$result" | grep -cF '`````' || true)
+    assert_equals 4 "$found_opens"
+    local has_old_doc
+    has_old_doc=$(echo "$result" | grep -c '"""Old doc"""' || true)
+    assert_equals 1 "$has_old_doc"
+    local has_new_doc
+    has_new_doc=$(echo "$result" | grep -c '"""New doc"""' || true)
+    assert_equals 1 "$has_new_doc"
+}
+
+# Real-world test: PR#18 review with actual AI response containing triple quotes in suggested fixes
+function test_build_comment_pr18_real_ai_response() {
+    local review_json
+    review_json=$(cat << 'JSONEOF'
+{"verdict": "changes_requested", "verdict_reason": "test", "issues": [{"severity": "high", "type": "architecture", "file": "evals/evaluators/init.py", "line": "1", "description": "test1", "current_code": "# Evaluators module", "suggested_fix": "\"\"\"\\n\\nEvaluators module - evaluation strategies for model output validation.\\n\"\"\""}, {"severity": "high", "type": "architecture", "file": "evals/evaluators/exact_match.py", "line": "1", "description": "test2", "current_code": "\"\"\"Exact-match evaluator.\"\"\"", "suggested_fix": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"severity": "high", "type": "architecture", "file": "evals/evaluators/factory.py", "line": "8", "description": "test3", "current_code": "\"\"\"from __future__ import annotations\"\"\"", "suggested_fix": "\"\"\"\\n\\n\"\"\"evals/evaluators/factory.py - Factory for creating evaluators.\\n\"\"\""}], "suggestions": [{"file": "evals/evaluators/exact_match.py", "line": "1", "description": "test4", "current_code": "\"\"\"Exact-match.\"\"\"", "suggested_code": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"file": "evals/evaluators/factory.py", "line": "8", "description": "test5", "current_code": "\"\"\"from __future__ import annotations\"\"\"", "suggested_code": "\"\"\"\\n\\n\"\"\"evals/evaluators/factory.py - Factory for creating evaluators.\\n\"\"\""}], "summary": "test"}
+JSONEOF
+)
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_fences
+    found_fences=$(echo "$result" | grep -cF '`````' || true)
+    assert_equals 20 "$found_fences"
+    local has_deprecated
+    has_deprecated=$(echo "$result" | grep -c 'Deprecated:' || true)
+    assert_equals 2 "$has_deprecated"
+    local has_factory_docstring
+    has_factory_docstring=$(echo "$result" | grep -c 'evals/evaluators/factory.py - Factory' || true)
+    assert_equals 2 "$has_factory_docstring"
+}
+
+# Real-world test: PR#18 actual diff content as current_code (simulating real AI review)
+function test_build_comment_pr18_actual_diff_current_code() {
+    local review_json
+    review_json=$(cat << 'JSONEOF'
+{"verdict": "changes_requested", "issues": [{"severity": "high", "file": "evals/evaluators/__init__.py", "line": "1", "description": "Add module docstring", "current_code": "# Evaluators module", "suggested_fix": "\"\"\"Evaluators module - evaluation strategies for model output validation.\"\"\""}, {"severity": "high", "file": "evals/evaluators/exact_match.py", "line": "1", "description": "Mark as deprecated", "current_code": "\"\"\"Exact-match evaluator for code-review model - 100%.\"\"\"", "suggested_fix": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"severity": "medium", "file": "evals/evaluators/factory.py", "line": "8", "description": "Update docstring", "current_code": "\"\"\"from __future__ import annotations\\n\\nfrom evals.evaluators.base import Evaluator\\nfrom evals.evaluators.code_block_evaluator import CodeBlockEvaluator, language_from_model_name\\nfrom evals.evaluators.ollama_judge import OllamaJudgeEvaluator\\nfrom evals.evaluators.schema_evaluator import SchemaEvaluator\\n\"\"\"", "suggested_fix": "\"\"\"evals/evaluators/factory.py - Factory for creating evaluators based on model name and strategy.\\n\\nThis module provides functions to create instances of evaluators, allowing for easy swapping of evaluation strategies.\\n\"\"\""}], "summary": "The PR adds docstrings, deprecates ExactMatchEvaluator, and updates factory."}
+JSONEOF
+)
+    local result
+    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
+    local found_fences
+    found_fences=$(echo "$result" | grep -cF '`````' || true)
+    assert_equals 12 "$found_fences"
+    local has_evaluators_module
+    has_evaluators_module=$(echo "$result" | grep -c 'Evaluators module' || true)
+    assert_equals 2 "$has_evaluators_module"
+    local has_deprecated
+    has_deprecated=$(echo "$result" | grep -c 'Deprecated:' || true)
+    assert_equals 1 "$has_deprecated"
+    local has_factory_description
+    has_factory_description=$(echo "$result" | grep -c 'Factory for creating evaluators' || true)
+    assert_equals 1 "$has_factory_description"
+    local has_current_code_in_output
+    has_current_code_in_output=$(echo "$result" | grep -c 'Exact-match evaluator for code-review model' || true)
+    assert_equals 1 "$has_current_code_in_output"
 }

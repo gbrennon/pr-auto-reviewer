@@ -19,13 +19,37 @@ forgejo_api_post() {
 }
 
 forgejo_get_user_repos() {
+  local username
+  username=$(forgejo_api_get "/user" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('login') or data.get('username') or '')
+except Exception:
+    pass
+" 2>/dev/null || true)
+
+  if [[ -z "$username" ]]; then
+    return 0
+  fi
+
   forgejo_api_get "/user/repos?limit=50" | python3 -c "
 import sys, json
+owner = '${username}'
 try:
     data = json.load(sys.stdin)
     if isinstance(data, list):
         for r in data:
-            print(r.get('full_name', ''))
+            full_name = r.get('full_name', '')
+            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+            if full_name.startswith(owner + '/') or repo_owner == owner:
+                print(full_name)
+    elif isinstance(data, dict):
+        for r in data.get('data', []):
+            full_name = r.get('full_name', '')
+            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+            if full_name.startswith(owner + '/') or repo_owner == owner:
+                print(full_name)
 except Exception:
     pass
 " 2>/dev/null || true

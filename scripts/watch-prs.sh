@@ -202,18 +202,61 @@ get_repos() {
     return
   fi
   
-  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/user/repos?limit=50" \
-    | python3 -c "
+  local username
+  local user_body user_http
+  user_body=$(mktemp)
+  user_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/user" \
+    -o "$user_body" -w "%{http_code}" 2>/dev/null || true)
+
+  if [[ ! "$user_http" =~ ^2[0-9][0-9]$ ]]; then
+    echo "ERROR: FORGEJO_TOKEN authentication failed while resolving repo owner (HTTP ${user_http:-unknown})" >&2
+    rm -f "$user_body"
+    return 1
+  fi
+
+  username=$(python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    if isinstance(data, list):
-        for r in data:
-            print(r.get('full_name', ''))
+    print(data.get('login') or data.get('username') or '')
 except Exception:
     pass
-" 2>/dev/null || true
+" < "$user_body" 2>/dev/null || true)
+  rm -f "$user_body"
+
+  if [[ -z "$username" ]]; then
+    echo "ERROR: FORGEJO_TOKEN did not return an authenticated username" >&2
+    return 1
+  fi
+
+  local repos_body repos_http
+  repos_body=$(mktemp)
+  repos_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/user/repos?limit=50" \
+    -o "$repos_body" -w "%{http_code}" 2>/dev/null || true)
+
+  if [[ ! "$repos_http" =~ ^2[0-9][0-9]$ ]]; then
+    echo "ERROR: FORGEJO_TOKEN authentication failed while listing repos (HTTP ${repos_http:-unknown})" >&2
+    rm -f "$repos_body"
+    return 1
+  fi
+
+  python3 -c "
+import sys, json
+owner = '${username}'
+try:
+    data = json.load(sys.stdin)
+    repos = data if isinstance(data, list) else data.get('data', [])
+    for r in repos:
+        full_name = r.get('full_name', '')
+        repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+        if full_name.startswith(owner + '/') or repo_owner == owner:
+            print(full_name)
+except Exception:
+    pass
+" < "$repos_body" 2>/dev/null || true
+  rm -f "$repos_body"
 }
 
 get_open_prs() {
@@ -375,8 +418,17 @@ process_pr() {
   local ollama_host
   ollama_host=$(resolve_ollama_host)
   
-  local response
-  response=$(python3 -c "
+  if [[ -z "$ollama_host" ]]; then
+    echo "    -> ERROR: Ollama host not resolved (service unreachable)"
+    return 1
+  fi
+  
+  local response_file curl_err http_status curl_exit response
+  response_file=$(mktemp)
+  curl_err=$(mktemp)
+  set +e
+  http_status=$(
+    python3 -c "
 import json
 import os
 import sys
@@ -387,12 +439,32 @@ data = {
     'stream': False
 }
 print(json.dumps(data))
-" <<< "$review_prompt" | curl -sf -X POST "${ollama_host}/api/generate" \
+" <<< "$review_prompt" | curl -sS -X POST "${ollama_host}/api/generate" \
     -H "Content-Type: application/json" \
-    -d @- 2>&1) || {
-      echo "    -> ERROR: Ollama request failed"
-      return 1
-    }
+    -d @- \
+    -o "$response_file" \
+    -w "%{http_code}" 2>"$curl_err"
+  )
+  curl_exit=$?
+  set -e
+  
+  if [[ $curl_exit -ne 0 ]] || ! [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+    local curl_details response_excerpt
+    curl_details=$(tr '\n' ' ' < "$curl_err" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    response_excerpt=$(tr '\n' ' ' < "$response_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' | cut -c1-240)
+    echo "    -> ERROR: Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http: ${http_status:-unknown}, curl exit: ${curl_exit})"
+    if [[ -n "$curl_details" ]]; then
+      echo "      curl: ${curl_details}"
+    fi
+    if [[ -n "$response_excerpt" ]]; then
+      echo "      body: ${response_excerpt}"
+    fi
+    rm -f "$response_file" "$curl_err"
+    return 1
+  fi
+  
+  response=$(cat "$response_file")
+  rm -f "$response_file" "$curl_err"
   
   local review
   review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
@@ -672,7 +744,9 @@ cycle() {
   echo "=== Cycle #${cycle_num} ==="
   
   local repos
-  repos=$(get_repos)
+  if ! repos=$(get_repos); then
+    return
+  fi
   
   if [[ -z "$repos" ]]; then
     echo "No repos found"
