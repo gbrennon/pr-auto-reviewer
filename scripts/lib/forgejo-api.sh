@@ -172,3 +172,22 @@ forgejo_post_comment() {
   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
     "{\"body\":${escaped_body}}" 2>/dev/null || true
 }
+
+forgejo_get_repo_tree() {
+  local repo="$1"
+  local ref="${2:-main}"
+  
+  forgejo_api_get "/repos/${repo}/git/trees/${ref}?recursive=true" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tree = data.get('tree', [])
+    for entry in tree:
+        path = entry.get('path', '')
+        entry_type = 'dir' if entry.get('type') == 'tree' else 'file'
+        suffix = '/' if entry_type == 'dir' else ''
+        print(f'{path}{suffix}')
+except Exception:
+    pass
+" 2>/dev/null || true
+}

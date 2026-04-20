@@ -5,10 +5,21 @@ import sys
 import os
 
 diff = os.environ.get("DIFF_CONTENT", "")
+repo_structure = os.environ.get("REPO_STRUCTURE", "")
+
+structure_section = ""
+if repo_structure:
+    structure_section = f"""
+## REPOSITORY STRUCTURE
+
+The following is the file tree of the repository. Use this to understand the codebase architecture and how files relate to each other.
+
+{repo_structure}
+
+"""
 
 prompt = f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
-
-## REVIEW PRIORITY
+{structure_section}## REVIEW PRIORITY
 
 1. **Critical Issues** (must fix):
    - Security vulnerabilities
