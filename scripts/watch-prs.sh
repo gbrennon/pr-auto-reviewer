@@ -412,8 +412,11 @@ process_pr() {
   
   echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
   
+  local repo_structure
+  repo_structure=$(forgejo_get_repo_tree "$repo" main 2>/dev/null || true)
+  
   local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
   
   local ollama_host
   ollama_host=$(resolve_ollama_host)
