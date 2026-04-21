@@ -97,20 +97,35 @@ if [[ ${#diff_content} -lt 50 ]]; then
   exit 1
 fi
 
+architecture_hint=""
 repo_structure=""
+conventions=""
+
 if [[ -n "$REPO_PATH" ]]; then
   echo "  Generating repo structure from: ${REPO_PATH}" >&2
   repo_structure=$(python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" "$REPO_PATH" 2>/dev/null || true)
+  architecture_hint=$(python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type "$REPO_PATH" 2>/dev/null || echo "unknown")
+
+  for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
+    if [[ -f "${REPO_PATH}/${conf_file}" ]]; then
+      conventions=$(cat "${REPO_PATH}/${conf_file}")
+      echo "  Conventions: ${conf_file} (${#conventions} bytes)" >&2
+      break
+    fi
+  done
 fi
 
 echo "Generating review..." >&2
 echo "  Diff: ${DIFF_FILE} (${#diff_content} bytes)" >&2
 echo "  Model: ${OLLAMA_MODEL}" >&2
+if [[ -n "$architecture_hint" ]] && [[ "$architecture_hint" != "unknown" ]]; then
+  echo "  Project type: ${architecture_hint}" >&2
+fi
 if [[ -n "$repo_structure" ]]; then
   echo "  Repo structure: included (${#repo_structure} bytes)" >&2
 fi
 
-review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
 
 ollama_host=$(resolve_ollama_host)
 

@@ -115,6 +115,21 @@ echo "Fetching repo structure from branch '${BRANCH}'..." >&2
 
 repo_structure=$(forgejo_get_repo_tree "$REPO" "$BRANCH" 2>/dev/null || true)
 
+architecture_hint="unknown"
+if [[ -n "$repo_structure" ]]; then
+  architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
+fi
+
+conventions=""
+for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
+  conf_content=$(forgejo_api_get "/repos/${REPO}/raw/${BRANCH}/${conf_file}" 2>/dev/null || true)
+  if [[ -n "$conf_content" ]]; then
+    conventions="$conf_content"
+    echo "  Conventions: ${conf_file} found (${#conventions} bytes)" >&2
+    break
+  fi
+done
+
 if [[ -z "$repo_structure" ]]; then
   echo "WARNING: Could not fetch repo structure, continuing without it..." >&2
 fi
@@ -123,12 +138,15 @@ echo "Generating review..." >&2
 echo "  Repo: ${REPO}" >&2
 echo "  PR: #${PR_NUMBER}" >&2
 echo "  Diff: ${#diff_content} bytes" >&2
+if [[ -n "$architecture_hint" ]] && [[ "$architecture_hint" != "unknown" ]]; then
+  echo "  Project type: ${architecture_hint}" >&2
+fi
 if [[ -n "$repo_structure" ]]; then
   echo "  Repo structure: ${#repo_structure} bytes" >&2
 fi
 echo "  Model: ${OLLAMA_MODEL}" >&2
 
-review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
 
 ollama_host=$(resolve_ollama_host)
 
