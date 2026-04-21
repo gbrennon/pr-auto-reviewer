@@ -415,8 +415,24 @@ process_pr() {
   local repo_structure
   repo_structure=$(forgejo_get_repo_tree "$repo" main 2>/dev/null || true)
   
+  local architecture_hint="unknown"
+  if [[ -n "$repo_structure" ]]; then
+    architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
+  fi
+  
+  local conventions=""
+  local conf_file
+  for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
+    local conf_content
+    conf_content=$(forgejo_api_get "/repos/${repo}/raw/main/${conf_file}" 2>/dev/null || true)
+    if [[ -n "$conf_content" ]]; then
+      conventions="$conf_content"
+      break
+    fi
+  done
+  
   local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
   
   local ollama_host
   ollama_host=$(resolve_ollama_host)
