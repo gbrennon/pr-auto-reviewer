@@ -12,6 +12,7 @@ diff = os.environ.get("DIFF_CONTENT", "")
 repo_structure = os.environ.get("REPO_STRUCTURE", "")
 architecture_hint = os.environ.get("ARCHITECTURE_HINT", "")
 conventions = os.environ.get("CONVENTIONS", "")
+file_contents = os.environ.get("FILE_CONTENTS", "")
 
 sections = []
 
@@ -25,6 +26,14 @@ The following is the file tree of the repository. Use this to understand
 the codebase architecture and how files relate to each other.
 
 {repo_structure}
+""")
+
+if file_contents:
+    sections.append(f"""FILES
+
+The following is the current content of files that are being changed:
+
+{file_contents}
 """)
 
 if conventions:

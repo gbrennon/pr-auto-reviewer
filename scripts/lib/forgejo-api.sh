@@ -191,3 +191,11 @@ except Exception:
     pass
 " 2>/dev/null || true
 }
+
+forgejo_get_file_content() {
+  local repo="$1"
+  local ref="${2:-main}"
+  local path="$3"
+  
+  forgejo_api_get "/repos/${repo}/raw/${ref}/${path}" 2>/dev/null || true
+}

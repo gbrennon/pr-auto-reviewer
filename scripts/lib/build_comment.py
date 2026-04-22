@@ -53,7 +53,7 @@ def determine_verdict(review):
     if verdict in ("request_changes", "changes_requested"):
         return "changes_requested"
     if verdict == "comment":
-        return "comment"
+        return "approved"
 
     # Fallback: determine from issue severity
     issues = review.get("issues", [])

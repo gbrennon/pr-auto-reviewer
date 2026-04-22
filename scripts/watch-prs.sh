@@ -17,13 +17,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Lock
+# Check if force review mode (skip lock)
 WATCHER_LOCK_FILE="${REPO_ROOT}/watcher-prs.lock"
 WATCHER_PID_FILE="${REPO_ROOT}/watcher-prs.pid"
-exec 9>"$WATCHER_LOCK_FILE"
-if ! flock -n 9; then
-  echo "watch-prs.sh is already running. Exiting." >&2
-  exit 1
+
+# Force review skips the lock check
+SKIP_LOCK=false
+for arg in "$@"; do
+  if [[ "$arg" == "-p" ]] || [[ "$arg" =~ ^-p[0-9]+$ ]]; then
+    SKIP_LOCK=true
+    break
+  fi
+done
+
+if [[ "$SKIP_LOCK" != "true" ]]; then
+  exec 9>"$WATCHER_LOCK_FILE"
+  if ! flock -n 9; then
+    echo "watch-prs.sh is already running. Exiting." >&2
+    exit 1
+  fi
 fi
 echo $$ > "$WATCHER_PID_FILE"
 
@@ -290,6 +302,43 @@ get_diff() {
     "${API_BASE}/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
 }
 
+get_files_from_diff() {
+  local diff="$1"
+  
+  echo "$diff" | grep -E "^diff --git" | sed 's/diff --git a\///' | cut -d' ' -f1 | sort -u
+}
+
+get_file_contents() {
+  local repo="$1"
+  local diff="$2"
+  
+  local files
+  files=$(get_files_from_diff "$diff")
+  
+  local contents=""
+  
+  for file in $files; do
+    [[ -z "$file" ]] && continue
+    
+    local sha
+    sha=$(echo "$diff" | grep -E "^diff.*$file" -A5 | grep "^@@" | head -1 | grep -oE '[a-f0-9]{40}' | head -1 || true)
+    
+    local ref="${sha:-main}"
+    
+    local content
+    content=$(forgejo_get_file_content "$repo" "$ref" "$file" 2>/dev/null || true)
+    
+    if [[ -n "$content" ]]; then
+      contents="${contents}
+
+=== FILE: ${file} ===
+${content}"
+    fi
+  done
+  
+  echo "$contents"
+}
+
 get_pr_comments() {
   local repo="$1"
   local pr_number="$2"
@@ -420,7 +469,7 @@ process_pr() {
     architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
   fi
   
-  local conventions=""
+local conventions=""
   local conf_file
   for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
     local conf_content
@@ -430,9 +479,12 @@ process_pr() {
       break
     fi
   done
-  
+
+  local file_contents
+  file_contents=$(get_file_contents "$repo" "$diff")
+
   local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" FILE_CONTENTS="$file_contents" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
   
   local ollama_host
   ollama_host=$(resolve_ollama_host)
