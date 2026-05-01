@@ -1,0 +1,15 @@
+"""ReviewContext — supporting context passed alongside the diff to improve review quality."""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ReviewContext:
+    """Supporting context passed alongside the diff to improve review quality.
+
+    Pure input data for prompt construction. No identity, no lifecycle.
+    """
+
+    architecture_hint: str
+    conventions: str | None = None
+    repository_structure: str | None = None
