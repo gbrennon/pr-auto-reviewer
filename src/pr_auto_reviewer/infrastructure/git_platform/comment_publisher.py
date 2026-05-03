@@ -1,0 +1,36 @@
+"""GitCommentPublisherAdapter — wraps GitPlatformHttpClient to implement CommentPublisherPort."""
+
+from __future__ import annotations
+
+import logging
+
+from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
+    CommentPublisherPort,
+)
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
+    GitPlatformHttpClient,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class GitCommentPublisherAdapter(CommentPublisherPort):
+    """Posts a reply comment on a PR; failure is non-fatal (logged only)."""
+
+    def __init__(self, client: GitPlatformHttpClient) -> None:
+        self._client = client
+
+    # ------------------------------------------------------------------ [port]
+    def post(self, pr_id: PullRequestId, body: str) -> None:
+        """POST a comment on *pr_id*. Logs warning on failure; does not raise."""
+
+        # -- [http] POST comment ---------------------------------------------
+        path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
+        try:
+            self._client.post(path, {"body": body})
+        except Exception:
+            # [err] non-fatal — log and move on
+            logger.warning(
+                "Failed to post comment on %s (non-fatal)", pr_id
+            )
