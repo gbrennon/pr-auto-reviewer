@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .item_severity import ItemSeverity
+from ..value_objects.item_severity import ItemSeverity
 
 
 @dataclass(frozen=True)

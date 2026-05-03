@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 from ..value_objects.pull_request_id import PullRequestId
 from ..value_objects.commit_sha import CommitSha

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 
 from .review_verdict import ReviewVerdict
-from .review_item import ReviewItem
+from ..entities.review_item import ReviewItem
 
 
 @dataclass(frozen=True)
