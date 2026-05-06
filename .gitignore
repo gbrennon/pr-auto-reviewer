@@ -6,3 +6,5 @@ runner-data/
 *.pid
 *.service
 __pycache__
+lib/bashunit
+coverage/

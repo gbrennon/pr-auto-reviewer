@@ -17,13 +17,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Lock
+# Check if force review mode (skip lock)
 WATCHER_LOCK_FILE="${REPO_ROOT}/watcher-prs.lock"
 WATCHER_PID_FILE="${REPO_ROOT}/watcher-prs.pid"
-exec 9>"$WATCHER_LOCK_FILE"
-if ! flock -n 9; then
-  echo "watch-prs.sh is already running. Exiting." >&2
-  exit 1
+
+# Force review skips the lock check
+SKIP_LOCK=false
+for arg in "$@"; do
+  if [[ "$arg" == "-p" ]] || [[ "$arg" =~ ^-p[0-9]+$ ]]; then
+    SKIP_LOCK=true
+    break
+  fi
+done
+
+if [[ "$SKIP_LOCK" != "true" ]]; then
+  exec 9>"$WATCHER_LOCK_FILE"
+  if ! flock -n 9; then
+    echo "watch-prs.sh is already running. Exiting." >&2
+    exit 1
+  fi
 fi
 echo $$ > "$WATCHER_PID_FILE"
 
@@ -202,18 +214,61 @@ get_repos() {
     return
   fi
   
-  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/user/repos?limit=50" \
-    | python3 -c "
+  local username
+  local user_body user_http
+  user_body=$(mktemp)
+  user_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/user" \
+    -o "$user_body" -w "%{http_code}" 2>/dev/null || true)
+
+  if [[ ! "$user_http" =~ ^2[0-9][0-9]$ ]]; then
+    echo "ERROR: FORGEJO_TOKEN authentication failed while resolving repo owner (HTTP ${user_http:-unknown})" >&2
+    rm -f "$user_body"
+    return 1
+  fi
+
+  username=$(python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    if isinstance(data, list):
-        for r in data:
-            print(r.get('full_name', ''))
+    print(data.get('login') or data.get('username') or '')
 except Exception:
     pass
-" 2>/dev/null || true
+" < "$user_body" 2>/dev/null || true)
+  rm -f "$user_body"
+
+  if [[ -z "$username" ]]; then
+    echo "ERROR: FORGEJO_TOKEN did not return an authenticated username" >&2
+    return 1
+  fi
+
+  local repos_body repos_http
+  repos_body=$(mktemp)
+  repos_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
+    "${API_BASE}/user/repos?limit=50" \
+    -o "$repos_body" -w "%{http_code}" 2>/dev/null || true)
+
+  if [[ ! "$repos_http" =~ ^2[0-9][0-9]$ ]]; then
+    echo "ERROR: FORGEJO_TOKEN authentication failed while listing repos (HTTP ${repos_http:-unknown})" >&2
+    rm -f "$repos_body"
+    return 1
+  fi
+
+  python3 -c "
+import sys, json
+owner = '${username}'
+try:
+    data = json.load(sys.stdin)
+    repos = data if isinstance(data, list) else data.get('data', [])
+    for r in repos:
+        full_name = r.get('full_name', '')
+        repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+        if full_name.startswith(owner + '/') or repo_owner == owner:
+            print(full_name)
+except Exception:
+    pass
+" < "$repos_body" 2>/dev/null || true
+  rm -f "$repos_body"
 }
 
 get_open_prs() {
@@ -247,25 +302,50 @@ get_diff() {
     "${API_BASE}/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
 }
 
+get_files_from_diff() {
+  local diff="$1"
+  
+  echo "$diff" | grep -E "^diff --git" | sed 's/diff --git a\///' | cut -d' ' -f1 | sort -u
+}
+
+get_file_contents() {
+  local repo="$1"
+  local diff="$2"
+  
+  local files
+  files=$(get_files_from_diff "$diff")
+  
+  local contents=""
+  
+  for file in $files; do
+    [[ -z "$file" ]] && continue
+    
+    local sha
+    sha=$(echo "$diff" | grep -E "^diff.*$file" -A5 | grep "^@@" | head -1 | grep -oE '[a-f0-9]{40}' | head -1 || true)
+    
+    local ref="${sha:-main}"
+    
+    local content
+    content=$(forgejo_get_file_content "$repo" "$ref" "$file" 2>/dev/null || true)
+    
+    if [[ -n "$content" ]]; then
+      contents="${contents}
+
+=== FILE: ${file} ===
+${content}"
+    fi
+  done
+  
+  echo "$contents"
+}
+
 get_pr_comments() {
   local repo="$1"
   local pr_number="$2"
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    comments = data if isinstance(data, list) else data.get('data', [])
-    for c in comments:
-        body = c.get('body', '')
-        id = c.get('id', '')
-        created = c.get('created_at', '')
-        if body:
-            print(f'{id}|{created}|{body}')
-except Exception:
-    pass
-" 2>/dev/null || true
+    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | \
+    python3 "${SCRIPT_DIR}/lib/get_pr_comments.py" 2>/dev/null || true
 }
 
 get_pr_reviews() {
@@ -273,27 +353,15 @@ get_pr_reviews() {
   local pr_number="$2"
   
   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
-    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    reviews = data if isinstance(data, list) else data.get('data', [])
-    for r in reviews:
-        body = r.get('body', '')
-        verdict = r.get('state', '')
-        id = r.get('id', '')
-        if body:
-            print(f'{id}|{verdict}|{body}')
-except Exception:
-    pass
-" 2>/dev/null || true
+    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | \
+    python3 "${SCRIPT_DIR}/lib/get_pr_reviews.py" 2>/dev/null || true
 }
 
 get_latest_review() {
   local repo="$1"
   local pr_number="$2"
   
-  get_pr_reviews "$repo" "$pr_number" | tail -1 | cut -d'|' -f3-
+  get_pr_reviews "$repo" "$pr_number" | cut -d'|' -f4-
 }
 
 list_review_items() {
@@ -318,98 +386,13 @@ list_review_items() {
 parse_issue_command() {
   local comment="$1"
   
-  local cmd_numbers
-  cmd_numbers=$(python3 -c "
-import re
-import sys
-
-comment = sys.stdin.read().strip().lower()
-# Support: 'create issue for 1, 2' and 'issue 1, 2'
-pattern = r'(?:create\s+issue\s+for\s+|issue\s+)([0-9,\s]+)'
-match = re.search(pattern, comment)
-if match:
-    nums = match.group(1)
-    numbers = [n.strip() for n in re.split(r'[,\s]+', nums) if n.strip() and n.strip().isdigit()]
-    if numbers:
-        print(','.join(numbers))
-" <<< "$comment" 2>/dev/null) || true
-  
-  echo "$cmd_numbers"
+  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse_issue_command.py" 2>/dev/null || true
 }
 
 extract_review_items() {
   local review_body="$1"
   
-  python3 -c "
-import re
-import sys
-
-body = sys.stdin.read()
-
-issues = []
-suggestions = []
-
-lines = body.split('\n')
-in_issues = False
-in_suggestions = False
-next_num = 1
-
-for line in lines:
-    line = line.strip()
-    if line.lower() == '### issues' or line.lower() == '### issues\n':
-        in_issues = True
-        in_suggestions = False
-        continue
-    elif line.lower() == '### suggestions' or line.lower() == '### suggestions\n':
-        in_suggestions = True
-        in_issues = False
-        continue
-    elif line.lower().startswith('### '):
-        in_issues = False
-        in_suggestions = False
-        continue
-    
-    if in_issues or in_suggestions:
-        match = re.match(r'^\d+[\.\)]\s+(.*)', line)
-        if match:
-            num = int(re.match(r'^(\d+)', line).group(1))
-            text = match.group(1).strip()
-            
-            severity = ''
-            issue_type = ''
-            location = ''
-            
-            sev_match = re.search(r'\[(\w+)\]', text)
-            if sev_match:
-                severity = sev_match.group(1)
-            
-            type_match = re.search(r'\[(\w+)\]', text)
-            matches = re.findall(r'\[(\w+)\]', text)
-            if len(matches) > 1:
-                issue_type = matches[1] if matches[0] == matches[1] else matches[-1]
-            
-            loc_match = re.match(r'([^\s]+)', text)
-            if loc_match:
-                location = loc_match.group(1)
-            
-            if in_issues:
-                issues.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
-            else:
-                suggestions.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
-        elif line.startswith('- ') or line.startswith('* '):
-            text = line.lstrip('-* ')
-            if text:
-                if in_issues:
-                    issues.append(f'{next_num}|| | |{text}')
-                else:
-                    suggestions.append(f'{next_num}|| | |{text}')
-                next_num += 1
-
-for i in issues:
-    print(i)
-for s in suggestions:
-    print(s)
-" <<< "$review_body" 2>/dev/null || true
+  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract_review_items.py" 2>/dev/null || true
 }
 
 create_issue() {
@@ -419,8 +402,8 @@ create_issue() {
   
   local escaped_title
   local escaped_body
-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   local result
   result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
@@ -478,14 +461,45 @@ process_pr() {
   
   echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
   
+  local repo_structure
+  repo_structure=$(forgejo_get_repo_tree "$repo" main 2>/dev/null || true)
+  
+  local architecture_hint="unknown"
+  if [[ -n "$repo_structure" ]]; then
+    architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
+  fi
+  
+local conventions=""
+  local conf_file
+  for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
+    local conf_content
+    conf_content=$(forgejo_api_get "/repos/${repo}/raw/main/${conf_file}" 2>/dev/null || true)
+    if [[ -n "$conf_content" ]]; then
+      conventions="$conf_content"
+      break
+    fi
+  done
+
+  local file_contents
+  file_contents=$(get_file_contents "$repo" "$diff")
+
   local review_prompt
-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
+  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" FILE_CONTENTS="$file_contents" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
   
   local ollama_host
   ollama_host=$(resolve_ollama_host)
   
-  local response
-  response=$(python3 -c "
+  if [[ -z "$ollama_host" ]]; then
+    echo "    -> ERROR: Ollama host not resolved (service unreachable)"
+    return 1
+  fi
+  
+  local response_file curl_err http_status curl_exit response
+  response_file=$(mktemp)
+  curl_err=$(mktemp)
+  set +e
+  http_status=$(
+    python3 -c "
 import json
 import os
 import sys
@@ -496,12 +510,32 @@ data = {
     'stream': False
 }
 print(json.dumps(data))
-" <<< "$review_prompt" | curl -sf -X POST "${ollama_host}/api/generate" \
+" <<< "$review_prompt" | curl -sS -X POST "${ollama_host}/api/generate" \
     -H "Content-Type: application/json" \
-    -d @- 2>&1) || {
-      echo "    -> ERROR: Ollama request failed"
-      return 1
-    }
+    -d @- \
+    -o "$response_file" \
+    -w "%{http_code}" 2>"$curl_err"
+  )
+  curl_exit=$?
+  set -e
+  
+  if [[ $curl_exit -ne 0 ]] || ! [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+    local curl_details response_excerpt
+    curl_details=$(tr '\n' ' ' < "$curl_err" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    response_excerpt=$(tr '\n' ' ' < "$response_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' | cut -c1-240)
+    echo "    -> ERROR: Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http: ${http_status:-unknown}, curl exit: ${curl_exit})"
+    if [[ -n "$curl_details" ]]; then
+      echo "      curl: ${curl_details}"
+    fi
+    if [[ -n "$response_excerpt" ]]; then
+      echo "      body: ${response_excerpt}"
+    fi
+    rm -f "$response_file" "$curl_err"
+    return 1
+  fi
+  
+  response=$(cat "$response_file")
+  rm -f "$response_file" "$curl_err"
   
   local review
   review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
@@ -520,7 +554,7 @@ print(json.dumps(data))
   fi
   
   local verdict comment_body build_output
-  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build-comment.py")
+  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build_comment.py")
   verdict=$(echo "$build_output" | head -1)
   comment_body=$(echo "$build_output" | tail -n +2)
   
@@ -528,7 +562,7 @@ print(json.dumps(data))
 
   # Post formal review using reviewer token (not comment)
   local escaped_body
-  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
 
   local reviewer_token="${FORGEJO_REVIEWER_TOKEN:-}"
   local reviewer_username="${FORGEJO_REVIEWER_USERNAME:-}"
@@ -613,15 +647,20 @@ process_issue_commands() {
     review_body=$(get_latest_review "$repo" "$pr_number")
   fi
   
+  echo "    -> Review body (${#review_body} chars):"
+  echo "$review_body" | head -5 | sed 's/^/      /'
   echo "    -> Checking for issue creation commands..."
   
   local review_items
-  review_items=$(extract_review_items "$review_body")
+  review_items=$(DEBUG=1 extract_review_items "$review_body" 2>&1) || true
   
   if [[ -z "$review_items" ]]; then
     echo "    -> No actionable items found in review"
     return 0
   fi
+  
+  echo "    -> Found review items:"
+  echo "$review_items" | sed 's/^/      /'
   
   local comments
   comments=$(get_pr_comments "$repo" "$pr_number")
@@ -700,9 +739,9 @@ process_issue_commands() {
         severity_line="- **Severity:** ${severity}"
       fi
       
-      local type_line=""
+      local category_line=""
       if [[ -n "$type" ]]; then
-        type_line="- **Type:** ${type}"
+        category_line="- **Category:** ${type}"
       fi
       
       local location_line=""
@@ -710,18 +749,30 @@ process_issue_commands() {
         location_line="- **File:** ${location}"
       fi
       
-      local item_title_text="${item_text:0:200}"
-      local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
+      local clean_title="${item_text}"
+      for tag in "$severity" "$type"; do
+        if [[ -n "$tag" ]]; then
+          clean_title="${clean_title#\[${tag}\]}"
+          clean_title="${clean_title#\[${tag}\] }"
+        fi
+      done
+      clean_title="${clean_title#${location}}"
+      clean_title="${clean_title#: }"
+      clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
+      
+      local item_title_text="${clean_title:0:200}"
+      local issue_title="[PR #${pr_number}] ${item_title_text}"
       local issue_body="## Original Review (PR #${pr_number})
 
 **Description:**
 ${item_text}
-${severity_line:+}
-${severity_line}
-${type_line:+}
-${type_line}
+
 ${location_line:+}
 ${location_line}
+${category_line:+}
+${category_line}
+${severity_line:+}
+${severity_line}
 
 ---
 *Auto-created from PR #${pr_number} via PR AI Reviewer*"
@@ -764,7 +815,9 @@ cycle() {
   echo "=== Cycle #${cycle_num} ==="
   
   local repos
-  repos=$(get_repos)
+  if ! repos=$(get_repos); then
+    return
+  fi
   
   if [[ -z "$repos" ]]; then
     echo "No repos found"

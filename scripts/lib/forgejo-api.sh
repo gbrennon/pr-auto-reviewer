@@ -19,13 +19,37 @@ forgejo_api_post() {
 }
 
 forgejo_get_user_repos() {
+  local username
+  username=$(forgejo_api_get "/user" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(data.get('login') or data.get('username') or '')
+except Exception:
+    pass
+" 2>/dev/null || true)
+
+  if [[ -z "$username" ]]; then
+    return 0
+  fi
+
   forgejo_api_get "/user/repos?limit=50" | python3 -c "
 import sys, json
+owner = '${username}'
 try:
     data = json.load(sys.stdin)
     if isinstance(data, list):
         for r in data:
-            print(r.get('full_name', ''))
+            full_name = r.get('full_name', '')
+            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+            if full_name.startswith(owner + '/') or repo_owner == owner:
+                print(full_name)
+    elif isinstance(data, dict):
+        for r in data.get('data', []):
+            full_name = r.get('full_name', '')
+            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
+            if full_name.startswith(owner + '/') or repo_owner == owner:
+                print(full_name)
 except Exception:
     pass
 " 2>/dev/null || true
@@ -103,7 +127,7 @@ forgejo_post_pr_review() {
   local reviewer_token="$5"
   
   local escaped_body
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/reviews" \
     "{\"event\":\"${event}\",\"body\":${escaped_body}}" \
@@ -127,8 +151,8 @@ forgejo_create_issue() {
   
   local escaped_title
   local escaped_body
-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   local result
   result=$(forgejo_api_post "/repos/${repo}/issues" \
@@ -143,8 +167,35 @@ forgejo_post_comment() {
   local body="$3"
   
   local escaped_body
-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
   
   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
     "{\"body\":${escaped_body}}" 2>/dev/null || true
+}
+
+forgejo_get_repo_tree() {
+  local repo="$1"
+  local ref="${2:-main}"
+  
+  forgejo_api_get "/repos/${repo}/git/trees/${ref}?recursive=true" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tree = data.get('tree', [])
+    for entry in tree:
+        path = entry.get('path', '')
+        entry_type = 'dir' if entry.get('type') == 'tree' else 'file'
+        suffix = '/' if entry_type == 'dir' else ''
+        print(f'{path}{suffix}')
+except Exception:
+    pass
+" 2>/dev/null || true
+}
+
+forgejo_get_file_content() {
+  local repo="$1"
+  local ref="${2:-main}"
+  local path="$3"
+  
+  forgejo_api_get "/repos/${repo}/raw/${ref}/${path}" 2>/dev/null || true
 }
