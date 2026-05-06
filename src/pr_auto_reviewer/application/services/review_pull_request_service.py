@@ -2,23 +2,29 @@
 
 from __future__ import annotations
 
+import logging
+
 from ..commands.review_pull_request_command import ReviewPullRequestCommand
-from ..commands.process_issue_commands_command import ProcessIssueCommandsCommand
 from ...domain.entities.pull_request import PullRequest
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
-from ...domain.value_objects.review_verdict import ReviewVerdict
+from ...domain.value_objects.code_review import CodeReview
+from ...domain.value_objects.commit_sha import CommitSha
+from ...domain.value_objects.pull_request_diff import PullRequestDiff
+from ...domain.value_objects.pull_request_id import PullRequestId
+from ...domain.value_objects.repository_context import RepositoryContext
 from ..ports.outbound.pull_request_repository import PullRequestRepository
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
 from ..ports.outbound.repository_context_port import RepositoryContextPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
 from ..ports.outbound.review_publisher_port import ReviewPublisherPort
-from ..ports.outbound.command_bus_port import CommandBusPort
 from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewPullRequestService(ReviewPullRequestUseCase):
     """Orchestrates: load PR → check if review needed → fetch diff →
-    build context → LLM review → publish → persist → dispatch commands.
+    build context → LLM review → publish → persist.
 
     Contains zero business logic — only coordination of domain objects
     and outbound ports.
@@ -31,17 +37,38 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         repository_context: RepositoryContextPort,
         llm_review: LlmReviewPort,
         review_publisher: ReviewPublisherPort,
-        command_bus: CommandBusPort,
     ) -> None:
         self._pr_repository = pr_repository
         self._changeset_fetcher = changeset_fetcher
         self._repository_context = repository_context
         self._llm_review = llm_review
         self._review_publisher = review_publisher
-        self._command_bus = command_bus
 
     def execute(self, command: ReviewPullRequestCommand) -> None:
-        # 1. Load or create aggregate
+        self._log_start(command)
+
+        pr = self._load_or_create_pull_request(command)
+
+        if not self._needs_review(command, pr):
+            self._handle_already_reviewed(command, pr)
+            return
+
+        diff = self._fetch_diff(command)
+        context = self._build_review_context(command)
+        review = self._run_llm_review(diff, context)
+
+        self._publish_review(command.pr_id, review)
+        pr = self._record_review(pr, review, command.head_sha)
+        self._persist(pr)
+
+    def _log_start(self, command: ReviewPullRequestCommand) -> None:
+        sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
+        logger.info("Starting review for PR %s (SHA: %s, force=%s)",
+                    command.pr_id, sha_str, command.force)
+
+    def _load_or_create_pull_request(
+        self, command: ReviewPullRequestCommand
+    ) -> PullRequest:
         pr = self._pr_repository.find(command.pr_id)
         if pr is None:
             pr = PullRequest(
@@ -49,43 +76,65 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 title=command.title,
                 head_sha=command.head_sha,
             )
+        return pr
 
-        # 2. Idempotency guard — already reviewed this SHA?
-        if not pr.needs_review(command.head_sha):
-            self._pr_repository.save(pr)
-            self._command_bus.dispatch(
-                ProcessIssueCommandsCommand(
-                    pr_id=command.pr_id, head_sha=command.head_sha
-                )
-            )
-            return
+    def _needs_review(
+        self, command: ReviewPullRequestCommand, pr: PullRequest
+    ) -> bool:
+        return command.force or pr.needs_review(command.head_sha)
 
-        # 3. Fetch diff
+    def _handle_already_reviewed(
+        self, command: ReviewPullRequestCommand, pr: PullRequest
+    ) -> None:
+        sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
+        logger.info(
+            "PR %s already reviewed at SHA %s, skipping",
+            command.pr_id, sha_str,
+        )
+        self._pr_repository.save(pr)
+
+    def _fetch_diff(
+        self, command: ReviewPullRequestCommand
+    ) -> PullRequestDiff:
+        logger.debug("Fetching diff for PR %s", command.pr_id)
         diff = self._changeset_fetcher.fetch(command.pr_id, command.head_sha)
         if not diff.diff_content.strip():
             raise EmptyDiffError(
                 f"Empty diff for {command.pr_id} at {command.head_sha}"
             )
+        logger.debug("Diff fetched, size: %d chars", len(diff.diff_content))
+        return diff
 
-        # 4. Build review context
+    def _build_review_context(
+        self, command: ReviewPullRequestCommand
+    ) -> RepositoryContext:
         context = self._repository_context.fetch(command.pr_id)
+        logger.debug("Review context built: repo=%s", command.pr_id.repository)
+        return context
 
-        # 5. Run LLM review
+    def _run_llm_review(
+        self, diff: PullRequestDiff, context: RepositoryContext
+    ) -> CodeReview:
+        logger.info("Sending to LLM for review...")
         review = self._llm_review.review(diff, context)
+        logger.info(
+            "LLM review complete: verdict=%s, items=%d, summary_len=%d",
+            review.verdict.value,
+            len(review.items),
+            len(review.summary) if review.summary else 0,
+        )
+        return review
 
-        # 6. Publish to platform
-        self._review_publisher.publish(command.pr_id, review)
+    def _publish_review(
+        self, pr_id: PullRequestId, review: CodeReview
+    ) -> None:
+        logger.info("Publishing review to platform...")
+        self._review_publisher.publish(pr_id, review)
 
-        # 7. Record review on aggregate
-        pr = pr.add_review(review, command.head_sha)
+    def _record_review(
+        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha
+    ) -> PullRequest:
+        return pr.add_review(review, head_sha)
 
-        # 8. Persist
+    def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
-
-        # 9. If approved, dispatch issue-commands processing
-        if review.verdict == ReviewVerdict.APPROVED:
-            self._command_bus.dispatch(
-                ProcessIssueCommandsCommand(
-                    pr_id=command.pr_id, head_sha=command.head_sha
-                )
-            )
