@@ -3,9 +3,9 @@
 from typing import Protocol
 
 from ....domain.value_objects.pull_request_id import PullRequestId
-from ....domain.value_objects.review_context import ReviewContext
+from ....domain.value_objects.repository_context import RepositoryContext
 
 
 class RepositoryContextPort(Protocol):
-    def fetch(self, pr_id: PullRequestId) -> ReviewContext:
+    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
         ...
