@@ -8,7 +8,7 @@ from .value_objects import (
     PrComment,
     PullRequestDiff,
     PullRequestId,
-    ReviewContext,
+    RepositoryContext,
     ReviewVerdict,
 )
 from .exceptions import (
@@ -37,7 +37,7 @@ __all__ = [
     "PrComment",
     "PullRequestDiff",
     "PullRequestId",
-    "ReviewContext",
+    "RepositoryContext",
     "ReviewVerdict",
     "DomainError",
     "EmptyDiffError",
