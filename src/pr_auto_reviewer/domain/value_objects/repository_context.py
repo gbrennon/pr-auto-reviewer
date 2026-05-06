@@ -1,10 +1,10 @@
-"""ReviewContext — supporting context passed alongside the diff to improve review quality."""
+"""RepositoryContext — supporting context passed alongside the diff to improve review quality."""
 
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ReviewContext:
+class RepositoryContext:
     """Supporting context passed alongside the diff to improve review quality.
 
     Pure input data for prompt construction. No identity, no lifecycle.

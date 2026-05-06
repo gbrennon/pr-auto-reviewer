@@ -4,7 +4,7 @@ from .pull_request_diff import PullRequestDiff
 from .review_verdict import ReviewVerdict
 from .item_severity import ItemSeverity
 from .code_review import CodeReview
-from .review_context import ReviewContext
+from .repository_context import RepositoryContext
 from .issue_command import IssueCommand
 from .comment_id import CommentId
 from .pr_comment import PrComment
@@ -16,7 +16,7 @@ __all__ = [
     "ReviewVerdict",
     "ItemSeverity",
     "CodeReview",
-    "ReviewContext",
+    "RepositoryContext",
     "IssueCommand",
     "CommentId",
     "PrComment",
