@@ -11,3 +11,4 @@ class ReviewPullRequestCommand:
     pr_id: PullRequestId
     head_sha: CommitSha
     title: str
+    force: bool = False
