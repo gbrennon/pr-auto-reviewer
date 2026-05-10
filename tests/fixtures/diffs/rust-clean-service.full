@@ -1,0 +1,25 @@
+use crate::domain::User;
+use crate::ports::UserRepository;
+use anyhow::Result;
+
+pub struct UserService<R: UserRepository> {
+    repo: R,
+}
+
+impl<R: UserRepository> UserService<R> {
+    pub fn new(repo: R) -> Self {
+        Self { repo }
+    }
+
+    pub async fn create_user(&self, name: &str, email: &str) -> Result<User> {
+        if name.trim().is_empty() {
+            anyhow::bail!("name must not be empty");
+        }
+        if !email.contains('@') {
+            anyhow::bail!("invalid email address");
+        }
+        let user = User::new(name, email);
+        self.repo.save(&user).await?;
+        Ok(user)
+    }
+}

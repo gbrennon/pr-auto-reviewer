@@ -1,0 +1,24 @@
+diff --git a/Services/ReportGenerator.cs b/Services/ReportGenerator.cs
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/Services/ReportGenerator.cs
+@@ -0,0 +1,18 @@
++using System.Data.SqlClient;
++
++namespace App.Services;
++
++public class ReportGenerator
++{
++    public byte[] GenerateMonthlyReport(int month, int year)
++    {
++        var connection = new SqlConnection("Server=prod-db;Database=sales;User=sa;Password=Admin123!");
++        connection.Open();
++        var cmd = new SqlCommand(
++            $"SELECT * FROM orders WHERE MONTH(created_at)={month} AND YEAR(created_at)={year}",
++            connection);
++        var reader = cmd.ExecuteReader();
++        // ... serialize to PDF
++        return new byte[0];
++    }
++}

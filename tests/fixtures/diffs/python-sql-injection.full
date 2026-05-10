@@ -1,0 +1,12 @@
+import sqlite3
+
+
+class UserRepository:
+    def __init__(self, db_path: str) -> None:
+        self._conn = sqlite3.connect(db_path)
+
+    def find_by_name(self, name: str) -> list[dict]:
+        query = f"SELECT * FROM users WHERE name = '{name}'"
+        cursor = self._conn.execute(query)
+        rows = cursor.fetchall()
+        return [dict(zip([d[0] for d in cursor.description], r)) for r in rows]
