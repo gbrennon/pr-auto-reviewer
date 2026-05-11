@@ -8,3 +8,4 @@ runner-data/
 __pycache__
 lib/bashunit
 coverage/
+.coverage
