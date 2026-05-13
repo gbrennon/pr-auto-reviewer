@@ -75,8 +75,7 @@ class RegisterIssueService(RegisterIssuePort):
             "Issue '%s' registered for PR %s", command.issue_id, command.pr_id,
         )
 
-    @staticmethod
-    def _find_item(items: list[ReviewItem], issue_id: str) -> ReviewItem:
+    def _find_item(self, items: list[ReviewItem], issue_id: str) -> ReviewItem:
         """Return the ReviewItem whose ``id`` (or fallback ``number``)
         matches *issue_id*.
 
@@ -88,12 +87,12 @@ class RegisterIssueService(RegisterIssuePort):
                 return item
 
         try:
-            num = int(issue_id)
+            id_ = int(issue_id)
         except ValueError:
             pass
         else:
             for item in items:
-                if item.number == num:
+                if item.number == id_:
                     return item
 
         raise ReviewItemNotFoundError(
