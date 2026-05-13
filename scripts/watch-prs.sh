@@ -52,7 +52,12 @@ load_config
 # Config
 FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
 FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
-API_BASE="${FORGEJO_HOST}/api/v1"
+# Avoid double /api/v1 if FORGEJO_HOST already includes it
+if [[ "$FORGEJO_HOST" == */api/v1 ]]; then
+  API_BASE="$FORGEJO_HOST"
+else
+  API_BASE="${FORGEJO_HOST}/api/v1"
+fi
 INTERVAL="${POLL_INTERVAL:-60}"
 REPOS_FILTER=""
 RUN_ONCE=false
