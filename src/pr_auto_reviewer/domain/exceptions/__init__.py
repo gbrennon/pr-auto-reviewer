@@ -10,6 +10,7 @@ from .pull_request_not_found_error import PullRequestNotFoundError
 from .issue_creation_error import IssueCreationError
 from .repository_corrupted_error import RepositoryCorruptedError
 from .llm_response_malformed_error import LlmResponseMalformedError
+from .review_item_not_found_error import ReviewItemNotFoundError
 
 __all__ = [
     "DomainError",
@@ -24,4 +25,5 @@ __all__ = [
     "IssueCreationError",
     "RepositoryCorruptedError",
     "LlmResponseMalformedError",
+    "ReviewItemNotFoundError",
 ]
