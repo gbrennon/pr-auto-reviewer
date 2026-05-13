@@ -13,3 +13,5 @@ class RepositoryContext:
     architecture_hint: str
     conventions: str | None = None
     repository_structure: str | None = None
+    pr_title: str | None = None
+    pr_description: str | None = None

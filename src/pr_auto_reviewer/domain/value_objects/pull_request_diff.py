@@ -16,3 +16,4 @@ class PullRequestDiff:
     file_contents: dict[str, str] = field(default_factory=dict)
     repository_structure: str | None = None
     conventions: str | None = None
+    commit_messages: list[str] = field(default_factory=list)
