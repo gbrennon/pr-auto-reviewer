@@ -102,13 +102,27 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             raise EmptyDiffError(
                 f"Empty diff for {command.pr_id} at {command.head_sha}"
             )
-        logger.debug("Diff fetched, size: %d chars", len(diff.diff_content))
+        logger.info(
+            "Diff fetched: %d chars, %d file(s) with contents",
+            len(diff.diff_content),
+            len(diff.file_contents),
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            file_list = sorted(diff.file_contents.keys()) if diff.file_contents else []
+            logger.debug("Files with full contents: %s", file_list or "(none)")
         return diff
 
     def _build_review_context(
         self, command: ReviewPullRequestCommand
     ) -> RepositoryContext:
+        from dataclasses import replace
+
         context = self._repository_context.fetch(command.pr_id)
+        context = replace(
+            context,
+            pr_title=command.title or None,
+            pr_description=command.description or None,
+        )
         logger.debug("Review context built: repo=%s", command.pr_id.repository)
         return context
 

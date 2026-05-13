@@ -13,11 +13,11 @@ def invalid_items_message(
         for item in available
     )
     return (
-        f"⚠️ Could not find review items: {invalid_list}.\n\n"
+        f"Could not find review items: {invalid_list}.\n\n"
         f"Available items:\n{available_list}"
     )
 
 
 def issues_created_message(issues: list[Issue]) -> str:
     links = "\n".join(f"- #{i.id}: {i.title}" for i in issues)
-    return f"✅ Created {len(issues)} issue(s):\n\n{links}"
+    return f"Created {len(issues)} issue(s):\n\n{links}"

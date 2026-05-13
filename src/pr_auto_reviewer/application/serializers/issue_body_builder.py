@@ -17,8 +17,9 @@ class IssueBodyBuilder:
             f"`{item.file_path}`" if item.file_path else "_(no specific file)_"
         )
 
+        item_ref = item.id if item.id else f"#{item.number}"
         body = (
-            f"## Review Item #{item.number} from {pr_id}\n\n"
+            f"## Review Item {item_ref} from {pr_id}\n\n"
             f"- **Severity:** {item.severity.upper()}\n"
             f"- **Category:** {item.category}\n"
             f"- **File:** {location}\n\n"

@@ -23,9 +23,6 @@ from ..messages.messages import invalid_items_message, issues_created_message
 
 
 class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
-    """Scans new PR comments for issue-creation commands, validates
-    requested item numbers, and creates tracker issues.
-    """
 
     def __init__(
         self,
@@ -48,84 +45,125 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
         self._issue_body_builder = issue_body_builder
 
     def execute(self, command: ProcessIssueCommandsCommand) -> None:
+        pr = self._load_pull_request(command)
+        self._process_comments_for_pull_request(pr)
+
+    def _load_pull_request(
+        self, command: ProcessIssueCommandsCommand,
+    ) -> PullRequest:
         pr = self._pr_repository.find(command.pr_id)
+
         if pr is None:
             raise PullRequestNotFoundError(
                 f"PullRequest {command.pr_id} not found"
             )
-        self._run(pr)
+        return pr
 
-    # ─── private ────────────────────────────────────────────────
+    def _process_comments_for_pull_request(self, pr: PullRequest) -> None:
+        raw_body = self._fetch_latest_review_body(pr)
 
-    def _run(self, pr: PullRequest) -> None:
-        # 2. Fetch latest review body
-        raw_body = self._review_reader.get_latest_review(pr.id)
         if not raw_body:
             return
 
-        # 3. Parse review items
-        review_items = self._review_item_parser.parse(raw_body)
+        review_items = self._parse_review_items(raw_body)
+
         if not review_items:
             return
 
-        # 4. Fetch comments
-        comments = self._comment_reader.get_comments(pr.id)
+        comments = self._fetch_comments(pr)
+
         if not comments:
             return
 
-        # 5. Process each comment
+        pr = self._process_each_comment(pr, comments, review_items)
+        self._persist_pull_request(pr)
+
+    def _fetch_latest_review_body(self, pr: PullRequest) -> str | None:
+        return self._review_reader.get_latest_review(pr.id)
+
+    def _parse_review_items(self, raw_body: str) -> list[ReviewItem]:
+        return self._review_item_parser.parse(raw_body)
+
+    def _fetch_comments(self, pr: PullRequest):
+        return self._comment_reader.get_comments(pr.id)
+
+    def _process_each_comment(
+        self, pr: PullRequest, comments, review_items: list[ReviewItem],
+    ) -> PullRequest:
         for comment in comments:
             if pr.is_comment_processed(comment.id):
                 continue
 
             cmd = self._issue_command_parser.parse(
-                comment.id.value, comment.body
+                comment.id.value, comment.body,
             )
             if cmd is None:
                 continue
 
             pr = pr.mark_comment_processed(comment.id)
-
-            valid, invalid = _partition_numbers(
-                cmd.item_numbers, review_items
+            valid, invalid = self._partition_item_numbers(
+                cmd.item_numbers, review_items,
             )
-
             if invalid:
-                self._comment_publisher.post(
-                    pr.id,
-                    invalid_items_message(invalid, review_items),
-                )
+                self._publish_invalid_items_message(pr, invalid, review_items)
                 continue
 
-            created: list[Issue] = []
-            for item_number in valid:
-                item = review_items[item_number - 1]
-                title, body = self._issue_body_builder.build(pr.id, item)
-                try:
-                    issue = self._issue_tracker.create(
-                        repository=pr.id.repository,
-                        title=title,
-                        body=body,
-                    )
-                    created.append(issue)
-                except IssueCreationError:
-                    raise
+            created_issues = self._create_issues_for_valid_items(
+                pr, valid, review_items,
+            )
 
-            if created:
-                self._comment_publisher.post(
-                    pr.id, issues_created_message(created),
+            if created_issues:
+                self._publish_issues_created_message(pr, created_issues)
+        return pr
+
+    @staticmethod
+    def _partition_item_numbers(
+        requested: list[int], items: list[ReviewItem],
+    ) -> tuple[list[int], list[int]]:
+        valid_numbers = {item.number for item in items}
+        valid: list[int] = []
+        invalid: list[int] = []
+
+        for n in requested:
+            (valid if n in valid_numbers else invalid).append(n)
+
+        return valid, invalid
+
+    def _publish_invalid_items_message(
+        self, pr: PullRequest, invalid: list[int],
+        review_items: list[ReviewItem],
+    ) -> None:
+        self._comment_publisher.post(
+            pr.id, invalid_items_message(invalid, review_items),
+        )
+
+    def _create_issues_for_valid_items(
+        self, pr: PullRequest, valid: list[int],
+        review_items: list[ReviewItem],
+    ) -> list[Issue]:
+        created: list[Issue] = []
+
+        for item_number in valid:
+            item = review_items[item_number - 1]
+            title, body = self._issue_body_builder.build(pr.id, item)
+
+            try:
+                issue = self._issue_tracker.create(
+                    repository=pr.id.repository,
+                    title=title,
+                    body=body,
                 )
+                created.append(issue)
+            except IssueCreationError:
+                raise
+        return created
 
-        # 6. Persist processed comment state
+    def _publish_issues_created_message(
+        self, pr: PullRequest, created_issues: list[Issue],
+    ) -> None:
+        self._comment_publisher.post(
+            pr.id, issues_created_message(created_issues),
+        )
+
+    def _persist_pull_request(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
-
-
-def _partition_numbers(
-    requested: list[int], items: list[ReviewItem],
-) -> tuple[list[int], list[int]]:
-    valid_numbers = {item.number for item in items}
-    valid: list[int] = []
-    invalid: list[int] = []
-    for n in requested:
-        (valid if n in valid_numbers else invalid).append(n)
-    return valid, invalid
