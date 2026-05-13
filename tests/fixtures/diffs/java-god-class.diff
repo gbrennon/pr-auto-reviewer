@@ -1,0 +1,47 @@
+diff --git a/src/main/java/com/example/OrderService.java b/src/main/java/com/example/OrderService.java
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/main/java/com/example/OrderService.java
+@@ -0,0 +1,42 @@
++package com.example;
++
++public class OrderService {
++    private Database db;
++    private EmailSender email;
++    private InvoicePdf pdf;
++    private PaymentGateway payment;
++    private AuditLog audit;
++    private MetricsCollector metrics;
++
++    public OrderService() {
++        this.db = new Database();
++        this.email = new EmailSender();
++        this.pdf = new InvoicePdf();
++        this.payment = new PaymentGateway();
++        this.audit = new AuditLog();
++        this.metrics = new MetricsCollector();
++    }
++
++    public void placeOrder(Order o) {
++        db.save(o);
++        email.sendConfirmation(o);
++        pdf.generate(o);
++        payment.charge(o);
++        audit.log("order_placed", o.getId());
++        metrics.increment("orders");
++    }
++
++    public void cancelOrder(long id) {
++        Order o = db.findById(id);
++        db.delete(o);
++        payment.refund(o);
++        email.sendCancellation(o);
++        audit.log("order_cancelled", id);
++        metrics.increment("cancellations");
++    }
++
++    public byte[] exportReport() {
++        return pdf.generateReport(db.findAll());
++    }
++}

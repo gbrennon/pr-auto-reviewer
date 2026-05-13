@@ -1,0 +1,34 @@
+diff --git a/src/main/kotlin/com/example/UserService.kt b/src/main/kotlin/com/example/UserService.kt
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/main/kotlin/com/example/UserService.kt
+@@ -0,0 +1,28 @@
++package com.example
++
++interface UserRepository {
++    fun save(user: User): User
++    fun findByEmail(email: String): User?
++}
++
++class UserService(private val repo: UserRepository) {
++
++    fun register(name: String, email: String): Result<User> {
++        require(name.isNotBlank()) { "name must not be blank" }
++        require(email.contains("@")) { "invalid email" }
++
++        val existing = repo.findByEmail(email)
++        if (existing != null) {
++            return Result.failure(IllegalStateException("email already registered"))
++        }
++
++        val user = User(
++            id = 0,
++            name = name.trim(),
++            email = email.lowercase().trim(),
++            createdAt = java.time.Instant.now(),
++        )
++        val saved = repo.save(user)
++        return Result.success(saved)
++    }
++}

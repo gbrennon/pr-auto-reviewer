@@ -1,0 +1,14 @@
+{
+  "issues": [
+    {
+      "file": "foo.py",
+      "line": "3",
+      "severity": "high",
+      "type": "security",
+      "description": "test issue"
+    }
+  ],
+  "summary": "Test summary",
+  "suggestions": [],
+  "praise": []
+}
