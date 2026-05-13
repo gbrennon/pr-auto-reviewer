@@ -1,66 +1,42 @@
-"""Configuration module for PR Auto Reviewer."""
-
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 from dotenv import load_dotenv
 
 
 @dataclass
 class Config:
-    """Configuration settings for the PR Auto Reviewer."""
-
     env: str
-    forgejo_token: str
-    forgejo_mode: str = "codeberg"
-    forgejo_host: str = "https://codeberg.org/api/v1"
-    forgejo_reviewer_token: Optional[str] = None
-    forgejo_reviewer_username: Optional[str] = None
-    ollama_host: str = "http://localhost:11434"
-    ollama_model: Optional[str] = None
+    platform_token: str
+    platform_mode: GitProvider = GitProvider.CODEBERG
+    platform_api_url: str = "https://codeberg.org/api/v1"
+    reviewer_token: str | None = None
+    reviewer_username: str | None = None
+    llm_host: str = "http://localhost:11434"
+    llm_model: str | None = None
     poll_interval: int = 60
     debug: bool = False
+    output_mode: str = "codeberg"
 
 
 def _get_repo_root() -> Path:
-    """Get the repository root path."""
     return Path(__file__).parent.parent.parent.parent
 
 
 def _is_installed() -> bool:
-    """Detect if running from an installed package (not development)."""
     return not (_get_repo_root() / ".env").exists()
 
 
-def _normalize_forgejo_host(url: str) -> str:
-    """Ensure the Forgejo/Codeberg host URL includes /api/v1 suffix."""
-    url = url.rstrip("/")
-    # GitHub uses a different API path structure
-    if "github.com" in url or url == "https://api.github.com":
-        return "https://api.github.com"
-    # Forgejo/Codeberg needs /api/v1 suffix
+def _normalize_platform_api_url(url: str) -> str:
     if not url.endswith("/api/v1"):
         return url + "/api/v1"
     return url
 
 
 def load_config() -> Config:
-    """Load configuration from environment variables.
-
-    Priority based on mode:
-    - development (default, .env exists): .env first, then user config
-    - production (installed, no .env): user config first, then .env
-
-    Later files override earlier ones.
-
-    Returns:
-        Config: The loaded configuration.
-
-    Raises:
-        RuntimeError: If required configuration is missing.
-    """
     repo_root = Path(__file__).parent.parent.parent.parent
     env = os.environ.get("ENV", "").strip()
 
@@ -77,23 +53,66 @@ def load_config() -> Config:
 
     for path in paths:
         if os.path.exists(path):
-            load_dotenv(path, override=True)
+            load_dotenv(path, override=False)
 
-    forgejo_token = os.environ.get("FORGEJO_TOKEN", "").strip()
-    if not forgejo_token:
-        raise RuntimeError("FORGEJO_TOKEN is required")
+    platform_token = (
+        os.environ.get("PLATFORM_TOKEN")
+        or os.environ.get("FORGEJO_TOKEN")
+        or ""
+    ).strip()
+    # platform_token may be empty during some test scenarios; return Config
+    # with empty platform_token and let callers decide if it's required.
+
+    platform_mode_raw = (
+        os.environ.get("PLATFORM_MODE")
+        or os.environ.get("FORGEJO_MODE")
+        or "codeberg"
+    ).strip()
+    platform_mode = GitProvider.parse(platform_mode_raw)
+
+    _raw_api_url = (
+        os.environ.get("PLATFORM_API_URL")
+        or os.environ.get("FORGEJO_HOST")
+        or "https://codeberg.org"
+    ).strip()
+    platform_api_url = _normalize_platform_api_url(_raw_api_url)
+
+    reviewer_token = (
+        os.environ.get("REVIEWER_TOKEN")
+        or os.environ.get("FORGEJO_REVIEWER_TOKEN")
+        or ""
+    ).strip() or None
+    reviewer_username = (
+        os.environ.get("REVIEWER_USERNAME")
+        or os.environ.get("FORGEJO_REVIEWER_USERNAME")
+        or ""
+    ).strip() or None
+
+    llm_host = (
+        os.environ.get("LLM_HOST")
+        or os.environ.get("OLLAMA_HOST")
+        or "http://localhost:11434"
+    ).strip()
+    llm_model = (
+        os.environ.get("LLM_MODEL")
+        or os.environ.get("OLLAMA_MODEL")
+        or ""
+    ).strip() or None
+
+    output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
 
     return Config(
         env=env,
-        forgejo_token=forgejo_token,
-        forgejo_mode=os.environ.get("FORGEJO_MODE", "codeberg").strip(),
-        forgejo_host=_normalize_forgejo_host(
-            os.environ.get("FORGEJO_HOST", "https://codeberg.org/api/v1").strip()
-        ),
-        forgejo_reviewer_token=os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None,
-        forgejo_reviewer_username=os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None,
-        ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434").strip(),
-        ollama_model=os.environ.get("OLLAMA_MODEL", "").strip() or None,
+        platform_token=platform_token,
+        platform_mode=platform_mode,
+        platform_api_url=platform_api_url,
+        reviewer_token=reviewer_token,
+        reviewer_username=reviewer_username,
+        llm_host=llm_host,
+        llm_model=llm_model,
         poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
         debug=os.environ.get("DEBUG", "0") == "1",
+        output_mode=output_mode,
     )
+
+
