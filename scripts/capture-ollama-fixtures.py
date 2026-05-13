@@ -45,6 +45,7 @@ SCENARIOS = [
     ("kotlin-clean-service",   "src/main/kotlin/com/example/UserService.kt"),
     ("shell-with-shebang",     "scripts/deploy.sh"),
     ("shell-missing-shebang",  "scripts/deploy.sh"),
+    ("rust-typo-reverse",     "src/infrastructure/persistence/json_dose_record_repository.rs"),
 ]
 
 
@@ -85,7 +86,8 @@ def main() -> None:
             file_contents={file_path: file_content},
         )
 
-        prompt = PromptBuilder.build(diff, context)
+        prompt_builder = PromptBuilder()
+        prompt = prompt_builder.build(diff, context)
         print(f"\n{'='*60}")
         print(f"  {base_name}")
         print(f"    diff: {len(diff_content)} chars, prompt: {len(prompt)} chars")
