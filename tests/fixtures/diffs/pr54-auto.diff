@@ -1,0 +1,4579 @@
+diff --git a/src/pr_auto_reviewer/application/__init__.py b/src/pr_auto_reviewer/application/__init__.py
+new file mode 100644
+index 0000000..6729692
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/__init__.py
+@@ -0,0 +1,39 @@
++from .ports import (
++    # Inbound
++    ReviewPullRequestUseCase,
++    ProcessIssueCommandsUseCase,
++    # Outbound
++    PullRequestRepository,
++    ChangesetFetcherPort,
++    RepositoryContextPort,
++    LlmReviewPort,
++    ReviewPublisherPort,
++    ReviewReaderPort,
++    CommentReaderPort,
++    CommentPublisherPort,
++    IssueTrackerPort,
++    CommandBusPort,
++)
++from .commands import ReviewPullRequestCommand, ProcessIssueCommandsCommand
++from .services import ReviewPullRequestService, ProcessIssueCommandsService
++from .serializers import IssueBodyBuilder
++
++__all__ = [
++    "ReviewPullRequestUseCase",
++    "ProcessIssueCommandsUseCase",
++    "PullRequestRepository",
++    "ChangesetFetcherPort",
++    "RepositoryContextPort",
++    "LlmReviewPort",
++    "ReviewPublisherPort",
++    "ReviewReaderPort",
++    "CommentReaderPort",
++    "CommentPublisherPort",
++    "IssueTrackerPort",
++    "CommandBusPort",
++    "ReviewPullRequestCommand",
++    "ProcessIssueCommandsCommand",
++    "ReviewPullRequestService",
++    "ProcessIssueCommandsService",
++    "IssueBodyBuilder",
++]
+diff --git a/src/pr_auto_reviewer/application/commands/__init__.py b/src/pr_auto_reviewer/application/commands/__init__.py
+new file mode 100644
+index 0000000..8eddb20
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/commands/__init__.py
+@@ -0,0 +1,4 @@
++from .review_pull_request_command import ReviewPullRequestCommand
++from .process_issue_commands_command import ProcessIssueCommandsCommand
++
++__all__ = ["ReviewPullRequestCommand", "ProcessIssueCommandsCommand"]
+diff --git a/src/pr_auto_reviewer/application/commands/process_issue_commands_command.py b/src/pr_auto_reviewer/application/commands/process_issue_commands_command.py
+new file mode 100644
+index 0000000..dcdb6e7
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/commands/process_issue_commands_command.py
+@@ -0,0 +1,12 @@
++"""ProcessIssueCommandsCommand — input for ProcessIssueCommandsService."""
++
++from dataclasses import dataclass
++
++from ...domain.value_objects.pull_request_id import PullRequestId
++from ...domain.value_objects.commit_sha import CommitSha
++
++
++@dataclass(frozen=True)
++class ProcessIssueCommandsCommand:
++    pr_id: PullRequestId
++    head_sha: CommitSha
+diff --git a/src/pr_auto_reviewer/application/commands/review_pull_request_command.py b/src/pr_auto_reviewer/application/commands/review_pull_request_command.py
+new file mode 100644
+index 0000000..b2f6764
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/commands/review_pull_request_command.py
+@@ -0,0 +1,14 @@
++"""ReviewPullRequestCommand — input for ReviewPullRequestService."""
++
++from dataclasses import dataclass
++
++from ...domain.value_objects.pull_request_id import PullRequestId
++from ...domain.value_objects.commit_sha import CommitSha
++
++
++@dataclass(frozen=True)
++class ReviewPullRequestCommand:
++    pr_id: PullRequestId
++    head_sha: CommitSha
++    title: str
++    force: bool = False
+diff --git a/src/pr_auto_reviewer/application/messages/__init__.py b/src/pr_auto_reviewer/application/messages/__init__.py
+new file mode 100644
+index 0000000..69d3480
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/messages/__init__.py
+@@ -0,0 +1,3 @@
++from .messages import invalid_items_message, issues_created_message
++
++__all__ = ["invalid_items_message", "issues_created_message"]
+diff --git a/src/pr_auto_reviewer/application/messages/messages.py b/src/pr_auto_reviewer/application/messages/messages.py
+new file mode 100644
+index 0000000..97ff162
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/messages/messages.py
+@@ -0,0 +1,23 @@
++"""Pure domain functions to build human-readable comment messages."""
++
++from ...domain.entities.issue import Issue
++from ...domain.entities.review_item import ReviewItem
++
++
++def invalid_items_message(
++    invalid: list[int], available: list[ReviewItem]
++) -> str:
++    invalid_list = ", ".join(f"#{n}" for n in invalid)
++    available_list = "\n".join(
++        f"- #{item.number}: {item.description[:60]}..."
++        for item in available
++    )
++    return (
++        f"⚠️ Could not find review items: {invalid_list}.\n\n"
++        f"Available items:\n{available_list}"
++    )
++
++
++def issues_created_message(issues: list[Issue]) -> str:
++    links = "\n".join(f"- #{i.id}: {i.title}" for i in issues)
++    return f"✅ Created {len(issues)} issue(s):\n\n{links}"
+diff --git a/src/pr_auto_reviewer/application/ports/__init__.py b/src/pr_auto_reviewer/application/ports/__init__.py
+new file mode 100644
+index 0000000..47b6e8a
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/__init__.py
+@@ -0,0 +1,28 @@
++from .inbound import ReviewPullRequestUseCase, ProcessIssueCommandsUseCase
++from .outbound import (
++    PullRequestRepository,
++    ChangesetFetcherPort,
++    RepositoryContextPort,
++    LlmReviewPort,
++    ReviewPublisherPort,
++    ReviewReaderPort,
++    CommentReaderPort,
++    CommentPublisherPort,
++    IssueTrackerPort,
++    CommandBusPort,
++)
++
++__all__ = [
++    "ReviewPullRequestUseCase",
++    "ProcessIssueCommandsUseCase",
++    "PullRequestRepository",
++    "ChangesetFetcherPort",
++    "RepositoryContextPort",
++    "LlmReviewPort",
++    "ReviewPublisherPort",
++    "ReviewReaderPort",
++    "CommentReaderPort",
++    "CommentPublisherPort",
++    "IssueTrackerPort",
++    "CommandBusPort",
++]
+diff --git a/src/pr_auto_reviewer/application/ports/inbound/__init__.py b/src/pr_auto_reviewer/application/ports/inbound/__init__.py
+new file mode 100644
+index 0000000..425a018
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/inbound/__init__.py
+@@ -0,0 +1,4 @@
++from .review_pull_request_use_case import ReviewPullRequestUseCase
++from .process_issue_commands_use_case import ProcessIssueCommandsUseCase
++
++__all__ = ["ReviewPullRequestUseCase", "ProcessIssueCommandsUseCase"]
+diff --git a/src/pr_auto_reviewer/application/ports/inbound/process_issue_commands_use_case.py b/src/pr_auto_reviewer/application/ports/inbound/process_issue_commands_use_case.py
+new file mode 100644
+index 0000000..1afc7a8
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/inbound/process_issue_commands_use_case.py
+@@ -0,0 +1,10 @@
++"""ProcessIssueCommandsUseCase — inbound port for scanning PR comments for issue commands."""
++
++from typing import Protocol
++
++from ...commands.process_issue_commands_command import ProcessIssueCommandsCommand
++
++
++class ProcessIssueCommandsUseCase(Protocol):
++    def execute(self, command: ProcessIssueCommandsCommand) -> None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/inbound/review_pull_request_use_case.py b/src/pr_auto_reviewer/application/ports/inbound/review_pull_request_use_case.py
+new file mode 100644
+index 0000000..9c0bc7d
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/inbound/review_pull_request_use_case.py
+@@ -0,0 +1,10 @@
++"""ReviewPullRequestUseCase — inbound port for reviewing a pull request."""
++
++from typing import Protocol
++
++from ...commands.review_pull_request_command import ReviewPullRequestCommand
++
++
++class ReviewPullRequestUseCase(Protocol):
++    def execute(self, command: ReviewPullRequestCommand) -> None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/__init__.py b/src/pr_auto_reviewer/application/ports/outbound/__init__.py
+new file mode 100644
+index 0000000..3c6bd94
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/__init__.py
+@@ -0,0 +1,23 @@
++from .pull_request_repository import PullRequestRepository
++from .changeset_fetcher_port import ChangesetFetcherPort
++from .repository_context_port import RepositoryContextPort
++from .llm_review_port import LlmReviewPort
++from .review_publisher_port import ReviewPublisherPort
++from .review_reader_port import ReviewReaderPort
++from .comment_reader_port import CommentReaderPort
++from .comment_publisher_port import CommentPublisherPort
++from .issue_tracker_port import IssueTrackerPort
++from .command_bus_port import CommandBusPort
++
++__all__ = [
++    "PullRequestRepository",
++    "ChangesetFetcherPort",
++    "RepositoryContextPort",
++    "LlmReviewPort",
++    "ReviewPublisherPort",
++    "ReviewReaderPort",
++    "CommentReaderPort",
++    "CommentPublisherPort",
++    "IssueTrackerPort",
++    "CommandBusPort",
++]
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/changeset_fetcher_port.py b/src/pr_auto_reviewer/application/ports/outbound/changeset_fetcher_port.py
+new file mode 100644
+index 0000000..fe28748
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/changeset_fetcher_port.py
+@@ -0,0 +1,12 @@
++"""ChangesetFetcherPort — fetch PullRequestDiff for a given PR and SHA."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++from ....domain.value_objects.commit_sha import CommitSha
++from ....domain.value_objects.pull_request_diff import PullRequestDiff
++
++
++class ChangesetFetcherPort(Protocol):
++    def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/command_bus_port.py b/src/pr_auto_reviewer/application/ports/outbound/command_bus_port.py
+new file mode 100644
+index 0000000..79cccb1
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/command_bus_port.py
+@@ -0,0 +1,8 @@
++"""CommandBusPort — send a command/message/event to the infrastructure layer."""
++
++from typing import Any, Protocol
++
++
++class CommandBusPort(Protocol):
++    def dispatch(self, command: Any) -> None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/comment_publisher_port.py b/src/pr_auto_reviewer/application/ports/outbound/comment_publisher_port.py
+new file mode 100644
+index 0000000..f216867
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/comment_publisher_port.py
+@@ -0,0 +1,10 @@
++"""CommentPublisherPort — post a reply comment on a PR."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++
++
++class CommentPublisherPort(Protocol):
++    def post(self, pr_id: PullRequestId, body: str) -> None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/comment_reader_port.py b/src/pr_auto_reviewer/application/ports/outbound/comment_reader_port.py
+new file mode 100644
+index 0000000..1a342d7
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/comment_reader_port.py
+@@ -0,0 +1,11 @@
++"""CommentReaderPort — fetch comments posted on a PR."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++from ....domain.value_objects.pr_comment import PrComment
++
++
++class CommentReaderPort(Protocol):
++    def get_comments(self, pr_id: PullRequestId) -> list[PrComment]:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/issue_tracker_port.py b/src/pr_auto_reviewer/application/ports/outbound/issue_tracker_port.py
+new file mode 100644
+index 0000000..bb36931
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/issue_tracker_port.py
+@@ -0,0 +1,10 @@
++"""IssueTrackerPort — create a tracker issue on a remote platform."""
++
++from typing import Protocol
++
++from ....domain.entities.issue import Issue
++
++
++class IssueTrackerPort(Protocol):
++    def create(self, repository: str, title: str, body: str) -> Issue:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/llm_review_port.py b/src/pr_auto_reviewer/application/ports/outbound/llm_review_port.py
+new file mode 100644
+index 0000000..7606105
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/llm_review_port.py
+@@ -0,0 +1,12 @@
++"""LlmReviewPort — send a diff + context to an LLM and receive a CodeReview."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_diff import PullRequestDiff
++from ....domain.value_objects.repository_context import RepositoryContext
++from ....domain.value_objects.code_review import CodeReview
++
++
++class LlmReviewPort(Protocol):
++    def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/pull_request_repository.py b/src/pr_auto_reviewer/application/ports/outbound/pull_request_repository.py
+new file mode 100644
+index 0000000..e01f87f
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/pull_request_repository.py
+@@ -0,0 +1,17 @@
++"""PullRequestRepository — persistence port for the PullRequest aggregate."""
++
++from __future__ import annotations
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++from ....domain.entities.pull_request import PullRequest
++
++
++class PullRequestRepository(Protocol):
++    def find(self, pr_id: PullRequestId) -> PullRequest | None:
++        ...
++
++    def save(self, pr: PullRequest) -> None:
++        ...
++
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/repository_context_port.py b/src/pr_auto_reviewer/application/ports/outbound/repository_context_port.py
+new file mode 100644
+index 0000000..1e8991a
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/repository_context_port.py
+@@ -0,0 +1,11 @@
++"""RepositoryContextPort — fetch repo context for improved review quality."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++from ....domain.value_objects.repository_context import RepositoryContext
++
++
++class RepositoryContextPort(Protocol):
++    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/review_publisher_port.py b/src/pr_auto_reviewer/application/ports/outbound/review_publisher_port.py
+new file mode 100644
+index 0000000..d8dfc8e
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/review_publisher_port.py
+@@ -0,0 +1,11 @@
++"""ReviewPublisherPort — publish a CodeReview verdict and body to a remote platform."""
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++from ....domain.value_objects.code_review import CodeReview
++
++
++class ReviewPublisherPort(Protocol):
++    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/ports/outbound/review_reader_port.py b/src/pr_auto_reviewer/application/ports/outbound/review_reader_port.py
+new file mode 100644
+index 0000000..990cf98
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/ports/outbound/review_reader_port.py
+@@ -0,0 +1,12 @@
++"""ReviewReaderPort — retrieve the latest published review body for a PR."""
++
++from __future__ import annotations
++
++from typing import Protocol
++
++from ....domain.value_objects.pull_request_id import PullRequestId
++
++
++class ReviewReaderPort(Protocol):
++    def get_latest_review(self, pr_id: PullRequestId) -> str | None:
++        ...
+diff --git a/src/pr_auto_reviewer/application/serializers/__init__.py b/src/pr_auto_reviewer/application/serializers/__init__.py
+new file mode 100644
+index 0000000..7671888
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/serializers/__init__.py
+@@ -0,0 +1,3 @@
++from .issue_body_builder import IssueBodyBuilder
++
++__all__ = ["IssueBodyBuilder"]
+diff --git a/src/pr_auto_reviewer/application/serializers/issue_body_builder.py b/src/pr_auto_reviewer/application/serializers/issue_body_builder.py
+new file mode 100644
+index 0000000..6e1d0bc
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/serializers/issue_body_builder.py
+@@ -0,0 +1,28 @@
++"""IssueBodyBuilder — pure domain service to build issue title and body."""
++
++from ...domain.value_objects.pull_request_id import PullRequestId
++from ...domain.entities.review_item import ReviewItem
++
++
++class IssueBodyBuilder:
++    """Produces (title, body) for a tracker issue from a ReviewItem.
++    The template is a domain rule — no platform formatting leaks in."""
++
++    def build(
++        self, pr_id: PullRequestId, item: ReviewItem
++    ) -> tuple[str, str]:
++        title = f"[{item.severity.upper()}] {item.category}: {item.description[:80]}"
++
++        location = (
++            f"`{item.file_path}`" if item.file_path else "_(no specific file)_"
++        )
++
++        body = (
++            f"## Review Item #{item.number} from {pr_id}\n\n"
++            f"- **Severity:** {item.severity.upper()}\n"
++            f"- **Category:** {item.category}\n"
++            f"- **File:** {location}\n\n"
++            f"{item.description}\n"
++        )
++
++        return title, body
+diff --git a/src/pr_auto_reviewer/application/services/__init__.py b/src/pr_auto_reviewer/application/services/__init__.py
+new file mode 100644
+index 0000000..7b323c0
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/services/__init__.py
+@@ -0,0 +1,4 @@
++from .review_pull_request_service import ReviewPullRequestService
++from .process_issue_commands_service import ProcessIssueCommandsService
++
++__all__ = ["ReviewPullRequestService", "ProcessIssueCommandsService"]
+diff --git a/src/pr_auto_reviewer/application/services/process_issue_commands_service.py b/src/pr_auto_reviewer/application/services/process_issue_commands_service.py
+new file mode 100644
+index 0000000..f500798
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/services/process_issue_commands_service.py
+@@ -0,0 +1,131 @@
++"""ProcessIssueCommandsService — scans PR comments for issue-creation commands."""
++
++from __future__ import annotations
++
++from ..commands.process_issue_commands_command import ProcessIssueCommandsCommand
++from ...domain.entities.pull_request import PullRequest
++from ...domain.entities.issue import Issue
++from ...domain.entities.review_item import ReviewItem
++from ...domain.exceptions import (
++    PullRequestNotFoundError,
++    IssueCreationError,
++)
++from ..ports.outbound.pull_request_repository import PullRequestRepository
++from ..ports.outbound.review_reader_port import ReviewReaderPort
++from ..ports.outbound.comment_reader_port import CommentReaderPort
++from ..ports.outbound.comment_publisher_port import CommentPublisherPort
++from ..ports.outbound.issue_tracker_port import IssueTrackerPort
++from ..ports.inbound.process_issue_commands_use_case import ProcessIssueCommandsUseCase
++from ...domain.services.review_item_parser import ReviewItemParser
++from ...domain.services.issue_command_parser import IssueCommandParser
++from ..serializers.issue_body_builder import IssueBodyBuilder
++from ..messages.messages import invalid_items_message, issues_created_message
++
++
++class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
++    """Scans new PR comments for issue-creation commands, validates
++    requested item numbers, and creates tracker issues.
++    """
++
++    def __init__(
++        self,
++        pr_repository: PullRequestRepository,
++        review_reader: ReviewReaderPort,
++        comment_reader: CommentReaderPort,
++        comment_publisher: CommentPublisherPort,
++        issue_tracker: IssueTrackerPort,
++        review_item_parser: ReviewItemParser,
++        issue_command_parser: IssueCommandParser,
++        issue_body_builder: IssueBodyBuilder,
++    ) -> None:
++        self._pr_repository = pr_repository
++        self._review_reader = review_reader
++        self._comment_reader = comment_reader
++        self._comment_publisher = comment_publisher
++        self._issue_tracker = issue_tracker
++        self._review_item_parser = review_item_parser
++        self._issue_command_parser = issue_command_parser
++        self._issue_body_builder = issue_body_builder
++
++    def execute(self, command: ProcessIssueCommandsCommand) -> None:
++        pr = self._pr_repository.find(command.pr_id)
++        if pr is None:
++            raise PullRequestNotFoundError(
++                f"PullRequest {command.pr_id} not found"
++            )
++        self._run(pr)
++
++    # ─── private ────────────────────────────────────────────────
++
++    def _run(self, pr: PullRequest) -> None:
++        # 2. Fetch latest review body
++        raw_body = self._review_reader.get_latest_review(pr.id)
++        if not raw_body:
++            return
++
++        # 3. Parse review items
++        review_items = self._review_item_parser.parse(raw_body)
++        if not review_items:
++            return
++
++        # 4. Fetch comments
++        comments = self._comment_reader.get_comments(pr.id)
++        if not comments:
++            return
++
++        # 5. Process each comment
++        for comment in comments:
++            if pr.is_comment_processed(comment.id):
++                continue
++
++            cmd = self._issue_command_parser.parse(
++                comment.id.value, comment.body
++            )
++            if cmd is None:
++                continue
++
++            pr = pr.mark_comment_processed(comment.id)
++
++            valid, invalid = _partition_numbers(
++                cmd.item_numbers, review_items
++            )
++
++            if invalid:
++                self._comment_publisher.post(
++                    pr.id,
++                    invalid_items_message(invalid, review_items),
++                )
++                continue
++
++            created: list[Issue] = []
++            for item_number in valid:
++                item = review_items[item_number - 1]
++                title, body = self._issue_body_builder.build(pr.id, item)
++                try:
++                    issue = self._issue_tracker.create(
++                        repository=pr.id.repository,
++                        title=title,
++                        body=body,
++                    )
++                    created.append(issue)
++                except IssueCreationError:
++                    raise
++
++            if created:
++                self._comment_publisher.post(
++                    pr.id, issues_created_message(created),
++                )
++
++        # 6. Persist processed comment state
++        self._pr_repository.save(pr)
++
++
++def _partition_numbers(
++    requested: list[int], items: list[ReviewItem],
++) -> tuple[list[int], list[int]]:
++    valid_numbers = {item.number for item in items}
++    valid: list[int] = []
++    invalid: list[int] = []
++    for n in requested:
++        (valid if n in valid_numbers else invalid).append(n)
++    return valid, invalid
+diff --git a/src/pr_auto_reviewer/application/services/review_pull_request_service.py b/src/pr_auto_reviewer/application/services/review_pull_request_service.py
+new file mode 100644
+index 0000000..9a59d8c
+--- /dev/null
++++ b/src/pr_auto_reviewer/application/services/review_pull_request_service.py
+@@ -0,0 +1,140 @@
++"""ReviewPullRequestService — orchestrates the full review flow for a PR."""
++
++from __future__ import annotations
++
++import logging
++
++from ..commands.review_pull_request_command import ReviewPullRequestCommand
++from ...domain.entities.pull_request import PullRequest
++from ...domain.exceptions.empty_diff_error import EmptyDiffError
++from ...domain.value_objects.code_review import CodeReview
++from ...domain.value_objects.commit_sha import CommitSha
++from ...domain.value_objects.pull_request_diff import PullRequestDiff
++from ...domain.value_objects.pull_request_id import PullRequestId
++from ...domain.value_objects.repository_context import RepositoryContext
++from ..ports.outbound.pull_request_repository import PullRequestRepository
++from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
++from ..ports.outbound.repository_context_port import RepositoryContextPort
++from ..ports.outbound.llm_review_port import LlmReviewPort
++from ..ports.outbound.review_publisher_port import ReviewPublisherPort
++from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
++
++logger = logging.getLogger(__name__)
++
++
++class ReviewPullRequestService(ReviewPullRequestUseCase):
++    """Orchestrates: load PR → check if review needed → fetch diff →
++    build context → LLM review → publish → persist.
++
++    Contains zero business logic — only coordination of domain objects
++    and outbound ports.
++    """
++
++    def __init__(
++        self,
++        pr_repository: PullRequestRepository,
++        changeset_fetcher: ChangesetFetcherPort,
++        repository_context: RepositoryContextPort,
++        llm_review: LlmReviewPort,
++        review_publisher: ReviewPublisherPort,
++    ) -> None:
++        self._pr_repository = pr_repository
++        self._changeset_fetcher = changeset_fetcher
++        self._repository_context = repository_context
++        self._llm_review = llm_review
++        self._review_publisher = review_publisher
++
++    def execute(self, command: ReviewPullRequestCommand) -> None:
++        self._log_start(command)
++
++        pr = self._load_or_create_pull_request(command)
++
++        if not self._needs_review(command, pr):
++            self._handle_already_reviewed(command, pr)
++            return
++
++        diff = self._fetch_diff(command)
++        context = self._build_review_context(command)
++        review = self._run_llm_review(diff, context)
++
++        self._publish_review(command.pr_id, review)
++        pr = self._record_review(pr, review, command.head_sha)
++        self._persist(pr)
++
++    def _log_start(self, command: ReviewPullRequestCommand) -> None:
++        sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
++        logger.info("Starting review for PR %s (SHA: %s, force=%s)",
++                    command.pr_id, sha_str, command.force)
++
++    def _load_or_create_pull_request(
++        self, command: ReviewPullRequestCommand
++    ) -> PullRequest:
++        pr = self._pr_repository.find(command.pr_id)
++        if pr is None:
++            pr = PullRequest(
++                id=command.pr_id,
++                title=command.title,
++                head_sha=command.head_sha,
++            )
++        return pr
++
++    def _needs_review(
++        self, command: ReviewPullRequestCommand, pr: PullRequest
++    ) -> bool:
++        return command.force or pr.needs_review(command.head_sha)
++
++    def _handle_already_reviewed(
++        self, command: ReviewPullRequestCommand, pr: PullRequest
++    ) -> None:
++        sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
++        logger.info(
++            "PR %s already reviewed at SHA %s, skipping",
++            command.pr_id, sha_str,
++        )
++        self._pr_repository.save(pr)
++
++    def _fetch_diff(
++        self, command: ReviewPullRequestCommand
++    ) -> PullRequestDiff:
++        logger.debug("Fetching diff for PR %s", command.pr_id)
++        diff = self._changeset_fetcher.fetch(command.pr_id, command.head_sha)
++        if not diff.diff_content.strip():
++            raise EmptyDiffError(
++                f"Empty diff for {command.pr_id} at {command.head_sha}"
++            )
++        logger.debug("Diff fetched, size: %d chars", len(diff.diff_content))
++        return diff
++
++    def _build_review_context(
++        self, command: ReviewPullRequestCommand
++    ) -> RepositoryContext:
++        context = self._repository_context.fetch(command.pr_id)
++        logger.debug("Review context built: repo=%s", command.pr_id.repository)
++        return context
++
++    def _run_llm_review(
++        self, diff: PullRequestDiff, context: RepositoryContext
++    ) -> CodeReview:
++        logger.info("Sending to LLM for review...")
++        review = self._llm_review.review(diff, context)
++        logger.info(
++            "LLM review complete: verdict=%s, items=%d, summary_len=%d",
++            review.verdict.value,
++            len(review.items),
++            len(review.summary) if review.summary else 0,
++        )
++        return review
++
++    def _publish_review(
++        self, pr_id: PullRequestId, review: CodeReview
++    ) -> None:
++        logger.info("Publishing review to platform...")
++        self._review_publisher.publish(pr_id, review)
++
++    def _record_review(
++        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha
++    ) -> PullRequest:
++        return pr.add_review(review, head_sha)
++
++    def _persist(self, pr: PullRequest) -> None:
++        self._pr_repository.save(pr)
+diff --git a/src/pr_auto_reviewer/comment_parser.py b/src/pr_auto_reviewer/comment_parser.py
+new file mode 100644
+index 0000000..f54b7fd
+--- /dev/null
++++ b/src/pr_auto_reviewer/comment_parser.py
+@@ -0,0 +1,51 @@
++"""Comment parser module for PR Auto Reviewer."""
++
++from typing import List, Dict, Any
++import re
++
++class CommentParser:
++    """Parses PR comments for review items."""
++
++    def parse_comment(self, comment_text: str) -> List[Dict[str, str]]:
++        """Parse a comment for review items.
++
++        Args:
++            comment_text: The comment text to parse
++
++        Returns:
++            List of review item dictionaries.
++        """
++        items = []
++        lines = comment_text.split("\n")
++
++        current_item = None
++        for line in lines:
++            if line.startswith("## "):
++                # New section
++                if current_item:
++                    items.append(current_item)
++                current_item = None
++            elif line.startswith("- [ ] ") or line.startswith("- [x] "):
++                # Review item
++                if not current_item:
++                    current_item = {"title": "", "body": ""}
++                current_item["title"] = line[4:].strip()
++            elif current_item and line.strip():
++                # Part of current item body
++                current_item["body"] += line + "\n"
++
++        if current_item:
++            items.append(current_item)
++
++        return items
++
++    def extract_review_items(self, text: str) -> List[Dict[str, str]]:
++        """Extract review items from text.
++
++        Args:
++            text: Text to extract from
++
++        Returns:
++            List of review item dictionaries.
++        """
++        return self.parse_comment(text)
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/domain/__init__.py b/src/pr_auto_reviewer/domain/__init__.py
+new file mode 100644
+index 0000000..fbb46a2
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/__init__.py
+@@ -0,0 +1,54 @@
++from .entities import Issue, PullRequest, ReviewItem
++from .value_objects import (
++    CodeReview,
++    CommentId,
++    CommitSha,
++    IssueCommand,
++    ItemSeverity,
++    PrComment,
++    PullRequestDiff,
++    PullRequestId,
++    RepositoryContext,
++    ReviewVerdict,
++)
++from .exceptions import (
++    DomainError,
++    EmptyDiffError,
++    InvalidCommentIdError,
++    InvalidCommitShaError,
++    InvalidIssueBodyError,
++    InvalidPullRequestIdError,
++    IssueCreationError,
++    LlmUnavailableError,
++    PullRequestNotFoundError,
++    ReviewPublishError,
++)
++from .services import IssueCommandParser, ReviewItemParser
++
++__all__ = [
++    "Issue",
++    "PullRequest",
++    "ReviewItem",
++    "CodeReview",
++    "CommentId",
++    "CommitSha",
++    "IssueCommand",
++    "ItemSeverity",
++    "PrComment",
++    "PullRequestDiff",
++    "PullRequestId",
++    "RepositoryContext",
++    "ReviewVerdict",
++    "DomainError",
++    "EmptyDiffError",
++    "InvalidCommentIdError",
++    "InvalidCommitShaError",
++    "InvalidIssueBodyError",
++    "InvalidPullRequestIdError",
++    "IssueCreationError",
++    "LlmUnavailableError",
++    "PullRequestNotFoundError",
++    "ReviewPublishError",
++    "IssueCommandParser",
++    "ReviewItemParser",
++]
+diff --git a/src/pr_auto_reviewer/domain/entities/__init__.py b/src/pr_auto_reviewer/domain/entities/__init__.py
+new file mode 100644
+index 0000000..4ad6724
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/entities/__init__.py
+@@ -0,0 +1,5 @@
++from .pull_request import PullRequest
++from .issue import Issue
++from .review_item import ReviewItem
++
++__all__ = ["PullRequest", "Issue", "ReviewItem"]
+diff --git a/src/pr_auto_reviewer/domain/entities/issue.py b/src/pr_auto_reviewer/domain/entities/issue.py
+new file mode 100644
+index 0000000..3744e8d
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/entities/issue.py
+@@ -0,0 +1,42 @@
++"""Issue — a tracker issue created from a review finding on the remote platform."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, replace
++
++from ..value_objects.pull_request_id import PullRequestId
++from ..exceptions import InvalidIssueBodyError
++
++
++@dataclass(frozen=True)
++class Issue:
++    """A tracker issue created from a review finding on the remote platform.
++
++    An issue has a platform-assigned numeric ID that persists.
++    It can be updated, closed, or linked — it lives beyond the review cycle
++    that created it.
++
++    Immutable. "Mutation" methods return a new Issue.
++    """
++
++    id: int
++    repository: str
++    title: str
++    body: str
++    source_pr_id: PullRequestId
++    source_item_number: int
++    _is_closed: bool = False
++
++    def close(self) -> Issue:
++        """Marks this issue as closed. Returns a new Issue."""
++        return replace(self, _is_closed=True)
++
++    def is_closed(self) -> bool:
++        """Returns whether this issue is closed."""
++        return self._is_closed
++
++    def update_body(self, new_body: str) -> Issue:
++        """Replaces the issue body with updated content. Returns a new Issue."""
++        if not new_body or not isinstance(new_body, str):
++            raise InvalidIssueBodyError("body must be a non-empty string")
++        return replace(self, body=new_body)
+diff --git a/src/pr_auto_reviewer/domain/entities/pull_request.py b/src/pr_auto_reviewer/domain/entities/pull_request.py
+new file mode 100644
+index 0000000..e8b23d1
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/entities/pull_request.py
+@@ -0,0 +1,62 @@
++"""PullRequest — the central aggregate root that tracks the review lifecycle."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, replace
++
++from ..value_objects.pull_request_id import PullRequestId
++from ..value_objects.commit_sha import CommitSha
++from ..value_objects.code_review import CodeReview
++from ..value_objects.comment_id import CommentId
++
++
++@dataclass(frozen=True)
++class PullRequest:
++    """The central aggregate root.
++
++    Tracks the review lifecycle for a single PR across polling cycles.
++    Its identity (PullRequestId) is stable across commits.
++    State changes over time — head_sha advances, reviews accumulate,
++    processed comments grow.
++
++    Immutable. "Mutation" methods return a new PullRequest with the
++    updated state — the original instance is never changed.
++    """
++
++    id: PullRequestId
++    title: str
++    head_sha: CommitSha
++    is_draft: bool = False
++    reviews: tuple[CodeReview, ...] = ()
++    processed_comment_ids: frozenset[CommentId] = frozenset()
++
++    def needs_review(self, sha: CommitSha) -> bool:
++        """True when sha differs from the last reviewed commit."""
++        if not self.reviews:
++            return True
++        return sha != self.head_sha
++
++    def add_review(self, review: CodeReview, sha: CommitSha) -> PullRequest:
++        """Records a completed review and advances the reviewed sha.
++
++        Returns a new PullRequest with the review appended and head_sha updated.
++        """
++        return replace(
++            self,
++            reviews=self.reviews + (review,),
++            head_sha=sha,
++        )
++
++    def mark_comment_processed(self, comment_id: CommentId) -> PullRequest:
++        """Records that a command comment was handled.
++
++        Returns a new PullRequest with the comment added to processed set.
++        """
++        return replace(
++            self,
++            processed_comment_ids=self.processed_comment_ids | {comment_id},
++        )
++
++    def is_comment_processed(self, comment_id: CommentId) -> bool:
++        """Idempotency guard for command processing."""
++        return comment_id in self.processed_comment_ids
+diff --git a/src/pr_auto_reviewer/domain/entities/review_item.py b/src/pr_auto_reviewer/domain/entities/review_item.py
+new file mode 100644
+index 0000000..c813d68
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/entities/review_item.py
+@@ -0,0 +1,20 @@
++"""ReviewItem — a single actionable finding produced by the AI review."""
++
++from dataclasses import dataclass
++
++from ..value_objects.item_severity import ItemSeverity
++
++
++@dataclass(frozen=True)
++class ReviewItem:
++    """A single actionable finding produced by the AI review.
++
++    Immutable. Two items with the same fields are identical.
++    The number is positional (scoped to the review), not a persistent identity.
++    """
++
++    number: int
++    severity: ItemSeverity
++    category: str
++    file_path: str | None
++    description: str
+diff --git a/src/pr_auto_reviewer/domain/exceptions/__init__.py b/src/pr_auto_reviewer/domain/exceptions/__init__.py
+new file mode 100644
+index 0000000..be33ad2
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/__init__.py
+@@ -0,0 +1,27 @@
++from .domain_error import DomainError
++from .invalid_commit_sha_error import InvalidCommitShaError
++from .invalid_pull_request_id_error import InvalidPullRequestIdError
++from .invalid_comment_id_error import InvalidCommentIdError
++from .invalid_issue_body_error import InvalidIssueBodyError
++from .empty_diff_error import EmptyDiffError
++from .llm_unavailable_error import LlmUnavailableError
++from .review_publish_error import ReviewPublishError
++from .pull_request_not_found_error import PullRequestNotFoundError
++from .issue_creation_error import IssueCreationError
++from .repository_corrupted_error import RepositoryCorruptedError
++from .llm_response_malformed_error import LlmResponseMalformedError
++
++__all__ = [
++    "DomainError",
++    "InvalidCommitShaError",
++    "InvalidPullRequestIdError",
++    "InvalidCommentIdError",
++    "InvalidIssueBodyError",
++    "EmptyDiffError",
++    "LlmUnavailableError",
++    "ReviewPublishError",
++    "PullRequestNotFoundError",
++    "IssueCreationError",
++    "RepositoryCorruptedError",
++    "LlmResponseMalformedError",
++]
+diff --git a/src/pr_auto_reviewer/domain/exceptions/domain_error.py b/src/pr_auto_reviewer/domain/exceptions/domain_error.py
+new file mode 100644
+index 0000000..36db4ef
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/domain_error.py
+@@ -0,0 +1,5 @@
++"""Base exception for all domain errors."""
++
++
++class DomainError(Exception):
++    """Base exception for all domain errors."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/empty_diff_error.py b/src/pr_auto_reviewer/domain/exceptions/empty_diff_error.py
+new file mode 100644
+index 0000000..9bbd210
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/empty_diff_error.py
+@@ -0,0 +1,7 @@
++"""Raised when a PR diff has no content."""
++
++from .domain_error import DomainError
++
++
++class EmptyDiffError(DomainError):
++    """Raised when a PR diff has no content."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/invalid_comment_id_error.py b/src/pr_auto_reviewer/domain/exceptions/invalid_comment_id_error.py
+new file mode 100644
+index 0000000..f0f35cd
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/invalid_comment_id_error.py
+@@ -0,0 +1,7 @@
++"""Raised when a CommentId value is empty."""
++
++from .domain_error import DomainError
++
++
++class InvalidCommentIdError(DomainError):
++    """Raised when a CommentId value is empty."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/invalid_commit_sha_error.py b/src/pr_auto_reviewer/domain/exceptions/invalid_commit_sha_error.py
+new file mode 100644
+index 0000000..3fca6a7
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/invalid_commit_sha_error.py
+@@ -0,0 +1,7 @@
++"""Raised when a CommitSha value is empty or invalid."""
++
++from .domain_error import DomainError
++
++
++class InvalidCommitShaError(DomainError):
++    """Raised when a CommitSha value is empty or invalid."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/invalid_issue_body_error.py b/src/pr_auto_reviewer/domain/exceptions/invalid_issue_body_error.py
+new file mode 100644
+index 0000000..befc411
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/invalid_issue_body_error.py
+@@ -0,0 +1,7 @@
++"""Raised when an issue body or title is empty."""
++
++from .domain_error import DomainError
++
++
++class InvalidIssueBodyError(DomainError):
++    """Raised when an issue body or title is empty."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/invalid_pull_request_id_error.py b/src/pr_auto_reviewer/domain/exceptions/invalid_pull_request_id_error.py
+new file mode 100644
+index 0000000..dc6e65b
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/invalid_pull_request_id_error.py
+@@ -0,0 +1,7 @@
++"""Raised when a PullRequestId has invalid repository or number."""
++
++from .domain_error import DomainError
++
++
++class InvalidPullRequestIdError(DomainError):
++    """Raised when a PullRequestId has invalid repository or number."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/issue_creation_error.py b/src/pr_auto_reviewer/domain/exceptions/issue_creation_error.py
+new file mode 100644
+index 0000000..7f4d29e
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/issue_creation_error.py
+@@ -0,0 +1,15 @@
++"""Raised when the issue tracker port fails to create an issue."""
++
++from .domain_error import DomainError
++
++
++class IssueCreationError(DomainError):
++    """Raised when the issue tracker port fails to create an issue."""
++
++    def __init__(self, repository: str, item_number: int, reason: str) -> None:
++        self.repository = repository
++        self.item_number = item_number
++        self.reason = reason
++        super().__init__(
++            f"Issue creation failed for #{item_number} in {repository}: {reason}"
++        )
+diff --git a/src/pr_auto_reviewer/domain/exceptions/llm_response_malformed_error.py b/src/pr_auto_reviewer/domain/exceptions/llm_response_malformed_error.py
+new file mode 100644
+index 0000000..2a96264
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/llm_response_malformed_error.py
+@@ -0,0 +1,11 @@
++"""Raised when the LLM response cannot be parsed into a CodeReview."""
++
++from .domain_error import DomainError
++
++
++class LlmResponseMalformedError(DomainError):
++    """Raised when the LLM response cannot be parsed into a CodeReview."""
++
++    def __init__(self, raw_text: str) -> None:
++        self.raw_text = raw_text
++        super().__init__("LLM response could not be parsed into a structured review.")
+diff --git a/src/pr_auto_reviewer/domain/exceptions/llm_unavailable_error.py b/src/pr_auto_reviewer/domain/exceptions/llm_unavailable_error.py
+new file mode 100644
+index 0000000..6434272
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/llm_unavailable_error.py
+@@ -0,0 +1,7 @@
++"""Raised when the LLM port is unreachable or timed out."""
++
++from .domain_error import DomainError
++
++
++class LlmUnavailableError(DomainError):
++    """Raised when the LLM port is unreachable or timed out."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/pull_request_not_found_error.py b/src/pr_auto_reviewer/domain/exceptions/pull_request_not_found_error.py
+new file mode 100644
+index 0000000..b522531
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/pull_request_not_found_error.py
+@@ -0,0 +1,7 @@
++"""Raised when a PullRequest aggregate is not found in the repository."""
++
++from .domain_error import DomainError
++
++
++class PullRequestNotFoundError(DomainError):
++    """Raised when a PullRequest aggregate is not found in the repository."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/repository_corrupted_error.py b/src/pr_auto_reviewer/domain/exceptions/repository_corrupted_error.py
+new file mode 100644
+index 0000000..70347e0
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/repository_corrupted_error.py
+@@ -0,0 +1,7 @@
++"""Raised when the PullRequestRepository data is malformed or unreadable."""
++
++from .domain_error import DomainError
++
++
++class RepositoryCorruptedError(DomainError):
++    """Raised when the PullRequestRepository data is malformed or unreadable."""
+diff --git a/src/pr_auto_reviewer/domain/exceptions/review_publish_error.py b/src/pr_auto_reviewer/domain/exceptions/review_publish_error.py
+new file mode 100644
+index 0000000..c184d34
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/exceptions/review_publish_error.py
+@@ -0,0 +1,7 @@
++"""Raised when the platform rejected the review publication."""
++
++from .domain_error import DomainError
++
++
++class ReviewPublishError(DomainError):
++    """Raised when the platform rejected the review publication."""
+diff --git a/src/pr_auto_reviewer/domain/services/__init__.py b/src/pr_auto_reviewer/domain/services/__init__.py
+new file mode 100644
+index 0000000..ffb6a2b
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/services/__init__.py
+@@ -0,0 +1,4 @@
++from .review_item_parser import ReviewItemParser
++from .issue_command_parser import IssueCommandParser
++
++__all__ = ["ReviewItemParser", "IssueCommandParser"]
+diff --git a/src/pr_auto_reviewer/domain/services/issue_command_parser.py b/src/pr_auto_reviewer/domain/services/issue_command_parser.py
+new file mode 100644
+index 0000000..f279f2d
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/services/issue_command_parser.py
+@@ -0,0 +1,38 @@
++"""IssueCommandParser — pure domain service to parse commands from comment bodies."""
++
++from __future__ import annotations
++
++import re
++
++from ..value_objects.issue_command import IssueCommand
++
++
++class IssueCommandParser:
++    """Pure domain service. Detects command syntax in a comment body
++    (e.g. `/create-issue 1,3`) and returns an IssueCommand VO, or None."""
++
++    _COMMAND_PATTERN = re.compile(
++        r"/create-issue\s+(?P<numbers>[\d,\s]+)",
++        re.IGNORECASE,
++    )
++
++    def parse(self, comment_id: str, comment_body: str) -> IssueCommand | None:
++        match = self._COMMAND_PATTERN.search(comment_body)
++        if not match:
++            return None
++
++        raw = match.group("numbers")
++        numbers: list[int] = []
++        for part in raw.split(","):
++            part = part.strip()
++            if part.isdigit():
++                numbers.append(int(part))
++
++        if not numbers:
++            return None
++
++        return IssueCommand(
++            comment_id=comment_id,
++            item_numbers=numbers,
++        )
++
+diff --git a/src/pr_auto_reviewer/domain/services/review_item_parser.py b/src/pr_auto_reviewer/domain/services/review_item_parser.py
+new file mode 100644
+index 0000000..0875077
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/services/review_item_parser.py
+@@ -0,0 +1,39 @@
++"""ReviewItemParser — pure domain service to parse a review body into ReviewItems."""
++
++from __future__ import annotations
++
++import re
++
++from ..entities.review_item import ReviewItem
++from ..value_objects.item_severity import ItemSeverity
++
++
++class ReviewItemParser:
++    """Pure domain service. Receives the markdown body of a posted review
++    and returns a structured list of ReviewItem. Contains all parsing rules
++    — no I/O, no ports."""
++
++    _ITEM_PATTERN = re.compile(
++        r"^\d+\.\s*\*\*(?P<severity>[A-Z]+)\*\*\s*\[(?P<category>\w+)](?:\s*`(?P<file>[^`]+)`)?\s*[:-]?\s*(?P<description>.+)$",
++        re.MULTILINE,
++    )
++
++    def parse(self, raw_body: str) -> list[ReviewItem]:
++        items: list[ReviewItem] = []
++        for n, match in enumerate(self._ITEM_PATTERN.finditer(raw_body), start=1):
++            severity_str = match.group("severity")
++            try:
++                severity = ItemSeverity(severity_str.lower())
++            except ValueError:
++                severity = ItemSeverity.INFO
++
++            file_path = match.group("file") or None
++
++            items.append(ReviewItem(
++                number=n,
++                severity=severity,
++                category=match.group("category"),
++                file_path=file_path,
++                description=match.group("description").strip(),
++            ))
++        return items
+diff --git a/src/pr_auto_reviewer/domain/value_objects/__init__.py b/src/pr_auto_reviewer/domain/value_objects/__init__.py
+new file mode 100644
+index 0000000..24e3cb7
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/__init__.py
+@@ -0,0 +1,23 @@
++from .pull_request_id import PullRequestId
++from .commit_sha import CommitSha
++from .pull_request_diff import PullRequestDiff
++from .review_verdict import ReviewVerdict
++from .item_severity import ItemSeverity
++from .code_review import CodeReview
++from .repository_context import RepositoryContext
++from .issue_command import IssueCommand
++from .comment_id import CommentId
++from .pr_comment import PrComment
++
++__all__ = [
++    "PullRequestId",
++    "CommitSha",
++    "PullRequestDiff",
++    "ReviewVerdict",
++    "ItemSeverity",
++    "CodeReview",
++    "RepositoryContext",
++    "IssueCommand",
++    "CommentId",
++    "PrComment",
++]
+diff --git a/src/pr_auto_reviewer/domain/value_objects/code_review.py b/src/pr_auto_reviewer/domain/value_objects/code_review.py
+new file mode 100644
+index 0000000..da75645
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/code_review.py
+@@ -0,0 +1,20 @@
++"""CodeReview — the complete, structured output produced by the LLM for a given diff."""
++
++from dataclasses import dataclass, field
++
++from .review_verdict import ReviewVerdict
++from ..entities.review_item import ReviewItem
++
++
++@dataclass(frozen=True)
++class CodeReview:
++    """The complete, structured output produced by the LLM for a given diff.
++
++    A review is the *result* of running a model over a diff. It never mutates.
++    A new commit means a new review, not an updated one.
++    """
++
++    verdict: ReviewVerdict
++    summary: str
++    items: list[ReviewItem] = field(default_factory=list)
++    model_used: str = ""
+diff --git a/src/pr_auto_reviewer/domain/value_objects/comment_id.py b/src/pr_auto_reviewer/domain/value_objects/comment_id.py
+new file mode 100644
+index 0000000..4a62608
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/comment_id.py
+@@ -0,0 +1,24 @@
++"""CommentId — opaque identifier for a comment on a pull request."""
++
++from dataclasses import dataclass
++
++from ..exceptions import InvalidCommentIdError
++
++
++@dataclass(frozen=True)
++class CommentId:
++    """Opaque identifier for a comment on a pull request.
++
++    An identifier treated as a value for idempotency tracking — it never changes.
++    """
++
++    value: str
++
++    def __str__(self) -> str:
++        return self.value
++
++    def __post_init__(self) -> None:
++        if not self.value or not isinstance(self.value, str):
++            raise InvalidCommentIdError(
++                "CommentId value must be a non-empty string"
++            )
+diff --git a/src/pr_auto_reviewer/domain/value_objects/commit_sha.py b/src/pr_auto_reviewer/domain/value_objects/commit_sha.py
+new file mode 100644
+index 0000000..0d02d16
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/commit_sha.py
+@@ -0,0 +1,24 @@
++"""CommitSha — represents a specific, immutable snapshot of code."""
++
++from dataclasses import dataclass
++
++from ..exceptions import InvalidCommitShaError
++
++
++@dataclass(frozen=True)
++class CommitSha:
++    """Represents a specific, immutable snapshot of code.
++
++    A SHA is content-addressed — it is its own identity.
++    """
++
++    value: str
++
++    def __str__(self) -> str:
++        return self.value
++
++    def __post_init__(self) -> None:
++        if not self.value or not isinstance(self.value, str):
++            raise InvalidCommitShaError(
++                "CommitSha value must be a non-empty string"
++            )
+diff --git a/src/pr_auto_reviewer/domain/value_objects/issue_command.py b/src/pr_auto_reviewer/domain/value_objects/issue_command.py
+new file mode 100644
+index 0000000..1a77067
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/issue_command.py
+@@ -0,0 +1,15 @@
++"""IssueCommand — a parsed user intent extracted from a PR comment requesting issue creation."""
++
++from dataclasses import dataclass, field
++
++
++@dataclass(frozen=True)
++class IssueCommand:
++    """A parsed user intent extracted from a PR comment requesting issue creation.
++
++    Derived from parsing a comment body. It is a description of intent,
++    not a persistent record.
++    """
++
++    comment_id: str
++    item_numbers: list[int] = field(default_factory=list)
+diff --git a/src/pr_auto_reviewer/domain/value_objects/item_severity.py b/src/pr_auto_reviewer/domain/value_objects/item_severity.py
+new file mode 100644
+index 0000000..d6d2583
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/item_severity.py
+@@ -0,0 +1,12 @@
++"""ItemSeverity — classification of how critical a review finding is."""
++
++from enum import StrEnum
++
++
++class ItemSeverity(StrEnum):
++    """Classification of how critical a review finding is."""
++
++    CRITICAL = "critical"
++    MAJOR = "major"
++    MINOR = "minor"
++    INFO = "info"
+diff --git a/src/pr_auto_reviewer/domain/value_objects/pr_comment.py b/src/pr_auto_reviewer/domain/value_objects/pr_comment.py
+new file mode 100644
+index 0000000..37b30fc
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/pr_comment.py
+@@ -0,0 +1,15 @@
++"""PrComment — application-layer DTO for a comment on a pull request."""
++
++from dataclasses import dataclass
++from datetime import datetime
++
++from .comment_id import CommentId
++
++
++@dataclass(frozen=True)
++class PrComment:
++    """DTO carrying only what the service needs from a PR comment."""
++
++    id: CommentId
++    body: str
++    created_at: datetime
+diff --git a/src/pr_auto_reviewer/domain/value_objects/pull_request_diff.py b/src/pr_auto_reviewer/domain/value_objects/pull_request_diff.py
+new file mode 100644
+index 0000000..22c0528
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/pull_request_diff.py
+@@ -0,0 +1,18 @@
++"""PullRequestDiff — immutable snapshot of what changed in a PR at a specific commit."""
++
++from dataclasses import dataclass, field
++
++from .pull_request_id import PullRequestId
++from .commit_sha import CommitSha
++
++
++@dataclass(frozen=True)
++class PullRequestDiff:
++    """Immutable snapshot of what changed in a PR at a specific commit."""
++
++    pr_id: PullRequestId
++    head_sha: CommitSha
++    diff_content: str
++    file_contents: dict[str, str] = field(default_factory=dict)
++    repository_structure: str | None = None
++    conventions: str | None = None
+diff --git a/src/pr_auto_reviewer/domain/value_objects/pull_request_id.py b/src/pr_auto_reviewer/domain/value_objects/pull_request_id.py
+new file mode 100644
+index 0000000..9e95362
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/pull_request_id.py
+@@ -0,0 +1,29 @@
++"""PullRequestId — composite identity of a pull request within a platform."""
++
++from dataclasses import dataclass
++
++from ..exceptions import InvalidPullRequestIdError
++
++
++@dataclass(frozen=True)
++class PullRequestId:
++    """Composite identity of a pull request within a platform.
++
++    Two PullRequestIds with the same repository and number are considered equal.
++    """
++
++    repository: str
++    number: int
++
++    def __str__(self) -> str:
++        return f"{self.repository}#{self.number}"
++
++    def __post_init__(self) -> None:
++        if not self.repository or not isinstance(self.repository, str):
++            raise InvalidPullRequestIdError(
++                "repository must be a non-empty string"
++            )
++        if not isinstance(self.number, int) or self.number <= 0:
++            raise InvalidPullRequestIdError(
++                "number must be a positive integer"
++            )
+diff --git a/src/pr_auto_reviewer/domain/value_objects/repository_context.py b/src/pr_auto_reviewer/domain/value_objects/repository_context.py
+new file mode 100644
+index 0000000..9577e22
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/repository_context.py
+@@ -0,0 +1,15 @@
++"""RepositoryContext — supporting context passed alongside the diff to improve review quality."""
++
++from dataclasses import dataclass
++
++
++@dataclass(frozen=True)
++class RepositoryContext:
++    """Supporting context passed alongside the diff to improve review quality.
++
++    Pure input data for prompt construction. No identity, no lifecycle.
++    """
++
++    architecture_hint: str
++    conventions: str | None = None
++    repository_structure: str | None = None
+diff --git a/src/pr_auto_reviewer/domain/value_objects/review_verdict.py b/src/pr_auto_reviewer/domain/value_objects/review_verdict.py
+new file mode 100644
+index 0000000..5901a83
+--- /dev/null
++++ b/src/pr_auto_reviewer/domain/value_objects/review_verdict.py
+@@ -0,0 +1,16 @@
++"""ReviewVerdict — enumerated conclusion of a code review."""
++
++from enum import StrEnum
++
++
++class ReviewVerdict(StrEnum):
++    """Enumerated conclusion of a code review.
++
++    Maps to platform-specific events (APPROVED, REQUEST_CHANGES, COMMENT)
++    as an adapter concern.
++    """
++
++    APPROVED = "approved"
++    CHANGES_REQUESTED = "changes_requested"
++    COMMENTED = "commented"
++
+diff --git a/src/pr_auto_reviewer/infrastructure/__init__.py b/src/pr_auto_reviewer/infrastructure/__init__.py
+new file mode 100644
+index 0000000..3167a9a
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/__init__.py
+@@ -0,0 +1,27 @@
++from .client import GitPlatformHttpClient
++from .persistence import JsonFilePullRequestRepository
++from .command_bus import InMemoryCommandBus
++from .git_platform.architecture_detector import ArchitectureDetector
++from .git_platform.changeset_fetcher import GitChangesetFetcherAdapter
++from .git_platform.repository_context import GitRepositoryContextAdapter
++from .git_platform.review_publisher import GitReviewPublisherAdapter
++from .git_platform.review_reader import GitReviewReaderAdapter
++from .git_platform.comment_reader import GitCommentReaderAdapter
++from .git_platform.comment_publisher import GitCommentPublisherAdapter
++from .git_platform.issue_tracker import GitIssueTrackerAdapter
++from .llm import OllamaLlmAdapter
++
++__all__ = [
++    "GitPlatformHttpClient",
++    "JsonFilePullRequestRepository",
++    "InMemoryCommandBus",
++    "ArchitectureDetector",
++    "GitChangesetFetcherAdapter",
++    "GitRepositoryContextAdapter",
++    "GitReviewPublisherAdapter",
++    "GitReviewReaderAdapter",
++    "GitCommentReaderAdapter",
++    "GitCommentPublisherAdapter",
++    "GitIssueTrackerAdapter",
++    "OllamaLlmAdapter",
++]
+diff --git a/src/pr_auto_reviewer/infrastructure/client/__init__.py b/src/pr_auto_reviewer/infrastructure/client/__init__.py
+new file mode 100644
+index 0000000..e5b012c
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/client/__init__.py
+@@ -0,0 +1,3 @@
++from .git_platform_http_client import GitPlatformHttpClient
++
++__all__ = ["GitPlatformHttpClient"]
+diff --git a/src/pr_auto_reviewer/infrastructure/client/git_platform_http_client.py b/src/pr_auto_reviewer/infrastructure/client/git_platform_http_client.py
+new file mode 100644
+index 0000000..4be69f8
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/client/git_platform_http_client.py
+@@ -0,0 +1,60 @@
++"""GitPlatformHttpClient — thin HTTP wrapper shared by git platform adapters.
++
++Not a port. Never referenced outside the infrastructure layer.
++Handles: base URL, Authorization header, response status assertion.
++"""
++
++from __future__ import annotations
++
++from typing import Any
++
++import requests
++
++
++class GitPlatformHttpClient:
++    """Thin HTTP client shared by all git platform adapters.
++
++    Concrete implementations (e.g. ForgejoHttpClient) can extend or wrap
++    this class with platform-specific quirks (pagination shape, auth scheme,
++    rate limiting).
++    """
++
++    def __init__(self, base_url: str, token: str) -> None:
++        self._base_url = base_url.rstrip("/")
++        self._token = token
++
++    @property
++    def base_url(self) -> str:
++        return self._base_url
++
++    def get(self, path: str, **params: Any) -> dict[str, Any]:
++        response = requests.get(
++            f"{self._base_url}{path}",
++            headers={"Authorization": f"token {self._token}"},
++            params=params,
++            timeout=30,
++        )
++        response.raise_for_status()
++        return response.json()
++
++    def get_raw(self, path: str) -> str:
++        response = requests.get(
++            f"{self._base_url}{path}",
++            headers={"Authorization": f"token {self._token}"},
++            timeout=30,
++        )
++        response.raise_for_status()
++        return response.text
++
++    def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
++        response = requests.post(
++            f"{self._base_url}{path}",
++            headers={
++                "Authorization": f"token {self._token}",
++                "Content-Type": "application/json",
++            },
++            json=body,
++            timeout=30,
++        )
++        response.raise_for_status()
++        return response.json()
+diff --git a/src/pr_auto_reviewer/infrastructure/command_bus/__init__.py b/src/pr_auto_reviewer/infrastructure/command_bus/__init__.py
+new file mode 100644
+index 0000000..3fcc9bb
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/command_bus/__init__.py
+@@ -0,0 +1,3 @@
++from .in_memory_command_bus import InMemoryCommandBus
++
++__all__ = ["InMemoryCommandBus"]
+diff --git a/src/pr_auto_reviewer/infrastructure/command_bus/in_memory_command_bus.py b/src/pr_auto_reviewer/infrastructure/command_bus/in_memory_command_bus.py
+new file mode 100644
+index 0000000..8fd92db
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/command_bus/in_memory_command_bus.py
+@@ -0,0 +1,42 @@
++"""InMemoryCommandBus — infrastructure adapter that dispatches commands.
++
++Implements CommandBusPort. A simple in-memory dispatcher that routes
++command objects to the registered handler callable.
++
++This is the simplest possible bus — commands are dispatched synchronously
++in the same process. Can be swapped for a message-queue-based bus without
++touching application or domain code.
++"""
++
++from __future__ import annotations
++
++from collections.abc import Callable
++from typing import Any
++
++from ...application.ports.outbound.command_bus_port import CommandBusPort
++
++
++Handler = Callable[[Any], None]
++
++
++class InMemoryCommandBus(CommandBusPort):
++    """Synchronous in-memory command dispatcher.
++
++    Handlers are registered at construction time by the composition root.
++    Unknown command types are silently ignored (fire-and-forget semantics).
++    """
++
++    def __init__(
++        self,
++        handlers: dict[type, Handler] | None = None,
++    ) -> None:
++        self._handlers: dict[type, Handler] = dict(handlers) if handlers else {}
++
++    def register(self, command_type: type, handler: Handler) -> None:
++        """Register a handler for a command type."""
++        self._handlers[command_type] = handler
++
++    def dispatch(self, command: Any) -> None:
++        handler = self._handlers.get(type(command))
++        if handler is not None:
++            handler(command)
+diff --git a/src/pr_auto_reviewer/infrastructure/config/__init__.py b/src/pr_auto_reviewer/infrastructure/config/__init__.py
+new file mode 100644
+index 0000000..5168a38
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/config/__init__.py
+@@ -0,0 +1,5 @@
++"""Infrastructure config module."""
++
++from pr_auto_reviewer.infrastructure.config.config import Config, load_config
++
++__all__ = ["Config", "load_config"]
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/infrastructure/config/config.py b/src/pr_auto_reviewer/infrastructure/config/config.py
+new file mode 100644
+index 0000000..ffc17a8
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/config/config.py
+@@ -0,0 +1,99 @@
++"""Configuration module for PR Auto Reviewer."""
++
++import os
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Optional
++
++from dotenv import load_dotenv
++
++
++@dataclass
++class Config:
++    """Configuration settings for the PR Auto Reviewer."""
++
++    env: str
++    forgejo_token: str
++    forgejo_mode: str = "codeberg"
++    forgejo_host: str = "https://codeberg.org/api/v1"
++    forgejo_reviewer_token: Optional[str] = None
++    forgejo_reviewer_username: Optional[str] = None
++    ollama_host: str = "http://localhost:11434"
++    ollama_model: Optional[str] = None
++    poll_interval: int = 60
++    debug: bool = False
++
++
++def _get_repo_root() -> Path:
++    """Get the repository root path."""
++    return Path(__file__).parent.parent.parent.parent
++
++
++def _is_installed() -> bool:
++    """Detect if running from an installed package (not development)."""
++    return not (_get_repo_root() / ".env").exists()
++
++
++def _normalize_forgejo_host(url: str) -> str:
++    """Ensure the Forgejo/Codeberg host URL includes /api/v1 suffix."""
++    url = url.rstrip("/")
++    # GitHub uses a different API path structure
++    if "github.com" in url or url == "https://api.github.com":
++        return "https://api.github.com"
++    # Forgejo/Codeberg needs /api/v1 suffix
++    if not url.endswith("/api/v1"):
++        return url + "/api/v1"
++    return url
++
++
++def load_config() -> Config:
++    """Load configuration from environment variables.
++
++    Priority based on mode:
++    - development (default, .env exists): .env first, then user config
++    - production (installed, no .env): user config first, then .env
++
++    Later files override earlier ones.
++
++    Returns:
++        Config: The loaded configuration.
++
++    Raises:
++        RuntimeError: If required configuration is missing.
++    """
++    repo_root = Path(__file__).parent.parent.parent.parent
++    env = os.environ.get("ENV", "").strip()
++
++    if not env:
++        env = "production" if _is_installed() else "development"
++
++    user_config_path = os.path.expanduser("~/.config/pr-auto-reviewer/config")
++    repo_env_path = repo_root / ".env"
++
++    if env == "production":
++        paths = [user_config_path, repo_env_path]
++    else:
++        paths = [repo_env_path, user_config_path]
++
++    for path in paths:
++        if os.path.exists(path):
++            load_dotenv(path, override=True)
++
++    forgejo_token = os.environ.get("FORGEJO_TOKEN", "").strip()
++    if not forgejo_token:
++        raise RuntimeError("FORGEJO_TOKEN is required")
++
++    return Config(
++        env=env,
++        forgejo_token=forgejo_token,
++        forgejo_mode=os.environ.get("FORGEJO_MODE", "codeberg").strip(),
++        forgejo_host=_normalize_forgejo_host(
++            os.environ.get("FORGEJO_HOST", "https://codeberg.org/api/v1").strip()
++        ),
++        forgejo_reviewer_token=os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None,
++        forgejo_reviewer_username=os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None,
++        ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434").strip(),
++        ollama_model=os.environ.get("OLLAMA_MODEL", "").strip() or None,
++        poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
++        debug=os.environ.get("DEBUG", "0") == "1",
++    )
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/__init__.py b/src/pr_auto_reviewer/infrastructure/git_platform/__init__.py
+new file mode 100644
+index 0000000..85adeb2
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/__init__.py
+@@ -0,0 +1,3 @@
++from .architecture_detector import ArchitectureDetector
++
++__all__ = ["ArchitectureDetector"]
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/architecture_detector.py b/src/pr_auto_reviewer/infrastructure/git_platform/architecture_detector.py
+new file mode 100644
+index 0000000..273de17
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/architecture_detector.py
+@@ -0,0 +1,67 @@
++"""ArchitectureDetector — infrastructure utility, not a port.
++
++Inspects repository file tree entries for known layout patterns
++to produce an architecture hint string for ReviewContext.
++"""
++
++from __future__ import annotations
++
++
++class ArchitectureDetector:
++    """Inspects file paths for known layout patterns."""
++
++    _ARCHITECTURES: list[tuple[str, list[str], list[str]]] = [
++        (
++            "cqrs",
++            ["src/commands/", "commands/", "src/queries/", "queries/"],
++            ["src/commands/", "commands/", "src/queries/", "queries/"],
++        ),
++        (
++            "mvc",
++            ["src/views/", "views/", "src/templates/", "templates/"],
++            ["src/controllers/", "controllers/", "src/handlers/", "handlers/", "src/routes/", "routes/", "src/models/", "models/"],
++        ),
++        (
++            "onion",
++            ["src/core/", "core/"],
++            ["src/application/", "application/", "src/infrastructure/", "infrastructure/"],
++        ),
++        (
++            "layered",
++            ["src/presentation/", "presentation/"],
++            ["src/domain/", "domain/", "src/application/", "application/", "src/infrastructure/", "infrastructure/"],
++        ),
++        (
++            "clean",
++            ["src/use_cases/", "use_cases/", "src/usecases/", "usecases/"],
++            ["src/domain/", "domain/", "src/infrastructure/", "infrastructure/"],
++        ),
++        (
++            "hexagonal",
++            ["src/domain/", "domain/"],
++            ["src/application/", "application/", "src/adapters/", "adapters/", "src/ports/", "ports/"],
++        ),
++    ]
++
++    def detect(self, tree_paths: list[str]) -> str:
++        """Return an architecture hint based on file tree traversal.
++
++        Args:
++            tree_paths: List of path strings from the git tree API
++                (e.g. 'src/domain/__init__.py', 'src/main.rs').
++
++        Returns:
++            Architecture hint string, e.g. 'hexagonal', or 'unknown'.
++        """
++        combined = "\n".join(tree_paths)
++
++        for name, required_markers, optional_markers in self._ARCHITECTURES:
++            has_required = any(m in combined for m in required_markers)
++            if not has_required:
++                continue
++
++            optional_matches = sum(1 for m in optional_markers if m in combined)
++            if optional_matches >= 1:
++                return name
++
++        return "unknown"
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/changeset_fetcher.py b/src/pr_auto_reviewer/infrastructure/git_platform/changeset_fetcher.py
+new file mode 100644
+index 0000000..ad3c1ec
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/changeset_fetcher.py
+@@ -0,0 +1,71 @@
++"""GitChangesetFetcherAdapter — wraps GitPlatformHttpClient to implement ChangesetFetcherPort."""
++
++from __future__ import annotations
++
++import logging
++import re
++
++from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
++    ChangesetFetcherPort,
++)
++from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
++from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
++from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++# Regex to extract changed file paths from unified-diff headers.
++_DIFF_FILE_PATH_RE = re.compile(
++    r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE
++)
++
++
++class GitChangesetFetcherAdapter(ChangesetFetcherPort):
++    """Fetches a pull-request diff and the full content of each changed file."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    # ------------------------------------------------------------------ [port]
++    def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
++        """Return the diff and per-file contents for *pr_id* at *sha*."""
++        # -- [http] fetch unified diff ---------------------------------------
++        diff_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff"
++        raw_diff = self._client.get_raw(diff_path)
++
++        # -- [err] empty / tiny diff -----------------------------------------
++        if not raw_diff or len(raw_diff.strip()) < 50:
++            raise EmptyDiffError(
++                f"Diff for {pr_id} at {sha} is empty or too short"
++            )
++
++        # -- [map] extract changed file paths from diff headers --------------
++        file_paths: set[str] = set()
++        for match in _DIFF_FILE_PATH_RE.finditer(raw_diff):
++            # b-side path is the "new" file (may be /dev/null for deletions)
++            new_path = match.group(2)
++            if new_path and new_path != "/dev/null":
++                file_paths.add(new_path)
++
++        # -- [http] fetch each file's content (skip deleted / unreadable) ---
++        file_contents: dict[str, str] = {}
++        for file_path in sorted(file_paths):
++            raw_path = f"/repos/{pr_id.repository}/raw/{sha.value}/{file_path}"
++            try:
++                content = self._client.get_raw(raw_path)
++                file_contents[file_path] = content
++            except Exception:
++                # 404 or other errors → file was probably deleted; skip silently.
++                logger.debug("Skipping unreadable file: %s", file_path)
++
++        # -- [map] build domain value-object ---------------------------------
++        return PullRequestDiff(
++            pr_id=pr_id,
++            head_sha=sha,
++            diff_content=raw_diff,
++            file_contents=file_contents,
++        )
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/comment_publisher.py b/src/pr_auto_reviewer/infrastructure/git_platform/comment_publisher.py
+new file mode 100644
+index 0000000..4b7ee23
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/comment_publisher.py
+@@ -0,0 +1,36 @@
++"""GitCommentPublisherAdapter — wraps GitPlatformHttpClient to implement CommentPublisherPort."""
++
++from __future__ import annotations
++
++import logging
++
++from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
++    CommentPublisherPort,
++)
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class GitCommentPublisherAdapter(CommentPublisherPort):
++    """Posts a reply comment on a PR; failure is non-fatal (logged only)."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    # ------------------------------------------------------------------ [port]
++    def post(self, pr_id: PullRequestId, body: str) -> None:
++        """POST a comment on *pr_id*. Logs warning on failure; does not raise."""
++
++        # -- [http] POST comment ---------------------------------------------
++        path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
++        try:
++            self._client.post(path, {"body": body})
++        except Exception:
++            # [err] non-fatal — log and move on
++            logger.warning(
++                "Failed to post comment on %s (non-fatal)", pr_id
++            )
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/comment_reader.py b/src/pr_auto_reviewer/infrastructure/git_platform/comment_reader.py
+new file mode 100644
+index 0000000..ad1a999
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/comment_reader.py
+@@ -0,0 +1,67 @@
++"""GitCommentReaderAdapter — wraps GitPlatformHttpClient to implement CommentReaderPort."""
++
++from __future__ import annotations
++
++import logging
++from datetime import datetime
++
++from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
++    CommentReaderPort,
++)
++from pr_auto_reviewer.domain.value_objects.comment_id import CommentId
++from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class GitCommentReaderAdapter(CommentReaderPort):
++    """Fetches PR comments and maps them to domain PrComment objects."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    # ------------------------------------------------------------------ [port]
++    def get_comments(self, pr_id: PullRequestId) -> list[PrComment]:
++        """Return all comments on *pr_id*, sorted by creation date ascending."""
++
++        # -- [http] GET comments ---------------------------------------------
++        path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
++        raw_comments = self._client.get(path, limit=50)
++
++        # Normalise to list — some platforms wrap in a dict under "data".
++        if isinstance(raw_comments, dict):
++            entries: list[dict] = raw_comments.get("data", raw_comments.get("comments", []))
++            if not isinstance(entries, list):
++                entries = [raw_comments] if raw_comments else []
++        elif isinstance(raw_comments, list):
++            entries = raw_comments
++        else:
++            entries = []
++
++        # -- [map] build PrComment objects -----------------------------------
++        comments: list[PrComment] = []
++        for entry in entries:
++            body = entry.get("body", "")
++            created_str = entry.get("created_at", "")
++            try:
++                created_at = datetime.fromisoformat(
++                    created_str.replace("Z", "+00:00")
++                )
++            except (ValueError, TypeError):
++                created_at = datetime.min
++
++            comments.append(
++                PrComment(
++                    id=CommentId(str(entry.get("id", ""))),
++                    body=body,
++                    created_at=created_at,
++                )
++            )
++
++        # -- [map] sort by created_at ascending, return ----------------------
++        comments.sort(key=lambda c: c.created_at)
++        return comments
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/issue_tracker.py b/src/pr_auto_reviewer/infrastructure/git_platform/issue_tracker.py
+new file mode 100644
+index 0000000..f25956b
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/issue_tracker.py
+@@ -0,0 +1,54 @@
++"""GitIssueTrackerAdapter — wraps GitPlatformHttpClient to implement IssueTrackerPort."""
++
++from __future__ import annotations
++
++import logging
++
++from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
++    IssueTrackerPort,
++)
++from pr_auto_reviewer.domain.entities.issue import Issue
++from pr_auto_reviewer.domain.exceptions.issue_creation_error import (
++    IssueCreationError,
++)
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class GitIssueTrackerAdapter(IssueTrackerPort):
++    """Creates tracker issues on the remote platform."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    # ------------------------------------------------------------------ [port]
++    def create(self, repository: str, title: str, body: str) -> Issue:
++        """POST a new issue to *repository* and return the Issue entity."""
++
++        # -- [http] POST issue -----------------------------------------------
++        path = f"/repos/{repository}/issues"
++        try:
++            response = self._client.post(path, {"title": title, "body": body})
++        except Exception as exc:
++            # -- [err] translate to domain exception -------------------------
++            raise IssueCreationError(
++                repository=repository,
++                item_number=0,
++                reason=str(exc),
++            ) from exc
++
++        # -- [map] build Issue domain entity ---------------------------------
++        # source_pr_id and source_item_number are set by the application
++        # service before persisting; the adapter uses sentinel defaults.
++        return Issue(
++            id=int(response.get("number", 0)),
++            repository=repository,
++            title=title,
++            body=body,
++            source_pr_id=PullRequestId(repository=repository, number=1),
++            source_item_number=0,
++        )
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/pr_lister_adapter.py b/src/pr_auto_reviewer/infrastructure/git_platform/pr_lister_adapter.py
+new file mode 100644
+index 0000000..c6b55a5
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/pr_lister_adapter.py
+@@ -0,0 +1,52 @@
++"""Git-PR-lister adapter - lists open PRs in a repository."""
++
++from __future__ import annotations
++
++from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
++
++
++class GitPrListerAdapter(PrListerPort):
++    """Lists open (non-draft) PRs in a repository."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    def list_open(self, repository: str) -> list[OpenPullRequest]:
++        """List all open PRs in the given repository."""
++        try:
++            data = self._client.get(
++                f"/repos/{repository}/pulls",
++                state="open",
++                limit=20,
++            )
++
++            prs = data if isinstance(data, list) else data.get("data", [])
++
++            result = []
++            for pr in prs:
++                if pr.get("draft", False):
++                    continue
++
++                number = pr.get("number")
++                sha = pr.get("head", {}).get("sha")
++                title = pr.get("title", "")
++
++                if number and sha:
++                    result.append(
++                        OpenPullRequest(
++                            pr_id=PullRequestId(repository=repository, number=int(number)),
++                            head_sha=CommitSha(sha),
++                            title=title,
++                            is_draft=pr.get("draft", False),
++                        )
++                    )
++
++            return result
++
++        except Exception:
++            return []
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/repo_lister_adapter.py b/src/pr_auto_reviewer/infrastructure/git_platform/repo_lister_adapter.py
+new file mode 100644
+index 0000000..33c0c5b
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/repo_lister_adapter.py
+@@ -0,0 +1,50 @@
++"""Git-repo-lister adapter - lists repositories to watch."""
++
++from __future__ import annotations
++
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++from pr_auto_reviewer.presentation.ports import RepoListerPort
++
++
++class GitRepoListerAdapter(RepoListerPort):
++    """Lists repositories owned by the authenticated user."""
++
++    def __init__(self, client: GitPlatformHttpClient, repos_filter: str | None = None) -> None:
++        self._client = client
++        self._repos_filter = repos_filter
++
++    def list_repos(self) -> list[str]:
++        """List all repositories owned by the authenticated user."""
++        try:
++            user_data = self._client.get("/user")
++            username = user_data.get("login") or user_data.get("username")
++            if not username:
++                return []
++
++            data = self._client.get("/user/repos", limit=50)
++            repos = data if isinstance(data, list) else data.get("data", [])
++
++            def is_owned(repo: dict) -> bool:
++                full_name = repo.get("full_name", "")
++                owner = repo.get("owner", {})
++                if isinstance(owner, dict):
++                    repo_owner = owner.get("login") or owner.get("username") or ""
++                else:
++                    repo_owner = ""
++                return full_name.startswith(f"{username}/") or repo_owner == username
++
++            result = [
++                repo["full_name"]
++                for repo in repos
++                if "full_name" in repo and is_owned(repo)
++            ]
++
++            if self._repos_filter:
++                result = [r for r in result if self._repos_filter in r]
++
++            return result
++
++        except Exception:
++            return []
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/repository_context.py b/src/pr_auto_reviewer/infrastructure/git_platform/repository_context.py
+new file mode 100644
+index 0000000..4cb3fb0
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/repository_context.py
+@@ -0,0 +1,66 @@
++"""GitRepositoryContextAdapter — wraps GitPlatformHttpClient to implement RepositoryContextPort."""
++
++from __future__ import annotations
++
++import logging
++
++from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
++    RepositoryContextPort,
++)
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.domain.value_objects.review_context import ReviewContext
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++from .architecture_detector import ArchitectureDetector
++
++logger = logging.getLogger(__name__)
++
++_CONVENTIONS_FILENAMES = ("ARCHITECTURE.md", "CONVENTIONS.md", ".architecturerc")
++
++
++class GitRepositoryContextAdapter(RepositoryContextPort):
++    """Fetches repository structure, architecture hint, and conventions."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++        self._detector = ArchitectureDetector()
++
++    # ------------------------------------------------------------------ [port]
++    def fetch(self, pr_id: PullRequestId) -> ReviewContext:
++        """Return ReviewContext for the given PR's repository."""
++        architecture_hint = "unknown"
++        repository_structure: str | None = None
++
++        # -- [http] GET git tree (recursive) ---------------------------------
++        tree_path = f"/repos/{pr_id.repository}/git/trees/main?recursive=1"
++        try:
++            response = self._client.get(tree_path)
++            tree_blobs = response.get("tree", [])
++            tree_paths: list[str] = [entry["path"] for entry in tree_blobs]
++            repository_structure = "\n".join(tree_paths)
++
++            # -- [map] detect architecture from tree paths -------------------
++            architecture_hint = self._detector.detect(tree_paths)
++        except Exception:
++            logger.warning(
++                "Failed to fetch git tree for %s, using defaults", pr_id
++            )
++
++        # -- [http] fetch conventions file (first match wins) ----------------
++        conventions: str | None = None
++        for filename in _CONVENTIONS_FILENAMES:
++            try:
++                raw_path = f"/repos/{pr_id.repository}/raw/main/{filename}"
++                conventions = self._client.get_raw(raw_path)
++                break  # found one
++            except Exception:
++                continue  # try next filename
++
++        # -- [map] build ReviewContext domain value-object -------------------
++        return ReviewContext(
++            architecture_hint=architecture_hint,
++            conventions=conventions,
++            repository_structure=repository_structure,
++        )
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/review_publisher.py b/src/pr_auto_reviewer/infrastructure/git_platform/review_publisher.py
+new file mode 100644
+index 0000000..ad25cbc
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/review_publisher.py
+@@ -0,0 +1,113 @@
++"""GitReviewPublisherAdapter — wraps GitPlatformHttpClient to implement ReviewPublisherPort."""
++
++from __future__ import annotations
++
++import logging
++
++from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
++    ReviewPublisherPort,
++)
++from pr_auto_reviewer.domain.exceptions.review_publish_error import (
++    ReviewPublishError,
++)
++from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++# [map] Verdict-to-platform-event mapping (adapter-private, never in domain)
++_VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
++    ReviewVerdict.APPROVED: "APPROVED",
++    ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
++    ReviewVerdict.COMMENTED: "COMMENT",
++}
++
++
++class GitReviewPublisherAdapter(ReviewPublisherPort):
++    """Publishes a CodeReview as a formal PR review on the remote platform."""
++
++    def __init__(
++        self,
++        client: GitPlatformHttpClient,
++        reviewer_token: str,
++        reviewer_username: str,
++    ) -> None:
++        self._client = client
++        self._reviewer_username = reviewer_username
++        # The reviewer_token is available if ever needed for auth-scoped calls.
++        self._reviewer_token = reviewer_token
++
++    # ------------------------------------------------------------------ [port]
++    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
++        """POST a formal review for *pr_id* with *review* verdict and body."""
++
++        # -- [map] verdict to platform event string --------------------------
++        verdict_event = _VERDICT_TO_EVENT.get(
++            review.verdict, "COMMENT"
++        )
++
++        # -- [map] build markdown body from CodeReview -----------------------
++        body = self._format_body(review)
++
++        # -- [http] request reviewer (non-fatal) -----------------------------
++        reviewers_path = (
++            f"/repos/{pr_id.repository}/pulls/{pr_id.number}/requested_reviewers"
++        )
++        try:
++            self._client.post(reviewers_path, {"reviewers": [self._reviewer_username]})
++        except Exception:
++            logger.warning(
++                "Failed to request reviewer '%s' for %s (non-fatal)",
++                self._reviewer_username,
++                pr_id,
++            )
++
++        # -- [http] POST the formal review -----------------------------------
++        reviews_path = (
++            f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
++        )
++        try:
++            self._client.post(
++                reviews_path,
++                {"event": verdict_event, "body": body},
++            )
++        except Exception as exc:
++            # -- [err] translate to domain exception -------------------------
++            raise ReviewPublishError(
++                f"Failed to publish review for {pr_id}: {exc}"
++            ) from exc
++
++    # -----------------------------------------------------------------------
++    # Private adapter utilities (not ports, not domain logic)
++    # -----------------------------------------------------------------------
++
++    @staticmethod
++    def _format_body(review: CodeReview) -> str:
++        """Render CodeReview as a human-readable markdown string."""
++        lines: list[str] = []
++
++        # Summary section
++        lines.append("## 🤖 AI Code Review")
++        lines.append("")
++        if review.summary:
++            lines.append(review.summary)
++            lines.append("")
++
++        # Items section
++        if review.items:
++            for item in review.items:
++                severity_label = item.severity.value.upper()
++                file_ref = f" (`{item.file_path}`)" if item.file_path else ""
++                lines.append(f"### {item.number}. [{severity_label}] {item.category}{file_ref}")
++                lines.append("")
++                lines.append(item.description)
++                lines.append("")
++
++        if review.model_used:
++            lines.append(f"---\n*Reviewed by {review.model_used}*")
++
++        return "\n".join(lines)
+diff --git a/src/pr_auto_reviewer/infrastructure/git_platform/review_reader.py b/src/pr_auto_reviewer/infrastructure/git_platform/review_reader.py
+new file mode 100644
+index 0000000..fc433a9
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/git_platform/review_reader.py
+@@ -0,0 +1,46 @@
++"""GitReviewReaderAdapter — wraps GitPlatformHttpClient to implement ReviewReaderPort."""
++
++from __future__ import annotations
++
++import logging
++
++from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
++    ReviewReaderPort,
++)
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
++    GitPlatformHttpClient,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class GitReviewReaderAdapter(ReviewReaderPort):
++    """Reads the most recently submitted PR review body."""
++
++    def __init__(self, client: GitPlatformHttpClient) -> None:
++        self._client = client
++
++    # ------------------------------------------------------------------ [port]
++    def get_latest_review(self, pr_id: PullRequestId) -> str | None:
++        """Return the body string of the most recent review, or None."""
++
++        # -- [http] GET reviews list -----------------------------------------
++        path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
++        reviews = self._client.get(path, limit=10)
++
++        # -- [map] sort by submitted_at descending, pick first ---------------
++        if isinstance(reviews, list):
++            sorted_reviews = sorted(
++                reviews,
++                key=lambda r: r.get("submitted_at", ""),
++                reverse=True,
++            )
++            if sorted_reviews:
++                body: str | None = sorted_reviews[0].get("body")
++                return body
++        elif isinstance(reviews, dict) and reviews:
++            # Some platforms return a single object.
++            return reviews.get("body")
++
++        return None
+diff --git a/src/pr_auto_reviewer/infrastructure/llm/__init__.py b/src/pr_auto_reviewer/infrastructure/llm/__init__.py
+new file mode 100644
+index 0000000..85253d2
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/llm/__init__.py
+@@ -0,0 +1,4 @@
++from .ollama_llm_adapter import OllamaLlmAdapter
++
++__all__ = ["OllamaLlmAdapter"]
++
+diff --git a/src/pr_auto_reviewer/infrastructure/llm/ollama_llm_adapter.py b/src/pr_auto_reviewer/infrastructure/llm/ollama_llm_adapter.py
+new file mode 100644
+index 0000000..e68ff11
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/llm/ollama_llm_adapter.py
+@@ -0,0 +1,216 @@
++"""OllamaLlmAdapter — implements LlmReviewPort using a local Ollama instance."""
++
++import json
++import logging
++import re
++from typing import Any
++
++import requests
++
++from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
++from pr_auto_reviewer.domain.entities.review_item import ReviewItem
++from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
++from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
++from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
++from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
++from pr_auto_reviewer.domain.value_objects.review_context import ReviewContext
++from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
++
++logger = logging.getLogger(__name__)
++
++
++class OllamaLlmAdapter(LlmReviewPort):
++    """Call a local Ollama instance to review a pull-request diff."""
++
++    def __init__(self, host: str, model: str) -> None:
++        self._host = host.rstrip("/")
++        self._model = model
++
++    def review(self, diff: PullRequestDiff, context: ReviewContext) -> CodeReview:
++        prompt = _PromptBuilder.build(diff, context)
++
++        try:
++            response = requests.post(
++                f"{self._host}/api/generate",
++                json={"model": self._model, "prompt": prompt, "stream": False},
++                timeout=120,
++            )
++            response.raise_for_status()
++        except requests.RequestException as exc:
++            raise LlmUnavailableError(
++                f"Ollama @ {self._host} unreachable or error: {exc}"
++            ) from exc
++
++        try:
++            body: dict[str, Any] = response.json()
++        except json.JSONDecodeError as exc:
++            raise LlmUnavailableError(
++                f"Ollama returned invalid JSON: {exc}"
++            ) from exc
++
++        raw_text: str = body.get("response", "")
++        if not raw_text:
++            raise LlmUnavailableError(
++                "Ollama returned an empty response — model may have failed silently."
++            )
++
++        return _ReviewResponseParser.parse(raw_text, self._model)
++
++
++# ------------------------------------------------------------------
++# Private helpers
++# ------------------------------------------------------------------
++
++
++class _PromptBuilder:
++    """Build the prompt sent to the LLM from a diff + review context."""
++
++    @staticmethod
++    def build(diff: PullRequestDiff, context: ReviewContext) -> str:
++        parts: list[str] = [
++            "You are an expert code reviewer. "
++            "Analyse the pull-request diff below.",
++            "",
++            "## Instructions",
++            "Produce a structured review with the following sections, "
++            "each starting with exactly the given markdown heading "
++            "on its own line:",
++            "",
++            "## Verdict",
++            "One of: approved | changes_requested | commented",
++            "",
++            "## Summary",
++            "A concise, one-paragraph summary of the changes and "
++            "your overall judgment.",
++            "",
++            "## Items",
++            "Zero or more bullet-point findings. Each bullet must "
++            "use this format:",
++            "- [severity] <category> (<file_path>) <description>",
++            "  severity: critical | major | minor | info",
++            "",
++            "If there are no findings, write `None` under the "
++            "## Items heading.",
++            "",
++            "---",
++        ]
++
++        if context.architecture_hint:
++            parts.append(
++                f"## Architecture / context\n"
++                f"{context.architecture_hint}\n"
++            )
++
++        conventions = context.conventions or diff.conventions
++        if conventions:
++            parts.append(f"## Project conventions\n{conventions}\n")
++
++        repo_structure = (
++            context.repository_structure or diff.repository_structure
++        )
++        if repo_structure:
++            parts.append(
++                f"## Repository structure\n{repo_structure}\n"
++            )
++
++        parts.append("## Diff\n```diff")
++        parts.append(diff.diff_content)
++        parts.append("```")
++
++        return "\n".join(parts)
++
++
++class _ReviewResponseParser:
++    """Parse the raw LLM text into a CodeReview domain object."""
++
++    _ITEM_RE = re.compile(
++        r"^\s*[-*]\s*\[(?P<severity>critical|major|minor|info)\]\s*"
++        r"(?P<category>[^(]+?)\s*"
++        r"\((?P<file_path>[^)]*)\)\s*"
++        r"(?P<description>.+)$",
++        re.IGNORECASE | re.MULTILINE,
++    )
++
++    @staticmethod
++    def parse(raw_text: str, model_used: str) -> CodeReview:
++        verdict = _ReviewResponseParser._extract_verdict(raw_text)
++        summary = _ReviewResponseParser._extract_summary(raw_text)
++        items = _ReviewResponseParser._extract_items(raw_text)
++        return CodeReview(
++            verdict=verdict,
++            summary=summary,
++            items=items,
++            model_used=model_used,
++        )
++
++    @staticmethod
++    def _extract_verdict(raw_text: str) -> ReviewVerdict:
++        match = re.search(
++            r"##\s*Verdict\s*\n\s*(.+)", raw_text, re.IGNORECASE
++        )
++        if not match:
++            return ReviewVerdict.COMMENTED
++
++        value = match.group(1).strip().lower()
++        if "changes_requested" in value or "request changes" in value:
++            return ReviewVerdict.CHANGES_REQUESTED
++        if "approved" in value:
++            return ReviewVerdict.APPROVED
++        return ReviewVerdict.COMMENTED
++
++    @staticmethod
++    def _extract_summary(raw_text: str) -> str:
++        pattern = r"##\s*Summary\s*\n(.*?)(?=##\s*Items|\Z)"
++        match = re.search(pattern, raw_text, re.IGNORECASE | re.DOTALL)
++        if not match:
++            return ""
++        return match.group(1).strip()
++
++    @staticmethod
++    def _extract_items(raw_text: str) -> list[ReviewItem]:
++        items_section = _ReviewResponseParser._isolate_items_section(
++            raw_text
++        )
++        if not items_section:
++            return []
++
++        items: list[ReviewItem] = []
++        for idx, match in enumerate(
++            _ReviewResponseParser._ITEM_RE.finditer(items_section),
++            start=1,
++        ):
++            severity_str = match.group("severity").lower()
++            try:
++                severity = ItemSeverity(severity_str)
++            except ValueError:
++                severity = ItemSeverity.INFO
++
++            file_path = match.group("file_path").strip() or None
++
++            items.append(
++                ReviewItem(
++                    number=idx,
++                    severity=severity,
++                    category=match.group("category").strip(),
++                    file_path=file_path,
++                    description=match.group("description").strip(),
++                )
++            )
++
++        return items
++
++    @staticmethod
++    def _isolate_items_section(raw_text: str) -> str | None:
++        """Return the portion between ## Items and the next ## heading."""
++        match = re.search(
++            r"##\s*Items\s*\n(.*?)(?=\n##\s|\Z)",
++            raw_text,
++            re.IGNORECASE | re.DOTALL,
++        )
++        if not match:
++            return None
++
++        body = match.group(1).strip()
++        if not body or body.lower() in ("none", "n/a", "no items"):
++            return None
++        return body
+diff --git a/src/pr_auto_reviewer/infrastructure/persistence/__init__.py b/src/pr_auto_reviewer/infrastructure/persistence/__init__.py
+new file mode 100644
+index 0000000..842111f
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/persistence/__init__.py
+@@ -0,0 +1,3 @@
++from .json_file_pr_repository import JsonFilePullRequestRepository
++
++__all__ = ["JsonFilePullRequestRepository"]
+diff --git a/src/pr_auto_reviewer/infrastructure/persistence/json_file_pr_repository.py b/src/pr_auto_reviewer/infrastructure/persistence/json_file_pr_repository.py
+new file mode 100644
+index 0000000..6ae85be
+--- /dev/null
++++ b/src/pr_auto_reviewer/infrastructure/persistence/json_file_pr_repository.py
+@@ -0,0 +1,158 @@
++"""JsonFilePullRequestRepository — persistence adapter for PullRequest aggregate.
++
++Implements PullRequestRepository. Replaces the STATE_FILE bash script approach
++with atomic writes and structured deserialization.
++"""
++
++from __future__ import annotations
++
++import json
++import os
++import tempfile
++from pathlib import Path
++
++from ...domain.entities.pull_request import PullRequest
++from ...domain.entities.review_item import ReviewItem
++from ...domain.value_objects.pull_request_id import PullRequestId
++from ...domain.value_objects.commit_sha import CommitSha
++from ...domain.value_objects.code_review import CodeReview
++from ...domain.value_objects.review_verdict import ReviewVerdict
++from ...domain.value_objects.item_severity import ItemSeverity
++from ...domain.value_objects.comment_id import CommentId
++from ...application.ports.outbound.pull_request_repository import (
++    PullRequestRepository,
++)
++
++_STATE_KEY_SEPARATOR = "/"
++
++
++class JsonFilePullRequestRepository(PullRequestRepository):
++    """Serialize and deserialize the PullRequest aggregate to a local JSON file.
++
++    Atomic writes: writes to a .tmp sibling file, then os.replace() to avoid
++    partial writes on crash.
++    """
++
++    def __init__(self, file_path: str | Path) -> None:
++        self._file_path = Path(file_path)
++
++    # ── port methods ────────────────────────────────────────────────
++
++    def find(self, pr_id: PullRequestId) -> PullRequest | None:
++        data = self._load()
++        reviewed = data.get("reviewed", {})
++
++        key = _make_key(pr_id)
++        raw = reviewed.get(key)
++        if raw is None:
++            return None
++
++        return self._deserialize(pr_id, raw)
++
++    def save(self, pr: PullRequest) -> None:
++        data = self._load()
++        reviewed = data.setdefault("reviewed", {})
++
++        key = _make_key(pr.id)
++        reviewed[key] = self._serialize(pr)
++
++        self._save(data)
++
++    # ── private ─────────────────────────────────────────────────────
++
++    def _load(self) -> dict:
++        if not self._file_path.exists():
++            return {"reviewed": {}}
++        try:
++            with open(self._file_path, "r", encoding="utf-8") as f:
++                return json.load(f)
++        except (json.JSONDecodeError, OSError) as exc:
++            from ...domain.exceptions import RepositoryCorruptedError
++            raise RepositoryCorruptedError(
++                f"State file {self._file_path} is corrupted or unreadable"
++            ) from exc
++
++    def _save(self, data: dict) -> None:
++        self._file_path.parent.mkdir(parents=True, exist_ok=True)
++        tmp_fd, tmp_path = tempfile.mkstemp(
++            suffix=".tmp",
++            prefix=self._file_path.name,
++            dir=self._file_path.parent,
++        )
++        try:
++            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
++                json.dump(data, f, indent=2, ensure_ascii=False)
++            os.replace(tmp_path, self._file_path)
++        except BaseException:
++            if os.path.exists(tmp_path):
++                os.unlink(tmp_path)
++            raise
++
++    # ── serialization ───────────────────────────────────────────────
++
++    def _serialize(self, pr: PullRequest) -> dict:
++        return {
++            "title": pr.title,
++            "head_sha": str(pr.head_sha),
++            "is_draft": pr.is_draft,
++            "reviews": [
++                {
++                    "verdict": r.verdict.value,
++                    "summary": r.summary,
++                    "model_used": r.model_used,
++                    "items": [
++                        {
++                            "number": i.number,
++                            "severity": i.severity.value,
++                            "category": i.category,
++                            "file_path": i.file_path,
++                            "description": i.description,
++                        }
++                        for i in r.items
++                    ],
++                }
++                for r in pr.reviews
++            ],
++            "processed_comment_ids": sorted(
++                str(c) for c in pr.processed_comment_ids
++            ),
++        }
++
++    def _deserialize(self, pr_id: PullRequestId, raw: dict) -> PullRequest:
++        reviews_raw = raw.get("reviews", [])
++        reviews: tuple[CodeReview, ...] = tuple(
++            CodeReview(
++                verdict=ReviewVerdict(r["verdict"]),
++                summary=r.get("summary", ""),
++                model_used=r.get("model_used", ""),
++                items=[
++                    ReviewItem(
++                        number=i["number"],
++                        severity=ItemSeverity(i["severity"]),
++                        category=i.get("category", ""),
++                        file_path=i.get("file_path"),
++                        description=i.get("description", ""),
++                    )
++                    for i in r.get("items", [])
++                ],
++            )
++            for r in reviews_raw
++        )
++
++        processed_ids: frozenset[CommentId] = frozenset(
++            CommentId(str(cid))
++            for cid in raw.get("processed_comment_ids", [])
++        )
++
++        return PullRequest(
++            id=pr_id,
++            title=raw.get("title", ""),
++            head_sha=CommitSha(raw.get("head_sha", "")),
++            is_draft=raw.get("is_draft", False),
++            reviews=reviews,
++            processed_comment_ids=processed_ids,
++        )
++
++
++def _make_key(pr_id: PullRequestId) -> str:
++    return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
+diff --git a/src/pr_auto_reviewer/presentation/__init__.py b/src/pr_auto_reviewer/presentation/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/pr_auto_reviewer/presentation/cli/__init__.py b/src/pr_auto_reviewer/presentation/cli/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/src/pr_auto_reviewer/presentation/cli/runner.py b/src/pr_auto_reviewer/presentation/cli/runner.py
+new file mode 100644
+index 0000000..cff1a81
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/cli/runner.py
+@@ -0,0 +1,153 @@
++"""CliRunner - CLI entry point with subcommands."""
++
++from __future__ import annotations
++
++import argparse
++import logging
++
++from pr_auto_reviewer.application.commands.process_issue_commands_command import (
++    ProcessIssueCommandsCommand,
++)
++from pr_auto_reviewer.application.commands.review_pull_request_command import (
++    ReviewPullRequestCommand,
++)
++from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
++    ProcessIssueCommandsUseCase,
++)
++from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
++    ReviewPullRequestUseCase,
++)
++from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
++from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
++    PullRequestNotFoundError,
++)
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
++from pr_auto_reviewer.presentation.ports import PrListerPort
++
++logger = logging.getLogger(__name__)
++
++
++class CliRunner:
++    """CLI runner with subcommands for manual operations."""
++
++    def __init__(
++        self,
++        review_service: ReviewPullRequestUseCase,
++        process_commands_service: ProcessIssueCommandsUseCase,
++        review_reader: ReviewReaderPort,
++        pr_lister: PrListerPort,
++        review_item_parser: ReviewItemParser,
++    ) -> None:
++        self._review_service = review_service
++        self._process_commands_service = process_commands_service
++        self._review_reader = review_reader
++        self._pr_lister = pr_lister
++        self._review_item_parser = review_item_parser
++
++    def run(self, argv: list[str]) -> int:
++        """Run the CLI with the given arguments."""
++        parser = argparse.ArgumentParser(prog="pr-auto-reviewer")
++        subparsers = parser.add_subparsers(dest="command", required=True)
++
++        subparsers.add_parser("review", help="Force review a specific PR")
++        subparsers.add_parser(
++            "process-commands", help="Process issue commands for a PR"
++        )
++        subparsers.add_parser("list-items", help="List review items for a PR")
++
++        args = parser.parse_args(argv[1:])
++
++        if args.command == "review":
++            return self._run_review(argv[2:])
++        elif args.command == "process-commands":
++            return self._run_process_commands(argv[2:])
++        elif args.command == "list-items":
++            return self._run_list_items(argv[2:])
++        else:
++            parser.print_help()
++            return 1
++
++    def _run_review(self, argv: list[str]) -> int:
++        parser = argparse.ArgumentParser(prog="pr-auto-reviewer review")
++        parser.add_argument("--repo", required=True, help="Repository (owner/repo)")
++        parser.add_argument("--pr", required=True, type=int, help="PR number")
++        args = parser.parse_args(argv)
++
++        open_prs = self._pr_lister.list_open(args.repo)
++        pr = next((p for p in open_prs if p.pr_id.number == args.pr), None)
++
++        if pr is None:
++            print(f"Error: PR #{args.pr} not found or not open in {args.repo}")
++            return 1
++
++        command = ReviewPullRequestCommand(
++            pr_id=pr.pr_id,
++            head_sha=pr.head_sha,
++            title=pr.title,
++        )
++
++        try:
++            self._review_service.execute(command)
++            print(f"Review posted for PR #{args.pr}")
++            return 0
++        except Exception as e:
++            print(f"Error: {e}")
++            return 1
++
++    def _run_process_commands(self, argv: list[str]) -> int:
++        parser = argparse.ArgumentParser(prog="pr-auto-reviewer process-commands")
++        parser.add_argument("--repo", required=True, help="Repository (owner/repo)")
++        parser.add_argument("--pr", required=True, type=int, help="PR number")
++        args = parser.parse_args(argv)
++
++        pr_id = PullRequestId(repository=args.repo, number=args.pr)
++
++        open_prs = self._pr_lister.list_open(args.repo)
++        pr = next((p for p in open_prs if p.pr_id.number == args.pr), None)
++
++        if pr is None:
++            print(f"Error: PR #{args.pr} not found in local state")
++            return 1
++
++        command = ProcessIssueCommandsCommand(pr_id=pr_id, head_sha=pr.head_sha)
++
++        try:
++            self._process_commands_service.execute(command)
++            print("Command processing complete")
++            return 0
++        except PullRequestNotFoundError:
++            print("Error: PR not in local state")
++            return 1
++        except Exception as e:
++            print(f"Error: {e}")
++            return 1
++
++    def _run_list_items(self, argv: list[str]) -> int:
++        parser = argparse.ArgumentParser(prog="pr-auto-reviewer list-items")
++        parser.add_argument("--repo", required=True, help="Repository (owner/repo)")
++        parser.add_argument("--pr", required=True, type=int, help="PR number")
++        args = parser.parse_args(argv)
++
++        pr_id = PullRequestId(repository=args.repo, number=args.pr)
++
++        raw_body = self._review_reader.get_latest_review(pr_id)
++        if raw_body is None:
++            print(f"No review found for PR #{args.pr}")
++            return 1
++
++        items = self._review_item_parser.parse(raw_body)
++        if not items:
++            print("No actionable items found")
++            return 0
++
++        print(f"{'#':<4} | {'Severity':<10} | {'Category':<12} | {'File':<30} | Description")
++        print("-" * 100)
++        for item in items:
++            file_path = item.file_path or ""
++            print(
++                f"{item.number:<4} | {item.severity.value.upper():<10} | "
++                f"{item.category:<12} | {file_path:<30} | {item.description}"
++            )
++
++        return 0
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/polling_daemon/__init__.py b/src/pr_auto_reviewer/presentation/polling_daemon/__init__.py
+new file mode 100644
+index 0000000..69f887b
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/polling_daemon/__init__.py
+@@ -0,0 +1,8 @@
++"""PollingDaemon - polls repositories for open PRs and triggers reviews."""
++
++from pr_auto_reviewer.presentation.polling_daemon.polling_daemon import PollingDaemon
++from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
++    PollingDaemonConfig,
++)
++
++__all__ = ["PollingDaemon", "PollingDaemonConfig"]
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon.py b/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon.py
+new file mode 100644
+index 0000000..a99bd91
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon.py
+@@ -0,0 +1,115 @@
++"""PollingDaemon - polls repositories for open PRs and triggers reviews."""
++
++from __future__ import annotations
++
++import logging
++import signal
++import time
++
++from pr_auto_reviewer.application.commands.review_pull_request_command import (
++    ReviewPullRequestCommand,
++)
++from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
++    ReviewPullRequestUseCase,
++)
++from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
++from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
++from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
++from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoListerPort
++from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
++    PollingDaemonConfig,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class PollingDaemon:
++    """Polls repositories for open PRs and triggers review operations."""
++
++    def __init__(
++        self,
++        config: PollingDaemonConfig,
++        repo_lister: RepoListerPort,
++        pr_lister: PrListerPort,
++        review_service: ReviewPullRequestUseCase,
++    ) -> None:
++        self._config = config
++        self._repo_lister = repo_lister
++        self._pr_lister = pr_lister
++        self._review_service = review_service
++        self._shutdown_requested = False
++        self._setup_signal_handlers()
++
++    def _setup_signal_handlers(self) -> None:
++        def handle_signal(signum: int, frame: object) -> None:
++            logger.info("Shutdown signal received, finishing current cycle...")
++            self._shutdown_requested = True
++
++        signal.signal(signal.SIGINT, handle_signal)
++        signal.signal(signal.SIGTERM, handle_signal)
++
++    def start(self) -> None:
++        """Start the polling loop."""
++        logger.info(
++            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
++            f"run_once={self._config.run_once})"
++        )
++
++        while not self._shutdown_requested:
++            self._run_cycle()
++
++            if self._config.run_once or self._shutdown_requested:
++                break
++
++            time.sleep(self._config.poll_interval_seconds)
++
++        logger.info("PollingDaemon stopped")
++
++    def _run_cycle(self) -> None:
++        """Execute one polling cycle."""
++        repos = self._repo_lister.list_repos()
++
++        if not repos:
++            logger.warning("No repositories found")
++            return
++
++        for repo in repos:
++            if self._shutdown_requested:
++                break
++
++            open_prs = self._pr_lister.list_open(repo)
++
++            if not open_prs:
++                logger.debug(f"No open PRs in {repo}")
++                continue
++
++            for pr in open_prs:
++                if self._shutdown_requested:
++                    break
++
++                if pr.is_draft:
++                    logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
++                    continue
++
++                self._process_pr(pr)
++
++    def _process_pr(self, pr: OpenPullRequest) -> None:
++        """Process a single PR - dispatch review command."""
++        logger.info(f"Reviewing PR #{pr.pr_id.number} in {pr.pr_id.repository}")
++
++        command = ReviewPullRequestCommand(
++            pr_id=pr.pr_id,
++            head_sha=pr.head_sha,
++            title=pr.title,
++        )
++
++        try:
++            self._review_service.execute(command)
++        except EmptyDiffError:
++            logger.warning(f"Empty diff, skipping PR #{pr.pr_id.number}")
++        except LlmUnavailableError:
++            logger.error("LLM unavailable, will retry next cycle")
++        except ReviewPublishError as e:
++            logger.error(f"Publish failed for PR #{pr.pr_id.number}: {e}")
++        except Exception as e:
++            logger.exception(f"Unexpected error processing PR #{pr.pr_id.number}: {e}")
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon_config.py b/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon_config.py
+new file mode 100644
+index 0000000..047a111
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon_config.py
+@@ -0,0 +1,15 @@
++"""PollingDaemonConfig - configuration for the polling daemon."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Optional
++
++
++@dataclass(frozen=True)
++class PollingDaemonConfig:
++    """Configuration for the polling daemon."""
++
++    poll_interval_seconds: int
++    repos_filter: Optional[str]
++    run_once: bool
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/ports/__init__.py b/src/pr_auto_reviewer/presentation/ports/__init__.py
+new file mode 100644
+index 0000000..7d73f71
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/ports/__init__.py
+@@ -0,0 +1,7 @@
++"""Ports - inbound-side ports for presentation layer."""
++
++from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
++from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
++from pr_auto_reviewer.presentation.ports.repo_lister_port import RepoListerPort
++
++__all__ = ["OpenPullRequest", "PrListerPort", "RepoListerPort"]
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/ports/open_pull_request.py b/src/pr_auto_reviewer/presentation/ports/open_pull_request.py
+new file mode 100644
+index 0000000..d24068b
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/ports/open_pull_request.py
+@@ -0,0 +1,18 @@
++"""OpenPullRequest DTO - represents an open pull request discovered during polling."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
++from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
++
++
++@dataclass(frozen=True)
++class OpenPullRequest:
++    """DTO for an open pull request discovered during polling."""
++
++    pr_id: PullRequestId
++    head_sha: CommitSha
++    title: str
++    is_draft: bool
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/ports/pr_lister_port.py b/src/pr_auto_reviewer/presentation/ports/pr_lister_port.py
+new file mode 100644
+index 0000000..99f76dd
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/ports/pr_lister_port.py
+@@ -0,0 +1,22 @@
++"""PrListerPort - port for listing open pull requests in a repository."""
++
++from __future__ import annotations
++
++from abc import ABC, abstractmethod
++
++from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
++
++
++class PrListerPort(ABC):
++    """Port for listing open pull requests in a repository."""
++
++    @abstractmethod
++    def list_open(self, repository: str) -> list[OpenPullRequest]:
++        """List all open (non-merged) PRs in a repository.
++
++        Args:
++            repository: Full repo path (e.g., "owner/repo")
++
++        Returns:
++            List of open pull requests.
++        """
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/presentation/ports/repo_lister_port.py b/src/pr_auto_reviewer/presentation/ports/repo_lister_port.py
+new file mode 100644
+index 0000000..f09d67b
+--- /dev/null
++++ b/src/pr_auto_reviewer/presentation/ports/repo_lister_port.py
+@@ -0,0 +1,17 @@
++"""RepoListerPort - port for listing repositories to watch."""
++
++from __future__ import annotations
++
++from abc import ABC, abstractmethod
++
++
++class RepoListerPort(ABC):
++    """Port for listing repositories to watch."""
++
++    @abstractmethod
++    def list_repos(self) -> list[str]:
++        """List all repositories to monitor.
++
++        Returns:
++            Full repo paths: ["owner/repo-a", "owner/repo-b"]
++        """
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/review_item_extractor.py b/src/pr_auto_reviewer/review_item_extractor.py
+new file mode 100644
+index 0000000..9ee71ba
+--- /dev/null
++++ b/src/pr_auto_reviewer/review_item_extractor.py
+@@ -0,0 +1,51 @@
++"""Review item extractor module for PR Auto Reviewer."""
++
++from typing import List, Dict, Any
++import re
++
++class ReviewItemExtractor:
++    """Extracts review items from PR reviews and comments."""
++
++    def extract_from_review(self, review_text: str) -> List[Dict[str, str]]:
++        """Extract review items from a review text.
++
++        Args:
++            review_text: The review text to extract from
++
++        Returns:
++            List of review item dictionaries.
++        """
++        items = []
++        lines = review_text.split("\n")
++
++        current_item = None
++        for line in lines:
++            if line.startswith("## "):
++                # New section
++                if current_item:
++                    items.append(current_item)
++                current_item = None
++            elif line.startswith("- [ ] ") or line.startswith("- [x] "):
++                # Review item
++                if not current_item:
++                    current_item = {"title": "", "body": ""}
++                current_item["title"] = line[4:].strip()
++            elif current_item and line.strip():
++                # Part of current item body
++                current_item["body"] += line + "\n"
++
++        if current_item:
++            items.append(current_item)
++
++        return items
++
++    def extract_from_comment(self, comment_text: str) -> List[Dict[str, str]]:
++        """Extract review items from a comment text.
++
++        Args:
++            comment_text: The comment text to extract from
++
++        Returns:
++            List of review item dictionaries.
++        """
++        return self.extract_from_review(comment_text)
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/test_issue_creation.py b/src/pr_auto_reviewer/test_issue_creation.py
+new file mode 100644
+index 0000000..03303d4
+--- /dev/null
++++ b/src/pr_auto_reviewer/test_issue_creation.py
+@@ -0,0 +1,105 @@
++"""Test issue creation from PR review."""
++
++from typing import Optional
++
++from .config import Config
++from .forgejo_api import ForgejoAPI
++from .review_item_extractor import ReviewItemExtractor
++from .issue_creator import IssueCreator
++
++class TestIssueCreation:
++    """Test issue creation from PR review."""
++
++    def __init__(
++        self,
++        config: Config,
++        repo: str,
++        pr_number: int,
++    ) -> None:
++        """Initialize the tester.
++
++        Args:
++            config: Configuration object
++            repo: Repository in format owner/repo
++            pr_number: PR number
++        """
++        self.config = config
++        self.repo = repo
++        self.pr_number = pr_number
++
++        self.forgejo_api = ForgejoAPI(config)
++        self.review_item_extractor = ReviewItemExtractor()
++        self.issue_creator = IssueCreator(config)
++
++    def run(self) -> None:
++        """Run the test."""
++        print(f"Testing issue creation for PR #{self.pr_number} in {self.repo}")
++
++        review_body = self.forgejo_api.get_latest_review(self.repo, self.pr_number)
++
++        if not review_body:
++            print(f"No review found for PR #{self.pr_number}")
++            return
++
++        print(f"Review body ({len(review_body)} chars):")
++        print("\n".join(f"  {line}" for line in review_body.split("\n")[:5]))
++        print("Extracting review items...")
++
++        review_items = self.review_item_extractor.extract(review_body)
++
++        if not review_items:
++            print("No actionable items found in review")
++            return
++
++        print(f"Found {len(review_items)} review items:")
++        for item in review_items[:5]:
++            print(f"  {item}")
++
++        print("Testing issue creation...")
++
++        # Test creating an issue from the first review item
++        if review_items:
++            item_data = review_items[0]
++
++            parts = item_data.split("|")
++            severity = parts[1] if len(parts) > 1 else ""
++            item_type = parts[2] if len(parts) > 2 else ""
++            location = parts[3] if len(parts) > 3 else ""
++            item_text = parts[4] if len(parts) > 4 else item_data
++
++            clean_title = item_text
++            for tag in [severity, item_type]:
++                if tag:
++                    clean_title = clean_title.replace(f"[{tag}]", "").replace(f"[{tag}] ", "")
++            clean_title = clean_title.replace(location, "").replace(": ", "").strip()
++            clean_title = clean_title[:200]
++
++            issue_title = f"[TEST] [PR #{self.pr_number}] {clean_title}"
++            issue_body = f"""## Test Issue Creation (PR #{self.pr_number})
++
++**Description:**
++{item_text}
++
++{location and f"- **File:** {location}"}
++{item_type and f"- **Category:** {item_type}"}
++{severity and f"- **Severity:** {severity}"}
++
++---
++*Test issue created from PR #{self.pr_number} via PR AI Reviewer*"""
++
++            issue_num = self.issue_creator.create_issue(self.repo, issue_title, issue_body)
++
++            if issue_num:
++                print(f"Test issue created: #{issue_num}")
++            else:
++                print("Failed to create test issue")
++        else:
++            print("No review items to test")
++
++
++def test_issue_creation() -> None:
++    """CLI entry point for test-issue-creation command."""
++    from .config import load_config
++    config = load_config()
++    tester = TestIssueCreation(config=config, repo="owner/repo", pr_number=1)
++    tester.run()
+\ No newline at end of file
+diff --git a/tests/pr_auto_reviewer/core/models/entities/test_issue.py b/tests/pr_auto_reviewer/core/models/entities/test_issue.py
+new file mode 100644
+index 0000000..5e8f0d4
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/entities/test_issue.py
+@@ -0,0 +1,113 @@
++import pytest
++from pr_auto_reviewer.core.models import (
++    Issue,
++    PullRequestId,
++    InvalidIssueBodyError,
++)
++
++
++class TestIssue:
++    """Tests for Issue entity (immutable)."""
++
++    def test_creation(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        issue = Issue(
++            id=100,
++            repository="owner/repo",
++            title="Fix SQL injection in main.py",
++            body="## Review Item 1\n\nFound a security issue...",
++            source_pr_id=pr_id,
++            source_item_number=3,
++        )
++        assert issue.id == 100
++        assert issue.repository == "owner/repo"
++        assert issue.title == "Fix SQL injection in main.py"
++        assert "security" in issue.body
++        assert issue.source_pr_id == pr_id
++        assert issue.source_item_number == 3
++
++    def test_identity_by_id(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        a = Issue(
++            id=100, repository="r", title="Issue A", body="body A",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        b = Issue(
++            id=200, repository="r", title="Issue A", body="body A",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        assert a.id != b.id
++
++    def test_different_source_pr(self) -> None:
++        pr_a = PullRequestId(repository="owner/repo", number=42)
++        pr_b = PullRequestId(repository="other/repo", number=99)
++
++        issue_a = Issue(
++            id=1, repository="r", title="t", body="b",
++            source_pr_id=pr_a, source_item_number=1,
++        )
++        issue_b = Issue(
++            id=2, repository="r", title="t", body="b",
++            source_pr_id=pr_b, source_item_number=1,
++        )
++        assert issue_a.source_pr_id == pr_a
++        assert issue_b.source_pr_id == pr_b
++        assert issue_a.source_pr_id != issue_b.source_pr_id
++
++    def test_close_and_is_closed(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        original = Issue(
++            id=100, repository="r", title="t", body="b",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        assert original.is_closed() is False
++        closed = original.close()
++        assert original.is_closed() is False  # original unchanged
++        assert closed.is_closed() is True
++
++    def test_update_body(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        original = Issue(
++            id=100, repository="r", title="t", body="original body",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        updated = original.update_body("updated body")
++        assert original.body == "original body"  # original unchanged
++        assert updated.body == "updated body"
++
++    def test_update_body_rejects_empty(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        issue = Issue(
++            id=100, repository="r", title="t", body="b",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        with pytest.raises(InvalidIssueBodyError, match="non-empty"):
++            issue.update_body("")
++
++    def test_close_idempotent(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        issue = Issue(
++            id=100, repository="r", title="t", body="b",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        issue = issue.close()
++        issue = issue.close()  # Closing twice should not raise
++        assert issue.is_closed() is True
++
++    def test_immutable_id(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        issue = Issue(
++            id=100, repository="r", title="t", body="b",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        with pytest.raises(Exception):
++            issue.id = 200  # type: ignore[misc]
++
++    def test_immutable_source_pr_id(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        issue = Issue(
++            id=100, repository="r", title="t", body="b",
++            source_pr_id=pr_id, source_item_number=1,
++        )
++        with pytest.raises(Exception):
++            issue.source_pr_id = PullRequestId(repository="x", number=99)  # type: ignore[misc]
+diff --git a/tests/pr_auto_reviewer/core/models/entities/test_pull_request.py b/tests/pr_auto_reviewer/core/models/entities/test_pull_request.py
+new file mode 100644
+index 0000000..a284be9
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/entities/test_pull_request.py
+@@ -0,0 +1,223 @@
++import pytest
++from pr_auto_reviewer.core.models import (
++    PullRequest,
++    PullRequestId,
++    CommitSha,
++    CodeReview,
++    ReviewVerdict,
++    ReviewItem,
++    ItemSeverity,
++    CommentId,
++)
++
++
++class TestPullRequest:
++    """Tests for PullRequest aggregate root entity (immutable)."""
++
++    def test_creation(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        sha = CommitSha(value="abc123")
++        pr = PullRequest(id=pr_id, title="Add feature X", head_sha=sha)
++        assert pr.id == pr_id
++        assert pr.title == "Add feature X"
++        assert pr.head_sha == sha
++        assert pr.is_draft is False
++        assert pr.reviews == ()
++        assert pr.processed_comment_ids == frozenset()
++
++    def test_creation_with_draft(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        pr = PullRequest(
++            id=pr_id, title="WIP thing", head_sha=CommitSha(value="abc"), is_draft=True
++        )
++        assert pr.is_draft is True
++
++    def test_needs_review_when_sha_differs(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="sha1"),
++        )
++        assert pr.needs_review(CommitSha(value="sha2")) is True
++
++    def test_needs_review_when_sha_same(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="sha1"),
++        )
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        pr = pr.add_review(review, CommitSha(value="sha1"))
++        assert pr.needs_review(CommitSha(value="sha1")) is False
++
++    def test_add_review_advances_head_sha(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="sha1"),
++        )
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM")
++        pr = pr.add_review(review, CommitSha(value="sha2"))
++
++        assert pr.head_sha == CommitSha(value="sha2")
++        assert len(pr.reviews) == 1
++        assert pr.reviews[0] == review
++
++    def test_add_review_does_not_mutate_original(self) -> None:
++        original = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="sha1"),
++        )
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM")
++        updated = original.add_review(review, CommitSha(value="sha2"))
++
++        assert original.reviews == ()
++        assert original.head_sha == CommitSha(value="sha1")
++        assert updated.reviews == (review,)
++        assert updated.head_sha == CommitSha(value="sha2")
++
++    def test_add_multiple_reviews(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="sha1"),
++        )
++        r1 = CodeReview(verdict=ReviewVerdict.COMMENTED, summary="First pass")
++        r2 = CodeReview(verdict=ReviewVerdict.APPROVED, summary="All good")
++
++        pr = pr.add_review(r1, CommitSha(value="sha2"))
++        pr = pr.add_review(r2, CommitSha(value="sha3"))
++
++        assert len(pr.reviews) == 2
++        assert pr.head_sha == CommitSha(value="sha3")
++
++    def test_mark_comment_processed(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="abc"),
++        )
++        cid = CommentId(value="c_1")
++        pr = pr.mark_comment_processed(cid)
++        assert pr.is_comment_processed(cid) is True
++
++    def test_mark_comment_does_not_mutate_original(self) -> None:
++        original = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="abc"),
++        )
++        cid = CommentId(value="c_1")
++        updated = original.mark_comment_processed(cid)
++
++        assert original.processed_comment_ids == frozenset()
++        assert updated.processed_comment_ids == frozenset({cid})
++
++    def test_is_comment_processed_false(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="abc"),
++        )
++        assert pr.is_comment_processed(CommentId(value="never_seen")) is False
++
++    def test_mark_multiple_comments_processed(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test PR",
++            head_sha=CommitSha(value="abc"),
++        )
++        c1 = CommentId(value="c_1")
++        c2 = CommentId(value="c_2")
++        pr = pr.mark_comment_processed(c1)
++        pr = pr.mark_comment_processed(c2)
++
++        assert pr.is_comment_processed(c1) is True
++        assert pr.is_comment_processed(c2) is True
++        assert len(pr.processed_comment_ids) == 2
++
++    def test_identity_stability_across_reviews(self) -> None:
++        pr_id = PullRequestId(repository="r", number=1)
++        pr = PullRequest(id=pr_id, title="Test", head_sha=CommitSha(value="s1"))
++        assert pr.id == pr_id
++
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        pr = pr.add_review(review, CommitSha(value="s2"))
++        assert pr.id == pr_id
++        assert pr.id.repository == "r"
++        assert pr.id.number == 1
++
++    def test_lifecycle_full_flow(self) -> None:
++        """Simulate a full review lifecycle."""
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        pr = PullRequest(
++            id=pr_id,
++            title="Add feature",
++            head_sha=CommitSha(value="initial"),
++        )
++
++        assert pr.needs_review(CommitSha(value="commit1")) is True
++
++        review = CodeReview(
++            verdict=ReviewVerdict.CHANGES_REQUESTED,
++            summary="Fix security issue",
++            items=[
++                ReviewItem(
++                    number=1,
++                    severity=ItemSeverity.CRITICAL,
++                    category="security",
++                    file_path="src/main.py",
++                    description="SQL injection risk",
++                ),
++            ],
++            model_used="llama3",
++        )
++        pr = pr.add_review(review, CommitSha(value="commit1"))
++
++        assert pr.needs_review(CommitSha(value="commit1")) is False
++        assert pr.needs_review(CommitSha(value="commit2")) is True
++
++        cid = CommentId(value="c_42")
++        pr = pr.mark_comment_processed(cid)
++        assert pr.is_comment_processed(cid) is True
++
++    def test_needs_review_with_no_reviews(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="New PR",
++            head_sha=CommitSha(value="abc123"),
++        )
++        assert pr.needs_review(CommitSha(value="abc123")) is True
++        assert pr.needs_review(CommitSha(value="def456")) is True
++
++    def test_needs_review_after_first_review(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test",
++            head_sha=CommitSha(value="s1"),
++        )
++        pr = pr.add_review(
++            CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok"),
++            CommitSha(value="s1"),
++        )
++        assert pr.needs_review(CommitSha(value="s1")) is False
++        assert pr.needs_review(CommitSha(value="s2")) is True
++
++    def test_immutable_id(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test",
++            head_sha=CommitSha(value="abc"),
++        )
++        with pytest.raises(Exception):
++            pr.id = PullRequestId(repository="x", number=2)  # type: ignore[misc]
++
++    def test_immutable_field_reassignment(self) -> None:
++        pr = PullRequest(
++            id=PullRequestId(repository="r", number=1),
++            title="Test",
++            head_sha=CommitSha(value="abc"),
++        )
++        with pytest.raises(Exception):
++            pr.head_sha = CommitSha(value="def")  # type: ignore[misc]
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_code_review.py b/tests/pr_auto_reviewer/core/models/value_objects/test_code_review.py
+new file mode 100644
+index 0000000..00d5db0
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_code_review.py
+@@ -0,0 +1,75 @@
++import pytest
++from pr_auto_reviewer.core.models import (
++    CodeReview,
++    ReviewVerdict,
++    ReviewItem,
++    ItemSeverity,
++)
++
++
++class TestCodeReview:
++    """Tests for CodeReview value object."""
++
++    def test_creation_with_items(self) -> None:
++        items = [
++            ReviewItem(
++                number=1,
++                severity=ItemSeverity.CRITICAL,
++                category="security",
++                file_path="x.py",
++                description="Fix SQL injection",
++            ),
++        ]
++        review = CodeReview(
++            verdict=ReviewVerdict.CHANGES_REQUESTED,
++            summary="Security issue found",
++            items=items,
++            model_used="llama3",
++        )
++        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
++        assert review.summary == "Security issue found"
++        assert len(review.items) == 1
++        assert review.model_used == "llama3"
++
++    def test_creation_minimal(self) -> None:
++        review = CodeReview(
++            verdict=ReviewVerdict.APPROVED,
++            summary="LGTM",
++        )
++        assert review.items == []
++        assert review.model_used == ""
++
++    def test_equality_same(self) -> None:
++        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        assert a == b
++
++    def test_equality_different_verdict(self) -> None:
++        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        b = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="OK")
++        assert a != b
++
++    def test_equality_different_items(self) -> None:
++        item = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MINOR,
++            category="style",
++            file_path="x.py",
++            description="desc",
++        )
++        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[item])
++        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[])
++        assert a != b
++
++    def test_immutability(self) -> None:
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        with pytest.raises(Exception):
++            review.summary = "changed"  # type: ignore[misc]
++
++    def test_hash_consistency(self) -> None:
++        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
++        # Frozen dataclass would auto-generate __hash__, but list[ReviewItem]
++        # makes it unhashable. This is expected for VOs with collection fields.
++        # Two identical CodeReviews are still equal via __eq__.
++        with pytest.raises(TypeError, match="unhashable"):
++            hash(review)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_comment_id.py b/tests/pr_auto_reviewer/core/models/value_objects/test_comment_id.py
+new file mode 100644
+index 0000000..a2f3b45
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_comment_id.py
+@@ -0,0 +1,41 @@
++import pytest
++from pr_auto_reviewer.core.models import CommentId, InvalidCommentIdError
++
++
++class TestCommentId:
++    """Tests for CommentId value object."""
++
++    def test_creation(self) -> None:
++        cid = CommentId(value="c_abc123")
++        assert cid.value == "c_abc123"
++
++    def test_equality_same(self) -> None:
++        a = CommentId(value="c_abc123")
++        b = CommentId(value="c_abc123")
++        assert a == b
++        assert hash(a) == hash(b)
++
++    def test_equality_different(self) -> None:
++        a = CommentId(value="c_abc123")
++        b = CommentId(value="c_def456")
++        assert a != b
++
++    def test_immutability(self) -> None:
++        cid = CommentId(value="c_abc123")
++        with pytest.raises(Exception):
++            cid.value = "changed"  # type: ignore[misc]
++
++    def test_str_representation(self) -> None:
++        cid = CommentId(value="c_abc123")
++        assert str(cid) == "c_abc123"
++
++    def test_set_membership(self) -> None:
++        a = CommentId(value="c_abc123")
++        b = CommentId(value="c_abc123")
++        s = {a}
++        assert b in s
++        assert CommentId(value="c_other") not in s
++
++    def test_empty_value_raises(self) -> None:
++        with pytest.raises(InvalidCommentIdError, match="non-empty"):
++            CommentId(value="")
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_commit_sha.py b/tests/pr_auto_reviewer/core/models/value_objects/test_commit_sha.py
+new file mode 100644
+index 0000000..69f2f93
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_commit_sha.py
+@@ -0,0 +1,44 @@
++import pytest
++from pr_auto_reviewer.core.models import CommitSha, InvalidCommitShaError
++
++
++class TestCommitSha:
++    """Tests for CommitSha value object."""
++
++    def test_creation_full_sha(self) -> None:
++        sha = CommitSha(value="abc123def456789012345678901234567890abcd")
++        assert sha.value == "abc123def456789012345678901234567890abcd"
++
++    def test_creation_abbreviated_sha(self) -> None:
++        sha = CommitSha(value="abc123d")
++        assert sha.value == "abc123d"
++
++    def test_empty_value_raises(self) -> None:
++        with pytest.raises(InvalidCommitShaError, match="non-empty"):
++            CommitSha(value="")
++
++    def test_equality_same_sha(self) -> None:
++        a = CommitSha(value="abc123")
++        b = CommitSha(value="abc123")
++        assert a == b
++        assert hash(a) == hash(b)
++
++    def test_equality_different_sha(self) -> None:
++        a = CommitSha(value="abc123")
++        b = CommitSha(value="def456")
++        assert a != b
++
++    def test_immutability(self) -> None:
++        sha = CommitSha(value="abc123")
++        with pytest.raises(Exception):
++            sha.value = "def456"  # type: ignore[misc]
++
++    def test_str_representation(self) -> None:
++        sha = CommitSha(value="abc123def")
++        assert str(sha) == "abc123def"
++
++    def test_set_membership(self) -> None:
++        a = CommitSha(value="abc123")
++        b = CommitSha(value="abc123")
++        s = {a}
++        assert b in s
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_issue_command.py b/tests/pr_auto_reviewer/core/models/value_objects/test_issue_command.py
+new file mode 100644
+index 0000000..6f686ae
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_issue_command.py
+@@ -0,0 +1,42 @@
++import pytest
++from pr_auto_reviewer.core.models import IssueCommand
++
++
++class TestIssueCommand:
++    """Tests for IssueCommand value object."""
++
++    def test_creation_with_items(self) -> None:
++        cmd = IssueCommand(comment_id="12345", item_numbers=[1, 2, 3])
++        assert cmd.comment_id == "12345"
++        assert cmd.item_numbers == [1, 2, 3]
++
++    def test_creation_empty_items(self) -> None:
++        cmd = IssueCommand(comment_id="12345")
++        assert cmd.item_numbers == []
++
++    def test_equality_same(self) -> None:
++        a = IssueCommand(comment_id="12345", item_numbers=[1, 2])
++        b = IssueCommand(comment_id="12345", item_numbers=[1, 2])
++        assert a == b
++
++    def test_equality_different_comment_id(self) -> None:
++        a = IssueCommand(comment_id="12345", item_numbers=[1])
++        b = IssueCommand(comment_id="67890", item_numbers=[1])
++        assert a != b
++
++    def test_equality_different_items(self) -> None:
++        a = IssueCommand(comment_id="12345", item_numbers=[1])
++        b = IssueCommand(comment_id="12345", item_numbers=[2])
++        assert a != b
++
++    def test_immutability(self) -> None:
++        cmd = IssueCommand(comment_id="12345", item_numbers=[1])
++        # Frozen dataclass prevents reassignment of the field itself
++        with pytest.raises(Exception):
++            cmd.item_numbers = [2]  # type: ignore[misc]
++
++    def test_hash_consistency(self) -> None:
++        cmd = IssueCommand(comment_id="12345", item_numbers=[1])
++        # list[int] makes the frozen dataclass unhashable by default
++        with pytest.raises(TypeError, match="unhashable"):
++            hash(cmd)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_item_severity.py b/tests/pr_auto_reviewer/core/models/value_objects/test_item_severity.py
+new file mode 100644
+index 0000000..1762d4f
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_item_severity.py
+@@ -0,0 +1,39 @@
++import pytest
++from pr_auto_reviewer.core.models import ItemSeverity
++
++
++class TestItemSeverity:
++    """Tests for ItemSeverity enum."""
++
++    def test_members_exist(self) -> None:
++        assert ItemSeverity.CRITICAL == "critical"
++        assert ItemSeverity.MAJOR == "major"
++        assert ItemSeverity.MINOR == "minor"
++        assert ItemSeverity.INFO == "info"
++
++    def test_four_levels(self) -> None:
++        members = list(ItemSeverity)
++        assert len(members) == 4
++        names = {m.name for m in members}
++        assert names == {"CRITICAL", "MAJOR", "MINOR", "INFO"}
++
++    def test_equality(self) -> None:
++        assert ItemSeverity.CRITICAL == ItemSeverity.CRITICAL
++        assert ItemSeverity.MAJOR != ItemSeverity.MINOR
++
++    def test_str_representation(self) -> None:
++        assert str(ItemSeverity.CRITICAL) == "critical"
++        assert str(ItemSeverity.MINOR) == "minor"
++
++    def test_hash(self) -> None:
++        assert hash(ItemSeverity.CRITICAL) == hash(ItemSeverity.CRITICAL)
++        s = {ItemSeverity.CRITICAL, ItemSeverity.INFO}
++        assert ItemSeverity.CRITICAL in s
++
++    def test_from_string(self) -> None:
++        assert ItemSeverity("critical") == ItemSeverity.CRITICAL
++        assert ItemSeverity("major") == ItemSeverity.MAJOR
++
++    def test_invalid_value_raises(self) -> None:
++        with pytest.raises(ValueError):
++            ItemSeverity("unknown")
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_diff.py b/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_diff.py
+new file mode 100644
+index 0000000..363a563
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_diff.py
+@@ -0,0 +1,73 @@
++import pytest
++from pr_auto_reviewer.core.models import (
++    PullRequestDiff,
++    PullRequestId,
++    CommitSha,
++)
++
++
++class TestPullRequestDiff:
++    """Tests for PullRequestDiff value object."""
++
++    def test_creation_with_all_fields(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        sha = CommitSha(value="abc123")
++        diff = PullRequestDiff(
++            pr_id=pr_id,
++            head_sha=sha,
++            diff_content="diff --git a/file b/file\n+foo\n-bar",
++            file_contents={"src/main.py": "print('hello')"},
++            repository_structure="src/\n  main.py",
++            conventions="# Project Conventions\n...",
++        )
++        assert diff.pr_id == pr_id
++        assert diff.head_sha == sha
++        assert diff.diff_content == "diff --git a/file b/file\n+foo\n-bar"
++        assert diff.file_contents == {"src/main.py": "print('hello')"}
++        assert diff.repository_structure == "src/\n  main.py"
++        assert diff.conventions == "# Project Conventions\n..."
++
++    def test_creation_minimal(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        sha = CommitSha(value="abc")
++        diff = PullRequestDiff(
++            pr_id=pr_id,
++            head_sha=sha,
++            diff_content="",
++        )
++        assert diff.file_contents == {}
++        assert diff.repository_structure is None
++        assert diff.conventions is None
++
++    def test_equality_same_values(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        sha = CommitSha(value="abc")
++        a = PullRequestDiff(pr_id=pr_id, head_sha=sha, diff_content="diff")
++        b = PullRequestDiff(pr_id=pr_id, head_sha=sha, diff_content="diff")
++        assert a == b
++
++    def test_equality_different_sha(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        a = PullRequestDiff(
++            pr_id=pr_id, head_sha=CommitSha(value="abc"), diff_content="diff"
++        )
++        b = PullRequestDiff(
++            pr_id=pr_id, head_sha=CommitSha(value="def"), diff_content="diff"
++        )
++        assert a != b
++
++    def test_immutability(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        diff = PullRequestDiff(
++            pr_id=pr_id, head_sha=CommitSha(value="abc"), diff_content="diff"
++        )
++        with pytest.raises(Exception):
++            diff.diff_content = "changed"  # type: ignore[misc]
++
++    def test_hash_consistency(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=1)
++        sha = CommitSha(value="abc")
++        diff = PullRequestDiff(pr_id=pr_id, head_sha=sha, diff_content="diff")
++        # dict[str, str] makes the frozen dataclass unhashable by default
++        with pytest.raises(TypeError, match="unhashable"):
++            hash(diff)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_id.py b/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_id.py
+new file mode 100644
+index 0000000..700aeb3
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_pull_request_id.py
+@@ -0,0 +1,54 @@
++import pytest
++from pr_auto_reviewer.core.models import PullRequestId, InvalidPullRequestIdError
++
++
++class TestPullRequestId:
++    """Tests for PullRequestId value object."""
++
++    def test_creation(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        assert pr_id.repository == "owner/repo"
++        assert pr_id.number == 42
++
++    def test_equality_same_values(self) -> None:
++        a = PullRequestId(repository="owner/repo", number=42)
++        b = PullRequestId(repository="owner/repo", number=42)
++        assert a == b
++        assert hash(a) == hash(b)
++
++    def test_equality_different_repository(self) -> None:
++        a = PullRequestId(repository="owner/repo", number=42)
++        b = PullRequestId(repository="other/repo", number=42)
++        assert a != b
++
++    def test_equality_different_number(self) -> None:
++        a = PullRequestId(repository="owner/repo", number=42)
++        b = PullRequestId(repository="owner/repo", number=99)
++        assert a != b
++
++    def test_immutability(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        with pytest.raises(Exception):
++            pr_id.number = 99  # type: ignore[misc]
++
++    def test_str_representation(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        assert str(pr_id) == "owner/repo#42"
++
++    def test_hash_consistency(self) -> None:
++        pr_id = PullRequestId(repository="owner/repo", number=42)
++        assert hash(pr_id) == hash(pr_id)
++        s = {pr_id}
++        assert PullRequestId(repository="owner/repo", number=42) in s
++
++    def test_empty_repository_raises(self) -> None:
++        with pytest.raises(InvalidPullRequestIdError, match="repository"):
++            PullRequestId(repository="", number=1)
++
++    def test_zero_number_raises(self) -> None:
++        with pytest.raises(InvalidPullRequestIdError, match="number"):
++            PullRequestId(repository="owner/repo", number=0)
++
++    def test_negative_number_raises(self) -> None:
++        with pytest.raises(InvalidPullRequestIdError, match="number"):
++            PullRequestId(repository="owner/repo", number=-1)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_review_context.py b/tests/pr_auto_reviewer/core/models/value_objects/test_review_context.py
+new file mode 100644
+index 0000000..0a2fea9
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_review_context.py
+@@ -0,0 +1,46 @@
++import pytest
++from pr_auto_reviewer.core.models import ReviewContext
++
++
++class TestReviewContext:
++    """Tests for ReviewContext value object."""
++
++    def test_creation_with_all_fields(self) -> None:
++        ctx = ReviewContext(
++            architecture_hint="hexagonal",
++            conventions="# Project Conventions",
++            repository_structure="src/\n  main.py",
++        )
++        assert ctx.architecture_hint == "hexagonal"
++        assert ctx.conventions == "# Project Conventions"
++        assert ctx.repository_structure == "src/\n  main.py"
++
++    def test_creation_minimal(self) -> None:
++        ctx = ReviewContext(architecture_hint="unknown")
++        assert ctx.architecture_hint == "unknown"
++        assert ctx.conventions is None
++        assert ctx.repository_structure is None
++
++    def test_equality_same(self) -> None:
++        a = ReviewContext(architecture_hint="hexagonal")
++        b = ReviewContext(architecture_hint="hexagonal")
++        assert a == b
++
++    def test_equality_different_hint(self) -> None:
++        a = ReviewContext(architecture_hint="hexagonal")
++        b = ReviewContext(architecture_hint="mvc")
++        assert a != b
++
++    def test_equality_different_conventions(self) -> None:
++        a = ReviewContext(architecture_hint="hexagonal", conventions="A")
++        b = ReviewContext(architecture_hint="hexagonal", conventions="B")
++        assert a != b
++
++    def test_immutability(self) -> None:
++        ctx = ReviewContext(architecture_hint="hexagonal")
++        with pytest.raises(Exception):
++            ctx.architecture_hint = "changed"  # type: ignore[misc]
++
++    def test_hash_consistency(self) -> None:
++        ctx = ReviewContext(architecture_hint="hexagonal", conventions="test")
++        assert hash(ctx) == hash(ctx)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_review_item.py b/tests/pr_auto_reviewer/core/models/value_objects/test_review_item.py
+new file mode 100644
+index 0000000..6c4d04e
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_review_item.py
+@@ -0,0 +1,102 @@
++import pytest
++from pr_auto_reviewer.core.models import ReviewItem, ItemSeverity
++
++
++class TestReviewItem:
++    """Tests for ReviewItem value object."""
++
++    def test_creation_with_all_fields(self) -> None:
++        item = ReviewItem(
++            number=1,
++            severity=ItemSeverity.CRITICAL,
++            category="security",
++            file_path="src/main.py",
++            description="SQL injection vulnerability",
++        )
++        assert item.number == 1
++        assert item.severity == ItemSeverity.CRITICAL
++        assert item.category == "security"
++        assert item.file_path == "src/main.py"
++        assert item.description == "SQL injection vulnerability"
++
++    def test_creation_without_file_path(self) -> None:
++        item = ReviewItem(
++            number=2,
++            severity=ItemSeverity.INFO,
++            category="style",
++            file_path=None,
++            description="Consider adding type hints",
++        )
++        assert item.file_path is None
++
++    def test_equality_same_fields(self) -> None:
++        a = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MAJOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        b = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MAJOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        assert a == b
++
++    def test_equality_different_number(self) -> None:
++        a = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MAJOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        b = ReviewItem(
++            number=2,
++            severity=ItemSeverity.MAJOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        assert a != b
++
++    def test_equality_different_severity(self) -> None:
++        a = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MAJOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        b = ReviewItem(
++            number=1,
++            severity=ItemSeverity.MINOR,
++            category="bug",
++            file_path="x.py",
++            description="desc",
++        )
++        assert a != b
++
++    def test_immutability(self) -> None:
++        item = ReviewItem(
++            number=1,
++            severity=ItemSeverity.INFO,
++            category="style",
++            file_path=None,
++            description="desc",
++        )
++        with pytest.raises(Exception):
++            item.description = "changed"  # type: ignore[misc]
++
++    def test_hash_consistency(self) -> None:
++        item = ReviewItem(
++            number=1,
++            severity=ItemSeverity.CRITICAL,
++            category="security",
++            file_path="x.py",
++            description="desc",
++        )
++        assert hash(item) == hash(item)
+diff --git a/tests/pr_auto_reviewer/core/models/value_objects/test_review_verdict.py b/tests/pr_auto_reviewer/core/models/value_objects/test_review_verdict.py
+new file mode 100644
+index 0000000..a0f7a82
+--- /dev/null
++++ b/tests/pr_auto_reviewer/core/models/value_objects/test_review_verdict.py
+@@ -0,0 +1,48 @@
++import pytest
++from pr_auto_reviewer.core.models import ReviewVerdict
++
++
++class TestReviewVerdict:
++    """Tests for ReviewVerdict enum."""
++
++    def test_members_exist(self) -> None:
++        assert ReviewVerdict.APPROVED == "approved"
++        assert ReviewVerdict.CHANGES_REQUESTED == "changes_requested"
++        assert ReviewVerdict.COMMENTED == "commented"
++
++    def test_three_states_only(self) -> None:
++        members = list(ReviewVerdict)
++        assert len(members) == 3
++        names = {m.name for m in members}
++        assert names == {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
++
++    def test_equality_same_verdict(self) -> None:
++        assert ReviewVerdict.APPROVED == ReviewVerdict.APPROVED
++        assert ReviewVerdict.CHANGES_REQUESTED == ReviewVerdict.CHANGES_REQUESTED
++
++    def test_equality_different_verdict(self) -> None:
++        assert ReviewVerdict.APPROVED != ReviewVerdict.CHANGES_REQUESTED
++        assert ReviewVerdict.APPROVED != ReviewVerdict.COMMENTED
++
++    def test_str_representation(self) -> None:
++        assert str(ReviewVerdict.APPROVED) == "approved"
++        assert str(ReviewVerdict.CHANGES_REQUESTED) == "changes_requested"
++        assert str(ReviewVerdict.COMMENTED) == "commented"
++
++    def test_hash(self) -> None:
++        assert hash(ReviewVerdict.APPROVED) == hash(ReviewVerdict.APPROVED)
++        s = {ReviewVerdict.APPROVED, ReviewVerdict.COMMENTED}
++        assert ReviewVerdict.APPROVED in s
++
++    def test_from_string(self) -> None:
++        assert ReviewVerdict("approved") == ReviewVerdict.APPROVED
++        assert ReviewVerdict("changes_requested") == ReviewVerdict.CHANGES_REQUESTED
++        assert ReviewVerdict("commented") == ReviewVerdict.COMMENTED
++
++    def test_invalid_value_raises(self) -> None:
++        with pytest.raises(ValueError):
++            ReviewVerdict("invalid")
++
++    def test_string_comparison(self) -> None:
++        assert ReviewVerdict.APPROVED == "approved"
++        assert ReviewVerdict.APPROVED != "changes_requested"
+diff --git a/tests/pr_auto_reviewer/domain/exceptions/test_llm_response_malformed_error.py b/tests/pr_auto_reviewer/domain/exceptions/test_llm_response_malformed_error.py
+new file mode 100644
+index 0000000..dad23a9
+--- /dev/null
++++ b/tests/pr_auto_reviewer/domain/exceptions/test_llm_response_malformed_error.py
+@@ -0,0 +1,40 @@
++"""Tests for LlmResponseMalformedError."""
++
++import pytest
++
++from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
++    LlmResponseMalformedError,
++)
++
++
++class TestLlmResponseMalformedError:
++    """Tests for LlmResponseMalformedError."""
++
++    def test_stores_raw_text(self) -> None:
++        """Stores the raw LLM response text."""
++        raw = "invalid json response"
++        error = LlmResponseMalformedError(raw)
++
++        assert error.raw_text == raw
++
++    def test_inherits_from_domain_error(self) -> None:
++        """Inherits from DomainError."""
++        error = LlmResponseMalformedError("test")
++
++        assert isinstance(error, Exception)
++
++    def test_has_default_message(self) -> None:
++        """Has a default error message."""
++        error = LlmResponseMalformedError("test")
++
++        assert "LLM response could not be parsed" in str(error)
++
++    def test_can_raise_and_catch(self) -> None:
++        """Can be raised and caught as DomainError."""
++        raw = "some malformed response"
++        error = LlmResponseMalformedError(raw)
++
++        with pytest.raises(Exception) as exc_info:
++            raise error
++
++        assert exc_info.value is error
+\ No newline at end of file

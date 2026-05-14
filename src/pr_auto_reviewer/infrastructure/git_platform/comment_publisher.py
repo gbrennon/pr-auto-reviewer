@@ -21,16 +21,13 @@ class GitCommentPublisherAdapter(CommentPublisherPort):
     def __init__(self, client: GitPlatformHttpClient) -> None:
         self._client = client
 
-    # ------------------------------------------------------------------ [port]
     def post(self, pr_id: PullRequestId, body: str) -> None:
         """POST a comment on *pr_id*. Logs warning on failure; does not raise."""
-
-        # -- [http] POST comment ---------------------------------------------
         path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
+
         try:
             self._client.post(path, {"body": body})
         except Exception:
-            # [err] non-fatal — log and move on
             logger.warning(
                 "Failed to post comment on %s (non-fatal)", pr_id
             )

@@ -1,0 +1,40 @@
+{
+  "verdict": "changes_requested",
+  "summary": "The CreateUser HTTP handler has multiple critical issues: all errors from io.ReadAll, json.Unmarshal, sql.Open, and db.Exec are silently discarded using blank identifiers (_). It also has a SQL injection vulnerability through string concatenation, performs an unsafe type assertion without checking, and opens a new database connection on every request instead of reusing a connection pool.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "critical",
+      "category": "bug",
+      "file_path": "pkg/handler/user.go",
+      "description": "All error returns are silently discarded using blank identifiers. Handle errors from io.ReadAll, json.Unmarshal, sql.Open, and db.Exec properly with if err != nil checks and appropriate HTTP error responses."
+    },
+    {
+      "number": 2,
+      "severity": "critical",
+      "category": "security",
+      "file_path": "pkg/handler/user.go",
+      "description": "SQL injection vulnerability: username is concatenated directly into the INSERT statement. Use parameterized queries: db.Exec('INSERT INTO users (username) VALUES ($1)', username)."
+    },
+    {
+      "number": 3,
+      "severity": "high",
+      "category": "bug",
+      "file_path": "pkg/handler/user.go",
+      "description": "Unsafe type assertion user['username'].(string) will panic if the key is missing or not a string. Use the comma-ok pattern: username, ok := user['username'].(string); if !ok { ... }."
+    },
+    {
+      "number": 4,
+      "severity": "medium",
+      "category": "performance",
+      "file_path": "pkg/handler/user.go",
+      "description": "Opening a new database connection on every request is inefficient. Use a shared connection pool (sql.DB) injected via dependency injection or a package-level variable."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 8,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

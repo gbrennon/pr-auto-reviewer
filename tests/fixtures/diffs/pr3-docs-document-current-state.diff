@@ -1,0 +1,340 @@
+diff --git a/README.md b/README.md
+index 2dbf615..5415798 100644
+--- a/README.md
++++ b/README.md
+@@ -100,9 +100,6 @@ Edit your `.env` file:
+ # Required: Your Codeberg API token
+ CODEBERG_TOKEN=your_token_here
+ 
+-# Optional: GitHub support (for GitHub repos)
+-GITHUB_PAT=your_github_token
+-
+ # Optional: Ollama settings
+ OLLAMA_HOST=http://localhost:11434
+ OLLAMA_MODEL=code-review
+@@ -168,20 +165,47 @@ OLLAMA_MODEL=qwen2.5-coder:14b bash scripts/watch-prs.sh
+ 
+ ## Project Structure
+ 
++See `docs/structure.md` for a detailed breakdown of files and directories.
++
+ ```
+ pr-auto-reviewer/
+ ├── scripts/
+ │   ├── bootstrap.sh          # Entry point - starts everything
+ │   ├── watch-prs.sh          # Main daemon that watches and reviews
+ │   ├── reload.sh             # Trigger config reload
+-│   ├── autostart/            # Systemd-like service manager
++│   ├── autostart/            # Service manager
+ │   └── lib/                  # Shared helper scripts
+ ├── docs/
++│   ├── structure.md          # File structure explanation
++│   ├── features.md           # Implemented and planned features
+ │   └── permissions.md        # Token scope documentation
+ ├── .env.example              # Configuration template
+ └── runner-data/              # State storage (PR reviews, PIDs)
+ ```
+ 
++## Current Status
++
++### Implemented
++
++- **Codeberg PR watching** - Watches all your repos or specific ones
++- **AI code review** - Uses local Ollama to review PRs
++- **Review posting** - Posts comments and formal reviews to Codeberg
++- **Draft PR skipping** - Skips draft PRs automatically
++- **Duplicate prevention** - Won't re-review unchanged PRs
++- **Hot reload** - Config changes detected without restart
++- **Autostart system** - Background service management
++- **Single cycle mode** - Run once for testing
++
++### Not Yet Implemented
++
++- **GitHub support** - Not tested, API not implemented
++- **Webhook mode** - Currently polling only (60s interval)
++- **Per-repo config** - Same settings for all repos
++- **Docker container** - Not available yet
++- **Systemd units** - Not available yet
++
++See `docs/features.md` for the complete feature list.
++
+ ## Troubleshooting
+ 
+ ### "No repos found"
+diff --git a/docs/features.md b/docs/features.md
+new file mode 100644
+index 0000000..039a108
+--- /dev/null
++++ b/docs/features.md
+@@ -0,0 +1,82 @@
++# Features
++
++This document outlines what is currently implemented and what is planned.
++
++## Implemented
++
++### Core Functionality
++
++- **Automatic PR Detection** - Watches all user's Codeberg repos for open PRs
++- **Single Repo Watch** - Can watch specific repo with `-r owner/repo`
++- **Draft PR Skipping** - Skips draft PRs automatically
++- **Duplicate Prevention** - Uses SHA-based state to avoid re-reviewing unchanged PRs
++- **AI Code Review** - Sends PR diff to Ollama and receives review
++- **Review Posting** - Posts formatted review comment to Codeberg PR
++- **Formal Review** - Also submits a formal approve/request_changes review
++
++### Configuration
++
++- **Environment-based Config** - All settings in `.env` file
++- **Hot Reload** - Changes to `.env` detected within ~10 seconds
++- **Manual Reload** - `reload.sh` triggers immediate config reload
++- **Configurable Poll Interval** - Set via `POLL_INTERVAL` env var
++- **Configurable Ollama** - Host and model configurable via env vars
++
++### Operations
++
++- **Bootstrap** - Single entry point (`bootstrap.sh`) that handles everything
++- **Daemon Mode** - Runs continuously in background
++- **Single Cycle** - Run once for testing (`--once`)
++- **Locking** - Prevents multiple instances from running
++- **PID Tracking** - Tracks running process for clean shutdown
++
++### Service Management
++
++- **Autostart System** - Simple service manager for background processes
++- **Start/Stop/Status** - Control running services
++- **Status Check** - View which services are running
++
++### Code Review Features
++
++- **Verdict System** - AI determines Approved or Changes Requested
++- **Structured Output** - Review includes Issues, Suggestions, Praise, Summary
++- **Severity Awareness** - AI identifies critical vs minor issues
++
++## Not Implemented (Planned)
++
++### GitHub Support
++
++- GitHub PAT integration not tested
++- GitHub API calls not implemented
++- Dual platform support planned but not validated
++
++### Advanced Features
++
++- **Webhook Support** - Currently polling-based; webhooks would be faster
++- **Per-Repo Config** - Different settings per repository
++- **Review History** - Store and query past reviews
++- **Stats/Dashboard** - Track review patterns
++- **Custom Prompts** - User-defined review instructions
++- **Multiple Models** - Choose different models per repo or PR type
++- **PR Size Limits** - Skip or warn on large PRs
++
++### Infrastructure
++
++- **Systemd Unit Files** - For native Linux service management
++- **Docker Container** - Containerized deployment
++- **Health Checks** - HTTP endpoint for monitoring
++
++### AI Improvements
++
++- **Caching** - Cache reviews for unchanged files
++- **Parallel Processing** - Review multiple PRs simultaneously
++- **Token Budget** - Truncate diffs to stay within model limits
++
++## Supported Platforms
++
++| Platform | Status |
++|----------|--------|
++| Codeberg | Tested and working |
++| GitHub | Not implemented |
++| Forgejo | Should work (Codeberg API compatible) |
++| Gitea | Should work (Forgejo fork) |
+diff --git a/docs/permissions.md b/docs/permissions.md
+new file mode 100644
+index 0000000..7795ae9
+--- /dev/null
++++ b/docs/permissions.md
+@@ -0,0 +1,56 @@
++# Permissions
++
++This document describes the required permissions for the PR AI Auto-Reviewer.
++
++## Codeberg API Token
++
++Generate at: https://codeberg.org/settings/applications
++
++| Field (Scope) | Permission | Description |
++|---------------|------------|-------------|
++| `user` | read | Get user repository subscriptions and settings |
++| `user` | write | Update user repository subscriptions and settings |
++| `repository` | read | Get repository files, releases, and collaborators |
++| `repository` | write | Get/update repository files, create pull requests |
++| `issue` | read | Get issue comments, attachments, and milestones |
++| `issue` | write | Post or edit issue comments, update milestones |
++| `activitypub` | read | ActivityPub read operations |
++| `activitypub` | write | ActivityPub write/delete operations |
++| `misc` | read | Get label and gitignore templates |
++| `misc` | write | Markup utility operations |
++| `notification` | read | Read user notifications |
++| `notification` | write | Mark notifications as read |
++| `organization` | read | List organizations and teams |
++| `organization` | write | Create/update teams and org settings |
++| `package` | read | Read and download packages |
++| `package` | write | Same as read currently |
++
++### Required Scopes
++
++For this project, you need at minimum:
++
++| Field (Scope) | Permission |
++|---------------|------------|
++| `user` | read |
++| `repository` | read |
++| `repository` | write |
++| `issue` | write |
++
++### Why these scopes?
++
++- `user` (read) - Needed to identify the authenticated user
++- `repository` (read) - Needed to read repository files and pull requests
++- `repository` (write) - Needed to create pull request reviews
++- `issue` (write) - Required to post comments on PRs (uses issues endpoint)
++
++### GitHub (Not Implemented)
++
++GitHub support is planned but not yet implemented. The table below documents what will be required when it is.
++
++| Field (Scope) | Permission | Description |
++|---------------|------------|-------------|
++| `repo` | full | Required to read PRs and post reviews |
++
++## Ollama
++
++No authentication required. Ensure Ollama is running at the configured host.
+diff --git a/docs/structure.md b/docs/structure.md
+new file mode 100644
+index 0000000..51e2bd8
+--- /dev/null
++++ b/docs/structure.md
+@@ -0,0 +1,121 @@
++# Structure
++
++This document explains the project structure and how the pieces fit together.
++
++## Overview
++
++The project has three main entry points:
++
++```
++scripts/
++├── bootstrap.sh          # Primary entry point - use this to start
++├── watch-prs.sh          # Main daemon - watches PRs and posts reviews
++├── reload.sh             # Manual reload trigger
++├── autostart/            # Service manager
++│   ├── autostart.sh     # Main autostart controller
++│   ├── 20-watch-prs.sh  # Service definition for PR watcher
++│   └── lib.sh           # Autostart utilities
++└── lib/                  # Shared libraries
++    ├── env-loader.sh    # Environment loading
++    ├── ollama-client.sh # Ollama API client
++    ├── hot-reload.sh    # Config hot-reload
++    ├── build-prompt.py  # Build Ollama prompt from diff
++    ├── build-comment.py # Build review comment
++    └── json-escape.py   # JSON escaping utility
++```
++
++## Entry Points
++
++### bootstrap.sh
++
++The recommended way to start the project. It:
++
++1. Checks dependencies (curl, python3, flock, nohup)
++2. Creates required directories (runner-data/)
++3. Loads environment from `.env`
++4. Checks if Ollama is running
++5. Attempts to start Ollama if not running
++6. Starts all autostart services
++
++**Usage:**
++```bash
++bash scripts/bootstrap.sh
++```
++
++### watch-prs.sh
++
++The main daemon that:
++
++1. Polls Codeberg repos for open PRs
++2. Skips draft PRs
++3. Checks SHA against state file to avoid duplicate reviews
++4. Fetches PR diff
++5. Sends diff to Ollama
++6. Posts review comment to Codeberg
++
++**Usage:**
++```bash
++bash scripts/watch-prs.sh           # daemon mode, 60s interval
++bash scripts/watch-prs.sh -i 30    # custom interval
++bash scripts/watch-prs.sh -r owner/repo  # specific repo
++bash scripts/watch-prs.sh --once    # single cycle
++```
++
++### autostart/
++
++A simple service manager for running background processes. Similar to systemd but simpler.
++
++**Usage:**
++```bash
++bash scripts/autostart/autostart.sh      # start all services
++bash scripts/autostart/autostart.sh --stop   # stop all services
++bash scripts/autostart/autostart.sh --status # show status
++```
++
++## Shared Libraries
++
++### env-loader.sh
++
++Loads environment variables from `.env` file. Used by bootstrap and autostart scripts to ensure consistent env across processes.
++
++### ollama-client.sh
++
++Provides utilities for talking to Ollama API:
++
++- `ollama_available()` - Check if Ollama is running
++- `resolve_ollama_host()` - Resolve the actual host URL (handles hot-reload)
++
++### hot-reload.sh
++
++Allows configuration changes without restarting:
++
++- Monitors `.env` for changes
++- Sends SIGHUP to watcher when config changes
++- Watcher re-reads env on SIGHUP
++
++### build-prompt.py
++
++Takes a PR diff and builds a prompt for the Ollama model. The prompt instructs the AI to review code and provide structured feedback.
++
++### build-comment.py
++
++Takes the raw AI response and builds a formatted Markdown comment with:
++- Verdict (Approved/Changes Requested)
++- Issues found
++- Suggestions
++- Praise
++- Summary
++
++### json-escape.py
++
++Utility to properly escape strings for JSON payloads.
++
++## Data Files
++
++```
++runner-data/
++├── pr-reviews.json  # State file - tracks reviewed PRs by SHA
++└── watch-prs.pid    # PID file for the watcher process
++```
++
++The state file prevents duplicate reviews. A PR is only re-reviewed if the SHA changes.

@@ -1,0 +1,824 @@
+diff --git a/src/pr_auto_reviewer/__init__.py b/src/pr_auto_reviewer/__init__.py
+new file mode 100644
+index 0000000..4a98887
+--- /dev/null
++++ b/src/pr_auto_reviewer/__init__.py
+@@ -0,0 +1,24 @@
++"""PR Auto Reviewer - Main module."""
++
++from .config import load_config, Config
++from .ollama_client import OllamaClient
++from .forgejo_api import ForgejoAPI
++from .review_processor import ReviewProcessor
++from .state import StateManager
++from .issue_creator import IssueCreator
++from .comment_parser import CommentParser
++from .review_item_extractor import ReviewItemExtractor
++from .hot_reload import HotReload
++
++__all__ = [
++    "load_config",
++    "Config",
++    "OllamaClient",
++    "ForgejoAPI",
++    "ReviewProcessor",
++    "StateManager",
++    "IssueCreator",
++    "CommentParser",
++    "ReviewItemExtractor",
++    "HotReload",
++]
+diff --git a/src/pr_auto_reviewer/__main__.py b/src/pr_auto_reviewer/__main__.py
+new file mode 100644
+index 0000000..5bef0ea
+--- /dev/null
++++ b/src/pr_auto_reviewer/__main__.py
+@@ -0,0 +1,6 @@
++"""Main entry point for the PR Auto Reviewer application."""
++
++from .cli import main
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/bootstrap.py b/src/pr_auto_reviewer/bootstrap.py
+new file mode 100644
+index 0000000..222a714
+--- /dev/null
++++ b/src/pr_auto_reviewer/bootstrap.py
+@@ -0,0 +1,83 @@
++"""Bootstrap the PR Auto Reviewer."""
++
++import os
++from pathlib import Path
++
++from .config import Config
++
++class Bootstrap:
++    """Bootstrap the PR Auto Reviewer."""
++
++    def __init__(self, config: Config) -> None:
++        """Initialize the bootstrapper.
++
++        Args:
++            config: Configuration object
++        """
++        self.config = config
++
++    def run(self) -> None:
++        """Run the bootstrap."""
++        print("Bootstrapping PR Auto Reviewer...")
++
++        # Create state directory
++        state_dir = Path.home() / ".pr-auto-reviewer" / "state"
++        state_dir.mkdir(parents=True, exist_ok=True)
++        print(f"Created state directory: {state_dir}")
++
++        # Create config file if it doesn't exist
++        config_path = Path.home() / ".pr-auto-reviewer" / "config.toml"
++        if not config_path.exists():
++            config_path.parent.mkdir(parents=True, exist_ok=True)
++            with open(config_path, "w") as f:
++                f.write("""# PR Auto Reviewer Configuration
++
++# Ollama settings
++ollama_host = "http://localhost:11434"
++ollama_model = "llama3"
++
++# Forgejo settings
++forgejo_host = "https://codeberg.org"
++forgejo_token = ""  # Personal access token
++forgejo_reviewer_token = ""  # Token for the reviewer user
++forgejo_reviewer_username = ""  # Username of the reviewer
++
++# Review settings
++review_template = ""
++""")
++            print(f"Created config file: {config_path}")
++        else:
++            print(f"Config file already exists: {config_path}")
++
++        # Create example .env file
++        env_path = Path.home() / ".pr-auto-reviewer" / ".env.example"
++        if not env_path.exists():
++            with open(env_path, "w") as f:
++                f.write("""# PR Auto Reviewer Environment Variables
++
++# Ollama settings
++OLLAMA_HOST=http://localhost:11434
++OLLAMA_MODEL=llama3
++
++# Forgejo settings
++FORGEJO_HOST=https://codeberg.org
++FORGEJO_TOKEN=your-personal-access-token
++FORGEJO_REVIEWER_TOKEN=reviewer-user-token
++FORGEJO_REVIEWER_USERNAME=reviewer-username
++
++# Review settings
++REVIEW_TEMPLATE=
++""")
++            print(f"Created example .env file: {env_path}")
++        else:
++            print(f"Example .env file already exists: {env_path}")
++
++        print("Bootstrap complete!")
++
++
++def bootstrap() -> None:
++    """CLI entry point for bootstrap command."""
++    from .config import load_config
++    config = load_config()
++    boot = Bootstrap(config=config)
++    boot.run()
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/cli.py b/src/pr_auto_reviewer/cli.py
+new file mode 100644
+index 0000000..0290db2
+--- /dev/null
++++ b/src/pr_auto_reviewer/cli.py
+@@ -0,0 +1,129 @@
++"""CLI entry point for PR Auto Reviewer."""
++
++import argparse
++import sys
++from typing import Optional
++
++from .config import load_config
++from .watch_prs import watch_prs
++from .create_issues_from_pr import create_issues_from_pr
++from .list_items import list_items
++from .bootstrap import bootstrap
++from .clean import clean
++from .test_issue_creation import test_issue_creation
++from .validate import main as validate
++from .validate_pr import main as validate_pr
++
++
++def main() -> None:
++    """Main CLI entry point."""
++    parser = argparse.ArgumentParser(description="PR AI Auto-Reviewer")
++    subparsers = parser.add_subparsers(dest="command", required=True)
++
++    # watch-prs command
++    watch_parser = subparsers.add_parser("watch-prs", help="Watch PRs for reviews")
++    watch_parser.add_argument("-i", "--interval", type=int, default=60, help="Poll interval in seconds")
++    watch_parser.add_argument("-r", "--repo", help="Watch specific repo")
++    watch_parser.add_argument("--once", action="store_true", help="Run once and exit")
++    watch_parser.add_argument("-p", "--pr", type=int, help="Force re-review specific PR")
++    watch_parser.add_argument("--list-items", action="store_true", help="List review items")
++
++    # create-issues command
++    create_parser = subparsers.add_parser("create-issues", help="Create issues from PR")
++    create_parser.add_argument("repo", help="Repository in format owner/repo")
++    create_parser.add_argument("pr_number", nargs="?", help="PR number or --all")
++
++    # list-items command
++    list_parser = subparsers.add_parser("list-items", help="List review items")
++    list_parser.add_argument("repo", help="Repository in format owner/repo")
++    list_parser.add_argument("pr_number", type=int, help="PR number")
++
++    # bootstrap command
++    subparsers.add_parser("bootstrap", help="Bootstrap the application")
++
++    # clean command
++    subparsers.add_parser("clean", help="Clean state files")
++
++    # test-issue-creation command
++    test_parser = subparsers.add_parser("test-issue-creation", help="Test issue creation")
++    test_parser.add_argument("repo", help="Repository in format owner/repo")
++    test_parser.add_argument("pr_number", type=int, help="PR number")
++
++    # validate command
++    validate_parser = subparsers.add_parser("validate", help="Generate local code review from diff file")
++    validate_parser.add_argument("-d", "--diff", required=True, help="Path to diff/patch file")
++    validate_parser.add_argument("-o", "--output", help="Write review to file instead of stdout")
++    validate_parser.add_argument("-r", "--repo", help="Local repo path to include file tree structure")
++    validate_parser.add_argument("--model", help="Ollama model to use")
++
++    # validate-pr command
++    validate_pr_parser = subparsers.add_parser("validate-pr", help="Generate review from Codeberg PR")
++    validate_pr_parser.add_argument("-r", "--repo", required=True, help="Repository in format owner/repo")
++    validate_pr_parser.add_argument("-p", "--pr", required=True, help="PR number")
++    validate_pr_parser.add_argument("-o", "--output", help="Write review to file instead of stdout")
++    validate_pr_parser.add_argument("-b", "--branch", default="main", help="Branch to use for repo structure")
++    validate_pr_parser.add_argument("--model", help="Ollama model to use")
++
++    args = parser.parse_args()
++
++    if args.command == "validate":
++        old_argv = sys.argv
++        sys.argv = ["validate"]
++        if args.diff:
++            sys.argv.extend(["-d", args.diff])
++        if args.output:
++            sys.argv.extend(["-o", args.output])
++        if args.repo:
++            sys.argv.extend(["-r", args.repo])
++        if args.model:
++            sys.argv.extend(["--model", args.model])
++        try:
++            sys.exit(validate())
++        finally:
++            sys.argv = old_argv
++    elif args.command == "validate-pr":
++        old_argv = sys.argv
++        sys.argv = ["validate-pr"]
++        if args.repo:
++            sys.argv.extend(["-r", args.repo])
++        if args.pr:
++            sys.argv.extend(["-p", str(args.pr)])
++        if args.output:
++            sys.argv.extend(["-o", args.output])
++        if args.branch:
++            sys.argv.extend(["-b", args.branch])
++        if args.model:
++            sys.argv.extend(["--model", args.model])
++        try:
++            sys.exit(validate_pr())
++        finally:
++            sys.argv = old_argv
++
++    try:
++        load_config()
++    except Exception as e:
++        print(f"Error loading config: {e}")
++        sys.exit(1)
++
++    if args.command == "watch-prs":
++        watch_prs(
++            interval=args.interval,
++            repo_filter=args.repo,
++            run_once=args.once,
++            force_pr=args.pr,
++            list_items=args.list_items,
++        )
++    elif args.command == "create-issues":
++        create_issues_from_pr(args.repo, args.pr_number)
++    elif args.command == "list-items":
++        list_items(args.repo, args.pr_number)
++    elif args.command == "bootstrap":
++        bootstrap()
++    elif args.command == "clean":
++        clean()
++    elif args.command == "test-issue-creation":
++        test_issue_creation(args.repo, args.pr_number)
++
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/config.py b/src/pr_auto_reviewer/config.py
+new file mode 100644
+index 0000000..7fab2bc
+--- /dev/null
++++ b/src/pr_auto_reviewer/config.py
+@@ -0,0 +1,86 @@
++"""Configuration module for PR Auto Reviewer."""
++
++import os
++from dataclasses import dataclass
++from typing import Optional
++
++@dataclass
++class Config:
++    """Configuration settings for the PR Auto Reviewer."""
++
++    forgejo_token: str
++    forgejo_mode: str = "codeberg"
++    forgejo_host: str = "https://codeberg.org"
++    forgejo_reviewer_token: Optional[str] = None
++    forgejo_reviewer_username: Optional[str] = None
++    ollama_host: str = "http://localhost:11434"
++    ollama_model: Optional[str] = None
++    poll_interval: int = 60
++    debug: bool = False
++
++def load_config() -> Config:
++    """Load configuration from environment variables or config file.
++
++    Returns:
++        Config: The loaded configuration.
++
++    Raises:
++        RuntimeError: If required configuration is missing.
++    """
++    config_path = os.path.expanduser("~/.config/pr-auto-reviewer/config")
++    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
++    env_path = os.path.join(repo_root, ".env")
++
++    # Try to load from user config first
++    if os.path.exists(config_path):
++        load_env_file(config_path)
++        return _create_config()
++
++    # Try to load from repo .env
++    if os.path.exists(env_path):
++        load_env_file(env_path)
++        return _create_config()
++
++    raise RuntimeError(
++        "No config found. Either:\n"
++        "  - Install: bash scripts/install-service.sh\n"
++        "  - Manual: cp .env.example .env and edit"
++    )
++
++def load_env_file(file_path: str) -> None:
++    """Load environment variables from a file.
++
++    Args:
++        file_path: Path to the environment file.
++    """
++    with open(file_path, "r", encoding="utf-8") as f:
++        for line in f:
++            line = line.strip()
++            if line and not line.startswith("#"):
++                key, value = line.split("=", 1)
++                os.environ[key.strip()] = value.strip()
++
++def _create_config() -> Config:
++    """Create Config object from environment variables.
++
++    Returns:
++        Config: The configuration object.
++
++    Raises:
++        RuntimeError: If required configuration is missing.
++    """
++    forgejo_token = os.environ.get("FORGEJO_TOKEN", "").strip()
++    if not forgejo_token:
++        raise RuntimeError("FORGEJO_TOKEN is required")
++
++    return Config(
++        forgejo_token=forgejo_token,
++        forgejo_mode=os.environ.get("FORGEJO_MODE", "codeberg").strip(),
++        forgejo_host=os.environ.get("FORGEJO_HOST", "https://codeberg.org").strip(),
++        forgejo_reviewer_token=os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None,
++        forgejo_reviewer_username=os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None,
++        ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434").strip(),
++        ollama_model=os.environ.get("OLLAMA_MODEL", "").strip() or None,
++        poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
++        debug=os.environ.get("DEBUG", "0") == "1",
++    )
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/forgejo_api.py b/src/pr_auto_reviewer/forgejo_api.py
+new file mode 100644
+index 0000000..d9e2622
+--- /dev/null
++++ b/src/pr_auto_reviewer/forgejo_api.py
+@@ -0,0 +1,328 @@
++"""Forgejo API client module for PR Auto Reviewer."""
++
++import json
++import requests
++from typing import Optional, List, Dict, Any, Tuple
++from .config import Config
++
++class ForgejoAPI:
++    """Client for interacting with Forgejo/Codeberg API."""
++
++    def __init__(self, config: Config) -> None:
++        """Initialize the Forgejo API client.
++
++        Args:
++            config: Configuration object.
++        """
++        self.config = config
++        self.api_base = f"{config.forgejo_host}/api/v1"
++
++    def get_repos(self) -> List[str]:
++        """Get list of repositories owned by the authenticated user.
++
++        Returns:
++            List of repository full names (owner/repo).
++        """
++        if not self.config.forgejo_token:
++            return []
++
++        try:
++            user_response = requests.get(
++                f"{self.api_base}/user",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            user_response.raise_for_status()
++
++            user_data = user_response.json()
++            username = user_data.get("login") or user_data.get("username")
++            if not username:
++                return []
++
++            response = requests.get(
++                f"{self.api_base}/user/repos?limit=50",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++
++            data = response.json()
++            def is_owned(repo: Dict[str, Any]) -> bool:
++                full_name = repo.get("full_name", "")
++                owner = repo.get("owner", {}) if isinstance(repo.get("owner", {}), dict) else {}
++                repo_owner = owner.get("login") or owner.get("username") or ""
++                return full_name.startswith(f"{username}/") or repo_owner == username
++
++            if isinstance(data, list):
++                return [repo["full_name"] for repo in data if "full_name" in repo and is_owned(repo)]
++            if isinstance(data, dict):
++                repos = data.get("data", [])
++                return [repo["full_name"] for repo in repos if "full_name" in repo and is_owned(repo)]
++            return []
++        except (requests.RequestException, json.JSONDecodeError):
++            return []
++
++    def get_open_prs(self, repo: str) -> List[Dict[str, Any]]:
++        """Get open PRs for a repository.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++
++        Returns:
++            List of PR dictionaries with number, sha, and title.
++        """
++        try:
++            response = requests.get(
++                f"{self.api_base}/repos/{repo}/pulls?state=open&limit=20",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++
++            data = response.json()
++            prs = data if isinstance(data, list) else data.get("data", [])
++
++            result = []
++            for pr in prs:
++                if pr.get("draft", False):
++                    continue
++                num = pr.get("number")
++                sha = pr.get("head", {}).get("sha")
++                title = pr.get("title", "")
++                if num and sha:
++                    result.append({
++                        "number": str(num),
++                        "sha": sha,
++                        "title": title
++                    })
++            return result
++        except (requests.RequestException, json.JSONDecodeError):
++            return []
++
++    def get_diff(self, repo: str, pr_number: str) -> Optional[str]:
++        """Get the diff for a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++
++        Returns:
++            Diff content or None if failed.
++        """
++        try:
++            response = requests.get(
++                f"{self.api_base}/repos/{repo}/pulls/{pr_number}.diff",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++            return response.text
++        except requests.RequestException:
++            return None
++
++    def get_pr_comments(self, repo: str, pr_number: str) -> List[Dict[str, Any]]:
++        """Get comments for a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++
++        Returns:
++            List of comment dictionaries.
++        """
++        try:
++            response = requests.get(
++                f"{self.api_base}/repos/{repo}/issues/{pr_number}/comments?limit=50",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++
++            data = response.json()
++            comments = data if isinstance(data, list) else data.get("data", [])
++
++            result = []
++            for comment in comments:
++                body = comment.get("body")
++                if body:
++                    result.append({
++                        "id": str(comment.get("id", "")),
++                        "created_at": comment.get("created_at", ""),
++                        "body": body
++                    })
++            return result
++        except (requests.RequestException, json.JSONDecodeError):
++            return []
++
++    def get_pr_reviews(self, repo: str, pr_number: str) -> List[Dict[str, Any]]:
++        """Get reviews for a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++
++        Returns:
++            List of review dictionaries.
++        """
++        try:
++            response = requests.get(
++                f"{self.api_base}/repos/{repo}/pulls/{pr_number}/reviews?limit=10",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++
++            data = response.json()
++            reviews = data if isinstance(data, list) else data.get("data", [])
++
++            result = []
++            for review in reviews:
++                body = review.get("body")
++                verdict = review.get("state")
++                review_id = review.get("id")
++                if body:
++                    result.append({
++                        "id": str(review_id),
++                        "state": verdict,
++                        "body": body
++                    })
++            return result
++        except (requests.RequestException, json.JSONDecodeError):
++            return []
++
++    def post_review(self, repo: str, pr_number: str, event: str, body: str) -> Optional[Dict[str, Any]]:
++        """Post a formal review to a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++            event: Review event (APPROVED, REQUEST_CHANGES, COMMENT)
++            body: Review body content
++
++        Returns:
++            Review response or None if failed.
++        """
++        if not self.config.forgejo_reviewer_token:
++            return None
++
++        try:
++            response = requests.post(
++                f"{self.api_base}/repos/{repo}/pulls/{pr_number}/reviews",
++                headers={
++                    "Authorization": f"token {self.config.forgejo_reviewer_token}",
++                    "accept": "application/json",
++                    "Content-Type": "application/json"
++                },
++                json={"event": event, "body": body},
++                timeout=30
++            )
++            response.raise_for_status()
++            return response.json()
++        except (requests.RequestException, json.JSONDecodeError):
++            return None
++
++    def request_reviewer(self, repo: str, pr_number: str, reviewer: str) -> bool:
++        """Request a reviewer for a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++            reviewer: Reviewer username
++
++        Returns:
++            True if successful, False otherwise.
++        """
++        try:
++            response = requests.post(
++                f"{self.api_base}/repos/{repo}/pulls/{pr_number}/requested_reviewers",
++                headers={
++                    "Authorization": f"token {self.config.forgejo_token}",
++                    "Content-Type": "application/json"
++                },
++                json={"reviewers": [reviewer]},
++                timeout=30
++            )
++            return response.status_code == 201
++        except requests.RequestException:
++            return False
++
++    def post_comment(self, repo: str, pr_number: str, body: str) -> bool:
++        """Post a comment to a PR.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            pr_number: PR number
++            body: Comment body
++
++        Returns:
++            True if successful, False otherwise.
++        """
++        try:
++            response = requests.post(
++                f"{self.api_base}/repos/{repo}/pulls/{pr_number}/comments",
++                headers={
++                    "Authorization": f"token {self.config.forgejo_token}",
++                    "Content-Type": "application/json"
++                },
++                json={"body": body},
++                timeout=30
++            )
++            return response.status_code == 201
++        except requests.RequestException:
++            return False
++
++    def get_repo_tree(self, repo: str, ref: str = "main") -> Optional[str]:
++        """Get the repository file tree structure.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            ref: Git ref (branch, tag, SHA). Defaults to 'main'.
++
++        Returns:
++            Tree listing as string, or None if failed.
++        """
++        try:
++            response = requests.get(
++                f"{self.api_base}/repos/{repo}/git/trees/{ref}?recursive=true",
++                headers={"Authorization": f"token {self.config.forgejo_token}"},
++                timeout=30
++            )
++            response.raise_for_status()
++            data = response.json()
++            tree = data.get("tree", [])
++            lines = []
++            for entry in tree:
++                path = entry.get("path", "")
++                entry_type = "dir" if entry.get("type") == "tree" else "file"
++                suffix = "/" if entry_type == "dir" else ""
++                lines.append(f"{path}{suffix}")
++            return "\n".join(lines)
++        except (requests.RequestException, json.JSONDecodeError):
++            return None
++
++    def create_issue(self, repo: str, title: str, body: str) -> Optional[int]:
++        """Create an issue in a repository.
++
++        Args:
++            repo: Repository in format 'owner/repo'
++            title: Issue title
++            body: Issue body
++
++        Returns:
++            Issue number or None if failed.
++        """
++        try:
++            response = requests.post(
++                f"{self.api_base}/repos/{repo}/issues",
++                headers={
++                    "Authorization": f"token {self.config.forgejo_token}",
++                    "Content-Type": "application/json"
++                },
++                json={"title": title, "body": body},
++                timeout=30
++            )
++            response.raise_for_status()
++            data = response.json()
++            return data.get("number")
++        except (requests.RequestException, json.JSONDecodeError):
++            return None
+diff --git a/src/pr_auto_reviewer/main.py b/src/pr_auto_reviewer/main.py
+new file mode 100644
+index 0000000..5bef0ea
+--- /dev/null
++++ b/src/pr_auto_reviewer/main.py
+@@ -0,0 +1,6 @@
++"""Main entry point for the PR Auto Reviewer application."""
++
++from .cli import main
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
+diff --git a/src/pr_auto_reviewer/ollama_client.py b/src/pr_auto_reviewer/ollama_client.py
+new file mode 100644
+index 0000000..0ba3bd9
+--- /dev/null
++++ b/src/pr_auto_reviewer/ollama_client.py
+@@ -0,0 +1,109 @@
++"""Ollama client module for PR Auto Reviewer."""
++
++import json
++import requests
++from typing import Optional, Dict, Any
++from .config import Config
++
++class OllamaClient:
++    """Client for interacting with Ollama API."""
++
++    def __init__(self, config: Config) -> None:
++        """Initialize the Ollama client.
++
++        Args:
++            config: Configuration object.
++        """
++        self.config = config
++
++    def is_available(self) -> bool:
++        """Check if Ollama is available.
++
++        Returns:
++            True if Ollama is available, False otherwise.
++        """
++        try:
++            response = requests.get(
++                f"{self.config.ollama_host}/api/tags",
++                timeout=5
++            )
++            return response.status_code == 200
++        except requests.RequestException:
++            return False
++
++    def generate_review(self, diff_content: str, repo_structure: str = "") -> Optional[str]:
++        """Generate a review using Ollama.
++
++        Args:
++            diff_content: The diff content to review.
++            repo_structure: Optional repo file tree for context.
++
++        Returns:
++            Generated review or None if failed.
++        """
++        if not self.is_available():
++            return None
++
++        prompt = self._build_prompt(diff_content, repo_structure)
++
++        try:
++            response = requests.post(
++                f"{self.config.ollama_host}/api/generate",
++                json={
++                    "model": self.config.ollama_model or "code-review:v1",
++                    "prompt": prompt,
++                    "stream": False
++                },
++                timeout=60
++            )
++            response.raise_for_status()
++
++            data = response.json()
++            return data.get("response")
++        except (requests.RequestException, json.JSONDecodeError):
++            return None
++
++    def _build_prompt(self, diff_content: str, repo_structure: str = "") -> str:
++        """Build the prompt for Ollama.
++
++        Args:
++            diff_content: The diff content.
++            repo_structure: Optional repo file tree for context.
++
++        Returns:
++            Formatted prompt string.
++        """
++        structure_section = ""
++        if repo_structure:
++            structure_section = f"""
++
++## REPOSITORY STRUCTURE
++
++The following is the file tree of the repository. Use this to understand the codebase architecture and how files relate to each other.
++
++{repo_structure}
++
++"""
++
++        return f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
++{structure_section}## Code Changes:
++{diff_content}
++
++Please provide your review in the following format:
++
++## Summary
++Brief summary of the changes
++
++## Issues
++1. [severity] [type] [location]: description
++2. [severity] [type] [location]: description
++
++## Suggestions
++1. [severity] [type] [location]: description
++2. [severity] [type] [location]: description
++
++## Verdict
++approved | changes_requested | comment
++
++Provide detailed feedback for each issue and suggestion.
++"""

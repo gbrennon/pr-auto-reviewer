@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR introduces a new set of scripts to automate code review. The scripts are well-structured and follow best practices. A few minor improvements could be made to enhance robustness and clarity.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 2,
+  "head_sha": "255d969b93474550e222b2643ccf20cc4b467ce3"
+}

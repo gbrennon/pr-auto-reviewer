@@ -237,7 +237,7 @@ class TestReviewVerdictE2E:
 
         mock_post.assert_called_once()
         prompt_sent = mock_post.call_args[1]["json"]["prompt"]
-        assert "## Full file contents" in prompt_sent
+        assert "## Full File Contents" in prompt_sent
         assert "### scripts/deploy.sh" in prompt_sent
         assert "#!/usr/bin/env bash" in prompt_sent
 

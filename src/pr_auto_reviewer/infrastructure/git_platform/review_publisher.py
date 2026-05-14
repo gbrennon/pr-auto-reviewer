@@ -19,12 +19,45 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 
 logger = logging.getLogger(__name__)
 
-# [map] Verdict-to-platform-event mapping (adapter-private, never in domain)
 _VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
     ReviewVerdict.APPROVED: "APPROVED",
     ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
     ReviewVerdict.COMMENTED: "COMMENT",
 }
+
+
+def format_review_body(review: CodeReview) -> str:
+    """Render a CodeReview as a human-readable markdown string."""
+    lines: list[str] = []
+
+    lines.append("## AI Code Review")
+    lines.append("")
+    if review.summary:
+        lines.append(review.summary)
+        lines.append("")
+
+    verdict_text = review.verdict.value.replace("_", " ").title()
+    lines.append(f"**Verdict:** {verdict_text}")
+    lines.append("")
+
+    if review.items:
+        for item in review.items:
+            severity_label = item.severity.value.upper()
+            file_ref = f" (`{item.file_path}`)" if item.file_path else ""
+            lines.append(
+                f"### {item.number}. [{severity_label}] {item.category}{file_ref}"
+            )
+            lines.append("")
+            lines.append(item.description)
+            lines.append("")
+    else:
+        lines.append("*No critical issues found.*")
+        lines.append("")
+
+    if review.model_used:
+        lines.append(f"---\n*Reviewed by {review.model_used}*")
+
+    return "\n".join(lines)
 
 
 class GitReviewPublisherAdapter(ReviewPublisherPort):
@@ -38,27 +71,37 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
     ) -> None:
         self._client = client
         self._reviewer_username = reviewer_username
-        # The reviewer_token is available if ever needed for auth-scoped calls.
         self._reviewer_token = reviewer_token
 
-    # ------------------------------------------------------------------ [port]
     def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
-        """POST a formal review for *pr_id* with *review* verdict and body."""
-
-        # -- [map] verdict to platform event string --------------------------
         verdict_event = _VERDICT_TO_EVENT.get(
             review.verdict, "COMMENT"
         )
 
-        # -- [map] build markdown body from CodeReview -----------------------
-        body = self._format_body(review)
+        logger.info(
+            "Publishing review for PR %s: verdict=%s, event=%s, "
+            "items_count=%d, summary_len=%d",
+            pr_id,
+            review.verdict.value,
+            verdict_event,
+            len(review.items),
+            len(review.summary) if review.summary else 0,
+        )
 
-        # -- [http] request reviewer (non-fatal) -----------------------------
+        body = format_review_body(review)
+
+        logger.debug(
+            "Review body preview: %s", body[:500] if body else "empty",
+        )
+
         reviewers_path = (
-            f"/repos/{pr_id.repository}/pulls/{pr_id.number}/requested_reviewers"
+            f"/repos/{pr_id.repository}/pulls/{pr_id.number}"
+            f"/requested_reviewers"
         )
         try:
-            self._client.post(reviewers_path, {"reviewers": [self._reviewer_username]})
+            self._client.post(
+                reviewers_path, {"reviewers": [self._reviewer_username]},
+            )
         except Exception:
             logger.warning(
                 "Failed to request reviewer '%s' for %s (non-fatal)",
@@ -66,7 +109,6 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
                 pr_id,
             )
 
-        # -- [http] POST the formal review -----------------------------------
         reviews_path = (
             f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
         )
@@ -76,38 +118,6 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
                 {"event": verdict_event, "body": body},
             )
         except Exception as exc:
-            # -- [err] translate to domain exception -------------------------
             raise ReviewPublishError(
                 f"Failed to publish review for {pr_id}: {exc}"
             ) from exc
-
-    # -----------------------------------------------------------------------
-    # Private adapter utilities (not ports, not domain logic)
-    # -----------------------------------------------------------------------
-
-    @staticmethod
-    def _format_body(review: CodeReview) -> str:
-        """Render CodeReview as a human-readable markdown string."""
-        lines: list[str] = []
-
-        # Summary section
-        lines.append("## 🤖 AI Code Review")
-        lines.append("")
-        if review.summary:
-            lines.append(review.summary)
-            lines.append("")
-
-        # Items section
-        if review.items:
-            for item in review.items:
-                severity_label = item.severity.value.upper()
-                file_ref = f" (`{item.file_path}`)" if item.file_path else ""
-                lines.append(f"### {item.number}. [{severity_label}] {item.category}{file_ref}")
-                lines.append("")
-                lines.append(item.description)
-                lines.append("")
-
-        if review.model_used:
-            lines.append(f"---\n*Reviewed by {review.model_used}*")
-
-        return "\n".join(lines)

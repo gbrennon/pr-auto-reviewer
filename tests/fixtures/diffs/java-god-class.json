@@ -1,0 +1,8 @@
+{
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 7,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8",
+  "title": "feat: add OrderService with multi-concern handler"
+}

@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit validate validate-pr bootstrap review
+.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit validate validate-pr bootstrap review capture-fixture
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -11,6 +11,8 @@ install:
 
 start:
 	@bash $(SCRIPT_DIR)/start.sh
+	@echo "Starting PR Auto Reviewer..."
+	@python -m pr_auto_reviewer.cli watch-prs
 
 stop:
 	@bash $(SCRIPT_DIR)/stop.sh
@@ -53,3 +55,6 @@ bootstrap:
 
 review:
 	@bash $(SCRIPT_DIR)/watch-prs.sh -r $(REPO) -p $(PR) --once
+
+capture-fixture:
+	@bash $(SCRIPT_DIR)/capture-fixture.sh -r $(REPO) -p $(PR) 

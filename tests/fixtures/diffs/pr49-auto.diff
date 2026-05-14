@@ -1,0 +1,745 @@
+diff --git a/README.md b/README.md
+index c603182..de7547f 100644
+--- a/README.md
++++ b/README.md
+@@ -1,260 +1,59 @@
+ # PR Auto Reviewer
+ 
+-An AI-powered code review assistant that automatically reviews pull requests on Forgejo or Codeberg using local Ollama AI models. Think of it as having an extra team member who never sleeps and always provides constructive feedback on your PRs.
++AI-powered code review for Forgejo/Codeberg using local Ollama models.
+ 
+-## How It Works
++## Getting Started
+ 
+-This project sits between your Forgejo/Codeberg repositories and a local Ollama instance. Here's the flow:
++```bash
++git clone https://codeberg.org/gbrennon/pr-auto-reviewer.git
++cd pr-auto-reviewer
++```
+ 
+-1. **Watches for PRs** - Continuously polls your repositories for open pull requests
+-2. **Fetches the diff** - When a new or updated PR is found, it downloads the changes
+-3. **Sends to AI** - The diff is sent to your Ollama model for analysis
+-4. **Posts review** - A formal review (approve/request changes) is posted on the PR
++### 1. Environment Variables
+ 
+-## Why Use It
++Create `.env` in the project root:
+ 
+-- **Consistent feedback** - Every PR gets reviewed, not just when you have time
+-- **Privacy-first** - Your code never leaves your machine; it runs entirely locally
+-- **Learning tool** - The AI suggestions can help developers grow their skills
+-- **Catches basics** - Frees up human reviewers to focus on architecture and logic, not style nits
+-- **Multi-platform** - Works with both Forgejo (local/self-hosted) and Codeberg
++```bash
++cp .env.example .env
++```
+ 
+-## What It Does NOT Do
++Edit `.env` with required variables. See [Configuration](docs/configuration.md) for all options.
+ 
+-- It does not merge PRs automatically (verdict is informational only)
+-- It does not replace human code review
+-- It does not store your code anywhere
+-- It does not self-review (reviewer must be a different account than PR author)
++### 2. Install & Run
++
++```bash
++make install
++```
++
++## Quick Commands
++
++| Command | What it does |
++|---------|--------------|
++| `make test` | Run unit tests |
++| `make watch` | Run watcher once (manual mode) |
++| `make start` | Start the service |
++| `make stop` | Stop the service |
++| `make status` | Show service status |
++| `make restart` | Restart the service |
++| `make logs` | View service logs |
++| `make clean` | Reset state files |
++
++See [Scripts Reference](docs/scripts.md) for full command list.
+ 
+ ## Requirements
+ 
+-- **Ollama** - A local AI inference server. [Install from ollama.ai](https://ollama.ai)
+-- **Forgejo or Codeberg account** - Where your repositories live
+-- **systemd** - Required for the service (Linux systems with systemd)
+-- **Two API tokens** - One from your account, one from a reviewer account
++- **Ollama** - Local AI inference. [Install](https://ollama.ai)
++- **Forgejo or Codeberg** - Self-hosted or cloud
++- **Two API tokens** - Owner and reviewer accounts
++- **systemd** - For service management
+ 
+-## Supported Platforms
++See [Requirements](docs/requirements.md) for full details.
+ 
+-Currently supports:
+-- Forgejo (local and self-hosted)
+-- Codeberg
++## Learn More
+ 
+-Planned support (not yet available):
+-- GitHub
+-- GitLab
+-- Other Git-based platforms
+-
+-## Quick Start
+-
+-```bash
+-# Clone the project
+-git clone https://codeberg.org/gbrennon/pr-auto-reviewer.git
+-cd pr-auto-reviewer
+-
+-# Run the install script - creates config and sets up systemd service
+-bash scripts/install-service.sh
+-```
+-
+-The install script will:
+-1. Create `~/.config/pr-auto-reviewer/config` with the configuration template
+-2. Set up the systemd user service
+-3. Start the service immediately
+-
+-## Configuration
+-
+-Edit your config file at `~/.config/pr-auto-reviewer/config`:
+-
+-```bash
+-# === FORGEJO/CODEBERG ===
+-FORGEJO_TOKEN=           # Required - Your account token (scopes: repo, read:user)
+-FORGEJO_HOST=https://codeberg.org
+-
+-# === REVIEWER ===
+-FORGEJO_REVIEWER_TOKEN=  # Required - Different user's token (scopes: repo)
+-FORGEJO_REVIEWER_USERNAME=  # Required - Username of reviewer account
+-
+-# === OLLAMA ===
+-OLLAMA_HOST=http://localhost:11434
+-OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
+-POLL_INTERVAL=60
+-```
+-
+-### Generating Tokens
+-
+-1. **Owner token** (FORGEJO_TOKEN): Generate at https://codeberg.org/settings/applications
+-   - Scopes: `repo`, `read:user`
+-
+-2. **Reviewer token** (FORGEJO_REVIEWER_TOKEN): Generate from a different account
+-   - Scopes: `repo`
+-   - Get the username from the reviewer's account
+-
+-### Switching Between Forgejo and Codeberg
+-
+-By default, the app connects to Codeberg. To use a local Forgejo instance:
+-
+-```bash
+-FORGEJO_HOST=http://forgejo.local:3000
+-```
+-
+-Set `FORGEJO_HOST` to your Forgejo instance URL in your config file. The API path (`/api/v1`) is automatically appended.
+-
+-## Usage
+-
+-### Starting the Watcher
+-
+-```bash
+-# Install and start the service (creates config, sets up systemd)
+-bash scripts/install-service.sh
+-
+-# Or run manually without installing
+-bash scripts/watch-prs.sh
+-```
+-
+-### Common Options
+-
+-```bash
+-# Watch specific repo instead of all repos
+-bash scripts/watch-prs.sh -r owner/repo
+-
+-# Custom poll interval (default is 60 seconds)
+-bash scripts/watch-prs.sh -i 30
+-
+-# Single run (good for testing)
+-bash scripts/watch-prs.sh --once
+-
+-# Check service status
+-systemctl --user status pr-ai-auto-reviewer.service
+-
+-# Stop the service
+-systemctl --user stop pr-ai-auto-reviewer.service
+-
+-# View logs
+-journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
+-```
+-
+-## Starting on Boot
+-
+-By default, the service starts when you log in. To start automatically at boot (even without an active login session):
+-
+-```bash
+-loginctl enable-linger $USER
+-```
+-
+-## The Review Output
+-
+-When the AI reviews a PR, it posts a formal review with verdict:
+-
+-- **Approved** - The changes look good
+-- **Changes Requested** - There are issues that should be addressed
+-
+-The review includes:
+-- Issues found (with severity: HIGH, MEDIUM, LOW)
+-- Suggestions for improvement
+-- Praise for good practices
+-- Summary
+-
+-Example:
+-```markdown
+-## AI Code Review
+-
+-**Verdict:** Approved
+-
+-### Issues
+-- [MEDIUM] [architecture] src/auth.rs:45: Consider using constant-time comparison
+-
+-### Suggestions
+-- Consider adding a unit test for the validate_email function
+-
+-### Praise
+-- Clean separation of concerns in the router
+-
+-**Summary:** Solid implementation. Ready to merge once the security concern is addressed.
+-
+----
+-*Review by code-review via PR AI Auto-Reviewer*
+-```
+-
+-## Hot Reload
+-
+-You can change settings without restarting the service. Edit `~/.config/pr-auto-reviewer/config` and the service will reload within 10 seconds. You can also trigger a reload:
+-
+-```bash
+-# Trigger config reload
+-pkill -HUP -f "watch-prs.sh"
+-```
+-
+-## Setting Up the AI Model
+-
+-Check what models you have available:
+-
+-```bash
+-# List available models
+-ollama list
+-
+-# Pull a model if needed (example)
+-ollama pull code-review
+-```
+-
+-## Manual/Dev Mode
+-
+-For development or testing without installing the service, you can use `.env` in the repo:
+-
+-```bash
+-# Create .env in repo root
+-cp .env.example .env
+-# Edit .env with your tokens
+-
+-# Run manually
+-bash scripts/watch-prs.sh --once
+-```
+-
+-The watcher will use `.env` from the repo when no user config exists at `~/.config/pr-auto-reviewer/config`.
+-
+-## Project Structure
+-
+-```
+-pr-auto-reviewer/
+-├── scripts/
+-│   ├── bootstrap.sh          # Entry point - starts everything
+-│   ├── install-service.sh    # Install as systemd service
+-│   ├── watch-prs.sh          # Main daemon that watches and reviews
+-│   ├── reload.sh             # Trigger config reload
+-│   ├── autostart/            # Service manager
+-│   └── lib/                  # Shared helper scripts
+-├── .env.example              # Configuration template (for manual mode)
+-└── runner-data/              # State storage (reviewed PRs)
+-```
+-
+-## Troubleshooting
+-
+-### "No repos found"
+-Your token might be missing the `read:user` scope.
+-
+-Regenerate your token at https://codeberg.org/settings/applications with both `repo` and `read:user` scopes.
+-
+-### "Self-review detected"
+-The reviewer token belongs to the same account as the PR author.
+-
+-Use a different account's token for `FORGEJO_REVIEWER_TOKEN`.
+-
+-### "Failed to post review"
+-- Check that `FORGEJO_REVIEWER_TOKEN` is valid and has `repo` scope
+-- Verify `FORGEJO_REVIEWER_USERNAME` is correct
+-
+-### "Ollama not available"
+-Make sure Ollama is running:
+-```bash
+-ollama serve
+-# Or check it's running
+-curl http://localhost:11434/api/tags
+-```
+-
+-### Service won't start
+-Check systemd logs:
+-```bash
+-journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
+-```
+-
+-## License
+-
+-MIT
++- [Configuration](docs/configuration.md) - All env vars explained
++- [Scripts Reference](docs/scripts.md) - Available commands
++- [Features](docs/features.md) - What's implemented
++- [Structure](docs/structure.md) - How it works
++- [Troubleshooting](docs/troubleshooting.md) - Common issues
++- [Testing](docs/HOWTO-test.md) - How to test changes
+\ No newline at end of file
+diff --git a/docs/HOWTO-test.md b/docs/HOWTO-test.md
+new file mode 100644
+index 0000000..86533a1
+--- /dev/null
++++ b/docs/HOWTO-test.md
+@@ -0,0 +1,183 @@
++# How to Test: Issue Creation from Review Comments
++
++This document describes how to validate the new feature that allows creating issues from review suggestions via user commands.
++
++## Overview
++
++When the AI posts a review with verdict **Approved**, users can reply with a command to create issues for specific suggestions.
++
++### Supported Command Syntax
++
++| Command | Creates Issues For |
++|---------|------------------|
++| `create issue for 1, 2` | items 1 and 2 |
++| `issue 1, 2` | items 1 and 2 |
++| `create issue for 1` | item 1 only |
++| `issue 3` | item 3 only |
++
++> **Note:** This feature is designed to also work with GitHub in the future - the command syntax is platform-agnostic.
++
++## Prerequisites
++
++1. A running PR Auto Reviewer setup (or run manually with `bash scripts/watch-prs.sh`)
++2. Access to a test repository with at least one open PR
++3. Tokens configured properly
++
++## Testing Steps
++
++### Step 1: Create a Test PR with Reviewable Changes
++
++1. Go to your test repository on Codeberg/Forgejo
++2. Create a PR with sufficient code changes (for good AI review suggestions)
++
++### Step 2: Run the Watcher
++
++Run the watcher in single-cycle mode:
++
++```bash
++cd /home/gbrennon/Documents/repos/gbrennon/pr-auto-reviewer
++bash scripts/watch-prs.sh -r owner/repo --once
++```
++
++**Expected output:**
++```
++=== Cycle #1 ===
++Repo: owner/repo
++  PR #N: [PR title]
++    -> NEW/UPDATED, analyzing...
++    -> Sending to Ollama...
++    -> Posting review to Codeberg...
++    -> Verdict: Approved
++    -> Review (approved) submitted!
++    -> State updated
++```
++
++### Step 3: Verify Review has Numbered Items
++
++Check the PR review on Codeberg. You should see:
++
++```markdown
++## AI Code Review
++
++**Verdict:** Approved
++
++### Issues
++1. [MEDIUM] [security] src/auth.rs:45: Consider using constant-time comparison
++
++### Suggestions
++2. [file:src/main.rs:10] Consider adding a unit test...
++```
++
++Note the numbers: Issue #1, Suggestion #2
++
++### Step 4: Post a Command Comment
++
++On the PR, add a comment with:
++```
++create issue for 1, 2
++```
++
++### Step 5: Run Watcher Again
++
++```bash
++bash scripts/watch-prs.sh -r owner/repo --once
++```
++
++**Expected output:**
++```
++=== Cycle #1 ===
++Repo: owner/repo
++  PR #N: [PR title]
++    -> already reviewed (SHA: ...)
++    -> Checking for issue creation commands...
++    -> Found command in comment X: create issue for 1,2
++    -> Created issue #123 for item 1
++    -> Created issue #124 for item 2
++```
++
++### Step 6: Verify Issues Created
++
++1. Check the Issues page - you should see new issues with titles like:
++   - `[PR #N] 1: [MEDIUM] [security] src/auth.rs:45: Consider using constant-time comparison`
++   - `[PR #N] 2: Consider adding a unit test...`
++
++2. Check the PR comments - the app should have replied with:
++   - `Created issue(s): #123, #124 from your request.`
++
++## Test Scenarios
++
++### Scenario 1: Invalid Item Numbers
++
++**Setup:** Post comment `create issue for 99`
++
++**Expected:**
++- App replies with error about item 99 not existing
++- No issues created
++
++### Scenario 2: Changes Requested Verdict
++
++**Setup:** Have a review with `changes_requested` verdict
++
++**Expected:**
++- Command `create issue for 1` should be ignored
++- Log shows: `Skipping command check (verdict: changes_requested)`
++
++### Scenario 3: Duplicate Command
++
++**Setup:** Post the same command twice
++
++**Expected:**
++- First command creates issues
++- Second command is silently ignored (tracked in state)
++
++### Scenario 4: Mixed Valid/Invalid
++
++**Setup:** Post `create issue for 1, 99, 2`
++
++**Expected:**
++- Error about item 99
++- Issues created for items 1 and 2
++- App replies with error about invalid items
++
++## Debugging
++
++### Enable Verbose Logging
++
++Add `-x` to see all commands:
++
++```bash
++bash -x scripts/watch-prs.sh -r owner/repo --once 2>&1 | less
++```
++
++### Check State File
++
++```bash
++cat runner-data/pr-reviews.json | python3 -m json.tool
++```
++
++### Manual API Test
++
++List issues:
++```bash
++curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
++  "https://codeberg.org/api/v1/repos/owner/repo/issues" | jq
++```
++
++## Cleanup
++
++Reset test state for a PR:
++
++```bash
++# Edit runner-data/pr-reviews.json to remove the entry, or:
++python3 -c "
++import json
++with open('runner-data/pr-reviews.json') as f:
++    d = json.load(f)
++# Remove specific entry
++key = 'owner/repo/N'
++if key in d.get('reviewed', {}):
++    del d['reviewed'][key]
++    with open('runner-data/pr-reviews.json', 'w') as f:
++        json.dump(d, f)
++"
++```
+\ No newline at end of file
+diff --git a/docs/configuration.md b/docs/configuration.md
+new file mode 100644
+index 0000000..839946d
+--- /dev/null
++++ b/docs/configuration.md
+@@ -0,0 +1,52 @@
++# Configuration
++
++## Environment Variables
++
++All configuration via environment variables. Two ways to set:
++
++1. **Project `.env`** - For manual/dev mode
++2. **User config** - `~/.config/pr-auto-reviewer/config` for service mode
++
++## Required Variables
++
++| Variable | Description |
++|----------|-------------|
++| `FORGEJO_TOKEN` | Your account API token. Scopes: `repo`, `read:user` |
++| `FORGEJO_HOST` | Platform URL. E.g., `https://codeberg.org` or `http://forgejo:3000` |
++| `FORGEJO_REVIEWER_TOKEN` | Different account's token. Scopes: `repo` |
++| `FORGEJO_REVIEWER_USERNAME` | Username of reviewer account |
++| `OLLAMA_MODEL` | Model name to use for reviews |
++
++## Optional Variables
++
++| Variable | Default | Description |
++|----------|---------|-------------|
++| `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
++| `POLL_INTERVAL` | `60` | Seconds between PR checks |
++| `REPO_ROOT` | `.` | Project root directory |
++
++## Generating Tokens
++
++### Owner Token
++1. Go to platform settings → Applications
++2. Create new token with scopes: `repo`, `read:user`
++3. Copy to `FORGEJO_TOKEN`
++
++### Reviewer Token
++1. Create account (different from owner)
++2. Go to platform settings → Applications
++3. Create token with scope: `repo`
++4. Copy to `FORGEJO_REVIEWER_TOKEN`
++5. Set `FORGEJO_REVIEWER_USERNAME` to account name
++
++## Example .env
++
++```bash
++FORGEJO_TOKEN=your_owner_token_here
++FORGEJO_HOST=https://codeberg.org
++FORGEJO_REVIEWER_TOKEN=your_reviewer_token_here
++FORGEJO_REVIEWER_USERNAME=code-reviewer
++OLLAMA_MODEL=code-review
++OLLAMA_HOST=http://localhost:11434
++POLL_INTERVAL=60
++```
+\ No newline at end of file
+diff --git a/docs/requirements.md b/docs/requirements.md
+new file mode 100644
+index 0000000..535dba5
+--- /dev/null
++++ b/docs/requirements.md
+@@ -0,0 +1,46 @@
++# Requirements
++
++## Software
++
++- **Ollama** - Local AI inference server. Install from https://ollama.ai
++- **systemd** - For service management on Linux
++- **curl** - For API calls
++- **python3** - For JSON processing
++- **bash** - Shell scripts
++
++## Hardware
++
++- **RAM**: 8GB+ recommended (depends on Ollama model)
++- **Storage**: Minimal (state files only)
++- **CPU**: Depends on Ollama model used
++
++## Platform Support
++
++| Platform | Status |
++|----------|--------|
++| Codeberg | Tested |
++| Forgejo | Tested |
++| Gitea | Should work |
++
++## Accounts
++
++### Owner Account
++- Generate token at platform settings
++- Scopes: `repo`, `read:user`
++
++### Reviewer Account
++- Different account from owner
++- Generate token at platform settings  
++- Scopes: `repo`
++- Username required for review attribution
++
++## Tokens
++
++Generate tokens from:
++
++- **Codeberg**: https://codeberg.org/settings/applications
++- **Forgejo**: `{forgejo_host}/user/settings/applications`
++
++Required scopes:
++- Owner: `repo`, `read:user`
++- Reviewer: `repo`
+\ No newline at end of file
+diff --git a/docs/scripts.md b/docs/scripts.md
+new file mode 100644
+index 0000000..1cadd2c
+--- /dev/null
++++ b/docs/scripts.md
+@@ -0,0 +1,59 @@
++# Scripts Reference
++
++## Make Commands
++
++Run from project root:
++
++| Command | Description |
++|---------|-------------|
++| `make test` | Run unit tests |
++| `make install` | Install service and configure |
++| `make start` | Start the watcher service |
++| `make stop` | Stop the watcher service |
++| `make status` | Show service status |
++| `make restart` | Restart the service |
++| `make logs` | Show service logs (follow mode) |
++| `make watch` | Run watcher once manually |
++| `make clean` | Reset state files |
++| `make install-bashunit` | Install bashunit testing framework |
++
++## Shell Scripts
++
++### Installation
++
++- `scripts/install-service.sh` - Install and configure systemd service
++
++### Running
++
++- `scripts/watch-prs.sh` - Main daemon, watches and reviews PRs
++- `scripts/watch.sh` - Alias for watch-prs.sh --once
++
++### Service Control
++
++- `scripts/start.sh` - Start systemd service
++- `scripts/stop.sh` - Stop systemd service
++- `scripts/status.sh` - Check service status
++- `scripts/restart.sh` - Restart service
++- `scripts/logs.sh` - View logs
++
++### Utilities
++
++- `scripts/clean.sh` - Clear state files
++- `scripts/test-unit.sh` - Run unit tests
++- `scripts/install-bashunit.sh` - Install testing framework
++
++### Issue Creation
++
++- `scripts/create-issues-from-pr.sh` - Create issues from PR review comments
++
++## Options
++
++### watch-prs.sh Options
++
++```bash
++-r owner/repo  # Watch specific repo
++-p PR_NUMBER   # Process specific PR
++-i SECONDS    # Poll interval (default: 60)
++--once        # Run single cycle
++--list-items  # Show review items without posting
++```
+\ No newline at end of file
+diff --git a/docs/troubleshooting.md b/docs/troubleshooting.md
+new file mode 100644
+index 0000000..f7ea763
+--- /dev/null
++++ b/docs/troubleshooting.md
+@@ -0,0 +1,60 @@
++# Troubleshooting
++
++## Common Issues
++
++### "No repos found"
++
++**Cause:** Missing `read:user` scope on token.
++
++**Fix:** Regenerate token with both `repo` and `read:user` scopes.
++
++### "Self-review detected"
++
++**Cause:** Reviewer token belongs to same account as PR author.
++
++**Fix:** Use a different account's token for `FORGEJO_REVIEWER_TOKEN`.
++
++### "Failed to post review"
++
++**Cause:** Invalid reviewer token or wrong username.
++
++**Fix:**
++- Verify `FORGEJO_REVIEWER_TOKEN` has `repo` scope
++- Check `FORGEJO_REVIEWER_USERNAME` is correct
++
++### "Ollama not available"
++
++**Cause:** Ollama not running or wrong host.
++
++**Fix:**
++```bash
++# Check Ollama is running
++curl http://localhost:11434/api/tags
++
++# Or start Ollama
++ollama serve
++```
++
++### Service won't start
++
++**Fix:**
++```bash
++# Check logs
++journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
++
++# Verify config
++cat ~/.config/pr-auto-reviewer/config
++```
++
++### Token Generation
++
++**Codeberg:** https://codeberg.org/settings/applications
++
++**Forgejo:** `{your-host}/user/settings/applications`
++
++## Getting Help
++
++Check logs for detailed error messages:
++```bash
++make logs
++```
+\ No newline at end of file

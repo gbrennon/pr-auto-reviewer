@@ -1,0 +1,1213 @@
+diff --git a/Makefile b/Makefile
+index 58ad71e..8a0d7cb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,33 +1,10 @@
+-.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit
++.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit validate validate-pr bootstrap review
+ 
+-SHELL := /usr/bin/env bash
++SHELL := /usr/bin/bash
+ SCRIPT_DIR := scripts
+-REPO_ROOT := .
+-
+-BASHUNIT := ./lib/bashunit
+ 
+ help:
+-	@echo "PR Auto Reviewer - Makefile"
+-	@echo ""
+-	@echo "Usage:"
+-	@echo "  make install         Install and configure the service"
+-	@echo "  make start           Start the watcher service"
+-	@echo "  make stop           Stop the watcher service"
+-	@echo "  make status         Show service status"
+-	@echo "  make restart        Restart the service"
+-	@echo "  make logs           Show service logs (follow)"
+-	@echo "  make watch          Run watcher once (manual mode)"
+-	@echo "  make test           Run unit tests"
+-	@echo "  make issues         Create issues from PR commands"
+-	@echo "  make list-items     List review items from PR"
+-	@echo "  make clean          Clean state files"
+-	@echo "  make install-bashunit  Install bashunit testing framework"
+-	@echo ""
+-	@echo "Examples:"
+-	@echo "  make test"
+-	@echo "  make watch"
+-	@echo "  make issues REPO=owner/repo PR=8"
+-	@echo "  make list-items REPO=owner/repo PR=8"
++	@bash $(SCRIPT_DIR)/help.sh
+ 
+ install:
+ 	@bash $(SCRIPT_DIR)/install-service.sh
+@@ -53,14 +30,26 @@ watch:
+ test:
+ 	@bash $(SCRIPT_DIR)/test-unit.sh
+ 
++clean:
++	@bash $(SCRIPT_DIR)/clean.sh
++
+ issues:
+ 	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
+ 
+ list-items:
+ 	@bash $(SCRIPT_DIR)/list-items.sh
+ 
+-clean:
+-	@bash $(SCRIPT_DIR)/clean.sh
+-
+ install-bashunit:
+ 	@bash $(SCRIPT_DIR)/install-bashunit.sh
++
++validate:
++	@bash $(SCRIPT_DIR)/validate.sh -d $(DIFF) $(if $(OUTPUT),-o $(OUTPUT)) $(if $(REPO),-r $(REPO))
++
++validate-pr:
++	@bash $(SCRIPT_DIR)/validate-pr.sh -r $(REPO) -p $(PR) $(if $(OUTPUT),-o $(OUTPUT)) $(if $(BRANCH),-b $(BRANCH))
++
++bootstrap:
++	@bash $(SCRIPT_DIR)/bootstrap.sh
++
++review:
++	@bash $(SCRIPT_DIR)/watch-prs.sh -r $(REPO) -p $(PR) --once
+\ No newline at end of file
+diff --git a/scripts/help.sh b/scripts/help.sh
+new file mode 100755
+index 0000000..4c30f83
+--- /dev/null
++++ b/scripts/help.sh
+@@ -0,0 +1,31 @@
++#!/usr/bin/bash
++# help.sh — Show help for PR Auto Reviewer
++
++cat <<EOF
++PR Auto Reviewer - Makefile
++
++Usage:
++  make install         Install and configure the service
++  make start           Start the watcher service
++  make stop           Stop the watcher service
++  make status         Show service status
++  make restart        Restart the service
++  make logs           Show service logs (follow)
++  make watch          Run watcher once (manual mode)
++  make test           Run unit tests
++  make issues         Create issues from PR commands
++  make list-items     List review items from PR
++  make clean          Clean state files
++  make install-bashunit  Install bashunit testing framework
++  make validate DIFF=<file> [OUTPUT=<file>] [REPO=<path>]  Generate local code review (no Codeberg API)
++  make validate-pr REPO=<owner/repo> PR=<n> [OUTPUT=<file>] [BRANCH=<branch>]  Generate review from Codeberg PR
++
++Examples:
++  make test
++  make watch
++  make issues REPO=owner/repo PR=8
++  make list-items REPO=owner/repo PR=8
++  make validate DIFF=changes.patch
++  make validate DIFF=changes.patch REPO=/path/to/repo
++  make validate-pr REPO=owner/repo PR=42
++EOF
+\ No newline at end of file
+diff --git a/scripts/lib/build_comment.py b/scripts/lib/build_comment.py
+index f762b07..d9e5879 100644
+--- a/scripts/lib/build_comment.py
++++ b/scripts/lib/build_comment.py
+@@ -45,19 +45,18 @@ def determine_verdict(review):
+     Returns:
+         'approved' if no critical/high issues
+         'changes_requested' if there are critical/high issues
++        'comment' if only medium/low issues or suggestions
+     """
+-    # Check for explicit verdict in response
+     verdict = review.get("verdict", "").lower()
+     if verdict in ("approve", "approved"):
+         return "approved"
+     if verdict in ("request_changes", "changes_requested"):
+         return "changes_requested"
+     if verdict == "comment":
+-        return "comment"
++        return "approved"
+ 
+     # Fallback: determine from issue severity
+     issues = review.get("issues", [])
+-
+     for issue in issues:
+         severity = issue.get("severity", "").lower()
+         if severity in ("critical", "high"):
+@@ -66,14 +65,19 @@ def determine_verdict(review):
+     return "approved"
+ 
+ 
++def code_block(code: str, lang: str = "") -> str:
++    """Render a fenced code block at column 0, expanding escaped newlines."""
++    # Expand escaped newlines from JSON string values
++    code = code.replace("\\n", "\n").replace("\\t", "    ")
++    return f"```{lang}\n{code}\n```\n"
++
++
+ def main():
+     review_json = os.environ.get("REVIEW_JSON", "")
+ 
+-    # Try to extract and parse JSON from the response
+     review = extract_json(review_json)
+ 
+     if review is None:
+-        # If no valid JSON found, treat the whole thing as summary
+         review = {"summary": review_json, "issues": [], "suggestions": [], "praise": []}
+ 
+     issues = review.get("issues", [])
+@@ -83,7 +87,6 @@ def main():
+     verdict_reason = review.get("verdict_reason", "")
+     model = os.environ.get("OLLAMA_MODEL", "ollama")
+ 
+-    # Determine verdict
+     verdict = determine_verdict(review)
+ 
+     if verdict == "approved":
+@@ -93,14 +96,14 @@ def main():
+     else:
+         verdict_text = "Comment"
+ 
+-    body = f"## AI Code Review\n\n"
++    body = "## AI Code Review\n\n"
+     body += f"**Verdict:** {verdict_text}\n"
+     if verdict_reason:
+         body += f"**Reason:** {verdict_reason}\n"
+     body += "\n"
+ 
+     if issues:
+-        body += "### Issues\n"
++        body += "### Issues\n\n"
+         for idx, i in enumerate(issues, 1):
+             sev = i.get("severity", "medium").upper()
+             typ = i.get("type", "")
+@@ -110,19 +113,26 @@ def main():
+             current_code = i.get("current_code", "")
+             suggested_fix = i.get("suggested_fix", "")
+ 
+-            location = f"{file}:{line}" if file and line else (file or line or "?")
++            location = f"{file}:{line}" if file and line else (file or str(line) or "?")
+             type_tag = f" [{typ}]" if typ else ""
+-            body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
++
++            body += f"**{idx}. [{sev}]{type_tag} `{location}`**\n\n"
++            body += f"{desc}\n\n"
++
+             if current_code:
+-                body += f"    `````\n    {current_code}\n    `````\n"
++                body += "_Current:_\n\n"
++                body += code_block(current_code)
++                body += "\n"
++
+             if suggested_fix:
+-                body += (
+-                    f"    **Suggested:**\n    `````\n    {suggested_fix}\n    `````\n"
+-                )
++                body += "_Suggested:_\n\n"
++                body += code_block(suggested_fix)
++                body += "\n"
++
+         body += "\n"
+ 
+     if suggestions:
+-        body += "### Suggestions\n"
++        body += "### Suggestions\n\n"
+         start_idx = len(issues) + 1
+         for idx, s in enumerate(suggestions, start_idx):
+             file = s.get("file", "")
+@@ -131,22 +141,29 @@ def main():
+             current_code = s.get("current_code", "")
+             suggested_code = s.get("suggested_code", "")
+ 
+-            location = f"{file}:{line}" if file and line else (file or line or "?")
+-            body += f"{idx}. {location}: {desc}\n"
++            location = f"{file}:{line}" if file and line else (file or str(line) or "?")
++
++            body += f"**{idx}. `{location}`**\n\n"
++            body += f"{desc}\n\n"
++
+             if current_code:
+-                body += f"    `````\n    {current_code}\n    `````\n"
++                body += "_Current:_\n\n"
++                body += code_block(current_code)
++                body += "\n"
++
+             if suggested_code:
+-                body += (
+-                    f"    **Suggested:**\n    `````\n    {suggested_code}\n    `````\n"
+-                )
++                body += "_Suggested:_\n\n"
++                body += code_block(suggested_code)
++                body += "\n"
++
+         body += "\n"
+ 
+     if praise:
+-        body += "### Praise\n"
++        body += "### Praise\n\n"
+         for p in praise:
+             file = p.get("file", "")
+             desc = p.get("description", "")
+-            body += f"- {file}: {desc}\n" if file else f"- {desc}\n"
++            body += f"- `{file}`: {desc}\n" if file else f"- {desc}\n"
+         body += "\n"
+ 
+     if summary:
+@@ -154,7 +171,6 @@ def main():
+ 
+     body += f"\n---\n*Review by {model} via local Forgejo*"
+ 
+-    # Print verdict to stdout for capture by caller
+     print(verdict)
+     print(body)
+ 
+diff --git a/scripts/lib/build_prompt.py b/scripts/lib/build_prompt.py
+index 6f5b75c..6d798d6 100644
+--- a/scripts/lib/build_prompt.py
++++ b/scripts/lib/build_prompt.py
+@@ -1,96 +1,47 @@
+ #!/usr/bin/env python3
+-"""Build the Ollama prompt for code review."""
++"""Build the Ollama user prompt for code review.
++
++Sends ONLY per-PR context (diff, repo structure, project type hint,
++conventions). The model's SYSTEM prompt (from the Modelfile) contains
++all review behavior, persona, and output format instructions.
++"""
+ 
+-import sys
+ import os
+ 
+ diff = os.environ.get("DIFF_CONTENT", "")
++repo_structure = os.environ.get("REPO_STRUCTURE", "")
++architecture_hint = os.environ.get("ARCHITECTURE_HINT", "")
++conventions = os.environ.get("CONVENTIONS", "")
++file_contents = os.environ.get("FILE_CONTENTS", "")
+ 
+-prompt = f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
++sections = []
+ 
+-## REVIEW PRIORITY
++if architecture_hint:
++    sections.append(f"PROJECT TYPE: {architecture_hint}\n")
+ 
+-1. **Critical Issues** (must fix):
+-   - Security vulnerabilities
+-   - Memory leaks or resource leaks
+-   - Race conditions
+-   - Unhandled exceptions
+-   - Null pointer dereferences
++if repo_structure:
++    sections.append(f"""REPOSITORY STRUCTURE
+ 
+-2. **Architectural Issues** (should fix):
+-   - SOLID violations
+-   - Architectural boundary breaches
+-   - God objects
+-   - Tight coupling without abstraction
++The following is the file tree of the repository. Use this to understand
++the codebase architecture and how files relate to each other.
+ 
+-3. **Code Quality** (consider fixing):
+-   - Naming conventions
+-   - Code duplication
+-   - Missing documentation
+-   - Inefficient algorithms
++{repo_structure}
++""")
+ 
+-4. **Suggestions** (optional):
+-   - Code style preferences
+-   - Minor optimizations
+-   - Cosmetic improvements
++if file_contents:
++    sections.append(f"""FILES
+ 
+-## RESPONSE FORMAT
++The following is the current content of files that are being changed:
+ 
+-Output ONLY valid JSON (no markdown, no explanation):
++{file_contents}
++""")
+ 
+-{{
+-  "verdict": "approve|comment|request_changes",
+-  "verdict_reason": "short explanation for the verdict",
+-  "issues": [
+-    {{"file": "path/to/file", "line": 123, "current_code": "EXACT problematic code (max 3 lines)", "severity": "critical|high|medium|low", "type": "security|architecture|solid|test|quality", "description": "What's wrong and WHY it matters", "suggested_fix": "EXACT code to replace current_code"}}
+-  ],
+-  "suggestions": [
+-    {{"file": "path/to/file", "line": 456, "current_code": "EXACT code to improve (max 3 lines)", "suggested_code": "EXACT improved version", "description": "Why this change improves the code"}}
+-  ],
+-  "praise": [
+-    {{"file": "path/to/file", "description": "what was done well"}}
+-  ],
+-  "summary": "2-3 sentence overall assessment of the PR"
+-}}
++if conventions:
++    sections.append(f"""PROJECT CONVENTIONS
+ 
+-## MANDATORY OUTPUT REQUIREMENTS
++{conventions}
++""")
+ 
+-Every issue and suggestion MUST include both current_code AND suggested_code/suggested_fix. If you cannot provide both, omit the issue entirely. Do NOT output generic descriptions without actual code.
++sections.append(f"DIFF:\n\n{diff}")
+ 
+-### CORRECT OUTPUT (will be accepted):
+-```json
+-{{
+-  "file": "src/utils/helper.py",
+-  "line": 45,
+-  "current_code": "if status == 200 {{ return true; }}",
+-  "suggested_fix": "const HTTP_OK = 200; if (status == HTTP_OK) {{ return true; }}",
+-  "description": "Magic number 200 makes intent unclear - future readers won't know why specifically 200"
+-}}
+-```
+-
+-### INCORRECT OUTPUT (will be rejected):
+-```json
+-{{
+-  "file": "src/utils/helper.py",
+-  "line": 45,
+-  "description": "Use a constant instead of magic number"
+-}}
+-```
+-
+-## GUIDELINES
+-
+-- Be specific: cite file names, line numbers, and show EXACT code
+-- Explain WHY something is an issue, not just WHAT is wrong
+-- Provide actionable feedback: show the exact code to fix it
+-- Be constructive: acknowledge good patterns alongside problems
+-- Focus on what matters: don't nitpick style when architecture is wrong
+-- Prioritize: critical issues first, then architectural, then quality
+-- No emojis in any output
+-- Reply in English only
+-- NEVER suggest adding comments. Instead, suggest using expressive variable/function names, extracting logic into well-named functions, or restructuring code to make it self-documenting
+-- NEVER suggest adding explanatory comments. Code should be self-explanatory through good naming and structure
+-
+-DIFF:
+-{diff}"""
+-
+-print(prompt)
++print("\n".join(sections))
+diff --git a/scripts/lib/forgejo-api.sh b/scripts/lib/forgejo-api.sh
+index c6c4a82..b0f47e3 100644
+--- a/scripts/lib/forgejo-api.sh
++++ b/scripts/lib/forgejo-api.sh
+@@ -172,3 +172,30 @@ forgejo_post_comment() {
+   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
+     "{\"body\":${escaped_body}}" 2>/dev/null || true
+ }
++
++forgejo_get_repo_tree() {
++  local repo="$1"
++  local ref="${2:-main}"
++  
++  forgejo_api_get "/repos/${repo}/git/trees/${ref}?recursive=true" | python3 -c "
++import sys, json
++try:
++    data = json.load(sys.stdin)
++    tree = data.get('tree', [])
++    for entry in tree:
++        path = entry.get('path', '')
++        entry_type = 'dir' if entry.get('type') == 'tree' else 'file'
++        suffix = '/' if entry_type == 'dir' else ''
++        print(f'{path}{suffix}')
++except Exception:
++    pass
++" 2>/dev/null || true
++}
++
++forgejo_get_file_content() {
++  local repo="$1"
++  local ref="${2:-main}"
++  local path="$3"
++  
++  forgejo_api_get "/repos/${repo}/raw/${ref}/${path}" 2>/dev/null || true
++}
+diff --git a/scripts/lib/generate_repo_structure.py b/scripts/lib/generate_repo_structure.py
+new file mode 100755
+index 0000000..e330bb0
+--- /dev/null
++++ b/scripts/lib/generate_repo_structure.py
+@@ -0,0 +1,234 @@
++#!/usr/bin/env python3
++"""Generate a repo structure tree from a local directory.
++
++Outputs a tree similar to `tree` but filtering out common non-source directories.
++Used by validate.sh to provide codebase context to the AI reviewer.
++
++Supports --detect-type to output a project type hint instead of the tree.
++"""
++
++import os
++import sys
++
++SKIP_DIRS = {
++    ".git", "__pycache__", "node_modules", ".venv", "venv", "env",
++    ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist",
++    "build", ".eggs", ".nox", "coverage", "htmlcov", ".hg", ".svn",
++    ".idea", ".vscode", ".vs", "target", "vendor", "vendor-bin",
++    "bower_components", ".next", ".nuxt", ".cache",
++}
++
++SKIP_EXTENSIONS = {
++    ".pyc", ".pyo", ".so", ".dylib", ".dll", ".exe", ".o", ".a",
++    ".class", ".jar", ".war", ".ear", ".woff", ".woff2", ".eot",
++    ".ttf", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
++    ".mp3", ".mp4", ".avi", ".mov", ".pdf", ".zip", ".tar", ".gz",
++    ".bz2", ".xz", ".7z", ".rar", ".db", ".sqlite", ".lock",
++}
++
++MAX_DEPTH = 6
++MAX_FILES = 300
++
++LAYER_INDICATORS = {
++    "domain", "application", "infrastructure", "adapters", "ports",
++    "presentation", "use_cases", "usecases", "services", "repositories",
++    "handlers", "controllers", "persistence",
++}
++
++
++def should_skip_dir(name):
++    return name in SKIP_DIRS or name.startswith(".")
++
++
++def should_skip_file(name):
++    _, ext = os.path.splitext(name)
++    return ext.lower() in SKIP_EXTENSIONS
++
++
++def generate_tree(root, prefix="", depth=0, file_count=[0]):
++    if depth > MAX_DEPTH or file_count[0] > MAX_FILES:
++        return
++
++    try:
++        entries = sorted(os.listdir(root))
++    except PermissionError:
++        return
++
++    dirs = []
++    files = []
++    for entry in entries:
++        path = os.path.join(root, entry)
++        if os.path.isdir(path):
++            if not should_skip_dir(entry):
++                dirs.append(entry)
++        else:
++            if not should_skip_file(entry):
++                files.append(entry)
++
++    items = dirs + files
++    for i, item in enumerate(items, 1):
++        is_last = i == len(items)
++        connector = "└── " if is_last else "├── "
++        child_prefix = "    " if is_last else "│   "
++
++        path = os.path.join(root, item)
++        if os.path.isdir(path):
++            print(f"{prefix}{connector}{item}/")
++            generate_tree(path, prefix + child_prefix, depth + 1, file_count)
++        else:
++            print(f"{prefix}{connector}{item}")
++            file_count[0] += 1
++
++        if file_count[0] > MAX_FILES:
++            print(f"{prefix}... (truncated, too many files)")
++            return
++
++
++def detect_project_type_local(root):
++    """Derive project type hint from a local directory structure."""
++    try:
++        entries = set(os.listdir(root))
++    except (PermissionError, FileNotFoundError):
++        return "unknown"
++
++    has_src = "src" in entries and os.path.isdir(os.path.join(root, "src"))
++
++    if has_src:
++        src_path = os.path.join(root, "src")
++        src_entries = set(os.listdir(src_path))
++
++        layer_matches = src_entries & LAYER_INDICATORS
++        if len(layer_matches) >= 2:
++            return "layered"
++
++        feature_dirs = [
++            d for d in src_entries
++            if os.path.isdir(os.path.join(src_path, d))
++            and not d.startswith(".")
++            and d not in LAYER_INDICATORS
++            and d not in SKIP_DIRS
++        ]
++        if len(feature_dirs) >= 2 and not layer_matches:
++            return "vertical-slices"
++
++        return "structured"
++
++    has_scripts = "scripts" in entries and os.path.isdir(os.path.join(root, "scripts"))
++
++    if has_scripts and not has_src:
++        return "scripts"
++
++    has_makefile = any(f in entries for f in ("Makefile", "makefile", "GNUmakefile"))
++
++    if has_makefile and not has_src:
++        return "scripts"
++
++    simple_indicators = {"app.py", "main.py", "manage.py", "app.ts", "index.ts", "main.go"}
++    if entries & simple_indicators:
++        return "simple"
++
++    return "unknown"
++
++
++def detect_project_type_from_tree(tree_text):
++    """Derive project type hint from a flat path tree (API response).
++
++    Expected input: one path per line, dirs end with /, e.g.:
++        src/
++        src/domain/
++        src/application/
++        scripts/
++        Makefile
++    """
++    lines = [line.strip() for line in tree_text.strip().splitlines() if line.strip()]
++    dirs = set()
++    files = set()
++
++    for line in lines:
++        basename = line.rsplit("/", 1)[-1] if "/" in line else line
++        if line.endswith("/"):
++            dirs.add(basename.rstrip("/"))
++        else:
++            files.add(basename)
++
++        parent_parts = []
++        for part in line.split("/"):
++            if part:
++                parent_parts.append(part)
++        for i in range(1, len(parent_parts)):
++            path_so_far = "/".join(parent_parts[:i])
++            if not path_so_far.endswith("/"):
++                dirs.add(parent_parts[i - 1])
++
++    has_src = "src" in dirs
++
++    if has_src:
++        src_subdirs = set()
++        for line in lines:
++            parts = line.strip("/").split("/")
++            if len(parts) >= 2 and parts[0] == "src":
++                if parts[1] and not parts[1].startswith("."):
++                    src_subdirs.add(parts[1])
++
++        layer_matches = src_subdirs & LAYER_INDICATORS
++        if len(layer_matches) >= 2:
++            return "layered"
++
++        feature_dirs = src_subdirs - LAYER_INDICATORS - SKIP_DIRS
++        if len(feature_dirs) >= 2 and not layer_matches:
++            return "vertical-slices"
++
++        return "structured"
++
++    has_scripts = "scripts" in dirs
++
++    if has_scripts and not has_src:
++        return "scripts"
++
++    has_makefile = "Makefile" in files or "makefile" in files or "GNUmakefile" in files
++
++    if has_makefile and not has_src:
++        return "scripts"
++
++    simple_indicators = {"app.py", "main.py", "manage.py", "app.ts", "index.ts", "main.go"}
++    if files & simple_indicators:
++        return "simple"
++
++    return "unknown"
++
++
++def main():
++    if len(sys.argv) < 2:
++        print("Usage: generate_repo_structure.py <repo_path>", file=sys.stderr)
++        print("       generate_repo_structure.py --detect-type <repo_path>", file=sys.stderr)
++        print("       generate_repo_structure.py --detect-type-from-tree  (reads tree from stdin)", file=sys.stderr)
++        sys.exit(1)
++
++    if sys.argv[1] == "--detect-type":
++        if len(sys.argv) < 3:
++            print("Usage: generate_repo_structure.py --detect-type <repo_path>", file=sys.stderr)
++            sys.exit(1)
++        repo_path = sys.argv[2]
++        if not os.path.isdir(repo_path):
++            print(f"Error: {repo_path} is not a directory", file=sys.stderr)
++            sys.exit(1)
++        print(detect_project_type_local(repo_path))
++        return
++
++    if sys.argv[1] == "--detect-type-from-tree":
++        tree_text = sys.stdin.read()
++        print(detect_project_type_from_tree(tree_text))
++        return
++
++    repo_path = sys.argv[1]
++    if not os.path.isdir(repo_path):
++        print(f"Error: {repo_path} is not a directory", file=sys.stderr)
++        sys.exit(1)
++
++    repo_name = os.path.basename(os.path.abspath(repo_path))
++    print(f"{repo_name}/")
++    generate_tree(repo_path, prefix="", depth=0)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/validate-pr.sh b/scripts/validate-pr.sh
+new file mode 100755
+index 0000000..c51e1d3
+--- /dev/null
++++ b/scripts/validate-pr.sh
+@@ -0,0 +1,220 @@
++#!/usr/bin/env bash
++# validate-pr.sh — Fetch a PR from Codeberg and generate a local code review.
++#
++# Fetches the diff and repo structure from Codeberg, sends to Ollama,
++# and outputs the review to stdout or file.
++#
++# Usage:
++#   ./validate-pr.sh -r <repo> -p <pr-number> [-o <output-file>]
++#
++# Options:
++#   -r <repo>      Repository in format owner/repo (required)
++#   -p <pr>       PR number (required)
++#   -o <path>     Write review to file instead of stdout
++#   -b <branch>   Branch to use for repo structure (default: main)
++#   -h            Show help
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++REPO=""
++PR_NUMBER=""
++OUTPUT_FILE=""
++BRANCH="main"
++SHOW_HELP=false
++
++usage() {
++  cat <<EOF
++Usage: $(basename "$0") -r <repo> -p <pr-number> [-o <output-file>]
++
++Fetch a PR from Codeberg and generate a local code review using Ollama.
++The review includes both the diff and the repo file structure for context.
++
++Options:
++  -r <repo>      Repository in format owner/repo (required)
++  -p <pr>        PR number (required)
++  -o <path>      Write review to file instead of stdout
++  -b <branch>    Branch to use for repo structure (default: main)
++  -h             Show this help
++
++Environment:
++  FORGEJO_TOKEN     Codeberg API token (required)
++  OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
++  OLLAMA_MODEL      Model to use (default: code-review)
++
++Examples:
++  $(basename "$0") -r owner/repo -p 42
++  $(basename "$0") -r owner/repo -p 42 -o review.md
++  $(basename "$0") -r owner/repo -p 42 -b develop
++EOF
++  exit 0
++}
++
++while getopts "r:p:o:b:h" opt; do
++  case "$opt" in
++    r) REPO="$OPTARG" ;;
++    p) PR_NUMBER="$OPTARG" ;;
++    o) OUTPUT_FILE="$OPTARG" ;;
++    b) BRANCH="$OPTARG" ;;
++    h) SHOW_HELP=true ;;
++    *) usage ;;
++  esac
++done
++
++if [[ "$SHOW_HELP" == "true" ]]; then
++  usage
++fi
++
++if [[ -z "$REPO" ]]; then
++  echo "ERROR: -r <repo> is required" >&2
++  usage
++fi
++
++if [[ -z "$PR_NUMBER" ]]; then
++  echo "ERROR: -p <pr-number> is required" >&2
++  usage
++fi
++
++source "${SCRIPT_DIR}/lib/config-loader.sh"
++load_config
++
++source "${SCRIPT_DIR}/lib/forgejo-api.sh"
++source "${SCRIPT_DIR}/lib/ollama-client.sh"
++
++OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++OLLAMA_MODEL="${OLLAMA_MODEL:-code-review:latest}"
++
++if [[ -z "${FORGEJO_TOKEN:-}" ]]; then
++  echo "ERROR: FORGEJO_TOKEN is required" >&2
++  exit 1
++fi
++
++if ! ollama_available; then
++  echo "ERROR: Ollama not available at ${OLLAMA_HOST}" >&2
++  echo "Make sure Ollama is running and the model '${OLLAMA_MODEL}' is available." >&2
++  exit 1
++fi
++
++echo "Fetching PR #${PR_NUMBER} from ${REPO}..." >&2
++
++diff_content=$(forgejo_get_pr_diff "$REPO" "$PR_NUMBER")
++
++if [[ -z "$diff_content" ]]; then
++  echo "ERROR: Failed to fetch diff for PR #${PR_NUMBER}" >&2
++  exit 1
++fi
++
++if [[ ${#diff_content} -lt 50 ]]; then
++  echo "ERROR: Diff content too short (${#diff_content} bytes)" >&2
++  exit 1
++fi
++
++echo "Fetching repo structure from branch '${BRANCH}'..." >&2
++
++repo_structure=$(forgejo_get_repo_tree "$REPO" "$BRANCH" 2>/dev/null || true)
++
++architecture_hint="unknown"
++if [[ -n "$repo_structure" ]]; then
++  architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
++fi
++
++conventions=""
++for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
++  conf_content=$(forgejo_api_get "/repos/${REPO}/raw/${BRANCH}/${conf_file}" 2>/dev/null || true)
++  if [[ -n "$conf_content" ]]; then
++    conventions="$conf_content"
++    echo "  Conventions: ${conf_file} found (${#conventions} bytes)" >&2
++    break
++  fi
++done
++
++if [[ -z "$repo_structure" ]]; then
++  echo "WARNING: Could not fetch repo structure, continuing without it..." >&2
++fi
++
++echo "Generating review..." >&2
++echo "  Repo: ${REPO}" >&2
++echo "  PR: #${PR_NUMBER}" >&2
++echo "  Diff: ${#diff_content} bytes" >&2
++if [[ -n "$architecture_hint" ]] && [[ "$architecture_hint" != "unknown" ]]; then
++  echo "  Project type: ${architecture_hint}" >&2
++fi
++if [[ -n "$repo_structure" ]]; then
++  echo "  Repo structure: ${#repo_structure} bytes" >&2
++fi
++echo "  Model: ${OLLAMA_MODEL}" >&2
++
++review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
++
++ollama_host=$(resolve_ollama_host)
++
++if [[ -z "$ollama_host" ]]; then
++  echo "ERROR: Ollama host not resolved" >&2
++  exit 1
++fi
++
++response_file=$(mktemp)
++curl_err=$(mktemp)
++
++set +e
++http_status=$(
++  python3 -c "
++import json
++import os
++import sys
++
++data = {
++    'model': os.environ.get('OLLAMA_MODEL', 'code-review'),
++    'prompt': sys.stdin.read(),
++    'stream': False
++}
++print(json.dumps(data))
++" <<< "$review_prompt" | curl -sS -X POST "${ollama_host}/api/generate" \
++    -H "Content-Type: application/json" \
++    -d @- \
++    -o "$response_file" \
++    -w "%{http_code}" 2>"$curl_err"
++)
++curl_exit=$?
++set -e
++
++if [[ $curl_exit -ne 0 ]] || ! [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
++  curl_details=$(tr '\n' ' ' < "$curl_err" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
++  response_excerpt=$(tr '\n' ' ' < "$response_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' | cut -c1-240)
++  echo "ERROR: Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http: ${http_status:-unknown}, curl exit: ${curl_exit})" >&2
++  if [[ -n "$curl_details" ]]; then
++    echo "  curl: ${curl_details}" >&2
++  fi
++  if [[ -n "$response_excerpt" ]]; then
++    echo "  body: ${response_excerpt}" >&2
++  fi
++  rm -f "$response_file" "$curl_err"
++  exit 1
++fi
++
++response=$(cat "$response_file")
++rm -f "$response_file" "$curl_err"
++
++review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
++
++if [[ -z "$review" ]]; then
++  echo "ERROR: No review generated from Ollama" >&2
++  exit 1
++fi
++
++build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build_comment.py")
++verdict=$(echo "$build_output" | head -1)
++comment_body=$(echo "$build_output" | tail -n +2)
++
++output="VERDICT: ${verdict}
++
++${comment_body}"
++
++if [[ -n "$OUTPUT_FILE" ]]; then
++  echo "$output" > "$OUTPUT_FILE"
++  echo "Review written to: ${OUTPUT_FILE}" >&2
++else
++  echo "$output"
++fi
+\ No newline at end of file
+diff --git a/scripts/validate.sh b/scripts/validate.sh
+new file mode 100755
+index 0000000..63c83b3
+--- /dev/null
++++ b/scripts/validate.sh
+@@ -0,0 +1,199 @@
++#!/usr/bin/env bash
++# validate.sh — Generate a local code review from a diff file using Ollama.
++#
++# No Codeberg API calls — review is printed to stdout or written to a file.
++# Optionally includes repo structure for architectural context.
++#
++# Usage:
++#   ./validate.sh -d <diff-file> [-o <output-file>] [-r <repo-path>]
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++DIFF_FILE=""
++OUTPUT_FILE=""
++REPO_PATH=""
++SHOW_HELP=false
++
++usage() {
++  cat <<EOF
++Usage: $(basename "$0") -d <diff-file> [-o <output-file>] [-r <repo-path>]
++
++Generate a local code review from a diff file using Ollama.
++No Codeberg API calls -- review is printed to stdout or written to a file.
++
++Options:
++  -d <path>   Path to diff/patch file (required)
++  -o <path>   Write review to file instead of stdout
++  -r <path>   Local repo path to include file tree structure in review
++  -h          Show this help
++
++Environment:
++  OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
++  OLLAMA_MODEL      Model to use (default: code-review)
++
++Examples:
++  $(basename "$0") -d changes.patch
++  $(basename "$0") -d changes.patch -o review.md
++  $(basename "$0") -d changes.patch -r /path/to/my-repo
++EOF
++  exit 0
++}
++
++while getopts "d:o:r:h" opt; do
++  case "$opt" in
++    d) DIFF_FILE="$OPTARG" ;;
++    o) OUTPUT_FILE="$OPTARG" ;;
++    r) REPO_PATH="$OPTARG" ;;
++    h) SHOW_HELP=true ;;
++    *) usage ;;
++  esac
++done
++
++if [[ "$SHOW_HELP" == "true" ]]; then
++  usage
++fi
++
++if [[ -z "$DIFF_FILE" ]]; then
++  echo "ERROR: -d <diff-file> is required" >&2
++  usage
++fi
++
++if [[ ! -f "$DIFF_FILE" ]]; then
++  echo "ERROR: diff file not found: $DIFF_FILE" >&2
++  exit 1
++fi
++
++if [[ -n "$REPO_PATH" ]] && [[ ! -d "$REPO_PATH" ]]; then
++  echo "ERROR: repo path not found: $REPO_PATH" >&2
++  exit 1
++fi
++
++source "${SCRIPT_DIR}/lib/config-loader.sh"
++load_config
++
++source "${SCRIPT_DIR}/lib/ollama-client.sh"
++
++OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++OLLAMA_MODEL="${OLLAMA_MODEL:-code-review:latest}"
++
++if ! ollama_available; then
++  echo "ERROR: Ollama not available at ${OLLAMA_HOST}" >&2
++  echo "Make sure Ollama is running and the model '${OLLAMA_MODEL}' is available." >&2
++  exit 1
++fi
++
++diff_content=$(cat "$DIFF_FILE")
++
++if [[ -z "$diff_content" ]]; then
++  echo "ERROR: diff file is empty: $DIFF_FILE" >&2
++  exit 1
++fi
++
++if [[ ${#diff_content} -lt 50 ]]; then
++  echo "ERROR: diff content too short (${#diff_content} bytes). Minimum 50 bytes required." >&2
++  exit 1
++fi
++
++architecture_hint=""
++repo_structure=""
++conventions=""
++
++if [[ -n "$REPO_PATH" ]]; then
++  echo "  Generating repo structure from: ${REPO_PATH}" >&2
++  repo_structure=$(python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" "$REPO_PATH" 2>/dev/null || true)
++  architecture_hint=$(python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type "$REPO_PATH" 2>/dev/null || echo "unknown")
++
++  for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
++    if [[ -f "${REPO_PATH}/${conf_file}" ]]; then
++      conventions=$(cat "${REPO_PATH}/${conf_file}")
++      echo "  Conventions: ${conf_file} (${#conventions} bytes)" >&2
++      break
++    fi
++  done
++fi
++
++echo "Generating review..." >&2
++echo "  Diff: ${DIFF_FILE} (${#diff_content} bytes)" >&2
++echo "  Model: ${OLLAMA_MODEL}" >&2
++if [[ -n "$architecture_hint" ]] && [[ "$architecture_hint" != "unknown" ]]; then
++  echo "  Project type: ${architecture_hint}" >&2
++fi
++if [[ -n "$repo_structure" ]]; then
++  echo "  Repo structure: included (${#repo_structure} bytes)" >&2
++fi
++
++review_prompt=$(DIFF_CONTENT="$diff_content" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
++
++ollama_host=$(resolve_ollama_host)
++
++if [[ -z "$ollama_host" ]]; then
++  echo "ERROR: Ollama host not resolved" >&2
++  exit 1
++fi
++
++response_file=$(mktemp)
++curl_err=$(mktemp)
++
++set +e
++http_status=$(
++  python3 -c "
++import json
++import os
++import sys
++
++data = {
++    'model': os.environ.get('OLLAMA_MODEL', 'code-review'),
++    'prompt': sys.stdin.read(),
++    'stream': False
++}
++print(json.dumps(data))
++" <<< "$review_prompt" | curl -sS -X POST "${ollama_host}/api/generate" \
++    -H "Content-Type: application/json" \
++    -d @- \
++    -o "$response_file" \
++    -w "%{http_code}" 2>"$curl_err"
++)
++curl_exit=$?
++set -e
++
++if [[ $curl_exit -ne 0 ]] || ! [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
++  curl_details=$(tr '\n' ' ' < "$curl_err" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
++  response_excerpt=$(tr '\n' ' ' < "$response_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' | cut -c1-240)
++  echo "ERROR: Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http: ${http_status:-unknown}, curl exit: ${curl_exit})" >&2
++  if [[ -n "$curl_details" ]]; then
++    echo "  curl: ${curl_details}" >&2
++  fi
++  if [[ -n "$response_excerpt" ]]; then
++    echo "  body: ${response_excerpt}" >&2
++  fi
++  rm -f "$response_file" "$curl_err"
++  exit 1
++fi
++
++response=$(cat "$response_file")
++rm -f "$response_file" "$curl_err"
++
++review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
++
++if [[ -z "$review" ]]; then
++  echo "ERROR: No review generated from Ollama" >&2
++  exit 1
++fi
++
++build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build_comment.py")
++verdict=$(echo "$build_output" | head -1)
++comment_body=$(echo "$build_output" | tail -n +2)
++
++output="VERDICT: ${verdict}
++
++${comment_body}"
++
++if [[ -n "$OUTPUT_FILE" ]]; then
++  echo "$output" > "$OUTPUT_FILE"
++  echo "Review written to: ${OUTPUT_FILE}" >&2
++else
++  echo "$output"
++fi
+\ No newline at end of file
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index 1fd5590..2fafc75 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -17,13 +17,25 @@ set -euo pipefail
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ 
+-# Lock
++# Check if force review mode (skip lock)
+ WATCHER_LOCK_FILE="${REPO_ROOT}/watcher-prs.lock"
+ WATCHER_PID_FILE="${REPO_ROOT}/watcher-prs.pid"
+-exec 9>"$WATCHER_LOCK_FILE"
+-if ! flock -n 9; then
+-  echo "watch-prs.sh is already running. Exiting." >&2
+-  exit 1
++
++# Force review skips the lock check
++SKIP_LOCK=false
++for arg in "$@"; do
++  if [[ "$arg" == "-p" ]] || [[ "$arg" =~ ^-p[0-9]+$ ]]; then
++    SKIP_LOCK=true
++    break
++  fi
++done
++
++if [[ "$SKIP_LOCK" != "true" ]]; then
++  exec 9>"$WATCHER_LOCK_FILE"
++  if ! flock -n 9; then
++    echo "watch-prs.sh is already running. Exiting." >&2
++    exit 1
++  fi
+ fi
+ echo $$ > "$WATCHER_PID_FILE"
+ 
+@@ -290,6 +302,43 @@ get_diff() {
+     "${API_BASE}/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
+ }
+ 
++get_files_from_diff() {
++  local diff="$1"
++  
++  echo "$diff" | grep -E "^diff --git" | sed 's/diff --git a\///' | cut -d' ' -f1 | sort -u
++}
++
++get_file_contents() {
++  local repo="$1"
++  local diff="$2"
++  
++  local files
++  files=$(get_files_from_diff "$diff")
++  
++  local contents=""
++  
++  for file in $files; do
++    [[ -z "$file" ]] && continue
++    
++    local sha
++    sha=$(echo "$diff" | grep -E "^diff.*$file" -A5 | grep "^@@" | head -1 | grep -oE '[a-f0-9]{40}' | head -1 || true)
++    
++    local ref="${sha:-main}"
++    
++    local content
++    content=$(forgejo_get_file_content "$repo" "$ref" "$file" 2>/dev/null || true)
++    
++    if [[ -n "$content" ]]; then
++      contents="${contents}
++
++=== FILE: ${file} ===
++${content}"
++    fi
++  done
++  
++  echo "$contents"
++}
++
+ get_pr_comments() {
+   local repo="$1"
+   local pr_number="$2"
+@@ -412,8 +461,30 @@ process_pr() {
+   
+   echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
+   
++  local repo_structure
++  repo_structure=$(forgejo_get_repo_tree "$repo" main 2>/dev/null || true)
++  
++  local architecture_hint="unknown"
++  if [[ -n "$repo_structure" ]]; then
++    architecture_hint=$(echo "$repo_structure" | python3 "${SCRIPT_DIR}/lib/generate_repo_structure.py" --detect-type-from-tree 2>/dev/null || echo "unknown")
++  fi
++  
++local conventions=""
++  local conf_file
++  for conf_file in ARCHITECTURE.md CONVENTIONS.md .architecturerc; do
++    local conf_content
++    conf_content=$(forgejo_api_get "/repos/${repo}/raw/main/${conf_file}" 2>/dev/null || true)
++    if [[ -n "$conf_content" ]]; then
++      conventions="$conf_content"
++      break
++    fi
++  done
++
++  local file_contents
++  file_contents=$(get_file_contents "$repo" "$diff")
++
+   local review_prompt
+-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
++  review_prompt=$(DIFF_CONTENT="$diff" REPO_STRUCTURE="$repo_structure" ARCHITECTURE_HINT="$architecture_hint" CONVENTIONS="$conventions" FILE_CONTENTS="$file_contents" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+   
+   local ollama_host
+   ollama_host=$(resolve_ollama_host)

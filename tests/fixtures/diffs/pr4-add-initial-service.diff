@@ -1,0 +1,114 @@
+diff --git a/scripts/bootstrap.sh b/scripts/bootstrap.sh
+index 51483c0..3b88f65 100755
+--- a/scripts/bootstrap.sh
++++ b/scripts/bootstrap.sh
+@@ -88,10 +88,12 @@ start_project() {
+     log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
+   fi
+ 
+-  log_info "Stopping any stale processes..."
+-  bash "$REPO_ROOT/scripts/autostart/autostart.sh" --stop
++  if bash "$REPO_ROOT/scripts/autostart/autostart.sh" --status 2>/dev/null | grep -q "watch-prs.*running"; then
++    log_info "watch-prs is already running, skipping start"
++    return 0
++  fi
+ 
+-  log_info "Starting services..."
++  log_info "watch-prs not running, starting..."
+   bash "$REPO_ROOT/scripts/autostart/autostart.sh"
+ }
+ 
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index 7c2800d..596b569 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -250,34 +250,43 @@ print(json.dumps(data))
+   
+   echo "    -> Verdict: ${verdict}"
+   
+-  # Post comment
+-  local escaped_body
+-  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+-  
+-  local post_result
+-  post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
+-    -H "Authorization: token $api_token" \
+-    -H "Content-Type: application/json" \
+-    -d "{\"body\": ${escaped_body}}" 2>&1) || true
+-  
+-  if [[ -n "$post_result" ]]; then
+-    echo "    -> Review comment posted!"
++    # Post comment
++    local escaped_body
++    escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+     
+-    # Try to post formal review
+-    local review_result
+-    review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
++    local post_result
++    post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
+       -H "Authorization: token $api_token" \
+       -H "Content-Type: application/json" \
+-      -d "{\"type\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
++      -d "{\"body\": ${escaped_body}}" 2>&1) || true
+     
+-    if [[ -n "$review_result" ]]; then
+-      echo "    -> Review (${verdict}) submitted!"
+-    fi
+-    
+-    # Update state
+-    local state
+-    state=$(load_state)
+-    STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
++    if [[ -n "$post_result" ]]; then
++      echo "    -> Review comment posted!"
++      
++      # Try to submit formal review (only works for others' PRs, not your own)
++      # Codeberg rejects approving/requesting changes on your own PRs
++      local review_result
++      review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
++        -H "Authorization: token $api_token" \
++        -H "Content-Type: application/json" \
++        -d "{\"event\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
++      
++      local review_id
++      review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
++      
++      if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
++        echo "    -> Review (${verdict}) submitted!"
++      else
++        # Check if it's a "reject your own pull" error
++        if echo "$review_result" | grep -q "reject your own pull"; then
++          echo "    -> Note: Cannot approve own PRs via API (Codeberg limitation)"
++        fi
++      fi
++      
++      # Update state
++      local state
++      state=$(load_state)
++      STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
+ import os, json
+ state = json.loads(os.environ.get('STATE_JSON', '{}'))
+ repo = os.environ.get('REPO', '')
+@@ -289,14 +298,14 @@ if 'reviewed' not in state:
+ state['reviewed'][key] = {'sha': pr_sha}
+ print(json.dumps(state))
+ " > "$STATE_FILE"
++      
++      echo "    -> State updated"
++    else
++      echo "    -> ERROR: Failed to post to Codeberg"
++      return 1
++    fi
+     
+-    echo "    -> State updated"
+-  else
+-    echo "    -> ERROR: Failed to post to Codeberg"
+-    return 1
+-  fi
+-  
+-  return 0
++    return 0
+ }
+ 
+ cycle() {

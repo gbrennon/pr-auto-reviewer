@@ -1,0 +1,19 @@
+{
+  "verdict": "changes_requested",
+  "summary": "The deploy script is missing the shebang line (#!/usr/bin/env bash) which is required for the kernel to know which interpreter to use. Without it, the script may fail when executed directly. The rest of the script is well-structured with set -euo pipefail, usage function, and proper argument handling.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "high",
+      "category": "bug",
+      "file_path": "scripts/deploy.sh",
+      "description": "Missing shebang line at the top of the script. Add '#!/usr/bin/env bash' as the first line so the script can be executed directly (./deploy.sh) without explicitly invoking bash."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 5,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

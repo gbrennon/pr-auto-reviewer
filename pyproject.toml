@@ -1,0 +1,50 @@
+[project]
+name = "pr-auto-reviewer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Glauber Brennon", email = "glauberbrennon@gmail.com" }
+]
+requires-python = ">=3.14.3"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "requests>=2.33.1",
+    "jinja2>=3.1.5",
+]
+
+[project.scripts]
+pr-auto-reviewer = "pr_auto_reviewer.cli:main"
+pr-auto-reviewer-bootstrap = "pr_auto_reviewer.cli:main"
+pr-auto-reviewer-clean = "pr_auto_reviewer.clean:main"
+pr-auto-reviewer-ddd = "pr_auto_reviewer.presentation.cli.runner:main"
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.12",
+]
+
+[tool.coverage.run]
+omit = [
+    "**/__init__.py",
+    "**/inbound/*.py",
+    "**/outbound/*.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+asyncio_mode = "strict"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=pr_auto_reviewer",
+    "--cov-report=term-missing",
+]

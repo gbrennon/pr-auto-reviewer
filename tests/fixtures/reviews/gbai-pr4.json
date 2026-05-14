@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR adds a new configuration file for `.actrc`. The addition is good, and there are minor suggestions for improvement.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "gb-ai-reviewer",
+  "full_repo": "gbrennon/gb-ai-reviewer",
+  "pr_number": 4,
+  "head_sha": "1eb82fa4deafb8410124306c793efe373d58bafa"
+}

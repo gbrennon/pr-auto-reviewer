@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR introduces a more detailed approach to running tests and checking coverage, with good refactoring and readability improvements.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "gb-ai-reviewer",
+  "full_repo": "gbrennon/gb-ai-reviewer",
+  "pr_number": 5,
+  "head_sha": "f8aefd710fb8419befa02d417a8790906cf415c1"
+}

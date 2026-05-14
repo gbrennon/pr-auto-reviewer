@@ -15,4 +15,5 @@ class OpenPullRequest:
     pr_id: PullRequestId
     head_sha: CommitSha
     title: str
-    is_draft: bool
+    description: str = ""
+    is_draft: bool = False

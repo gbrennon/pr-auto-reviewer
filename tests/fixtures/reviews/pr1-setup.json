@@ -1,0 +1,19 @@
+{
+  "verdict": "approved",
+  "summary": "The PR introduces a new feature for automatically reviewing pull requests on Codeberg using an AI model. The README is updated with detailed instructions and the .env.example file includes necessary configuration options. Suggestions include adding comments to the .env.example file and linking to a repository or issue tracker in the README.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "info",
+      "category": "quality",
+      "file_path": ".env.example",
+      "description": "The .env.example file should be ignored in the repository to prevent sensitive information from being committed. Consider adding it to .gitignore."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 1,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

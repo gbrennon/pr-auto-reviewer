@@ -1,0 +1,1128 @@
+diff --git a/.gitignore b/.gitignore
+index 7dfda34..a4de087 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -6,3 +6,4 @@ runner-data/
+ *.pid
+ *.service
+ __pycache__
++lib/bashunit
+diff --git a/Makefile b/Makefile
+index 826b0cb..c81aec0 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,60 +1,62 @@
+-.PHONY: help install start stop status restart logs watch test clean issues list-items
++.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit test-unit
+ 
+ SHELL := /usr/bin/env bash
+ SCRIPT_DIR := scripts
+ REPO_ROOT := .
+ 
++BASHUNIT := ./lib/bashunit
++
+ help:
+ 	@echo "PR Auto Reviewer - Makefile"
+ 	@echo ""
+ 	@echo "Usage:"
+ 	@echo "  make install         Install and configure the service"
+-	@echo "  make start          Start the watcher service"
++	@echo "  make start           Start the watcher service"
+ 	@echo "  make stop           Stop the watcher service"
+ 	@echo "  make status         Show service status"
+-	@echo "  make restart       Restart the service"
+-	@echo "  make logs          Show service logs (follow)"
+-	@echo "  make watch        Run watcher once (manual mode)"
+-	@echo "  make test         Run test on a repo"
+-	@echo "  make issues       Create issues from PR commands"
+-	@echo "  make list-items   List review items from PR"
+-	@echo "  make clean         Clean state files"
++	@echo "  make restart        Restart the service"
++	@echo "  make logs           Show service logs (follow)"
++	@echo "  make watch          Run watcher once (manual mode)"
++	@echo "  make test           Run test on a repo"
++	@echo "  make issues         Create issues from PR commands"
++	@echo "  make list-items     List review items from PR"
++	@echo "  make clean          Clean state files"
++	@echo "  make install-bashunit  Install bashunit testing framework"
++	@echo "  make test-unit      Run unit tests with bashunit"
+ 	@echo ""
+ 	@echo "Examples:"
+ 	@echo "  make test REPO=gbrennon/pr-auto-reviewer"
+ 	@echo "  make issues REPO=owner/repo PR=8"
+ 	@echo "  make list-items REPO=owner/repo PR=8"
++	@echo "  make test-unit"
+ 
+ install:
+-	@echo "Running install script..."
+ 	@bash $(SCRIPT_DIR)/install-service.sh
+ 
+ start:
+-	@echo "Starting service..."
+-	@systemctl --user start pr-ai-auto-reviewer.service
++	@bash $(SCRIPT_DIR)/start.sh
+ 
+ stop:
+-	@echo "Stopping service..."
+-	@systemctl --user stop pr-ai-auto-reviewer.service
++	@bash $(SCRIPT_DIR)/stop.sh
+ 
+ status:
+-	@systemctl --user status pr-ai-auto-reviewer.service || true
++	@bash $(SCRIPT_DIR)/status.sh
+ 
+ restart:
+-	@systemctl --user restart pr-ai-auto-reviewer.service || true
++	@bash $(SCRIPT_DIR)/restart.sh
+ 
+ logs:
+-	@journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
++	@bash $(SCRIPT_DIR)/logs.sh
+ 
+ watch:
+-	@bash $(SCRIPT_DIR)/watch-prs.sh --once
++	@bash $(SCRIPT_DIR)/watch.sh
+ 
+ test:
+ ifndef REPO
+ 	@echo "Usage: make test REPO=owner/repo"
+ 	@exit 1
+ endif
+-	@bash $(SCRIPT_DIR)/watch-prs.sh -r $(REPO) --once
++	@bash $(SCRIPT_DIR)/test-pr.sh $(REPO)
+ 
+ issues:
+ ifndef REPO
+@@ -76,10 +78,13 @@ ifndef PR
+ 	@echo "Usage: make list-items REPO=owner/repo PR=number"
+ 	@exit 1
+ endif
+-	@bash $(SCRIPT_DIR)/watch-prs.sh -r $(REPO) -p $(PR) --list-items
++	@bash $(SCRIPT_DIR)/list-items.sh $(REPO) $(PR)
+ 
+ clean:
+-	@echo "Cleaning state files..."
+-	@rm -f $(REPO_ROOT)/runner-data/pr-reviews.json
+-	@echo '{"reviewed":{}}' > $(REPO_ROOT)/runner-data/pr-reviews.json
+-	@echo "Done. State reset."
+\ No newline at end of file
++	@bash $(SCRIPT_DIR)/clean.sh
++
++install-bashunit:
++	@bash $(SCRIPT_DIR)/install-bashunit.sh
++
++test-unit:
++	@bash $(SCRIPT_DIR)/test-unit.sh
+\ No newline at end of file
+diff --git a/scripts/clean.sh b/scripts/clean.sh
+new file mode 100644
+index 0000000..f0d8e3f
+--- /dev/null
++++ b/scripts/clean.sh
+@@ -0,0 +1,12 @@
++#!/usr/bin/env bash
++# clean.sh - Clean state files
++
++set -e
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++echo "Cleaning state files..."
++rm -f "${PROJECT_DIR}/runner-data/pr-reviews.json"
++echo '{"reviewed":{}}' > "${PROJECT_DIR}/runner-data/pr-reviews.json"
++echo "Done. State reset."
+\ No newline at end of file
+diff --git a/scripts/install-bashunit.sh b/scripts/install-bashunit.sh
+new file mode 100644
+index 0000000..0382ab0
+--- /dev/null
++++ b/scripts/install-bashunit.sh
+@@ -0,0 +1,17 @@
++#!/usr/bin/env bash
++# install-bashunit.sh - Install bashunit testing framework
++
++set -e
++
++BASHUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
++BASHUNIT_BIN="${BASHUNIT_DIR}/bashunit"
++
++if [[ -f "$BASHUNIT_BIN" ]]; then
++    echo "bashunit already installed at $BASHUNIT_BIN"
++    exit 0
++fi
++
++echo "Installing bashunit..."
++curl -s https://bashunit.typeddevs.com/install.sh | bash
++
++echo "Done."
+\ No newline at end of file
+diff --git a/scripts/lib/extract-review-items.py b/scripts/lib/extract-review-items.py
+new file mode 100644
+index 0000000..bdf37ce
+--- /dev/null
++++ b/scripts/lib/extract-review-items.py
+@@ -0,0 +1,121 @@
++#!/usr/bin/env python3
++"""Extract review items (issues and suggestions) from a review body."""
++
++import sys
++import re
++import os
++
++
++def extract_review_items(review_body, debug=False):
++    """Extract issues and suggestions from a review body.
++
++    Args:
++        review_body: The review text to parse
++        debug: If True, output debug info to stderr
++
++    Returns:
++        List of strings in format: num|severity|type|location|text
++    """
++    if debug:
++        print(f"[DEBUG] Input review body length: {len(review_body)}", file=sys.stderr)
++        print(f"[DEBUG] First 500 chars: {review_body[:500]}", file=sys.stderr)
++
++    issues = []
++    suggestions = []
++
++    lines = review_body.split("\n")
++    in_issues = False
++    in_suggestions = False
++    next_num = 1
++
++    for line in lines:
++        line = line.strip()
++        if line.lower() == "### issues" or line.lower() == "### issues\n":
++            in_issues = True
++            in_suggestions = False
++            if debug:
++                print("[DEBUG] Entered ### Issues section", file=sys.stderr)
++            continue
++        elif line.lower() == "### suggestions" or line.lower() == "### suggestions\n":
++            in_suggestions = True
++            in_issues = False
++            if debug:
++                print("[DEBUG] Entered ### Suggestions section", file=sys.stderr)
++            continue
++        elif line.lower().startswith("### "):
++            in_issues = False
++            in_suggestions = False
++            continue
++
++        if in_issues or in_suggestions:
++            match = re.match(r"^\d+[\.\)]\s+(.*)", line)
++            if match:
++                num_match = re.match(r"^(\d+)", line)
++                num = int(num_match.group(1)) if num_match else next_num
++                text = match.group(1).strip()
++
++                severity = ""
++                issue_type = ""
++                location = ""
++
++                matches = re.findall(r"\[(\w+)\]", text)
++                if len(matches) >= 1:
++                    severity = matches[0]
++                if len(matches) >= 2:
++                    issue_type = matches[1]
++
++                remaining = text
++                for _ in matches:
++                    remaining = re.sub(r"\[\w+\]\s*", "", remaining, count=1)
++                remaining = remaining.strip()
++
++                if remaining:
++                    loc_match = re.match(r"^([^:]+:\d+)", remaining)
++                    if loc_match:
++                        location = loc_match.group(1)
++                    else:
++                        loc_match = re.match(r"^(\S+)", remaining)
++                        if loc_match:
++                            location = loc_match.group(1)
++
++                item = f"{num}|{severity}|{issue_type}|{location}|{text}"
++                if in_issues:
++                    issues.append(item)
++                    if debug:
++                        print(f"[DEBUG] Found issue: {item[:80]}...", file=sys.stderr)
++                else:
++                    suggestions.append(item)
++                    if debug:
++                        print(
++                            f"[DEBUG] Found suggestion: {item[:80]}...", file=sys.stderr
++                        )
++            elif line.startswith("- ") or line.startswith("* "):
++                text = line.lstrip("-* ")
++                if text:
++                    if in_issues:
++                        issues.append(f"{next_num}|| | |{text}")
++                    else:
++                        suggestions.append(f"{next_num}|| | |{text}")
++                    next_num += 1
++
++    if debug:
++        print(
++            f"[DEBUG] Extracted {len(issues)} issues and {len(suggestions)} suggestions",
++            file=sys.stderr,
++        )
++
++    result = issues + suggestions
++    return result
++
++
++def main():
++    debug = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
++    review_body = sys.stdin.read()
++    items = extract_review_items(review_body, debug=debug)
++
++    for item in items:
++        print(item)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/lib/get-pr-comments.py b/scripts/lib/get-pr-comments.py
+new file mode 100644
+index 0000000..32e4f5d
+--- /dev/null
++++ b/scripts/lib/get-pr-comments.py
+@@ -0,0 +1,42 @@
++#!/usr/bin/env python3
++"""Parse PR comments from API response."""
++
++import sys
++import json
++
++
++def parse_comments(json_data):
++    """Parse comments from API response.
++
++    Args:
++        json_data: Parsed JSON from Forgejo API
++
++    Returns:
++        List of strings in format: id|created_at|body
++    """
++    if isinstance(json_data, list):
++        comments = json_data
++    else:
++        comments = json_data.get("data", [])
++
++    results = []
++    for c in comments:
++        body = c.get("body", "")
++        comment_id = c.get("id", "")
++        created = c.get("created_at", "")
++        if body:
++            results.append(f"{comment_id}|{created}|{body}")
++
++    return results
++
++
++def main():
++    json_data = json.load(sys.stdin)
++    comments = parse_comments(json_data)
++
++    for c in comments:
++        print(c)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/lib/get-pr-reviews.py b/scripts/lib/get-pr-reviews.py
+new file mode 100644
+index 0000000..2eb9b13
+--- /dev/null
++++ b/scripts/lib/get-pr-reviews.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++"""Get and sort PR reviews, returning the most recent one."""
++
++import sys
++import json
++import os
++
++
++def get_latest_review_json(json_data):
++    """Find the most recent review from API response.
++
++    The API returns reviews in unspecified order. We need to sort by
++    created_at to get the most recent one.
++
++    Args:
++        json_data: Parsed JSON from Forgejo API
++
++    Returns:
++        The most recent review dict with body, or None
++    """
++    if isinstance(json_data, list):
++        reviews = json_data
++    else:
++        reviews = json_data.get("data", [])
++
++    if not reviews:
++        return None
++
++    valid_reviews = [r for r in reviews if r.get("body")]
++    if not valid_reviews:
++        return None
++
++    def get_created_at(review):
++        created = review.get("created_at", "")
++        if not created:
++            return "1970-01-01T00:00:00Z"
++        return created
++
++    valid_reviews.sort(key=get_created_at, reverse=True)
++
++    return valid_reviews[0]
++
++
++def main():
++    json_data = json.load(sys.stdin)
++    review = get_latest_review_json(json_data)
++
++    if review:
++        body = review.get("body", "")
++        verdict = review.get("state", "")
++        review_id = review.get("id", "")
++        created = review.get("created_at", "")
++
++        print(f"{review_id}|{verdict}|{created}|{body}")
++    else:
++        print("")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/lib/json-escape.py b/scripts/lib/json-escape.py
+index 5f71b37..ec6d4f3 100644
+--- a/scripts/lib/json-escape.py
++++ b/scripts/lib/json-escape.py
+@@ -4,4 +4,4 @@
+ import sys
+ import json
+ 
+-print(json.dumps(sys.stdin.read()))
++print(json.dumps(sys.stdin.read()).rstrip("\n"))
+diff --git a/scripts/lib/ollama-client.sh b/scripts/lib/ollama-client.sh
+index a84c0d8..da3bd22 100755
+--- a/scripts/lib/ollama-client.sh
++++ b/scripts/lib/ollama-client.sh
+@@ -2,7 +2,7 @@
+ # ollama-client.sh — Ollama API wrapper for code review.
+ 
+ OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+-OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
++OLLAMA_MODEL="${OLLAMA_MODEL:-code-review:latest}"
+ 
+ # Resolve Ollama host - always try localhost first for local development
+ resolve_ollama_host() {
+@@ -62,23 +62,8 @@ ollama_generate() {
+ ollama_review() {
+   local diff="$1"
+   
+-  local review_prompt="You are a code reviewer. Review the following git diff and provide constructive feedback. Focus on bugs, security issues, code quality, and potential improvements. Output in JSON format:
+-
+-{
+-  \"issues\": [
+-    {\"line\": \"10\", \"severity\": \"high\", \"description\": \"issue description\"}
+-  ],
+-  \"suggestions\": [
+-    {\"line\": \"15\", \"description\": \"suggestion\"}
+-  ],
+-  \"summary\": \"one sentence overall assessment\"
+-}
+-
+-DIFF:
+-${diff}"
+-
+   local response
+-  response=$(ollama_generate "$review_prompt")
++  response=$(ollama_generate "$diff" "$OLLAMA_MODEL")
+   
+   # Extract response field
+   echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true
+diff --git a/scripts/lib/parse-issue-command.py b/scripts/lib/parse-issue-command.py
+new file mode 100644
+index 0000000..5f39fb2
+--- /dev/null
++++ b/scripts/lib/parse-issue-command.py
+@@ -0,0 +1,48 @@
++#!/usr/bin/env python3
++"""Parse issue creation commands from PR comments."""
++
++import sys
++import re
++
++
++def parse_issue_command(comment):
++    """Parse issue creation command from a comment.
++
++    Supports:
++    - "create issue for 1, 2, 3"
++    - "issue 1, 2"
++    - "create issue for 1 2 3"
++    - "issue 1"
++
++    Args:
++        comment: The comment text to parse
++
++    Returns:
++        Comma-separated string of item numbers, or empty string if no command found
++    """
++    comment = comment.strip().lower()
++
++    pattern = r"(?:create\s+issue\s+for\s+|issue\s+)([0-9,\s]+)"
++    match = re.search(pattern, comment)
++
++    if match:
++        nums = match.group(1)
++        numbers = [
++            n.strip()
++            for n in re.split(r"[,\s]+", nums)
++            if n.strip() and n.strip().isdigit()
++        ]
++        if numbers:
++            return ",".join(numbers)
++
++    return ""
++
++
++def main():
++    comment = sys.stdin.read().strip()
++    result = parse_issue_command(comment)
++    print(result)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/list-items.sh b/scripts/list-items.sh
+new file mode 100644
+index 0000000..77e9eed
+--- /dev/null
++++ b/scripts/list-items.sh
+@@ -0,0 +1,15 @@
++#!/usr/bin/env bash
++# list-items.sh - List review items from a PR
++
++set -e
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO="${1:-}"
++PR="${2:-}"
++
++if [[ -z "$REPO" ]] || [[ -z "$PR" ]]; then
++    echo "Usage: $0 owner/repo pr-number"
++    exit 1
++fi
++
++bash "${SCRIPT_DIR}/watch-prs.sh" -r "$REPO" -p "$PR" --list-items
+\ No newline at end of file
+diff --git a/scripts/logs.sh b/scripts/logs.sh
+new file mode 100644
+index 0000000..821b82f
+--- /dev/null
++++ b/scripts/logs.sh
+@@ -0,0 +1,4 @@
++#!/usr/bin/env bash
++# logs.sh - Show service logs (follow mode)
++
++journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
+\ No newline at end of file
+diff --git a/scripts/restart.sh b/scripts/restart.sh
+new file mode 100644
+index 0000000..de6a479
+--- /dev/null
++++ b/scripts/restart.sh
+@@ -0,0 +1,7 @@
++#!/usr/bin/env bash
++# restart.sh - Restart the watcher service
++
++set -e
++
++systemctl --user restart pr-ai-auto-reviewer.service || true
++echo "Service restarted."
+\ No newline at end of file
+diff --git a/scripts/start.sh b/scripts/start.sh
+new file mode 100644
+index 0000000..71c5dfb
+--- /dev/null
++++ b/scripts/start.sh
+@@ -0,0 +1,8 @@
++#!/usr/bin/env bash
++# start.sh - Start the watcher service
++
++set -e
++
++echo "Starting service..."
++systemctl --user start pr-ai-auto-reviewer.service
++echo "Service started."
+\ No newline at end of file
+diff --git a/scripts/status.sh b/scripts/status.sh
+new file mode 100644
+index 0000000..2a076e6
+--- /dev/null
++++ b/scripts/status.sh
+@@ -0,0 +1,4 @@
++#!/usr/bin/env bash
++# status.sh - Show service status
++
++systemctl --user status pr-ai-auto-reviewer.service || true
+\ No newline at end of file
+diff --git a/scripts/stop.sh b/scripts/stop.sh
+new file mode 100644
+index 0000000..2e31262
+--- /dev/null
++++ b/scripts/stop.sh
+@@ -0,0 +1,8 @@
++#!/usr/bin/env bash
++# stop.sh - Stop the watcher service
++
++set -e
++
++echo "Stopping service..."
++systemctl --user stop pr-ai-auto-reviewer.service
++echo "Service stopped."
+\ No newline at end of file
+diff --git a/scripts/test-pr.sh b/scripts/test-pr.sh
+new file mode 100644
+index 0000000..e25be3a
+--- /dev/null
++++ b/scripts/test-pr.sh
+@@ -0,0 +1,14 @@
++#!/usr/bin/env bash
++# test-pr.sh - Run test on a specific repo
++
++set -e
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO="${1:-}"
++
++if [[ -z "$REPO" ]]; then
++    echo "Usage: $0 owner/repo"
++    exit 1
++fi
++
++bash "${SCRIPT_DIR}/watch-prs.sh" -r "$REPO" --once
+\ No newline at end of file
+diff --git a/scripts/test-unit.sh b/scripts/test-unit.sh
+new file mode 100644
+index 0000000..095a31c
+--- /dev/null
++++ b/scripts/test-unit.sh
+@@ -0,0 +1,17 @@
++#!/usr/bin/env bash
++# test-unit.sh - Run unit tests with bashunit
++
++set -e
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
++BASHUNIT="${PROJECT_DIR}/lib/bashunit"
++TESTS_DIR="${PROJECT_DIR}/tests"
++
++if [[ ! -f "$BASHUNIT" ]]; then
++    echo "bashunit not found. Installing..."
++    bash "${SCRIPT_DIR}/install-bashunit.sh"
++fi
++
++echo "Running unit tests..."
++"$BASHUNIT" "$TESTS_DIR"
+\ No newline at end of file
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index c9d2986..0bb6922 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -252,20 +252,8 @@ get_pr_comments() {
+   local pr_number="$2"
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | python3 -c "
+-import sys, json
+-try:
+-    data = json.load(sys.stdin)
+-    comments = data if isinstance(data, list) else data.get('data', [])
+-    for c in comments:
+-        body = c.get('body', '')
+-        id = c.get('id', '')
+-        created = c.get('created_at', '')
+-        if body:
+-            print(f'{id}|{created}|{body}')
+-except Exception:
+-    pass
+-" 2>/dev/null || true
++    "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | \
++    python3 "${SCRIPT_DIR}/lib/get-pr-comments.py" 2>/dev/null || true
+ }
+ 
+ get_pr_reviews() {
+@@ -273,27 +261,15 @@ get_pr_reviews() {
+   local pr_number="$2"
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | python3 -c "
+-import sys, json
+-try:
+-    data = json.load(sys.stdin)
+-    reviews = data if isinstance(data, list) else data.get('data', [])
+-    for r in reviews:
+-        body = r.get('body', '')
+-        verdict = r.get('state', '')
+-        id = r.get('id', '')
+-        if body:
+-            print(f'{id}|{verdict}|{body}')
+-except Exception:
+-    pass
+-" 2>/dev/null || true
++    "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | \
++    python3 "${SCRIPT_DIR}/lib/get-pr-reviews.py" 2>/dev/null || true
+ }
+ 
+ get_latest_review() {
+   local repo="$1"
+   local pr_number="$2"
+   
+-  get_pr_reviews "$repo" "$pr_number" | tail -1 | cut -d'|' -f3-
++  get_pr_reviews "$repo" "$pr_number" | cut -d'|' -f4-
+ }
+ 
+ list_review_items() {
+@@ -318,98 +294,13 @@ list_review_items() {
+ parse_issue_command() {
+   local comment="$1"
+   
+-  local cmd_numbers
+-  cmd_numbers=$(python3 -c "
+-import re
+-import sys
+-
+-comment = sys.stdin.read().strip().lower()
+-# Support: 'create issue for 1, 2' and 'issue 1, 2'
+-pattern = r'(?:create\s+issue\s+for\s+|issue\s+)([0-9,\s]+)'
+-match = re.search(pattern, comment)
+-if match:
+-    nums = match.group(1)
+-    numbers = [n.strip() for n in re.split(r'[,\s]+', nums) if n.strip() and n.strip().isdigit()]
+-    if numbers:
+-        print(','.join(numbers))
+-" <<< "$comment" 2>/dev/null) || true
+-  
+-  echo "$cmd_numbers"
++  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse-issue-command.py" 2>/dev/null || true
+ }
+ 
+ extract_review_items() {
+   local review_body="$1"
+   
+-  python3 -c "
+-import re
+-import sys
+-
+-body = sys.stdin.read()
+-
+-issues = []
+-suggestions = []
+-
+-lines = body.split('\n')
+-in_issues = False
+-in_suggestions = False
+-next_num = 1
+-
+-for line in lines:
+-    line = line.strip()
+-    if line.lower() == '### issues' or line.lower() == '### issues\n':
+-        in_issues = True
+-        in_suggestions = False
+-        continue
+-    elif line.lower() == '### suggestions' or line.lower() == '### suggestions\n':
+-        in_suggestions = True
+-        in_issues = False
+-        continue
+-    elif line.lower().startswith('### '):
+-        in_issues = False
+-        in_suggestions = False
+-        continue
+-    
+-    if in_issues or in_suggestions:
+-        match = re.match(r'^\d+[\.\)]\s+(.*)', line)
+-        if match:
+-            num = int(re.match(r'^(\d+)', line).group(1))
+-            text = match.group(1).strip()
+-            
+-            severity = ''
+-            issue_type = ''
+-            location = ''
+-            
+-            sev_match = re.search(r'\[(\w+)\]', text)
+-            if sev_match:
+-                severity = sev_match.group(1)
+-            
+-            type_match = re.search(r'\[(\w+)\]', text)
+-            matches = re.findall(r'\[(\w+)\]', text)
+-            if len(matches) > 1:
+-                issue_type = matches[1] if matches[0] == matches[1] else matches[-1]
+-            
+-            loc_match = re.match(r'([^\s]+)', text)
+-            if loc_match:
+-                location = loc_match.group(1)
+-            
+-            if in_issues:
+-                issues.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
+-            else:
+-                suggestions.append(f'{num}|{severity}|{issue_type}|{location}|{text}')
+-        elif line.startswith('- ') or line.startswith('* '):
+-            text = line.lstrip('-* ')
+-            if text:
+-                if in_issues:
+-                    issues.append(f'{next_num}|| | |{text}')
+-                else:
+-                    suggestions.append(f'{next_num}|| | |{text}')
+-                next_num += 1
+-
+-for i in issues:
+-    print(i)
+-for s in suggestions:
+-    print(s)
+-" <<< "$review_body" 2>/dev/null || true
++  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract-review-items.py" 2>/dev/null || true
+ }
+ 
+ create_issue() {
+@@ -613,16 +504,21 @@ process_issue_commands() {
+     review_body=$(get_latest_review "$repo" "$pr_number")
+   fi
+   
++  echo "    -> Review body (${#review_body} chars):"
++  echo "$review_body" | head -5 | sed 's/^/      /'
+   echo "    -> Checking for issue creation commands..."
+   
+   local review_items
+-  review_items=$(extract_review_items "$review_body")
++  review_items=$(DEBUG=1 extract_review_items "$review_body" 2>&1) || true
+   
+   if [[ -z "$review_items" ]]; then
+     echo "    -> No actionable items found in review"
+     return 0
+   fi
+   
++  echo "    -> Found review items:"
++  echo "$review_items" | sed 's/^/      /'
++  
+   local comments
+   comments=$(get_pr_comments "$repo" "$pr_number")
+   
+@@ -700,9 +596,9 @@ process_issue_commands() {
+         severity_line="- **Severity:** ${severity}"
+       fi
+       
+-      local type_line=""
++      local category_line=""
+       if [[ -n "$type" ]]; then
+-        type_line="- **Type:** ${type}"
++        category_line="- **Category:** ${type}"
+       fi
+       
+       local location_line=""
+@@ -710,7 +606,18 @@ process_issue_commands() {
+         location_line="- **File:** ${location}"
+       fi
+       
+-      local item_title_text="${item_text:0:200}"
++      local clean_title="${item_text}"
++      for tag in "$severity" "$type"; do
++        if [[ -n "$tag" ]]; then
++          clean_title="${clean_title#\[${tag}\]}"
++          clean_title="${clean_title#\[${tag}\] }"
++        fi
++      done
++      clean_title="${clean_title#${location}}"
++      clean_title="${clean_title#: }"
++      clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
++      
++      local item_title_text="${clean_title:0:200}"
+       local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
+       local issue_body="## Original Review (PR #${pr_number})
+ 
+@@ -718,8 +625,8 @@ process_issue_commands() {
+ ${item_text}
+ ${severity_line:+}
+ ${severity_line}
+-${type_line:+}
+-${type_line}
++${category_line:+}
++${category_line}
+ ${location_line:+}
+ ${location_line}
+ 
+diff --git a/scripts/watch.sh b/scripts/watch.sh
+new file mode 100644
+index 0000000..38cfe6c
+--- /dev/null
++++ b/scripts/watch.sh
+@@ -0,0 +1,7 @@
++#!/usr/bin/env bash
++# watch.sh - Run watcher once (manual mode)
++
++set -e
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++bash "${SCRIPT_DIR}/watch-prs.sh" --once
+\ No newline at end of file
+diff --git a/tests/lib_test.sh b/tests/lib_test.sh
+new file mode 100644
+index 0000000..d8ee3b1
+--- /dev/null
++++ b/tests/lib_test.sh
+@@ -0,0 +1,180 @@
++#!/usr/bin/env bash
++# Test library functions using bashunit
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
++LIB_DIR="${PROJECT_DIR}/scripts/lib"
++
++function test_extract_review_items_extracts_three_items() {
++    local review_body='## AI Code Review
++
++**Verdict:** Changes Requested
++
++### Issues
++1. [HIGH] [security] src/auth.rs:45: SQL injection vulnerability
++2. [MEDIUM] [architecture] src/db.rs:20: Tight coupling
++
++### Suggestions
++3. Consider adding unit tests
++
++**Summary:** Fix the security issue.'
++
++    local result
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++
++    local count
++    count=$(echo "$result" | wc -l)
++
++    assert_equals 3 "$count"
++}
++
++function test_extract_review_items_extracts_high_severity() {
++    local review_body='## AI Code Review
++
++### Issues
++1. [HIGH] [security] src/auth.rs:45: SQL injection
++'
++
++    local result
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++
++    local contains
++    contains=$(echo "$result" | grep -c '^1|HIGH|security|' || true)
++    assert_equals 1 "$contains"
++}
++
++function test_extract_review_items_extracts_medium_and_architecture() {
++    local review_body='## AI Code Review
++
++### Issues
++2. [MEDIUM] [architecture] src/db.rs:20: Tight coupling
++'
++
++    local result
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++
++    local contains
++    contains=$(echo "$result" | grep -c '^2|MEDIUM|architecture|' || true)
++    assert_equals 1 "$contains"
++}
++
++function test_extract_review_items_location_format() {
++    local review_body='## AI Code Review
++
++### Issues
++1. [LOW] [quality] scripts/lib/extract-review-items.py:85: Magic number
++'
++
++    local result
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++
++    local has_location
++    has_location=$(echo "$result" | grep -c 'scripts/lib/extract-review-items.py:85' || true)
++    assert_equals 1 "$has_location"
++}
++
++function test_extract_review_items_severity_not_in_location() {
++    local review_body='## AI Code Review
++
++### Issues
++1. [LOW] [quality] src/file.rs:10: Some issue
++'
++
++    local result
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++
++    local has_low_in_location
++    has_low_in_location=$(echo "$result" | grep -c '^1|LOW|quality|LOW|' || true)
++    assert_equals 0 "$has_low_in_location"
++}
++
++function test_parse_issue_command_create_issue_for() {
++    local result
++    result=$(echo "create issue for 1, 2, 3" | python3 "${LIB_DIR}/parse-issue-command.py")
++
++    assert_equals "1,2,3" "$result"
++}
++
++function test_parse_issue_command_shorthand() {
++    local result
++    result=$(echo "issue 5" | python3 "${LIB_DIR}/parse-issue-command.py")
++
++    assert_equals "5" "$result"
++}
++
++function test_parse_issue_command_uppercase() {
++    local result
++    result=$(echo "CREATE ISSUE FOR 1 2" | python3 "${LIB_DIR}/parse-issue-command.py")
++
++    assert_equals "1,2" "$result"
++}
++
++function test_parse_issue_command_non_command() {
++    local result
++    result=$(echo "This is a regular comment" | python3 "${LIB_DIR}/parse-issue-command.py")
++
++    assert_equals "" "$result"
++}
++
++function test_get_pr_reviews_returns_most_recent() {
++    local json='[
++        {"id": 1, "state": "approved", "created_at": "2024-01-01T00:00:00Z", "body": "Old review"},
++        {"id": 2, "state": "changes_requested", "created_at": "2024-01-02T00:00:00Z", "body": "Newer review"}
++    ]'
++
++    local result
++    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-reviews.py")
++
++    local contains
++    contains=$(echo "$result" | grep -c 'Newer review' || true)
++    assert_equals 1 "$contains"
++}
++
++function test_get_pr_reviews_contains_correct_id_and_state() {
++    local json='[
++        {"id": 1, "state": "approved", "created_at": "2024-01-01T00:00:00Z", "body": "Old review"},
++        {"id": 2, "state": "changes_requested", "created_at": "2024-01-02T00:00:00Z", "body": "Newer review"}
++    ]'
++
++    local result
++    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-reviews.py")
++
++    local contains
++    contains=$(echo "$result" | grep -c '2|changes_requested' || true)
++    assert_equals 1 "$contains"
++}
++
++function test_get_pr_comments_parses_two_comments() {
++    local json='[
++        {"id": 100, "created_at": "2024-01-01T00:00:00Z", "body": "First comment"},
++        {"id": 101, "created_at": "2024-01-02T00:00:00Z", "body": "Second comment"}
++    ]'
++
++    local result
++    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-comments.py")
++
++    local count
++    count=$(echo "$result" | wc -l)
++
++    assert_equals 2 "$count"
++}
++
++function test_get_pr_comments_parses_correctly() {
++    local json='[
++        {"id": 100, "created_at": "2024-01-01T00:00:00Z", "body": "First comment"}
++    ]'
++
++    local result
++    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-comments.py")
++
++    local contains
++    contains=$(echo "$result" | grep -c '100.*First comment' || true)
++    assert_equals 1 "$contains"
++}
++
++function test_json_escape_escapes_quotes() {
++    local result
++    result=$(printf 'Hello "world"' | python3 "${LIB_DIR}/json-escape.py")
++
++    assert_equals '"Hello \"world\""' "$result"
++}
+\ No newline at end of file
+diff --git a/tests/scripts_test.sh b/tests/scripts_test.sh
+new file mode 100644
+index 0000000..a54ce59
+--- /dev/null
++++ b/tests/scripts_test.sh
+@@ -0,0 +1,60 @@
++#!/usr/bin/env bash
++# Test shell scripts using bashunit
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)"
++PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++
++function test_install_bashunit_skips_if_exists() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/install-bashunit.sh" 2>&1)
++    assert_equals 0 $?
++}
++
++function test_clean_outputs_message() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/clean.sh" 2>&1)
++    local count
++    count=$(echo "$result" | grep -c 'Done' || true)
++    assert_equals 1 "$count"
++}
++
++function test_clean_resets_state() {
++    bash "${SCRIPT_DIR}/clean.sh" > /dev/null 2>&1
++    local content
++    content=$(cat "${PROJECT_DIR}/runner-data/pr-reviews.json")
++    assert_equals '{"reviewed":{}}' "$content"
++}
++
++function test_list_items_requires_repo() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/list-items.sh" 2>&1)
++    assert_equals 1 $?
++}
++
++function test_list_items_requires_pr() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/list-items.sh" owner/repo 2>&1)
++    assert_equals 1 $?
++}
++
++function test_test_pr_requires_repo() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/test-pr.sh" 2>&1)
++    assert_equals 1 $?
++}
++
++function test_list_items_usage_message() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/list-items.sh" 2>&1)
++    local count
++    count=$(echo "$result" | grep -c 'Usage:' || true)
++    assert_equals 1 "$count"
++}
++
++function test_test_pr_usage_message() {
++    local result
++    result=$(bash "${SCRIPT_DIR}/test-pr.sh" 2>&1)
++    local count
++    count=$(echo "$result" | grep -c 'Usage:' || true)
++    assert_equals 1 "$count"
++}
+\ No newline at end of file

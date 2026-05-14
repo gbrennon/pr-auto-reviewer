@@ -1,0 +1,49 @@
+use std::sync::Mutex;
+
+use crate::domain::medication::MedicationId;
+use crate::domain::dose_record::DoseRecord;
+use crate::domain::ports::DoseRecordRepository;
+use crate::domain::errors::StorageError;
+
+pub struct JsonDoseRecordRepository {
+    records: Mutex<Vec<DoseRecord>>,
+}
+
+impl JsonDoseRecordRepository {
+    pub fn new() -> Self {
+        Self { records: Mutex::new(Vec::new()) }
+    }
+
+    pub fn load_from_file(path: &str) -> Result<Self, StorageError> {
+        let data = std::fs::read_to_string(path)?;
+        let records: Vec<DoseRecord> = serde_json::from_str(&data)?;
+        Ok(Self { records: Mutex::new(records) })
+    }
+}
+
+impl DoseRecordRepository for JsonDoseRecordRepository {
+    fn save(&self, record: &DoseRecord) -> Result<(), StorageError> {
+        let mut records = self.records.lock().unwrap();
+        records.push(record.clone());
+        Ok(())
+    }
+
+    fn find_all(&self) -> Result<Vec<DoseRecord>, StorageError> {
+        let records = self.records.lock().unwrap();
+        Ok(records.clone())
+    }
+
+    fn find_by_medication_id(
+        &self,
+        medication_id: &MedicationId,
+    ) -> Result<Vec<DoseRecord>, StorageError> {
+        // This will list DoseReord in the inverse order
+        let records = self.records.lock().unwrap();
+        Ok(records
+            .iter()
+            .filter(|r| r.medication_id() == medication_id)
+            .cloned()
+            .rev()
+            .collect())
+    }
+}

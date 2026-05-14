@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR adds comprehensive documentation and improves the README. The changes are well-structured and provide valuable information for users and developers.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 3,
+  "head_sha": "0e79fc1f08396df6213f3c26c7f08bbf5a209350"
+}

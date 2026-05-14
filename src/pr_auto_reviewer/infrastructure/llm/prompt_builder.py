@@ -2,131 +2,104 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
+import jinja2
+
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
+
+_DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
+_DELETED_FILE_RE = re.compile(r"^deleted file mode", re.MULTILINE)
+_NEW_FILE_RE = re.compile(r"^new file mode", re.MULTILINE)
+_DEVNULL_SRC_RE = re.compile(r"^--- /dev/null$", re.MULTILINE)
+_DEVNULL_DST_RE = re.compile(r"^\+\+\+ /dev/null$", re.MULTILINE)
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 class PromptBuilder:
     """Build the prompt sent to the LLM from a diff + review context."""
 
-    @staticmethod
-    def build(diff: PullRequestDiff, context: RepositoryContext) -> str:
-        parts: list[str] = [
-            "You are a Senior Principal Software Engineer and Code Reviewer "
-            "with deep expertise in software architecture, design patterns, "
-            "SOLID principles, and engineering excellence. "
-            "Your role is to provide constructive, actionable code reviews "
-            "for pull requests.",
-            "",
-            "## REVIEW PRIORITY",
-            "",
-            "1. **Critical Issues** (must fix):",
-            "   - Security vulnerabilities",
-            "   - Memory leaks or resource leaks",
-            "   - Race conditions",
-            "   - Unhandled exceptions",
-            "   - Null pointer dereferences",
-            "",
-            "2. **Architectural Issues** (should fix):",
-            "   - SOLID violations",
-            "   - Architectural boundary breaches",
-            "   - God objects",
-            "   - Tight coupling without abstraction",
-            "",
-            "3. **Code Quality** (consider fixing):",
-            "   - Naming conventions",
-            "   - Code duplication",
-            "   - Missing documentation",
-            "   - Inefficient algorithms",
-            "",
-            "4. **Suggestions** (optional):",
-            "   - Code style preferences",
-            "   - Minor optimizations",
-            "   - Cosmetic improvements",
-            "",
-            "## RESPONSE FORMAT",
-            "",
-            "Output ONLY valid JSON (no markdown, no explanation):",
-            "",
-            "{",
-            '  "issues": [',
-            '    {"file": "path/to/file", "line": "123", '
-            '"severity": "critical|high|medium|low", '
-            '"type": "security|architecture|solid|test|quality", '
-            '"description": "specific issue description"}',
-            "  ],",
-            '  "suggestions": [',
-            '    {"file": "path/to/file", "line": "456", '
-            '"description": "improvement suggestion"}',
-            "  ],",
-            '  "praise": [',
-            '    {"file": "path/to/file", "description": "what was done well"}',
-            "  ],",
-            '  "summary": "2-3 sentence overall assessment of the PR"',
-            "}",
-            "",
-            "## GUIDELINES",
-            "",
-            "- Be specific: cite file names, line numbers, and function names",
-            "- Explain WHY something is an issue, not just WHAT is wrong",
-            "- Provide actionable feedback: tell the author HOW to fix it",
-            "- Be constructive: acknowledge good patterns alongside problems",
-            "- Focus on what matters: don't nitpick style when "
-            "architecture is wrong",
-            "- Prioritize: critical issues first, then architectural, then quality",
-            "- No emojis in any output",
-            "- Reply in English only",
-            "- **CRITICAL: NEVER suggest removing the modified code.** "
-            "Your job is to review changes, not undo them. "
-            "If you find issues with the modified code, suggest how to "
-            "improve it — refactor, restructure, fix — but never propose "
-            "reverting or deleting the change. "
-            "The author intentionally made this modification; "
-            "help them make it better, not discard it.",
-            "- **CRITICAL: READ the full file contents and diff CAREFULLY "
-            "before reporting issues.**  Do NOT generate formulaic or "
-            "template feedback (e.g. 'missing shebang', 'add comments') "
-            "without first verifying that the problem actually exists in "
-            "the provided code.  If the code already has a shebang, "
-            "comments, error handling, or other boilerplate, do NOT "
-            "suggest adding them — doing so is a hallucination.",
-            "",
-            "---",
-        ]
+    def __init__(self, template_dir: Path | None = None) -> None:
+        self._env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(str(template_dir or _TEMPLATES_DIR)),
+            keep_trailing_newline=True,
+        )
 
-        if context.architecture_hint:
-            parts.append(
-                f"## Architecture / context\n"
-                f"{context.architecture_hint}\n"
-            )
+    def _classify_chunk(self, chunk: str) -> str:
+        """Return '[ADDED]', '[DELETED]', or '[MODIFIED]' for a diff chunk."""
+        if _DELETED_FILE_RE.search(chunk) or _DEVNULL_DST_RE.search(chunk):
+            return "[DELETED]"
+        if _NEW_FILE_RE.search(chunk) or _DEVNULL_SRC_RE.search(chunk):
+            return "[ADDED]"
+        return "[MODIFIED]"
+
+    def _annotate_diff(self, raw_diff: str) -> str:
+        """Insert file-status markers into a unified diff.
+
+        Each per-file chunk gets a header line like::
+
+            [DELETED] .github/copilot-instructions.md -- already removed, skip.
+
+        placed right after the ``diff --git`` line.
+        """
+        chunks = _DIFF_CHUNK_RE.split(raw_diff)
+        annotated: list[str] = []
+
+        for chunk in chunks:
+            if not chunk.strip():
+                continue
+
+            lines = chunk.split("\n")
+            header_line = lines[0] if lines else ""
+
+            if not header_line.startswith("diff --git "):
+                annotated.append(chunk)
+                continue
+
+            parts = header_line.split(" ")
+            b_path = parts[3][2:] if len(parts) >= 4 else ""
+
+            change_type = self._classify_chunk(chunk)
+
+            if change_type == "[DELETED]":
+                marker = (
+                    f"[DELETED] {b_path} -- this file is being removed. "
+                    f"Do NOT flag any issues in it."
+                )
+            elif change_type == "[ADDED]":
+                marker = (
+                    f"[ADDED] {b_path} -- this is a new file. "
+                    f"Review its content for issues."
+                )
+            else:
+                marker = (
+                    f"[MODIFIED] {b_path} -- this file has been changed. "
+                    f"Review only the added (+) lines and the context."
+                )
+
+            lines.insert(1, marker)
+            annotated.append("\n".join(lines))
+
+        return "\n".join(annotated)
+
+    def build(self, diff: PullRequestDiff, context: RepositoryContext) -> str:
+        template = self._env.get_template("review_prompt.j2")
 
         conventions = context.conventions or diff.conventions
-        if conventions:
-            parts.append(f"## Project conventions\n{conventions}\n")
+        repo_structure = context.repository_structure or diff.repository_structure
 
-        repo_structure = (
-            context.repository_structure or diff.repository_structure
+        annotated_diff = self._annotate_diff(diff.diff_content)
+
+        return template.render(
+            architecture_hint=context.architecture_hint if context.architecture_hint else None,
+            conventions=conventions if conventions else None,
+            repository_structure=repo_structure if repo_structure else None,
+            file_contents=diff.file_contents if diff.file_contents else None,
+            annotated_diff=annotated_diff,
+            pr_title=context.pr_title if context.pr_title else None,
+            pr_description=context.pr_description if context.pr_description else None,
+            commit_messages=diff.commit_messages if diff.commit_messages else None,
         )
-        if repo_structure:
-            parts.append(
-                f"## Repository structure\n{repo_structure}\n"
-            )
-
-        # Include full file contents so the LLM can read clean code
-        # (not just diff markers).  This drastically reduces hallucinations
-        # about missing shebangs, comments, or other boilerplate.
-        if diff.file_contents:
-            parts.append("## Full file contents (the actual files, not diffs)")
-            parts.append("")
-            for file_path, content in sorted(diff.file_contents.items()):
-                parts.append(f"### {file_path}")
-                parts.append("```")
-                parts.append(content)
-                parts.append("```")
-                parts.append("")
-
-        parts.append("## Diff\n```diff")
-        parts.append(diff.diff_content)
-        parts.append("```")
-
-        return "\n".join(parts)

@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR cleans up the zshrc file by removing an unused plugin, which is a good refactoring.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "dotfiles",
+  "full_repo": "gbrennon/dotfiles",
+  "pr_number": 22,
+  "head_sha": "47b99e86d88e597140f8ab5acf7e65a762d14f9d"
+}

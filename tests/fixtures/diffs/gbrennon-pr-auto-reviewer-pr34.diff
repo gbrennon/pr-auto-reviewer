@@ -1,0 +1,973 @@
+diff --git a/.gitignore b/.gitignore
+index a4de087..974ecdb 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -7,3 +7,4 @@ runner-data/
+ *.service
+ __pycache__
+ lib/bashunit
++coverage/
+diff --git a/Makefile b/Makefile
+index c81aec0..58ad71e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit test-unit
++.PHONY: help install start stop status restart logs watch test clean issues list-items install-bashunit
+ 
+ SHELL := /usr/bin/env bash
+ SCRIPT_DIR := scripts
+@@ -17,18 +17,17 @@ help:
+ 	@echo "  make restart        Restart the service"
+ 	@echo "  make logs           Show service logs (follow)"
+ 	@echo "  make watch          Run watcher once (manual mode)"
+-	@echo "  make test           Run test on a repo"
++	@echo "  make test           Run unit tests"
+ 	@echo "  make issues         Create issues from PR commands"
+ 	@echo "  make list-items     List review items from PR"
+ 	@echo "  make clean          Clean state files"
+ 	@echo "  make install-bashunit  Install bashunit testing framework"
+-	@echo "  make test-unit      Run unit tests with bashunit"
+ 	@echo ""
+ 	@echo "Examples:"
+-	@echo "  make test REPO=gbrennon/pr-auto-reviewer"
++	@echo "  make test"
++	@echo "  make watch"
+ 	@echo "  make issues REPO=owner/repo PR=8"
+ 	@echo "  make list-items REPO=owner/repo PR=8"
+-	@echo "  make test-unit"
+ 
+ install:
+ 	@bash $(SCRIPT_DIR)/install-service.sh
+@@ -52,39 +51,16 @@ watch:
+ 	@bash $(SCRIPT_DIR)/watch.sh
+ 
+ test:
+-ifndef REPO
+-	@echo "Usage: make test REPO=owner/repo"
+-	@exit 1
+-endif
+-	@bash $(SCRIPT_DIR)/test-pr.sh $(REPO)
++	@bash $(SCRIPT_DIR)/test-unit.sh
+ 
+ issues:
+-ifndef REPO
+-	@echo "Usage: make issues REPO=owner/repo PR=number"
+-	@exit 1
+-endif
+-ifndef PR
+-	@echo "Usage: make issues REPO=owner/repo PR=number"
+-	@exit 1
+-endif
+-	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh $(REPO) $(PR)
++	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
+ 
+ list-items:
+-ifndef REPO
+-	@echo "Usage: make list-items REPO=owner/repo PR=number"
+-	@exit 1
+-endif
+-ifndef PR
+-	@echo "Usage: make list-items REPO=owner/repo PR=number"
+-	@exit 1
+-endif
+-	@bash $(SCRIPT_DIR)/list-items.sh $(REPO) $(PR)
++	@bash $(SCRIPT_DIR)/list-items.sh
+ 
+ clean:
+ 	@bash $(SCRIPT_DIR)/clean.sh
+ 
+ install-bashunit:
+ 	@bash $(SCRIPT_DIR)/install-bashunit.sh
+-
+-test-unit:
+-	@bash $(SCRIPT_DIR)/test-unit.sh
+\ No newline at end of file
+diff --git a/scripts/create-issues-from-pr.sh b/scripts/create-issues-from-pr.sh
+index acbcc55..6761356 100644
+--- a/scripts/create-issues-from-pr.sh
++++ b/scripts/create-issues-from-pr.sh
+@@ -139,8 +139,8 @@ create_issue() {
+   
+   local escaped_title
+   local escaped_body
+-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   local result
+   result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
+@@ -160,7 +160,7 @@ post_comment() {
+   local body="$3"
+   
+   local escaped_body
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   curl -sf -X POST "${API_BASE}/repos/${repo}/issues/${pr_number}/comments" \
+     -H "Authorization: token ${FORGEJO_TOKEN}" \
+diff --git a/scripts/lib/build-prompt.py b/scripts/lib/build-prompt.py
+deleted file mode 100644
+index a56d3bd..0000000
+--- a/scripts/lib/build-prompt.py
++++ /dev/null
+@@ -1,68 +0,0 @@
+-#!/usr/bin/env python3
+-"""Build the Ollama prompt for code review."""
+-
+-import sys
+-import os
+-
+-diff = os.environ.get("DIFF_CONTENT", "")
+-
+-prompt = f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
+-
+-## REVIEW PRIORITY
+-
+-1. **Critical Issues** (must fix):
+-   - Security vulnerabilities
+-   - Memory leaks or resource leaks
+-   - Race conditions
+-   - Unhandled exceptions
+-   - Null pointer dereferences
+-
+-2. **Architectural Issues** (should fix):
+-   - SOLID violations
+-   - Architectural boundary breaches
+-   - God objects
+-   - Tight coupling without abstraction
+-
+-3. **Code Quality** (consider fixing):
+-   - Naming conventions
+-   - Code duplication
+-   - Missing documentation
+-   - Inefficient algorithms
+-
+-4. **Suggestions** (optional):
+-   - Code style preferences
+-   - Minor optimizations
+-   - Cosmetic improvements
+-
+-## RESPONSE FORMAT
+-
+-Output ONLY valid JSON (no markdown, no explanation):
+-
+-{{
+-  "issues": [
+-    {{"file": "path/to/file", "line": "123", "severity": "critical|high|medium|low", "type": "security|architecture|solid|test|quality", "description": "specific issue description"}}
+-  ],
+-  "suggestions": [
+-    {{"file": "path/to/file", "line": "456", "description": "improvement suggestion"}}
+-  ],
+-  "praise": [
+-    {{"file": "path/to/file", "description": "what was done well"}}
+-  ],
+-  "summary": "2-3 sentence overall assessment of the PR"
+-}}
+-
+-## GUIDELINES
+-
+-- Be specific: cite file names, line numbers, and function names
+-- Explain WHY something is an issue, not just WHAT is wrong
+-- Provide actionable feedback: tell the author HOW to fix it
+-- Be constructive: acknowledge good patterns alongside problems
+-- Focus on what matters: don't nitpick style when architecture is wrong
+-- Prioritize: critical issues first, then architectural, then quality
+-- No emojis in any output
+-- Reply in English only
+-
+-DIFF:
+-{diff}"""
+-
+-print(prompt)
+diff --git a/scripts/lib/build-comment.py b/scripts/lib/build_comment.py
+similarity index 73%
+rename from scripts/lib/build-comment.py
+rename to scripts/lib/build_comment.py
+index 4e01628..4119e4d 100644
+--- a/scripts/lib/build-comment.py
++++ b/scripts/lib/build_comment.py
+@@ -46,6 +46,16 @@ def determine_verdict(review):
+         'approved' if no critical/high issues
+         'changes_requested' if there are critical/high issues
+     """
++    # Check for explicit verdict in response
++    verdict = review.get("verdict", "").lower()
++    if verdict in ("approve", "approved"):
++        return "approved"
++    if verdict in ("request_changes", "changes_requested"):
++        return "changes_requested"
++    if verdict == "comment":
++        return "comment"
++
++    # Fallback: determine from issue severity
+     issues = review.get("issues", [])
+ 
+     for issue in issues:
+@@ -70,6 +80,7 @@ def main():
+     suggestions = review.get("suggestions", [])
+     praise = review.get("praise", [])
+     summary = review.get("summary", "")
++    verdict_reason = review.get("verdict_reason", "")
+     model = os.environ.get("OLLAMA_MODEL", "ollama")
+ 
+     # Determine verdict
+@@ -77,11 +88,16 @@ def main():
+ 
+     if verdict == "approved":
+         verdict_text = "Approved"
+-    else:
++    elif verdict == "changes_requested":
+         verdict_text = "Changes Requested"
++    else:
++        verdict_text = "Comment"
+ 
+     body = f"## AI Code Review\n\n"
+-    body += f"**Verdict:** {verdict_text}\n\n"
++    body += f"**Verdict:** {verdict_text}\n"
++    if verdict_reason:
++        body += f"**Reason:** {verdict_reason}\n"
++    body += "\n"
+ 
+     if issues:
+         body += "### Issues\n"
+@@ -91,10 +107,16 @@ def main():
+             file = i.get("file", "")
+             line = i.get("line", "?")
+             desc = i.get("description", "")
++            current_code = i.get("current_code", "")
++            suggested_fix = i.get("suggested_fix", "")
+ 
+             location = f"{file}:{line}" if file and line else (file or line or "?")
+             type_tag = f" [{typ}]" if typ else ""
+             body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
++            if current_code:
++                body += f"    ```\n    {current_code}\n    ```\n"
++            if suggested_fix:
++                body += f"    **Suggested:**\n    ```\n    {suggested_fix}\n    ```\n"
+         body += "\n"
+ 
+     if suggestions:
+@@ -104,9 +126,15 @@ def main():
+             file = s.get("file", "")
+             line = s.get("line", "?")
+             desc = s.get("description", "")
++            current_code = s.get("current_code", "")
++            suggested_code = s.get("suggested_code", "")
+ 
+             location = f"{file}:{line}" if file and line else (file or line or "?")
+             body += f"{idx}. {location}: {desc}\n"
++            if current_code:
++                body += f"    ```\n    {current_code}\n    ```\n"
++            if suggested_code:
++                body += f"    **Suggested:**\n    ```\n    {suggested_code}\n    ```\n"
+         body += "\n"
+ 
+     if praise:
+diff --git a/scripts/lib/build_prompt.py b/scripts/lib/build_prompt.py
+new file mode 100644
+index 0000000..6f5b75c
+--- /dev/null
++++ b/scripts/lib/build_prompt.py
+@@ -0,0 +1,96 @@
++#!/usr/bin/env python3
++"""Build the Ollama prompt for code review."""
++
++import sys
++import os
++
++diff = os.environ.get("DIFF_CONTENT", "")
++
++prompt = f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
++
++## REVIEW PRIORITY
++
++1. **Critical Issues** (must fix):
++   - Security vulnerabilities
++   - Memory leaks or resource leaks
++   - Race conditions
++   - Unhandled exceptions
++   - Null pointer dereferences
++
++2. **Architectural Issues** (should fix):
++   - SOLID violations
++   - Architectural boundary breaches
++   - God objects
++   - Tight coupling without abstraction
++
++3. **Code Quality** (consider fixing):
++   - Naming conventions
++   - Code duplication
++   - Missing documentation
++   - Inefficient algorithms
++
++4. **Suggestions** (optional):
++   - Code style preferences
++   - Minor optimizations
++   - Cosmetic improvements
++
++## RESPONSE FORMAT
++
++Output ONLY valid JSON (no markdown, no explanation):
++
++{{
++  "verdict": "approve|comment|request_changes",
++  "verdict_reason": "short explanation for the verdict",
++  "issues": [
++    {{"file": "path/to/file", "line": 123, "current_code": "EXACT problematic code (max 3 lines)", "severity": "critical|high|medium|low", "type": "security|architecture|solid|test|quality", "description": "What's wrong and WHY it matters", "suggested_fix": "EXACT code to replace current_code"}}
++  ],
++  "suggestions": [
++    {{"file": "path/to/file", "line": 456, "current_code": "EXACT code to improve (max 3 lines)", "suggested_code": "EXACT improved version", "description": "Why this change improves the code"}}
++  ],
++  "praise": [
++    {{"file": "path/to/file", "description": "what was done well"}}
++  ],
++  "summary": "2-3 sentence overall assessment of the PR"
++}}
++
++## MANDATORY OUTPUT REQUIREMENTS
++
++Every issue and suggestion MUST include both current_code AND suggested_code/suggested_fix. If you cannot provide both, omit the issue entirely. Do NOT output generic descriptions without actual code.
++
++### CORRECT OUTPUT (will be accepted):
++```json
++{{
++  "file": "src/utils/helper.py",
++  "line": 45,
++  "current_code": "if status == 200 {{ return true; }}",
++  "suggested_fix": "const HTTP_OK = 200; if (status == HTTP_OK) {{ return true; }}",
++  "description": "Magic number 200 makes intent unclear - future readers won't know why specifically 200"
++}}
++```
++
++### INCORRECT OUTPUT (will be rejected):
++```json
++{{
++  "file": "src/utils/helper.py",
++  "line": 45,
++  "description": "Use a constant instead of magic number"
++}}
++```
++
++## GUIDELINES
++
++- Be specific: cite file names, line numbers, and show EXACT code
++- Explain WHY something is an issue, not just WHAT is wrong
++- Provide actionable feedback: show the exact code to fix it
++- Be constructive: acknowledge good patterns alongside problems
++- Focus on what matters: don't nitpick style when architecture is wrong
++- Prioritize: critical issues first, then architectural, then quality
++- No emojis in any output
++- Reply in English only
++- NEVER suggest adding comments. Instead, suggest using expressive variable/function names, extracting logic into well-named functions, or restructuring code to make it self-documenting
++- NEVER suggest adding explanatory comments. Code should be self-explanatory through good naming and structure
++
++DIFF:
++{diff}"""
++
++print(prompt)
+diff --git a/scripts/lib/extract-review-items.py b/scripts/lib/extract_review_items.py
+similarity index 100%
+rename from scripts/lib/extract-review-items.py
+rename to scripts/lib/extract_review_items.py
+diff --git a/scripts/lib/forgejo-api.sh b/scripts/lib/forgejo-api.sh
+index 0f53106..533eeb7 100644
+--- a/scripts/lib/forgejo-api.sh
++++ b/scripts/lib/forgejo-api.sh
+@@ -103,7 +103,7 @@ forgejo_post_pr_review() {
+   local reviewer_token="$5"
+   
+   local escaped_body
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/reviews" \
+     "{\"event\":\"${event}\",\"body\":${escaped_body}}" \
+@@ -127,8 +127,8 @@ forgejo_create_issue() {
+   
+   local escaped_title
+   local escaped_body
+-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   local result
+   result=$(forgejo_api_post "/repos/${repo}/issues" \
+@@ -143,7 +143,7 @@ forgejo_post_comment() {
+   local body="$3"
+   
+   local escaped_body
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
+     "{\"body\":${escaped_body}}" 2>/dev/null || true
+diff --git a/scripts/lib/get-pr-comments.py b/scripts/lib/get_pr_comments.py
+similarity index 100%
+rename from scripts/lib/get-pr-comments.py
+rename to scripts/lib/get_pr_comments.py
+diff --git a/scripts/lib/get-pr-reviews.py b/scripts/lib/get_pr_reviews.py
+similarity index 100%
+rename from scripts/lib/get-pr-reviews.py
+rename to scripts/lib/get_pr_reviews.py
+diff --git a/scripts/lib/json-escape.py b/scripts/lib/json_escape.py
+similarity index 100%
+rename from scripts/lib/json-escape.py
+rename to scripts/lib/json_escape.py
+diff --git a/scripts/lib/parse-issue-command.py b/scripts/lib/parse_issue_command.py
+similarity index 100%
+rename from scripts/lib/parse-issue-command.py
+rename to scripts/lib/parse_issue_command.py
+diff --git a/scripts/test-pr.sh b/scripts/test-pr.sh
+deleted file mode 100644
+index e25be3a..0000000
+--- a/scripts/test-pr.sh
++++ /dev/null
+@@ -1,14 +0,0 @@
+-#!/usr/bin/env bash
+-# test-pr.sh - Run test on a specific repo
+-
+-set -e
+-
+-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-REPO="${1:-}"
+-
+-if [[ -z "$REPO" ]]; then
+-    echo "Usage: $0 owner/repo"
+-    exit 1
+-fi
+-
+-bash "${SCRIPT_DIR}/watch-prs.sh" -r "$REPO" --once
+\ No newline at end of file
+diff --git a/scripts/test-unit.sh b/scripts/test-unit.sh
+index 095a31c..a733f05 100644
+--- a/scripts/test-unit.sh
++++ b/scripts/test-unit.sh
+@@ -1,8 +1,6 @@
+ #!/usr/bin/env bash
+ # test-unit.sh - Run unit tests with bashunit
+ 
+-set -e
+-
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ BASHUNIT="${PROJECT_DIR}/lib/bashunit"
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index 0bb6922..3d1350e 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -253,7 +253,7 @@ get_pr_comments() {
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+     "${API_BASE}/repos/${repo}/issues/${pr_number}/comments?limit=50" 2>/dev/null | \
+-    python3 "${SCRIPT_DIR}/lib/get-pr-comments.py" 2>/dev/null || true
++    python3 "${SCRIPT_DIR}/lib/get_pr_comments.py" 2>/dev/null || true
+ }
+ 
+ get_pr_reviews() {
+@@ -262,7 +262,7 @@ get_pr_reviews() {
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+     "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews?limit=10" 2>/dev/null | \
+-    python3 "${SCRIPT_DIR}/lib/get-pr-reviews.py" 2>/dev/null || true
++    python3 "${SCRIPT_DIR}/lib/get_pr_reviews.py" 2>/dev/null || true
+ }
+ 
+ get_latest_review() {
+@@ -294,13 +294,13 @@ list_review_items() {
+ parse_issue_command() {
+   local comment="$1"
+   
+-  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse-issue-command.py" 2>/dev/null || true
++  echo "$comment" | python3 "${SCRIPT_DIR}/lib/parse_issue_command.py" 2>/dev/null || true
+ }
+ 
+ extract_review_items() {
+   local review_body="$1"
+   
+-  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract-review-items.py" 2>/dev/null || true
++  echo "$review_body" | DEBUG=1 python3 "${SCRIPT_DIR}/lib/extract_review_items.py" 2>/dev/null || true
+ }
+ 
+ create_issue() {
+@@ -310,8 +310,8 @@ create_issue() {
+   
+   local escaped_title
+   local escaped_body
+-  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+-  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_title=$(echo "$title" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
++  escaped_body=$(echo "$body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+   
+   local result
+   result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/issues" \
+@@ -370,7 +370,7 @@ process_pr() {
+   echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
+   
+   local review_prompt
+-  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
++  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build_prompt.py")
+   
+   local ollama_host
+   ollama_host=$(resolve_ollama_host)
+@@ -411,7 +411,7 @@ print(json.dumps(data))
+   fi
+   
+   local verdict comment_body build_output
+-  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build-comment.py")
++  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build_comment.py")
+   verdict=$(echo "$build_output" | head -1)
+   comment_body=$(echo "$build_output" | tail -n +2)
+   
+@@ -419,7 +419,7 @@ print(json.dumps(data))
+ 
+   # Post formal review using reviewer token (not comment)
+   local escaped_body
+-  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json_escape.py")
+ 
+   local reviewer_token="${FORGEJO_REVIEWER_TOKEN:-}"
+   local reviewer_username="${FORGEJO_REVIEWER_USERNAME:-}"
+@@ -618,17 +618,18 @@ process_issue_commands() {
+       clean_title=$(echo "$clean_title" | sed 's/^[[:space:]]*//')
+       
+       local item_title_text="${clean_title:0:200}"
+-      local issue_title="[PR #${pr_number}] ${num}: ${item_title_text}"
++      local issue_title="[PR #${pr_number}] ${item_title_text}"
+       local issue_body="## Original Review (PR #${pr_number})
+ 
+ **Description:**
+ ${item_text}
+-${severity_line:+}
+-${severity_line}
+-${category_line:+}
+-${category_line}
++
+ ${location_line:+}
+ ${location_line}
++${category_line:+}
++${category_line}
++${severity_line:+}
++${severity_line}
+ 
+ ---
+ *Auto-created from PR #${pr_number} via PR AI Reviewer*"
+diff --git a/tests/lib_test.sh b/tests/lib_test.sh
+index d8ee3b1..1f9d1b4 100644
+--- a/tests/lib_test.sh
++++ b/tests/lib_test.sh
+@@ -1,9 +1,7 @@
+ #!/usr/bin/env bash
+ # Test library functions using bashunit
+ 
+-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+-LIB_DIR="${PROJECT_DIR}/scripts/lib"
++LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib" && pwd)"
+ 
+ function test_extract_review_items_extracts_three_items() {
+     local review_body='## AI Code Review
+@@ -20,7 +18,7 @@ function test_extract_review_items_extracts_three_items() {
+ **Summary:** Fix the security issue.'
+ 
+     local result
+-    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract_review_items.py")
+ 
+     local count
+     count=$(echo "$result" | wc -l)
+@@ -36,7 +34,7 @@ function test_extract_review_items_extracts_high_severity() {
+ '
+ 
+     local result
+-    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract_review_items.py")
+ 
+     local contains
+     contains=$(echo "$result" | grep -c '^1|HIGH|security|' || true)
+@@ -51,7 +49,7 @@ function test_extract_review_items_extracts_medium_and_architecture() {
+ '
+ 
+     local result
+-    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract_review_items.py")
+ 
+     local contains
+     contains=$(echo "$result" | grep -c '^2|MEDIUM|architecture|' || true)
+@@ -62,14 +60,14 @@ function test_extract_review_items_location_format() {
+     local review_body='## AI Code Review
+ 
+ ### Issues
+-1. [LOW] [quality] scripts/lib/extract-review-items.py:85: Magic number
++1. [LOW] [quality] scripts/lib/extract_review_items.py:85: Magic number
+ '
+ 
+     local result
+-    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract_review_items.py")
+ 
+     local has_location
+-    has_location=$(echo "$result" | grep -c 'scripts/lib/extract-review-items.py:85' || true)
++    has_location=$(echo "$result" | grep -c 'scripts/lib/extract_review_items.py:85' || true)
+     assert_equals 1 "$has_location"
+ }
+ 
+@@ -81,7 +79,7 @@ function test_extract_review_items_severity_not_in_location() {
+ '
+ 
+     local result
+-    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract-review-items.py")
++    result=$(echo "$review_body" | python3 "${LIB_DIR}/extract_review_items.py")
+ 
+     local has_low_in_location
+     has_low_in_location=$(echo "$result" | grep -c '^1|LOW|quality|LOW|' || true)
+@@ -90,28 +88,28 @@ function test_extract_review_items_severity_not_in_location() {
+ 
+ function test_parse_issue_command_create_issue_for() {
+     local result
+-    result=$(echo "create issue for 1, 2, 3" | python3 "${LIB_DIR}/parse-issue-command.py")
++    result=$(echo "create issue for 1, 2, 3" | python3 "${LIB_DIR}/parse_issue_command.py")
+ 
+     assert_equals "1,2,3" "$result"
+ }
+ 
+ function test_parse_issue_command_shorthand() {
+     local result
+-    result=$(echo "issue 5" | python3 "${LIB_DIR}/parse-issue-command.py")
++    result=$(echo "issue 5" | python3 "${LIB_DIR}/parse_issue_command.py")
+ 
+     assert_equals "5" "$result"
+ }
+ 
+ function test_parse_issue_command_uppercase() {
+     local result
+-    result=$(echo "CREATE ISSUE FOR 1 2" | python3 "${LIB_DIR}/parse-issue-command.py")
++    result=$(echo "CREATE ISSUE FOR 1 2" | python3 "${LIB_DIR}/parse_issue_command.py")
+ 
+     assert_equals "1,2" "$result"
+ }
+ 
+ function test_parse_issue_command_non_command() {
+     local result
+-    result=$(echo "This is a regular comment" | python3 "${LIB_DIR}/parse-issue-command.py")
++    result=$(echo "This is a regular comment" | python3 "${LIB_DIR}/parse_issue_command.py")
+ 
+     assert_equals "" "$result"
+ }
+@@ -123,7 +121,7 @@ function test_get_pr_reviews_returns_most_recent() {
+     ]'
+ 
+     local result
+-    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-reviews.py")
++    result=$(echo "$json" | python3 "${LIB_DIR}/get_pr_reviews.py")
+ 
+     local contains
+     contains=$(echo "$result" | grep -c 'Newer review' || true)
+@@ -137,7 +135,7 @@ function test_get_pr_reviews_contains_correct_id_and_state() {
+     ]'
+ 
+     local result
+-    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-reviews.py")
++    result=$(echo "$json" | python3 "${LIB_DIR}/get_pr_reviews.py")
+ 
+     local contains
+     contains=$(echo "$result" | grep -c '2|changes_requested' || true)
+@@ -151,7 +149,7 @@ function test_get_pr_comments_parses_two_comments() {
+     ]'
+ 
+     local result
+-    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-comments.py")
++    result=$(echo "$json" | python3 "${LIB_DIR}/get_pr_comments.py")
+ 
+     local count
+     count=$(echo "$result" | wc -l)
+@@ -165,7 +163,7 @@ function test_get_pr_comments_parses_correctly() {
+     ]'
+ 
+     local result
+-    result=$(echo "$json" | python3 "${LIB_DIR}/get-pr-comments.py")
++    result=$(echo "$json" | python3 "${LIB_DIR}/get_pr_comments.py")
+ 
+     local contains
+     contains=$(echo "$result" | grep -c '100.*First comment' || true)
+@@ -174,7 +172,74 @@ function test_get_pr_comments_parses_correctly() {
+ 
+ function test_json_escape_escapes_quotes() {
+     local result
+-    result=$(printf 'Hello "world"' | python3 "${LIB_DIR}/json-escape.py")
++    result=$(printf 'Hello "world"' | python3 "${LIB_DIR}/json_escape.py")
+ 
+     assert_equals '"Hello \"world\""' "$result"
++}
++
++function test_python_files_use_snake_case() {
++    local expected_files="build_comment.py build_prompt.py extract_review_items.py get_pr_comments.py get_pr_reviews.py json_escape.py parse_issue_command.py"
++    local all_found=1
++    
++    for file in $expected_files; do
++        if [[ ! -f "${LIB_DIR}/${file}" ]]; then
++            all_found=0
++        fi
++    done
++    
++    assert_equals 1 "$all_found"
++}
++
++function test_build_comment_parses_explicit_verdict_approve() {
++    local review_json='{"verdict": "approve", "issues": [], "suggestions": [], "praise": [], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
++    assert_equals "approved" "$result"
++}
++
++function test_build_comment_parses_explicit_verdict_request_changes() {
++    local review_json='{"verdict": "request_changes", "issues": [{"severity": "high"}], "suggestions": [], "praise": [], "summary": "Fix it"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
++    assert_equals "changes_requested" "$result"
++}
++
++function test_build_comment_parses_explicit_verdict_comment() {
++    local review_json='{"verdict": "comment", "issues": [{"severity": "low"}], "suggestions": [], "praise": [], "summary": "Consider this"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1 | head -1)
++    assert_equals "comment" "$result"
++}
++
++function test_build_comment_includes_verdict_reason() {
++    local review_json='{"verdict": "approve", "verdict_reason": "No critical issues found", "issues": [], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'Reason:' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_comment_shows_current_code_in_issues() {
++    local review_json='{"verdict": "approve", "issues": [{"file": "test.js", "line": 10, "current_code": "if (x == 1)", "description": "magic number", "suggested_fix": "const ONE = 1"}], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_code
++    found_code=$(echo "$result" | grep -c 'if (x == 1)' || true)
++    local found_suggested
++    found_suggested=$(echo "$result" | grep -c 'const ONE = 1' || true)
++    assert_equals 1 "$found_code"
++    assert_equals 1 "$found_suggested"
++}
++
++function test_build_comment_shows_current_code_in_suggestions() {
++    local review_json='{"verdict": "comment", "suggestions": [{"file": "test.js", "line": 20, "current_code": "function x()", "suggested_code": "function processData()", "description": "Better name"}], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_code
++    found_code=$(echo "$result" | grep -c 'function x()' || true)
++    local found_suggested
++    found_suggested=$(echo "$result" | grep -c 'function processData()' || true)
++    assert_equals 1 "$found_code"
++    assert_equals 1 "$found_suggested"
+ }
+\ No newline at end of file
+diff --git a/tests/prompt_test.sh b/tests/prompt_test.sh
+new file mode 100644
+index 0000000..8e8c1c3
+--- /dev/null
++++ b/tests/prompt_test.sh
+@@ -0,0 +1,123 @@
++#!/usr/bin/env bash
++# Test build-prompt.py using bashunit
++
++PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++BUILD_PROMPT="${PROJECT_DIR}/scripts/lib/build_prompt.py"
++
++function test_build_prompt_runs_without_error() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    assert_equals 0 $?
++}
++
++function test_build_prompt_contains_review_priority() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'REVIEW PRIORITY' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_critical_issues() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'Security vulnerabilities' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_json_format() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c '"issues"' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_guidelines() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'GUIDELINES' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_no_emojis_rule() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'No emojis' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_no_comments_guideline() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'NEVER suggest adding comments' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_self_documenting_guideline() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'self-documenting' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_includes_diff_content() {
++    local result
++    result=$(DIFF_CONTENT="MY_TEST_DIFF_CONTENT" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'MY_TEST_DIFF_CONTENT' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_includes_verdict_field() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c '"verdict"' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_includes_verdict_reason_field() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c '"verdict_reason"' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_suggestions_include_suggested_code() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c '"suggested_code"' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_includes_mandatory_requirements() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'MANDATORY OUTPUT REQUIREMENTS' || true)
++    assert_equals 1 "$found"
++}
++
++function test_build_prompt_contains_current_code_example() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'current_code' || true)
++    assert_equals 0 $? # grep returns 0 if found, 1 if not found
++}
++
++function test_build_prompt_contains_suggested_fix_example() {
++    local result
++    result=$(DIFF_CONTENT="test diff" python3 "${BUILD_PROMPT}" 2>&1)
++    local found
++    found=$(echo "$result" | grep -c 'suggested_fix' || true)
++    assert_equals 0 $?
++}
+\ No newline at end of file
+diff --git a/tests/scripts_test.sh b/tests/scripts_test.sh
+index a54ce59..2594eaf 100644
+--- a/tests/scripts_test.sh
++++ b/tests/scripts_test.sh
+@@ -3,6 +3,8 @@
+ 
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)"
+ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++WATCH_PRS="${SCRIPT_DIR}/watch-prs.sh"
++CREATE_ISSUES="${SCRIPT_DIR}/create-issues-from-pr.sh"
+ 
+ function test_install_bashunit_skips_if_exists() {
+     local result
+@@ -37,12 +39,6 @@ function test_list_items_requires_pr() {
+     assert_equals 1 $?
+ }
+ 
+-function test_test_pr_requires_repo() {
+-    local result
+-    result=$(bash "${SCRIPT_DIR}/test-pr.sh" 2>&1)
+-    assert_equals 1 $?
+-}
+-
+ function test_list_items_usage_message() {
+     local result
+     result=$(bash "${SCRIPT_DIR}/list-items.sh" 2>&1)
+@@ -51,10 +47,38 @@ function test_list_items_usage_message() {
+     assert_equals 1 "$count"
+ }
+ 
+-function test_test_pr_usage_message() {
+-    local result
+-    result=$(bash "${SCRIPT_DIR}/test-pr.sh" 2>&1)
+-    local count
+-    count=$(echo "$result" | grep -c 'Usage:' || true)
+-    assert_equals 1 "$count"
++function test_create_issue_uses_owner_token() {
++    local found
++    found=$(grep 'Authorization: token.*FORGEJO_TOKEN' "${WATCH_PRS}" | wc -l)
++    local result=0
++    if test "$found" -gt 0; then
++        result=0
++    else
++        result=1
++    fi
++    assert_equals 0 "$result"
++}
++
++function test_create_issue_does_not_use_reviewer_token() {
++    local found
++    found=$(grep 'Authorization: token.*FORGEJO_REVIEWER_TOKEN' "${WATCH_PRS}" | wc -l)
++    assert_equals 0 "$found"
++}
++
++function test_create_issues_uses_owner_token() {
++    local found
++    found=$(grep 'Authorization: token.*FORGEJO_TOKEN' "${CREATE_ISSUES}" | wc -l)
++    local result=0
++    if test "$found" -gt 0; then
++        result=0
++    else
++        result=1
++    fi
++    assert_equals 0 "$result"
++}
++
++function test_create_issues_does_not_use_reviewer_token() {
++    local found
++    found=$(grep 'Authorization: token.*FORGEJO_REVIEWER_TOKEN' "${CREATE_ISSUES}" | wc -l)
++    assert_equals 0 "$found"
+ }
+\ No newline at end of file

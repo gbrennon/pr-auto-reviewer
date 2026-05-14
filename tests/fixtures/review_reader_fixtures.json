@@ -1,0 +1,12 @@
+{
+  "private": {
+    "repo": "gbrennon/pr-auto-reviewer",
+    "pr_number": 53,
+    "has_review": false
+  },
+  "public": {
+    "repo": "gbrennon/BitPill",
+    "pr_number": 95,
+    "has_review": true
+  }
+}

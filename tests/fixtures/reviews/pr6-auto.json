@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "(no summary provided by model)",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 6,
+  "head_sha": "3a8fe4a3d64843d745aaba6a7e5d174e98a72747"
+}

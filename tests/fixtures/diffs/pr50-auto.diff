@@ -1,0 +1,702 @@
+diff --git a/scripts/check-token.sh b/scripts/check-token.sh
+new file mode 100755
+index 0000000..ce5db69
+--- /dev/null
++++ b/scripts/check-token.sh
+@@ -0,0 +1,100 @@
++#!/usr/bin/env bash
++# check-token.sh - diagnostic for FORGEJO_TOKEN and repo discovery
++set -euo pipefail
++
++CONFIG_FILE="${HOME}/.config/pr-auto-reviewer/config"
++if [[ ! -f "$CONFIG_FILE" ]]; then
++  echo "ERROR: Config not found at $CONFIG_FILE"
++  exit 1
++fi
++
++# shellcheck disable=SC1090
++source "$CONFIG_FILE"
++
++FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
++FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
++API_BASE="${FORGEJO_HOST}/api/v1"
++
++if [[ -z "$FORGEJO_TOKEN" ]]; then
++  echo "ERROR: FORGEJO_TOKEN is empty in $CONFIG_FILE"
++  exit 1
++fi
++
++echo "Checking FORGEJO_HOST: $FORGEJO_HOST"
++
++echo "Calling ${API_BASE}/user ..."
++user_file=$(mktemp)
++user_code=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" "${API_BASE}/user" -o "$user_file" -w "%{http_code}" 2>/dev/null || true)
++user_body=$(cat "$user_file" 2>/dev/null || true)
++rm -f "$user_file"
++
++echo "HTTP /user: ${user_code}"
++if [[ "$user_code" -ne 200 ]]; then
++  echo "Body: ${user_body}"
++  echo "\nDiagnosis: Authentication failed for FORGEJO_TOKEN (HTTP ${user_code})."
++  echo "Actions:"
++  echo "  - Verify FORGEJO_TOKEN in $CONFIG_FILE is correct and not expired."
++  echo "  - Ensure token has required scopes: \`repo\` and \`read:user\` (Codeberg/Forgejo)."
++  echo "  - If self-hosted Forgejo, confirm FORGEJO_HOST is the correct URL and reachable from this host."
++  exit 2
++fi
++
++# Parse username
++username=$(printf '%s' "$user_body" | python3 - <<'PY'
++import sys, json
++try:
++    data = json.load(sys.stdin)
++    print(data.get('login') or data.get('username') or '')
++except Exception:
++    print('')
++PY
++)
++
++if [[ -z "$username" ]]; then
++  echo "WARNING: /user returned 200 but no username found. Body:\n${user_body}" 
++else
++  echo "Authenticated username: ${username}"
++fi
++
++echo "\nCalling ${API_BASE}/user/repos?limit=50 ..."
++repos_file=$(mktemp)
++repos_code=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" "${API_BASE}/user/repos?limit=50" -o "$repos_file" -w "%{http_code}" 2>/dev/null || true)
++repos_body=$(cat "$repos_file" 2>/dev/null || true)
++rm -f "$repos_file"
++
++echo "HTTP /user/repos: ${repos_code}"
++if [[ "$repos_code" -ne 200 ]]; then
++  echo "Body: ${repos_body}"
++  echo "\nDiagnosis: Failed to list repos (HTTP ${repos_code}). If 401, token/auth issue."
++  exit 3
++fi
++
++# Count repos and show up to 20
++count=$(printf '%s' "$repos_body" | python3 - <<'PY'
++import sys, json
++try:
++    data = json.load(sys.stdin)
++    repos = data if isinstance(data, list) else data.get('data', [])
++    print(len(repos))
++except Exception:
++    print(0)
++PY
++)
++
++echo "Total repos returned: ${count}"
++
++printf '%s' "$repos_body" | python3 - <<'PY'
++import sys, json
++try:
++    data = json.load(sys.stdin)
++    repos = data if isinstance(data, list) else data.get('data', [])
++    for r in repos[:20]:
++        full = r.get('full_name') or r.get('path') or ''
++        owner = r.get('owner',{})
++        owner_login = owner.get('login') or owner.get('username') or ''
++        print(f"- {full} (owner: {owner_login})")
++except Exception as e:
++    print('Could not parse repo list')
++PY
++
++echo "\nDone. If token returned 401, regenerate token with required scopes and update $CONFIG_FILE, then reload service: systemctl --user restart pr-ai-auto-reviewer.service"
+diff --git a/scripts/get-pr-diff.sh b/scripts/get-pr-diff.sh
+new file mode 100644
+index 0000000..5a17b44
+--- /dev/null
++++ b/scripts/get-pr-diff.sh
+@@ -0,0 +1,17 @@
++#!/usr/bin/env bash
++# Script to fetch PR diff from Codeberg
++
++source .env
++
++repo="${1:-gbrennon/gb-ollama-container}"
++pr="${2:-18}"
++
++diff=$(curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
++  "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr}.diff" 2>/dev/null)
++
++if [ -z "$diff" ]; then
++  echo "Failed to fetch diff" >&2
++  exit 1
++fi
++
++echo "$diff"
+\ No newline at end of file
+diff --git a/scripts/lib/build_comment.py b/scripts/lib/build_comment.py
+index 4119e4d..f762b07 100644
+--- a/scripts/lib/build_comment.py
++++ b/scripts/lib/build_comment.py
+@@ -114,9 +114,11 @@ def main():
+             type_tag = f" [{typ}]" if typ else ""
+             body += f"{idx}. [{sev}]{type_tag} {location}: {desc}\n"
+             if current_code:
+-                body += f"    ```\n    {current_code}\n    ```\n"
++                body += f"    `````\n    {current_code}\n    `````\n"
+             if suggested_fix:
+-                body += f"    **Suggested:**\n    ```\n    {suggested_fix}\n    ```\n"
++                body += (
++                    f"    **Suggested:**\n    `````\n    {suggested_fix}\n    `````\n"
++                )
+         body += "\n"
+ 
+     if suggestions:
+@@ -132,9 +134,11 @@ def main():
+             location = f"{file}:{line}" if file and line else (file or line or "?")
+             body += f"{idx}. {location}: {desc}\n"
+             if current_code:
+-                body += f"    ```\n    {current_code}\n    ```\n"
++                body += f"    `````\n    {current_code}\n    `````\n"
+             if suggested_code:
+-                body += f"    **Suggested:**\n    ```\n    {suggested_code}\n    ```\n"
++                body += (
++                    f"    **Suggested:**\n    `````\n    {suggested_code}\n    `````\n"
++                )
+         body += "\n"
+ 
+     if praise:
+diff --git a/scripts/lib/forgejo-api.sh b/scripts/lib/forgejo-api.sh
+index 533eeb7..c6c4a82 100644
+--- a/scripts/lib/forgejo-api.sh
++++ b/scripts/lib/forgejo-api.sh
+@@ -19,13 +19,37 @@ forgejo_api_post() {
+ }
+ 
+ forgejo_get_user_repos() {
++  local username
++  username=$(forgejo_api_get "/user" | python3 -c "
++import sys, json
++try:
++    data = json.load(sys.stdin)
++    print(data.get('login') or data.get('username') or '')
++except Exception:
++    pass
++" 2>/dev/null || true)
++
++  if [[ -z "$username" ]]; then
++    return 0
++  fi
++
+   forgejo_api_get "/user/repos?limit=50" | python3 -c "
+ import sys, json
++owner = '${username}'
+ try:
+     data = json.load(sys.stdin)
+     if isinstance(data, list):
+         for r in data:
+-            print(r.get('full_name', ''))
++            full_name = r.get('full_name', '')
++            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
++            if full_name.startswith(owner + '/') or repo_owner == owner:
++                print(full_name)
++    elif isinstance(data, dict):
++        for r in data.get('data', []):
++            full_name = r.get('full_name', '')
++            repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
++            if full_name.startswith(owner + '/') or repo_owner == owner:
++                print(full_name)
+ except Exception:
+     pass
+ " 2>/dev/null || true
+@@ -147,4 +171,4 @@ forgejo_post_comment() {
+   
+   forgejo_api_post "/repos/${repo}/pulls/${pr_number}/comments" \
+     "{\"body\":${escaped_body}}" 2>/dev/null || true
+-}
+\ No newline at end of file
++}
+diff --git a/scripts/lib/get_pr_comments.py b/scripts/lib/get_pr_comments.py
+index 32e4f5d..3247815 100644
+--- a/scripts/lib/get_pr_comments.py
++++ b/scripts/lib/get_pr_comments.py
+@@ -31,7 +31,16 @@ def parse_comments(json_data):
+ 
+ 
+ def main():
+-    json_data = json.load(sys.stdin)
++    try:
++        json_data = json.load(sys.stdin)
++    except json.JSONDecodeError:
++        # No input or invalid JSON — treat as no comments
++        return
++    except Exception as e:
++        # Unexpected error — write to stderr so caller or logs can capture it
++        print(f"ERROR parsing comments JSON: {e}", file=sys.stderr)
++        return
++
+     comments = parse_comments(json_data)
+ 
+     for c in comments:
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index 3d1350e..1fd5590 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -202,18 +202,61 @@ get_repos() {
+     return
+   fi
+   
+-  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "${API_BASE}/user/repos?limit=50" \
+-    | python3 -c "
++  local username
++  local user_body user_http
++  user_body=$(mktemp)
++  user_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
++    "${API_BASE}/user" \
++    -o "$user_body" -w "%{http_code}" 2>/dev/null || true)
++
++  if [[ ! "$user_http" =~ ^2[0-9][0-9]$ ]]; then
++    echo "ERROR: FORGEJO_TOKEN authentication failed while resolving repo owner (HTTP ${user_http:-unknown})" >&2
++    rm -f "$user_body"
++    return 1
++  fi
++
++  username=$(python3 -c "
+ import sys, json
+ try:
+     data = json.load(sys.stdin)
+-    if isinstance(data, list):
+-        for r in data:
+-            print(r.get('full_name', ''))
++    print(data.get('login') or data.get('username') or '')
+ except Exception:
+     pass
+-" 2>/dev/null || true
++" < "$user_body" 2>/dev/null || true)
++  rm -f "$user_body"
++
++  if [[ -z "$username" ]]; then
++    echo "ERROR: FORGEJO_TOKEN did not return an authenticated username" >&2
++    return 1
++  fi
++
++  local repos_body repos_http
++  repos_body=$(mktemp)
++  repos_http=$(curl -sS -H "Authorization: token ${FORGEJO_TOKEN}" \
++    "${API_BASE}/user/repos?limit=50" \
++    -o "$repos_body" -w "%{http_code}" 2>/dev/null || true)
++
++  if [[ ! "$repos_http" =~ ^2[0-9][0-9]$ ]]; then
++    echo "ERROR: FORGEJO_TOKEN authentication failed while listing repos (HTTP ${repos_http:-unknown})" >&2
++    rm -f "$repos_body"
++    return 1
++  fi
++
++  python3 -c "
++import sys, json
++owner = '${username}'
++try:
++    data = json.load(sys.stdin)
++    repos = data if isinstance(data, list) else data.get('data', [])
++    for r in repos:
++        full_name = r.get('full_name', '')
++        repo_owner = r.get('owner', {}).get('login') or r.get('owner', {}).get('username') or ''
++        if full_name.startswith(owner + '/') or repo_owner == owner:
++            print(full_name)
++except Exception:
++    pass
++" < "$repos_body" 2>/dev/null || true
++  rm -f "$repos_body"
+ }
+ 
+ get_open_prs() {
+@@ -375,8 +418,17 @@ process_pr() {
+   local ollama_host
+   ollama_host=$(resolve_ollama_host)
+   
+-  local response
+-  response=$(python3 -c "
++  if [[ -z "$ollama_host" ]]; then
++    echo "    -> ERROR: Ollama host not resolved (service unreachable)"
++    return 1
++  fi
++  
++  local response_file curl_err http_status curl_exit response
++  response_file=$(mktemp)
++  curl_err=$(mktemp)
++  set +e
++  http_status=$(
++    python3 -c "
+ import json
+ import os
+ import sys
+@@ -387,12 +439,32 @@ data = {
+     'stream': False
+ }
+ print(json.dumps(data))
+-" <<< "$review_prompt" | curl -sf -X POST "${ollama_host}/api/generate" \
++" <<< "$review_prompt" | curl -sS -X POST "${ollama_host}/api/generate" \
+     -H "Content-Type: application/json" \
+-    -d @- 2>&1) || {
+-      echo "    -> ERROR: Ollama request failed"
+-      return 1
+-    }
++    -d @- \
++    -o "$response_file" \
++    -w "%{http_code}" 2>"$curl_err"
++  )
++  curl_exit=$?
++  set -e
++  
++  if [[ $curl_exit -ne 0 ]] || ! [[ "$http_status" =~ ^2[0-9][0-9]$ ]]; then
++    local curl_details response_excerpt
++    curl_details=$(tr '\n' ' ' < "$curl_err" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
++    response_excerpt=$(tr '\n' ' ' < "$response_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' | cut -c1-240)
++    echo "    -> ERROR: Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http: ${http_status:-unknown}, curl exit: ${curl_exit})"
++    if [[ -n "$curl_details" ]]; then
++      echo "      curl: ${curl_details}"
++    fi
++    if [[ -n "$response_excerpt" ]]; then
++      echo "      body: ${response_excerpt}"
++    fi
++    rm -f "$response_file" "$curl_err"
++    return 1
++  fi
++  
++  response=$(cat "$response_file")
++  rm -f "$response_file" "$curl_err"
+   
+   local review
+   review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
+@@ -672,7 +744,9 @@ cycle() {
+   echo "=== Cycle #${cycle_num} ==="
+   
+   local repos
+-  repos=$(get_repos)
++  if ! repos=$(get_repos); then
++    return
++  fi
+   
+   if [[ -z "$repos" ]]; then
+     echo "No repos found"
+diff --git a/tests/fixtures/pr18.diff b/tests/fixtures/pr18.diff
+new file mode 100644
+index 0000000..c491161
+--- /dev/null
++++ b/tests/fixtures/pr18.diff
+@@ -0,0 +1,165 @@
++diff --git a/evals/evaluators/__init__.py b/evals/evaluators/__init__.py
++index 8d1fdec..67ebb6c 100644
++--- a/evals/evaluators/__init__.py
+++++ b/evals/evaluators/__init__.py
++@@ -1 +1,23 @@
++-# Evaluators module
+++"""Evaluators module - evaluation strategies for model output validation."""
+++
+++from evals.evaluators.factory import (
+++    make_evaluator,
+++    ExactMatchEvaluator,
+++    SchemaEvaluator,
+++    CodeBlockEvaluator,
+++    OllamaJudgeEvaluator,
+++)
+++from evals.evaluators.base import Evaluator, AsyncEvaluator, EvaluationResult
+++from evals.evaluators._json_parser import parse_json_output
+++
+++__all__ = [
+++    "make_evaluator",
+++    "ExactMatchEvaluator",
+++    "SchemaEvaluator",
+++    "CodeBlockEvaluator",
+++    "OllamaJudgeEvaluator",
+++    "Evaluator",
+++    "AsyncEvaluator",
+++    "EvaluationResult",
+++    "parse_json_output",
+++]
++diff --git a/evals/evaluators/exact_match.py b/evals/evaluators/exact_match.py
++index e795654..088a682 100644
++--- a/evals/evaluators/exact_match.py
+++++ b/evals/evaluators/exact_match.py
++@@ -1,167 +1,36 @@
++-"""Exact-match evaluator for code-review model - 100%."""
+++"""Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.
+++
+++This module is kept for backward compatibility only.
+++All functionality has been moved to SchemaEvaluator.
+++"""
++ 
++ from __future__ import annotations
++ 
++-import json
++-import re
++-from typing import Optional
+++import warnings
++ 
++-from evals.evaluators.base import AsyncEvaluator, EvaluationResult
++-from evals.fixtures.models import Fixture
+++from evals.evaluators.schema_evaluator import SchemaEvaluator
+++
+++__all__ = ["ExactMatchEvaluator"]
++ 
++ 
++-class ExactMatchEvaluator(AsyncEvaluator):
++-    """Very lenient evaluator - passes if model produces any output."""
+++class ExactMatchEvaluator(SchemaEvaluator):
+++    """Deprecated: This evaluator is deprecated.
+++
+++    Use SchemaEvaluator directly instead. ExactMatchEvaluator was too lenient
+++    and has been replaced with proper JSON schema validation.
+++
+++    This class is a thin wrapper around SchemaEvaluator for backwards compatibility.
+++    """
++ 
++     def __init__(self, strict_mode: bool = False):
+++        warnings.warn(
+++            "ExactMatchEvaluator is deprecated. Use SchemaEvaluator instead.",
+++            DeprecationWarning,
+++            stacklevel=2,
+++        )
+++        super().__init__()
++         self.strict_mode = strict_mode
++ 
++     @property
++     def name(self) -> str:
++-        return "exact-match"
++-
++-    async def _async_evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
++-        return self._evaluate(fixture, model_output)
++-
++-    def _evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
++-        if not model_output or not model_output.strip():
++-            return EvaluationResult(
++-                fixture_name=fixture.name, passed=False, score=0.0, error="No output"
++-            )
++-
++-        parsed = self._parse_model_output(model_output)
++-
++-        if not parsed:
++-            return self._lenient_validate(fixture, model_output)
++-
++-        return self._validate(fixture, parsed)
++-
++-    def _parse_model_output(self, output: str) -> Optional[dict]:
++-        if not output or not output.strip():
++-            return None
++-
++-        lines = output.split("\n")
++-        json_str = lines[0]
++-        try:
++-            return json.loads(json_str)
++-        except:
++-            pass
++-
++-        return None
++-
++-    def _lenient_validate(self, fixture: Fixture, model_output: str) -> EvaluationResult:
++-        if fixture.expected in model_output:
++-            return EvaluationResult(
++-                fixture_name=fixture.name, passed=True, score=1.0, details={"lenient": True}
++-            )
++-        return EvaluationResult(
++-            fixture_name=fixture.name, passed=False, score=0.0, details={"lenient": True}
++-        )
++-
++-    def _validate(self, fixture: Fixture, parsed: dict) -> EvaluationResult:
++-        try:
++-            passed = parsed.get("passed", False)
++-            score = parsed.get("score", 0.0)
++-            return EvaluationResult(
++-                fixture_name=fixture.name,
++-                passed=passed,
++-                score=score,
++-                details=parsed.get("details", {}),
++-            )
++-        except Exception as e:
++-            return EvaluationResult(
++-                fixture_name=fixture.name, passed=False, score=0.0, error=str(e)
++-            )
+++        return "exact-match"
++diff --git a/evals/evaluators/factory.py b/evals/evaluators/factory.py
++index 1234567..abcdefg 100644
++--- a/evals/evaluators/factory.py
+++++ b/evals/evaluators/factory.py
++@@ -1,10 +1,19 @@
++-"""from __future__ import annotations
+++"""evals/evaluators/factory.py - Factory for creating evaluators based on model name and strategy.
++ 
+++This module provides functions to create instances of evaluators, allowing for easy swapping of evaluation strategies.
+++"""
+++
+++from __future__ import annotations
+++
+++from evals.evaluators.base import Evaluator
+++from evals.evaluators.code_block_evaluator import CodeBlockEvaluator, language_from_model_name
+++from evals.evaluators.exact_match import ExactMatchEvaluator
+++from evals.evaluators.ollama_judge import OllamaJudgeEvaluator
+++from evals.evaluators.schema_evaluator import SchemaEvaluator
+++
+++__all__ = ["make_evaluator", "ExactMatchEvaluator", "SchemaEvaluator", "CodeBlockEvaluator", "OllamaJudgeEvaluator"]
+++
+++def make_evaluator(model_name: str, strategy: str = "auto") -> Evaluator:
+++    """Create an evaluator based on model name and strategy."""
+++    if strategy == "exact" or "exact" in model_name.lower():
+++        return ExactMatchEvaluator()
+++    elif strategy == "schema" or "schema" in model_name.lower():
+++        return SchemaEvaluator()
+++    elif strategy == "code_block" or "code" in model_name.lower():
+++        return CodeBlockEvaluator()
+++    elif strategy == "judge" or "judge" in model_name.lower():
+++        return OllamaJudgeEvaluator()
+++    return SchemaEvaluator()
+++
+\ No newline at end of file
+diff --git a/tests/lib_test.sh b/tests/lib_test.sh
+index 1f9d1b4..85f5ff0 100644
+--- a/tests/lib_test.sh
++++ b/tests/lib_test.sh
+@@ -180,13 +180,13 @@ function test_json_escape_escapes_quotes() {
+ function test_python_files_use_snake_case() {
+     local expected_files="build_comment.py build_prompt.py extract_review_items.py get_pr_comments.py get_pr_reviews.py json_escape.py parse_issue_command.py"
+     local all_found=1
+-    
++
+     for file in $expected_files; do
+         if [[ ! -f "${LIB_DIR}/${file}" ]]; then
+             all_found=0
+         fi
+     done
+-    
++
+     assert_equals 1 "$all_found"
+ }
+ 
+@@ -242,4 +242,89 @@ function test_build_comment_shows_current_code_in_suggestions() {
+     found_suggested=$(echo "$result" | grep -c 'function processData()' || true)
+     assert_equals 1 "$found_code"
+     assert_equals 1 "$found_suggested"
+-}
+\ No newline at end of file
++}
++
++# Happy path - simple code without special characters
++function test_build_comment_uses_five_backticks_for_simple_code() {
++    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 1, "current_code": "x = 1", "description": "simple", "suggested_fix": "x = 2"}], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_opens
++    found_opens=$(echo "$result" | grep -cF '`````' || true)
++    local found_closes
++    found_closes=$(echo "$result" | grep -cF '`````' || true)
++    assert_equals 4 "$found_opens"
++    assert_equals 4 "$found_closes"
++}
++
++# Happy path - multi-line code with docstrings (contains triple quotes)
++function test_build_comment_uses_five_backticks_for_multiline() {
++    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 10, "current_code": "def foo():\n    return 1", "description": "add docstring", "suggested_fix": "def foo():\n    \"\"\"Docstring.\"\"\"\n    return 1"}], "summary": "Good"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_opens
++    found_opens=$(echo "$result" | grep -cF '`````' || true)
++    assert_equals 4 "$found_opens"
++}
++
++# Edge case - both current_code and suggested_code contain triple quotes (docstrings)
++function test_build_comment_handles_both_code_fields_with_triple_quotes() {
++    local review_json='{"verdict": "approve", "issues": [{"file": "test.py", "line": 1, "current_code": "def foo():\n    \"\"\"Old doc\"\"\"", "description": "update", "suggested_fix": "def foo():\n    \"\"\"New doc\"\"\"\n    pass"}], "summary": "Ok"}'
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_opens
++    found_opens=$(echo "$result" | grep -cF '`````' || true)
++    assert_equals 4 "$found_opens"
++    local has_old_doc
++    has_old_doc=$(echo "$result" | grep -c '"""Old doc"""' || true)
++    assert_equals 1 "$has_old_doc"
++    local has_new_doc
++    has_new_doc=$(echo "$result" | grep -c '"""New doc"""' || true)
++    assert_equals 1 "$has_new_doc"
++}
++
++# Real-world test: PR#18 review with actual AI response containing triple quotes in suggested fixes
++function test_build_comment_pr18_real_ai_response() {
++    local review_json
++    review_json=$(cat << 'JSONEOF'
++{"verdict": "changes_requested", "verdict_reason": "test", "issues": [{"severity": "high", "type": "architecture", "file": "evals/evaluators/init.py", "line": "1", "description": "test1", "current_code": "# Evaluators module", "suggested_fix": "\"\"\"\\n\\nEvaluators module - evaluation strategies for model output validation.\\n\"\"\""}, {"severity": "high", "type": "architecture", "file": "evals/evaluators/exact_match.py", "line": "1", "description": "test2", "current_code": "\"\"\"Exact-match evaluator.\"\"\"", "suggested_fix": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"severity": "high", "type": "architecture", "file": "evals/evaluators/factory.py", "line": "8", "description": "test3", "current_code": "\"\"\"from __future__ import annotations\"\"\"", "suggested_fix": "\"\"\"\\n\\n\"\"\"evals/evaluators/factory.py - Factory for creating evaluators.\\n\"\"\""}], "suggestions": [{"file": "evals/evaluators/exact_match.py", "line": "1", "description": "test4", "current_code": "\"\"\"Exact-match.\"\"\"", "suggested_code": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"file": "evals/evaluators/factory.py", "line": "8", "description": "test5", "current_code": "\"\"\"from __future__ import annotations\"\"\"", "suggested_code": "\"\"\"\\n\\n\"\"\"evals/evaluators/factory.py - Factory for creating evaluators.\\n\"\"\""}], "summary": "test"}
++JSONEOF
++)
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_fences
++    found_fences=$(echo "$result" | grep -cF '`````' || true)
++    assert_equals 20 "$found_fences"
++    local has_deprecated
++    has_deprecated=$(echo "$result" | grep -c 'Deprecated:' || true)
++    assert_equals 2 "$has_deprecated"
++    local has_factory_docstring
++    has_factory_docstring=$(echo "$result" | grep -c 'evals/evaluators/factory.py - Factory' || true)
++    assert_equals 2 "$has_factory_docstring"
++}
++
++# Real-world test: PR#18 actual diff content as current_code (simulating real AI review)
++function test_build_comment_pr18_actual_diff_current_code() {
++    local review_json
++    review_json=$(cat << 'JSONEOF'
++{"verdict": "changes_requested", "issues": [{"severity": "high", "file": "evals/evaluators/__init__.py", "line": "1", "description": "Add module docstring", "current_code": "# Evaluators module", "suggested_fix": "\"\"\"Evaluators module - evaluation strategies for model output validation.\"\"\""}, {"severity": "high", "file": "evals/evaluators/exact_match.py", "line": "1", "description": "Mark as deprecated", "current_code": "\"\"\"Exact-match evaluator for code-review model - 100%.\"\"\"", "suggested_fix": "\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\\n\\nThis module is kept for backward compatibility only.\\nAll functionality has been moved to SchemaEvaluator.\\n\"\"\""}, {"severity": "medium", "file": "evals/evaluators/factory.py", "line": "8", "description": "Update docstring", "current_code": "\"\"\"from __future__ import annotations\\n\\nfrom evals.evaluators.base import Evaluator\\nfrom evals.evaluators.code_block_evaluator import CodeBlockEvaluator, language_from_model_name\\nfrom evals.evaluators.ollama_judge import OllamaJudgeEvaluator\\nfrom evals.evaluators.schema_evaluator import SchemaEvaluator\\n\"\"\"", "suggested_fix": "\"\"\"evals/evaluators/factory.py - Factory for creating evaluators based on model name and strategy.\\n\\nThis module provides functions to create instances of evaluators, allowing for easy swapping of evaluation strategies.\\n\"\"\""}], "summary": "The PR adds docstrings, deprecates ExactMatchEvaluator, and updates factory."}
++JSONEOF
++)
++    local result
++    result=$(REVIEW_JSON="$review_json" python3 "${LIB_DIR}/build_comment.py" 2>&1)
++    local found_fences
++    found_fences=$(echo "$result" | grep -cF '`````' || true)
++    assert_equals 12 "$found_fences"
++    local has_evaluators_module
++    has_evaluators_module=$(echo "$result" | grep -c 'Evaluators module' || true)
++    assert_equals 2 "$has_evaluators_module"
++    local has_deprecated
++    has_deprecated=$(echo "$result" | grep -c 'Deprecated:' || true)
++    assert_equals 1 "$has_deprecated"
++    local has_factory_description
++    has_factory_description=$(echo "$result" | grep -c 'Factory for creating evaluators' || true)
++    assert_equals 1 "$has_factory_description"
++    local has_current_code_in_output
++    has_current_code_in_output=$(echo "$result" | grep -c 'Exact-match evaluator for code-review model' || true)
++    assert_equals 1 "$has_current_code_in_output"
++}
+diff --git a/tests/scripts_test.sh b/tests/scripts_test.sh
+index 2594eaf..8f6f4a9 100644
+--- a/tests/scripts_test.sh
++++ b/tests/scripts_test.sh
+@@ -65,6 +65,18 @@ function test_create_issue_does_not_use_reviewer_token() {
+     assert_equals 0 "$found"
+ }
+ 
++function test_watch_prs_lists_owner_repos() {
++    local found
++    found=$(grep -F -c '/user/repos?limit=50' "${WATCH_PRS}" || true)
++    assert_equals 1 "$found"
++}
++
++function test_watch_prs_reports_repo_auth_failure() {
++    local found
++    found=$(grep -F -c 'authentication failed while listing repos' "${WATCH_PRS}" || true)
++    assert_equals 1 "$found"
++}
++
+ function test_create_issues_uses_owner_token() {
+     local found
+     found=$(grep 'Authorization: token.*FORGEJO_TOKEN' "${CREATE_ISSUES}" | wc -l)
+@@ -81,4 +93,16 @@ function test_create_issues_does_not_use_reviewer_token() {
+     local found
+     found=$(grep 'Authorization: token.*FORGEJO_REVIEWER_TOKEN' "${CREATE_ISSUES}" | wc -l)
+     assert_equals 0 "$found"
+-}
+\ No newline at end of file
++}
++
++function test_forgejo_api_lists_owner_repos() {
++    local found
++    found=$(grep -F -c '/user/repos?limit=50' "${SCRIPT_DIR}/lib/forgejo-api.sh" || true)
++    assert_equals 1 "$found"
++}
++
++function test_watch_prs_reports_ollama_failure_details() {
++    local found
++    found=$(grep -c 'Ollama request failed (host: ${ollama_host}, model: ${OLLAMA_MODEL}, http:' "${WATCH_PRS}" || true)
++    assert_equals 1 "$found"
++}

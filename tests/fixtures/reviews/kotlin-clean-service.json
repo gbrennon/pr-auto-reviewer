@@ -1,0 +1,19 @@
+{
+  "verdict": "approved",
+  "summary": "Clean Kotlin service implementation with a well-defined UserRepository interface following the repository pattern. UserService uses constructor injection for the repository, validates inputs with require(), checks for duplicate emails before registration, normalizes data (trim, lowercase), and uses Kotlin's Result type for error handling. Well-designed and idiomatic.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "info",
+      "category": "quality",
+      "file_path": "src/main/kotlin/com/example/UserService.kt",
+      "description": "The id = 0 placeholder for new users is a smell. Consider using a data class without id for creation requests, or making id nullable, so the persistence layer assigns it."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 12,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}
