@@ -20,4 +20,7 @@ class ReviewItem:
     category: str
     file_path: str | None
     description: str
+    line: str = field(default="", compare=False)
     id: str = field(default="", compare=False)
+    current_code: str = field(default="", compare=False)
+    suggested_fix: str = field(default="", compare=False)

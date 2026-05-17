@@ -20,6 +20,7 @@ class Config:
     poll_interval: int = 60
     debug: bool = False
     output_mode: str = "codeberg"
+    fragments_dir: str = "fragments"
 
 
 def _get_repo_root() -> Path:

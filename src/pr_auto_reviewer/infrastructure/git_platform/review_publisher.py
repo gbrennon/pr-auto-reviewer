@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+
+import jinja2
 
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
@@ -26,38 +29,32 @@ _VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
 }
 
 
+_TEMPLATES_DIR = Path(__file__).parent.parent / "llm" / "templates"
+_review_output_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(str(_TEMPLATES_DIR)),
+    keep_trailing_newline=True,
+)
+
+
 def format_review_body(review: CodeReview) -> str:
-    """Render a CodeReview as a human-readable markdown string."""
-    lines: list[str] = []
-
-    lines.append("## AI Code Review")
-    lines.append("")
-    if review.summary:
-        lines.append(review.summary)
-        lines.append("")
-
+    """Render a CodeReview via the review_output.j2 Jinja2 template."""
     verdict_text = review.verdict.value.replace("_", " ").title()
-    lines.append(f"**Verdict:** {verdict_text}")
-    lines.append("")
 
-    if review.items:
-        for item in review.items:
-            severity_label = item.severity.value.upper()
-            file_ref = f" (`{item.file_path}`)" if item.file_path else ""
-            lines.append(
-                f"### {item.number}. [{severity_label}] {item.category}{file_ref}"
-            )
-            lines.append("")
-            lines.append(item.description)
-            lines.append("")
-    else:
-        lines.append("*No critical issues found.*")
-        lines.append("")
+    # Assign sequential numbers to suggestions (continuing from items)
+    next_num = len(review.items) + 1
+    suggestions = getattr(review, 'suggestions', [])
+    numbered_suggestions = []
+    for i, s in enumerate(suggestions):
+        s_copy = dict(s)
+        s_copy["number"] = next_num + i
+        numbered_suggestions.append(s_copy)
 
-    if review.model_used:
-        lines.append(f"---\n*Reviewed by {review.model_used}*")
-
-    return "\n".join(lines)
+    template = _review_output_env.get_template("review_output.j2")
+    return template.render(
+        review=review,
+        verdict_text=verdict_text,
+        suggestions=numbered_suggestions,
+    )
 
 
 class GitReviewPublisherAdapter(ReviewPublisherPort):

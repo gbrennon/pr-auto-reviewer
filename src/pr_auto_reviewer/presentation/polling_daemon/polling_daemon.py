@@ -55,8 +55,11 @@ class PollingDaemon:
             f"run_once={self._config.run_once})"
         )
 
+        cycle = 0
         try:
             while True:
+                cycle += 1
+                logger.info("=== Cycle #%d ===", cycle)
                 self._run_cycle()
 
                 if self._config.run_once:
@@ -66,7 +69,7 @@ class PollingDaemon:
         except KeyboardInterrupt:
             pass
 
-        logger.info("PollingDaemon stopped")
+        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""

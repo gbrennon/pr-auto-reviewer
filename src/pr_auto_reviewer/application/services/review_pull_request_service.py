@@ -11,10 +11,9 @@ from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
-from ...domain.value_objects.repository_context import RepositoryContext
 from ..ports.outbound.pull_request_repository import PullRequestRepository
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
-from ..ports.outbound.repository_context_port import RepositoryContextPort
+from ..ports.outbound.review_context_factory_port import ReviewContextFactoryPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
 from ..ports.outbound.review_publisher_port import ReviewPublisherPort
 from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
@@ -24,23 +23,21 @@ logger = logging.getLogger(__name__)
 
 class ReviewPullRequestService(ReviewPullRequestUseCase):
     """Orchestrates: load PR → check if review needed → fetch diff →
-    build context → LLM review → publish → persist.
-
-    Contains zero business logic — only coordination of domain objects
-    and outbound ports.
+    build context + compose prompt via ReviewContextFactoryPort →
+    LLM review → publish → persist.
     """
 
     def __init__(
         self,
         pr_repository: PullRequestRepository,
         changeset_fetcher: ChangesetFetcherPort,
-        repository_context: RepositoryContextPort,
+        review_context_factory: ReviewContextFactoryPort,
         llm_review: LlmReviewPort,
         review_publisher: ReviewPublisherPort,
     ) -> None:
         self._pr_repository = pr_repository
         self._changeset_fetcher = changeset_fetcher
-        self._repository_context = repository_context
+        self._review_context_factory = review_context_factory
         self._llm_review = llm_review
         self._review_publisher = review_publisher
 
@@ -54,8 +51,12 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             return
 
         diff = self._fetch_diff(command)
-        context = self._build_review_context(command)
-        review = self._run_llm_review(diff, context)
+        composed = self._review_context_factory.build(
+            command.pr_id, diff,
+            pr_title=command.title,
+            pr_description=command.description,
+        )
+        review = self._run_llm_review_with_prompt(composed)
 
         self._publish_review(command.pr_id, review)
         pr = self._record_review(pr, review, command.head_sha)
@@ -112,25 +113,10 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             logger.debug("Files with full contents: %s", file_list or "(none)")
         return diff
 
-    def _build_review_context(
-        self, command: ReviewPullRequestCommand
-    ) -> RepositoryContext:
-        from dataclasses import replace
-
-        context = self._repository_context.fetch(command.pr_id)
-        context = replace(
-            context,
-            pr_title=command.title or None,
-            pr_description=command.description or None,
-        )
-        logger.debug("Review context built: repo=%s", command.pr_id.repository)
-        return context
-
-    def _run_llm_review(
-        self, diff: PullRequestDiff, context: RepositoryContext
-    ) -> CodeReview:
-        logger.info("Sending to LLM for review...")
-        review = self._llm_review.review(diff, context)
+    def _run_llm_review_with_prompt(self, prompt) -> CodeReview:
+        """Send the composed prompt to the LLM and log the result."""
+        logger.info("Sending composed prompt to LLM for review...")
+        review = self._llm_review.review_prompt(prompt)
         logger.info(
             "LLM review complete: verdict=%s, items=%d, summary_len=%d",
             review.verdict.value,

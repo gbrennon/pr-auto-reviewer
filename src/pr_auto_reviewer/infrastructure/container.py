@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -45,8 +46,20 @@ from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import 
 from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
     NullPullRequestRepository,
 )
+from pr_auto_reviewer.application.services.compose_review_prompt_service import (
+    ComposeReviewPromptService,
+)
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
+)
+from pr_auto_reviewer.infrastructure.fragments.repositories import (
+    FileSystemFragmentRepository,
+)
+from pr_auto_reviewer.infrastructure.git_platform.review_context_factory import (
+    ReviewContextFactory,
+)
+from pr_auto_reviewer.infrastructure.fragments.renderers import (
+    Jinja2Renderer,
 )
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
@@ -76,6 +89,15 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
+)
+from pr_auto_reviewer.application.ports.outbound.review_context_factory_port import (
+    ReviewContextFactoryPort,
+)
+from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
+    FragmentRepositoryPort,
+)
+from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
+    PromptRendererPort,
 )
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
@@ -137,6 +159,28 @@ class Container:
             self._http_client,
         )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
+
+        # Fragment-based prompt composition subsystem.
+        fragments_dir = self._config.fragments_dir or "fragments"
+        self._fragment_repository: FragmentRepositoryPort = (
+            FileSystemFragmentRepository(Path(fragments_dir))
+        )
+        self._fragment_renderer: PromptRendererPort = Jinja2Renderer()
+        self._fragment_max_tokens: int | None = getattr(
+            self._config, "fragment_max_tokens", None,
+        )
+
+        # Composite port — eliminates data clump in ReviewPullRequestService
+        self._review_context_factory: ReviewContextFactoryPort = (
+            ReviewContextFactory(
+                repository_context=self._repository_context,
+                compose_review_prompt=ComposeReviewPromptService(
+                    repository=self._fragment_repository,
+                    renderer=self._fragment_renderer,
+                    max_tokens=self._fragment_max_tokens,
+                ),
+            )
+        )
 
         self._repo_lister: RepoListerPort = GitRepoListerAdapter(
             client=self._http_client,
@@ -205,6 +249,30 @@ class Container:
     @property
     def pr_lister(self) -> PrListerPort:
         return self._pr_lister
+
+    # ------------------------------------------------------------------
+    # Review context factory (composite outbound port)
+    # ------------------------------------------------------------------
+
+    @property
+    def review_context_factory(self) -> ReviewContextFactoryPort:
+        return self._review_context_factory
+
+    # ------------------------------------------------------------------
+    # Fragment subsystem
+    # ------------------------------------------------------------------
+
+    @property
+    def fragment_repository(self) -> FragmentRepositoryPort:
+        return self._fragment_repository
+
+    @property
+    def fragment_renderer(self) -> PromptRendererPort:
+        return self._fragment_renderer
+
+    @property
+    def fragment_max_tokens(self) -> int | None:
+        return self._fragment_max_tokens
 
 
 def _state_file_path() -> str:

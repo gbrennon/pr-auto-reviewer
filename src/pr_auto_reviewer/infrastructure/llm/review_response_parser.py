@@ -77,10 +77,17 @@ class ReviewResponseParser:
         summary = ReviewResponseParser._extract_summary_md(raw_text)
         items = ReviewResponseParser._extract_items_md(raw_text)
 
-        # If the markdown parser also found nothing structured, use the
-        # raw LLM response as the summary so the review comment is not empty.
+        # If the markdown parser also found nothing structured, extract
+        # the first meaningful paragraph as summary (before any ## heading)
+        # instead of dumping the entire raw response.
         if not summary and not items:
-            summary = raw_text.strip()
+            first_para = ReviewResponseParser._extract_first_paragraph(raw_text)
+            summary = first_para if first_para else raw_text.strip()[:500]
+
+        # If verdict COMMENTED but text doesn't say "comment", default APPROVED
+        if verdict == ReviewVerdict.COMMENTED:
+            if "commented" not in raw_text[:500].lower():
+                verdict = ReviewVerdict.APPROVED
 
         return CodeReview(
             verdict=verdict,
@@ -113,13 +120,17 @@ class ReviewResponseParser:
     @staticmethod
     def _parse_json(data: dict, model_used: str) -> CodeReview:
         """Parse JSON format response."""
-        # Determine verdict from issues
+        # Determine verdict — prefer explicit verdict from LLM, fall back to
+        # deriving from issue severities.
         issues = data.get("issues", [])
         suggestions = data.get("suggestions", [])
         praise = data.get("praise", [])
         summary = data.get("summary", "")
+        reason = data.get("reason", "")
 
-        verdict = ReviewResponseParser._determine_verdict(issues)
+        verdict = ReviewResponseParser._resolve_verdict(
+            data.get("verdict"), issues,
+        )
 
         # Map severity strings to ItemSeverity enum
         _SEVERITY_MAP = {
@@ -144,21 +155,54 @@ class ReviewResponseParser:
                     severity=severity,
                     category=issue.get("type", ""),
                     file_path=issue.get("file"),
+                    line=issue.get("line", ""),
                     description=issue.get("description", ""),
+                    current_code=issue.get("current_code", ""),
+                    suggested_fix=issue.get("suggested_fix", ""),
                 )
             )
 
+        # Enrich suggestions with current/suggested code
+        enriched_suggestions = []
+        for s in suggestions:
+            enriched_suggestions.append({
+                "file": s.get("file", ""),
+                "line": s.get("line", ""),
+                "description": s.get("description", ""),
+                "current_code": s.get("current_code", ""),
+                "suggested_code": s.get("suggested_code", ""),
+            })
+
         return CodeReview(
             verdict=verdict,
+            reason=reason,
             summary=summary,
             items=items,
+            suggestions=enriched_suggestions,
+            praise=praise,
             model_used=model_used,
         )
 
 
     @staticmethod
+    def _resolve_verdict(
+        explicit: str | None, issues: list,
+    ) -> ReviewVerdict:
+        """Resolve verdict — prefer explicit JSON field, fall back to
+        deriving from issue severities."""
+        if explicit:
+            value = explicit.strip().lower()
+            if "changes" in value or "request" in value:
+                return ReviewVerdict.CHANGES_REQUESTED
+            if "approved" in value:
+                return ReviewVerdict.APPROVED
+            if "commented" in value:
+                return ReviewVerdict.COMMENTED
+        return ReviewResponseParser._determine_verdict(issues)
+
+    @staticmethod
     def _determine_verdict(issues: list) -> ReviewVerdict:
-        """Determine verdict based on issues."""
+        """Determine verdict based on issue severities."""
         for issue in issues:
             severity = issue.get("severity", "").lower()
             if severity in ("critical", "high"):
@@ -168,18 +212,52 @@ class ReviewResponseParser:
     @staticmethod
     def _extract_verdict_md(raw_text: str) -> ReviewVerdict:
         """Fallback: extract verdict from markdown format."""
+        # Try ## Verdict\nvalue
         match = re.search(
             r"##\s*Verdict\s*\n\s*(.+)", raw_text, re.IGNORECASE
         )
-        if not match:
-            return ReviewVerdict.COMMENTED
+        if match:
+            value = match.group(1).strip().lower()
+            if "changes_requested" in value or "request changes" in value:
+                return ReviewVerdict.CHANGES_REQUESTED
+            if "approved" in value:
+                return ReviewVerdict.APPROVED
 
-        value = match.group(1).strip().lower()
-        if "changes_requested" in value or "request changes" in value:
-            return ReviewVerdict.CHANGES_REQUESTED
-        if "approved" in value:
-            return ReviewVerdict.APPROVED
+        # Try **Verdict:** value (model Modelfile output)
+        match = re.search(
+            r"\*\*Verdict:\s*\*\*\s*(.+)", raw_text, re.IGNORECASE
+        )
+        if match:
+            value = match.group(1).strip().lower()
+            if "changes" in value or "request" in value:
+                return ReviewVerdict.CHANGES_REQUESTED
+            if "approved" in value:
+                return ReviewVerdict.APPROVED
+            if "commented" in value:
+                return ReviewVerdict.COMMENTED
+
+        # Try plain "Verdict: value"
+        match = re.search(r"Verdict:\s*(.+)", raw_text, re.IGNORECASE)
+        if match:
+            value = match.group(1).strip().lower()
+            if "changes" in value or "request" in value:
+                return ReviewVerdict.CHANGES_REQUESTED
+            if "approved" in value:
+                return ReviewVerdict.APPROVED
+
         return ReviewVerdict.COMMENTED
+
+    @staticmethod
+    def _extract_first_paragraph(raw_text: str) -> str | None:
+        """Extract text before the first ``##`` heading as a summary."""
+        match = re.search(r"^(.+?)\n##\s", raw_text, re.DOTALL)
+        if match:
+            para = match.group(1).strip()
+            # Skip if it's just a verdict line
+            if para.lower().startswith("verdict") or para.lower().startswith("**verdict"):
+                return None
+            return para if len(para) > 20 else None
+        return None
 
     @staticmethod
     def _extract_summary_md(raw_text: str) -> str:

@@ -271,7 +271,7 @@ class TestPollingDaemon:
             "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
         ) as mock_logger:
             daemon.start()
-        mock_logger.info.assert_any_call("PollingDaemon stopped")
+        mock_logger.info.assert_any_call("PollingDaemon stopped after 1 cycle(s)")
 
     def test_ctrl_c_stops_daemon_during_blocking_review(
         self, config, mock_review_service,
@@ -305,6 +305,6 @@ class TestPollingDaemon:
             daemon.start()
         stopped_calls = [
             c for c in mock_logger.info.call_args_list
-            if "PollingDaemon stopped" in str(c)
+            if "PollingDaemon stopped after 1 cycle(s)" in str(c)
         ]
         assert len(stopped_calls) == 1

@@ -14,6 +14,9 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 )
 
 from .architecture_detector import ArchitectureDetector
+from .context_serializer import ContextSerializer
+from .language_detector import LanguageDetector
+from .python_version_detector import PythonVersionDetector
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +24,34 @@ _CONVENTIONS_FILENAMES = ("ARCHITECTURE.md", "CONVENTIONS.md", ".architecturerc"
 
 
 class GitRepositoryContextAdapter(RepositoryContextPort):
-    """Fetches repository structure, architecture hint, and conventions."""
+    """Fetches repository structure, architecture hint, and conventions.
+
+    Composes ``ArchitectureDetector``, ``LanguageDetector``, and
+    ``ContextSerializer`` collaborators instead of inline private
+    methods.
+    """
 
     def __init__(self, client: GitPlatformHttpClient) -> None:
         self._client = client
-        self._detector = ArchitectureDetector()
+        self._architecture_detector = ArchitectureDetector()
+        self._language_detector = LanguageDetector()
+        self._context_serializer = ContextSerializer()
+        self._python_version_detector = PythonVersionDetector()
 
     def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
         """Return RepositoryContext for the given PR's repository."""
         architecture_hint = "unknown"
         repository_structure: str | None = None
 
+        tree_paths: list[str] = []
         tree_path = f"/repos/{pr_id.repository}/git/trees/main?recursive=1"
         try:
             response = self._client.get(tree_path)
             tree_blobs = response.get("tree", [])
-            tree_paths: list[str] = [entry["path"] for entry in tree_blobs]
+            tree_paths = [entry["path"] for entry in tree_blobs]
             repository_structure = "\n".join(tree_paths)
 
-            architecture_hint = self._detector.detect(tree_paths)
+            architecture_hint = self._architecture_detector.detect(tree_paths)
         except Exception:
             logger.warning(
                 "Failed to fetch git tree for %s, using defaults", pr_id
@@ -54,8 +66,34 @@ class GitRepositoryContextAdapter(RepositoryContextPort):
             except Exception:
                 continue
 
+        python_version = self._python_version_detector.detect(tree_paths)
+
         return RepositoryContext(
             architecture_hint=architecture_hint,
             conventions=conventions,
             repository_structure=repository_structure,
+            python_version=python_version,
         )
+
+    def build_fragment_context(
+        self,
+        repo_context: RepositoryContext,
+        file_paths: list[str],
+        commit_messages: list[str] | None = None,
+    ) -> tuple[str, str | None]:
+        """Detect language and serialise context + commit messages.
+
+        Returns ``(language, serialized_context)``.
+        """
+        language = self._language_detector.detect(file_paths)
+
+        # Fallback: if Python but tree fetch failed, default to 3.9+
+        version = repo_context.python_version
+        if version is None and language == "python":
+            version = "3.9"
+
+        serialized = self._context_serializer.serialize(
+            repo_context, commit_messages,
+            python_version=self._python_version_detector.guidance(version),
+        )
+        return language, serialized

@@ -23,9 +23,9 @@ from pr_auto_reviewer.domain import (
 from tests.pr_auto_reviewer.application.stubs import (
     StubPullRequestRepository,
     StubChangesetFetcher,
-    StubRepositoryContext,
     StubLlmReview,
     StubReviewPublisher,
+    StubReviewContextFactory,
 )
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "diffs"
@@ -46,6 +46,7 @@ def _diff_fixture(pr_id, sha):
     return PullRequestDiff(
         pr_id=pr_id, head_sha=sha,
         diff_content=(FIXTURES / "sample-service.diff").read_text(),
+        file_contents={"src/main.py": "def hello(): pass\n"},
     )
 
 def _review(verdict=ReviewVerdict.APPROVED):
@@ -62,17 +63,18 @@ class TestReviewPullRequestService:
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
         pr_repo = StubPullRequestRepository(initial=None)
         changeset = StubChangesetFetcher(diff)
-        repo_ctx = StubRepositoryContext(RepositoryContext(architecture_hint="hint"))
+        factory = StubReviewContextFactory()
         llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, repo_ctx, llm, publisher,
+            pr_repo, changeset, factory, llm, publisher,
         ).execute(cmd)
 
         assert pr_repo.find_calls == [cmd.pr_id]
         assert changeset.fetch_calls == [(cmd.pr_id, cmd.head_sha)]
-        assert len(llm.review_calls) == 1
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
         assert len(publisher.publish_calls) == 1
         assert len(pr_repo.save_calls) == 1
         assert pr_repo.save_calls[0].head_sha == cmd.head_sha
@@ -83,15 +85,17 @@ class TestReviewPullRequestService:
         existing = existing.add_review(_review(), cmd.head_sha)
         pr_repo = StubPullRequestRepository(initial=existing)
         changeset = StubChangesetFetcher(_diff_fixture(cmd.pr_id, cmd.head_sha))
+        factory = StubReviewContextFactory()
         llm = StubLlmReview(_review())
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, StubRepositoryContext(), llm, publisher,
+            pr_repo, changeset, factory, llm, publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 0
-        assert len(llm.review_calls) == 0
+        assert len(factory.build_calls) == 0
+        assert len(llm.review_prompt_calls) == 0
         assert len(publisher.publish_calls) == 0
         assert len(pr_repo.save_calls) == 1
 
@@ -105,16 +109,17 @@ class TestReviewPullRequestService:
         pr_repo = StubPullRequestRepository(initial=existing)
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
         changeset = StubChangesetFetcher(diff)
-        repo_ctx = StubRepositoryContext(RepositoryContext(architecture_hint="hint"))
+        factory = StubReviewContextFactory()
         llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, repo_ctx, llm, publisher,
+            pr_repo, changeset, factory, llm, publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 1
-        assert len(llm.review_calls) == 1
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
         assert len(publisher.publish_calls) == 1
         assert len(pr_repo.save_calls) == 1
 
@@ -124,7 +129,7 @@ class TestReviewPullRequestService:
             pr_id=_pr_id(), head_sha=_sha(), diff_content="   \n ",
         ))
         svc = ReviewPullRequestService(
-            pr_repo, changeset, StubRepositoryContext(),
+            pr_repo, changeset, StubReviewContextFactory(),
             StubLlmReview(_review()), StubReviewPublisher(),
         )
         with pytest.raises(EmptyDiffError):
@@ -138,14 +143,15 @@ class TestReviewPullRequestService:
         pr_repo = StubPullRequestRepository(initial=existing)
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
         changeset = StubChangesetFetcher(diff)
-        repo_ctx = StubRepositoryContext(RepositoryContext(architecture_hint="hint"))
+        factory = StubReviewContextFactory()
         llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, repo_ctx, llm, publisher,
+            pr_repo, changeset, factory, llm, publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 1
-        assert len(llm.review_calls) == 1
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
         assert len(publisher.publish_calls) == 1

@@ -56,5 +56,15 @@ bootstrap:
 review:
 	@bash $(SCRIPT_DIR)/watch-prs.sh -r $(REPO) -p $(PR) --once
 
+
+# New fragment-based review (Python CompositionRoot path)
+review-new:
+	@python -m pr_auto_reviewer.cli watch-prs -r $(REPO) --once $(if $(FORCE_PR),-p $(FORCE_PR))
+
+review-new-all:
+	@POLL_INTERVAL=$${POLL_INTERVAL:-60} python -m pr_auto_reviewer.cli watch-prs
+
+review-new-pr:
+	@python -m pr_auto_reviewer.cli review -r $(REPO) -p $(PR) --force
 capture-fixture:
 	@bash $(SCRIPT_DIR)/capture-fixture.sh -r $(REPO) -p $(PR) 

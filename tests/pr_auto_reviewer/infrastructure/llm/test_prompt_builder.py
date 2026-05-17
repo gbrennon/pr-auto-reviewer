@@ -91,9 +91,9 @@ class TestPromptBuilder:
         result = PromptBuilder().build(_diff, _context)
         assert "Senior Principal Software Engineer" in result
 
-    def test_build_ends_with_diff_fence(self, _diff, _context):
+    def test_build_ends_with_reminder(self, _diff, _context):
         result = PromptBuilder().build(_diff, _context)
-        assert result.rstrip().endswith("```")
+        assert "not to undo them." in result
 
     def test_build_includes_file_contents_when_present(self, _context):
         diff = PullRequestDiff(

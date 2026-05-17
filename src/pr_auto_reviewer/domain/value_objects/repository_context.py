@@ -15,3 +15,4 @@ class RepositoryContext:
     repository_structure: str | None = None
     pr_title: str | None = None
     pr_description: str | None = None
+    python_version: str | None = None

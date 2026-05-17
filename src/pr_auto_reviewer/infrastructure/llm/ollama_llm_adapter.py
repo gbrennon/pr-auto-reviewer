@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
+from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
@@ -26,29 +27,79 @@ _SEP = "=" * 72
 class OllamaLlmAdapter(LlmReviewPort):
     """Call a local Ollama instance to review a pull-request diff."""
 
-    def __init__(self, host: str, model: str) -> None:
+    def __init__(self, host: str, model: str, compose_review_prompt: object | None = None, fragment_selector: object | None = None, fragment_composer: object | None = None) -> None:
         self._host = host.rstrip("/")
         self._model = model
         self._prompt_builder = PromptBuilder()
+        self._compose_review_prompt = compose_review_prompt
+        self._fragment_selector = fragment_selector
+        self._fragment_composer = fragment_composer
+
+    # ------------------------------------------------------------------
+    # Public API — LlmReviewPort
+    # ------------------------------------------------------------------
 
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
+        """Build prompt from diff+context via PromptBuilder, then call Ollama.
+
+        Deprecated: prefer :meth:`review_prompt` with fragment-based
+        composition orchestrated by the application service.
+        """
+        prompt_str = self._prompt_builder.build(diff, context)
+        return self._call_ollama(prompt_str)
+
+    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
+        """Send an already-composed prompt to Ollama and return a CodeReview.
+
+        Args:
+            prompt: A fully assembled prompt ready for LLM consumption.
+
+        Returns:
+            The parsed code review.
+        """
+        logger.info(
+            "Reviewing with composed prompt: %d chars, %d tokens, %d fragments used",
+            len(prompt.content),
+            prompt.total_tokens,
+            len(prompt.fragments_used),
+        )
+        return self._call_ollama(prompt.content)
+
+    # ------------------------------------------------------------------
+    # Internal — Ollama HTTP call
+    # ------------------------------------------------------------------
+
+    def _call_ollama(self, prompt_text: str) -> CodeReview:
+        """Send *prompt_text* to Ollama, parse the response into a CodeReview."""
         t0 = time.monotonic()
         logger.info("Calling Ollama at %s with model %s", self._host, self._model)
 
-        prompt = self._prompt_builder.build(diff, context)
-        prompt_chars = len(prompt)
+        prompt_chars = len(prompt_text)
         logger.info("Prompt built: %d chars", prompt_chars)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(_SEP)
-            logger.debug("FULL PROMPT (%d chars):\n%s", prompt_chars, prompt)
+            logger.debug("FULL PROMPT (%d chars):\n%s", prompt_chars, prompt_text)
             logger.debug(_SEP)
 
         timeout = int(os.getenv("OLLAMA_TIMEOUT", 120))
         try:
+            # Split first fragment (system prompt) from user prompt
+            SEP = "\n\n---\n\n"
+            system_text = ""
+            user_text = prompt_text
+            if SEP in prompt_text:
+                parts = prompt_text.split(SEP, 1)
+                system_text = parts[0]
+                user_text = parts[1]
+
+            req: dict = {"model": self._model, "prompt": user_text, "stream": False}
+            if system_text:
+                req["system"] = system_text
+
             response = requests.post(
                 f"{self._host}/api/generate",
-                json={"model": self._model, "prompt": prompt, "stream": False},
+                json=req,
                 timeout=timeout,
             )
             response.raise_for_status()
