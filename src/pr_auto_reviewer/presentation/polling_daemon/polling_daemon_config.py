@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -11,5 +10,6 @@ class PollingDaemonConfig:
     """Configuration for the polling daemon."""
 
     poll_interval_seconds: int
-    repos_filter: Optional[str]
+    repos_filter: str | None
     run_once: bool
+    force_pr: int | None = None

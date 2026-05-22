@@ -1,0 +1,1495 @@
+diff --git a/scripts/autostart/20-watch-prs.sh b/scripts/autostart/20-watch-prs.sh
+new file mode 100755
+index 0000000..586912b
+--- /dev/null
++++ b/scripts/autostart/20-watch-prs.sh
+@@ -0,0 +1,30 @@
++#!/usr/bin/env bash
++# 20-watch-prs.sh — Start AI PR reviewer watcher.
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++source "${SCRIPT_DIR}/lib.sh"
++
++WATCH_PR_SCRIPT="${SCRIPT_DIR}/../watch-prs.sh"
++PID_FILE="${REPO_ROOT}/runner-data/watch-prs.pid"
++LOG_FILE="${REPO_ROOT}/watch-prs.log"
++
++start() {
++  if [[ ! -f "$WATCH_PR_SCRIPT" ]]; then
++    log_warn "watch-prs.sh not found"
++    return 0
++  fi
++  
++  if ! curl -sf "${OLLAMA_HOST:-http://localhost:11434}/api/tags" >/dev/null 2>&1; then
++    log_warn "Ollama not available, skipping PR watcher"
++    return 0
++  fi
++  
++  log "Starting PR watcher..."
++  run_background "$WATCH_PR_SCRIPT" "$PID_FILE" "watch-prs" "$LOG_FILE"
++}
++
++stop() {
++  stop_background "$PID_FILE" "watch-prs"
++}
++
++start
+diff --git a/scripts/autostart/autostart.sh b/scripts/autostart/autostart.sh
+new file mode 100755
+index 0000000..a59e23b
+--- /dev/null
++++ b/scripts/autostart/autostart.sh
+@@ -0,0 +1,99 @@
++#!/usr/bin/env bash
++# autostart.sh — Main entry for autostart scripts.
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++ACTION="${1:-run}"
++
++log() {
++  printf '[autostart] %s\n' "$1"
++}
++
++log_done() {
++  printf '[autostart] [DONE] %s\n' "$1"
++}
++
++log_error() {
++  printf '[autostart] [ERROR] %s\n' "$1"
++}
++
++run_all() {
++  log "Running autostart scripts..."
++  
++  for script in "$SCRIPT_DIR"/[0-9][0-9]-*.sh; do
++    [[ -f "$script" ]] || continue
++    [[ "$(basename "$script")" == "lib.sh" ]] && continue
++    [[ "$(basename "$script")" == "autostart.sh" ]] && continue
++    
++    log "Running $(basename "$script")"
++    
++    if source "$script" 2>/dev/null; then
++      if declare -f start >/dev/null 2>&1; then
++        start
++      fi
++      log_done "$(basename "$script")"
++    else
++      log_error "$(basename "$script") failed to source"
++    fi
++  done
++  
++  log "Autostart complete"
++}
++
++status_all() {
++  log "Autostart script status:"
++  
++  for script in "$SCRIPT_DIR"/[0-9][0-9]-*.sh; do
++    [[ -f "$script" ]] || continue
++    [[ "$(basename "$script")" == "lib.sh" ]] && continue
++    [[ "$(basename "$script")" == "autostart.sh" ]] && continue
++    
++    local name
++    name=$(basename "$script" | sed 's/[0-9][0-9]-//; s/.sh$//')
++    
++    local pid_info="stopped"
++    case "$name" in
++      watch-prs)
++        if pgrep -f "watch-prs.sh" >/dev/null 2>&1; then
++          pid_info="running"
++        fi
++        ;;
++    esac
++    
++    printf '  %-30s %s\n' "$name" "$pid_info"
++  done
++}
++
++stop_all() {
++  log "Stopping autostart scripts..."
++  
++  for script in "$SCRIPT_DIR"/[0-9][0-9]-*.sh; do
++    [[ -f "$script" ]] || continue
++    [[ "$(basename "$script")" == "lib.sh" ]] && continue
++    [[ "$(basename "$script")" == "autostart.sh" ]] && continue
++    
++    if source "$script" 2>/dev/null; then
++      if declare -f stop >/dev/null 2>&1; then
++        log "Stopping $(basename "$script")"
++        stop
++      fi
++    fi
++  done
++  
++  log "Autostart stopped"
++}
++
++case "$ACTION" in
++  --status)
++    status_all
++    ;;
++  --stop)
++    stop_all
++    ;;
++  *)
++    run_all
++    ;;
++esac
+diff --git a/scripts/autostart/lib.sh b/scripts/autostart/lib.sh
+new file mode 100755
+index 0000000..c57d313
+--- /dev/null
++++ b/scripts/autostart/lib.sh
+@@ -0,0 +1,107 @@
++#!/usr/bin/env bash
++# lib.sh — Shared utilities for autostart scripts.
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
++
++# Load environment
++if [[ -f "${REPO_ROOT}/.env" ]]; then
++  set -a
++  source "${REPO_ROOT}/.env"
++  set +a
++fi
++
++log() {
++  printf '[autostart] %s\n' "$1"
++}
++
++log_skip() {
++  printf '[autostart] [SKIP] %s\n' "$1"
++}
++
++log_start() {
++  printf '[autostart] [START] %s\n' "$1"
++}
++
++log_done() {
++  printf '[autostart] [DONE] %s\n' "$1"
++}
++
++log_warn() {
++  printf '[autostart] [WARN] %s\n' "$1"
++}
++
++log_error() {
++  printf '[autostart] [ERROR] %s\n' "$1"
++}
++
++is_running() {
++  local pid_file="$1"
++  if [[ -f "$pid_file" ]]; then
++    local pid
++    pid=$(cat "$pid_file" 2>/dev/null)
++    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
++      return 0
++    fi
++  fi
++  return 1
++}
++
++get_pid() {
++  local pid_file="$1"
++  if [[ -f "$pid_file" ]]; then
++    cat "$pid_file"
++  fi
++}
++
++run_background() {
++  local script="$1"
++  local pid_file="$2"
++  local name="$3"
++  local logs="${4:-/dev/null}"
++  
++  if is_running "$pid_file"; then
++    log_skip "$name already running (PID $(get_pid "$pid_file"))"
++    return 0
++  fi
++  
++  rm -f "$pid_file"
++  
++  if [[ "$logs" != "/dev/null" ]]; then
++    mkdir -p "$(dirname "$logs")"
++  fi
++
++  log_start "$name"
++  
++  {
++    set -a
++    source "${REPO_ROOT}/.env"
++    set +a
++    exec bash "$script"
++  } >> "$logs" 2>&1 &
++  
++  local new_pid=$!
++  echo "$new_pid" > "$pid_file"
++  
++  log_done "$name started (PID $new_pid)"
++  return 0
++}
++
++stop_background() {
++  local pid_file="$1"
++  local name="$2"
++  
++  if is_running "$pid_file"; then
++    local pid
++    pid=$(get_pid "$pid_file")
++    log "Stopping $name (PID $pid)..."
++    kill "$pid" 2>/dev/null || true
++    sleep 1
++    rm -f "$pid_file"
++    log_done "$name stopped"
++  else
++    log_skip "$name not running"
++  fi
++}
+diff --git a/scripts/bootstrap.sh b/scripts/bootstrap.sh
+new file mode 100755
+index 0000000..51483c0
+--- /dev/null
++++ b/scripts/bootstrap.sh
+@@ -0,0 +1,118 @@
++#!/usr/bin/env bash
++# bootstrap.sh — Bootstrap script to start the PR AI Auto-Reviewer
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++cd "$REPO_ROOT"
++
++source "${SCRIPT_DIR}/lib/env-loader.sh"
++
++RED='\033[0;31m'
++GREEN='\033[0;32m'
++YELLOW='\033[1;33m'
++NC='\033[0m'
++
++log_info() { echo -e "${GREEN}[bootstrap]${NC} $*"; }
++log_warn() { echo -e "${YELLOW}[bootstrap]${NC} WARNING: $*"; }
++log_error() { echo -e "${RED}[bootstrap]${NC} ERROR: $*"; }
++
++check_dep() {
++  if ! command -v "$1" &>/dev/null; then
++    log_error "$1 is required but not installed"
++    return 1
++  fi
++  log_info "$1 found: $(command -v "$1")"
++}
++
++check_deps() {
++  log_info "Checking dependencies..."
++  check_dep curl || true
++  check_dep python3 || true
++  check_dep flock || true
++  check_dep nohup || true
++}
++
++setup_env() {
++  if [[ -f "$REPO_ROOT/.env" ]]; then
++    log_info ".env loaded"
++  else
++    log_error ".env not found. Create it from .env.example template."
++    return 1
++  fi
++
++  init_env
++}
++
++check_ollama() {
++  local host="${OLLAMA_HOST:-http://localhost:11434}"
++
++  log_info "Checking Ollama at $host..."
++  if curl -sf "$host/api/tags" &>/dev/null; then
++    log_info "Ollama is running"
++    return 0
++  else
++    log_warn "Ollama not running at $host"
++    return 1
++  fi
++}
++
++start_ollama() {
++  if command -v ollama &>/dev/null; then
++    log_info "Starting Ollama..."
++    nohup ollama serve &>/dev/null &
++    sleep 3
++    if check_ollama; then
++      log_info "Ollama started"
++    fi
++  else
++    log_warn "ollama command not found, cannot auto-start"
++  fi
++}
++
++create_dirs() {
++  mkdir -p "$REPO_ROOT/runner-data"
++  mkdir -p "$REPO_ROOT/logs"
++}
++
++start_project() {
++  log_info "Starting PR AI Auto-Reviewer..."
++
++  if [[ ! -f "$REPO_ROOT/.env" ]]; then
++    log_error ".env file missing. Run bootstrap again after configuring."
++    return 1
++  fi
++
++  if [[ -z "$CODEBERG_TOKEN" ]]; then
++    log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
++  fi
++
++  log_info "Stopping any stale processes..."
++  bash "$REPO_ROOT/scripts/autostart/autostart.sh" --stop
++
++  log_info "Starting services..."
++  bash "$REPO_ROOT/scripts/autostart/autostart.sh"
++}
++
++main() {
++  echo ""
++  echo "=== PR AI Auto-Reviewer Bootstrap ==="
++  echo ""
++
++  create_dirs
++  check_deps
++  setup_env
++
++  if ! check_ollama; then
++    start_ollama
++  fi
++
++  start_project
++
++  echo ""
++  log_info "Bootstrap complete"
++  log_info "Use: bash scripts/autostart/autostart.sh --status to check status"
++}
++
++main "$@"
+diff --git a/scripts/lib/build-comment.py b/scripts/lib/build-comment.py
+new file mode 100644
+index 0000000..d960441
+--- /dev/null
++++ b/scripts/lib/build-comment.py
+@@ -0,0 +1,133 @@
++#!/usr/bin/env python3
++"""Build review comment body from Ollama JSON response."""
++
++import sys
++import json
++import os
++import re
++
++
++def extract_json(text):
++    """Try to extract valid JSON from text that may contain markdown or other content."""
++    if not text:
++        return None
++
++    text = text.strip()
++
++    # Try direct parse first
++    try:
++        return json.loads(text)
++    except:
++        pass
++
++    # Try to find JSON in markdown code blocks
++    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
++    if match:
++        try:
++            return json.loads(match.group(1))
++        except:
++            pass
++
++    # Try to find any {...} block
++    match = re.search(r'\{[^{}]*"[^"]+":\s*[^{}]*\}', text, re.DOTALL)
++    if match:
++        try:
++            return json.loads(match.group(0))
++        except:
++            pass
++
++    return None
++
++
++def determine_verdict(review):
++    """Determine review verdict based on issues.
++
++    Returns:
++        'approved' if no critical/high issues
++        'changes_requested' if there are critical/high issues
++    """
++    issues = review.get("issues", [])
++
++    for issue in issues:
++        severity = issue.get("severity", "").lower()
++        if severity in ("critical", "high"):
++            return "changes_requested"
++
++    return "approved"
++
++
++def main():
++    review_json = os.environ.get("REVIEW_JSON", "")
++
++    # Try to extract and parse JSON from the response
++    review = extract_json(review_json)
++
++    if review is None:
++        # If no valid JSON found, treat the whole thing as summary
++        review = {"summary": review_json, "issues": [], "suggestions": [], "praise": []}
++
++    issues = review.get("issues", [])
++    suggestions = review.get("suggestions", [])
++    praise = review.get("praise", [])
++    summary = review.get("summary", "")
++    model = os.environ.get("OLLAMA_MODEL", "ollama")
++
++    # Determine verdict
++    verdict = determine_verdict(review)
++
++    # Determine emoji and text for verdict
++    if verdict == "approved":
++        verdict_emoji = "✅"
++        verdict_text = "Approved"
++    else:
++        verdict_emoji = "❌"
++        verdict_text = "Changes Requested"
++
++    body = f"## AI Code Review {verdict_emoji}\n\n"
++    body += f"**Verdict:** {verdict_text}\n\n"
++
++    if issues:
++        body += "### Issues\n"
++        for i in issues:
++            sev = i.get("severity", "medium").upper()
++            typ = i.get("type", "")
++            file = i.get("file", "")
++            line = i.get("line", "?")
++            desc = i.get("description", "")
++
++            location = f"{file}:{line}" if file and line else (file or line or "?")
++            type_tag = f" [{typ}]" if typ else ""
++            body += f"- [{sev}]{type_tag} {location}: {desc}\n"
++        body += "\n"
++
++    if suggestions:
++        body += "### Suggestions\n"
++        for s in suggestions:
++            file = s.get("file", "")
++            line = s.get("line", "?")
++            desc = s.get("description", "")
++
++            location = f"{file}:{line}" if file and line else (file or line or "?")
++            body += f"- {location}: {desc}\n"
++        body += "\n"
++
++    if praise:
++        body += "### Praise\n"
++        for p in praise:
++            file = p.get("file", "")
++            desc = p.get("description", "")
++            body += f"- {file}: {desc}\n" if file else f"- {desc}\n"
++        body += "\n"
++
++    if summary:
++        body += f"**Summary:** {summary}\n"
++
++    body += f"\n---\n*Review by {model} via local Forgejo*"
++
++    # Print verdict to stdout for capture by caller
++    print(verdict)
++    print(body)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/lib/build-prompt.py b/scripts/lib/build-prompt.py
+new file mode 100644
+index 0000000..a56d3bd
+--- /dev/null
++++ b/scripts/lib/build-prompt.py
+@@ -0,0 +1,68 @@
++#!/usr/bin/env python3
++"""Build the Ollama prompt for code review."""
++
++import sys
++import os
++
++diff = os.environ.get("DIFF_CONTENT", "")
++
++prompt = f"""You are a Senior Principal Software Engineer and Code Reviewer with deep expertise in software architecture, design patterns, SOLID principles, and engineering excellence. Your role is to provide constructive, actionable code reviews for pull requests.
++
++## REVIEW PRIORITY
++
++1. **Critical Issues** (must fix):
++   - Security vulnerabilities
++   - Memory leaks or resource leaks
++   - Race conditions
++   - Unhandled exceptions
++   - Null pointer dereferences
++
++2. **Architectural Issues** (should fix):
++   - SOLID violations
++   - Architectural boundary breaches
++   - God objects
++   - Tight coupling without abstraction
++
++3. **Code Quality** (consider fixing):
++   - Naming conventions
++   - Code duplication
++   - Missing documentation
++   - Inefficient algorithms
++
++4. **Suggestions** (optional):
++   - Code style preferences
++   - Minor optimizations
++   - Cosmetic improvements
++
++## RESPONSE FORMAT
++
++Output ONLY valid JSON (no markdown, no explanation):
++
++{{
++  "issues": [
++    {{"file": "path/to/file", "line": "123", "severity": "critical|high|medium|low", "type": "security|architecture|solid|test|quality", "description": "specific issue description"}}
++  ],
++  "suggestions": [
++    {{"file": "path/to/file", "line": "456", "description": "improvement suggestion"}}
++  ],
++  "praise": [
++    {{"file": "path/to/file", "description": "what was done well"}}
++  ],
++  "summary": "2-3 sentence overall assessment of the PR"
++}}
++
++## GUIDELINES
++
++- Be specific: cite file names, line numbers, and function names
++- Explain WHY something is an issue, not just WHAT is wrong
++- Provide actionable feedback: tell the author HOW to fix it
++- Be constructive: acknowledge good patterns alongside problems
++- Focus on what matters: don't nitpick style when architecture is wrong
++- Prioritize: critical issues first, then architectural, then quality
++- No emojis in any output
++- Reply in English only
++
++DIFF:
++{diff}"""
++
++print(prompt)
+diff --git a/scripts/lib/env-loader.sh b/scripts/lib/env-loader.sh
+new file mode 100644
+index 0000000..88e8c4a
+--- /dev/null
++++ b/scripts/lib/env-loader.sh
+@@ -0,0 +1,47 @@
++#!/usr/bin/env bash
++# env-loader.sh — Load and validate environment variables from .env
++
++set -euo pipefail
++
++load_env() {
++  if [[ -z "${REPO_ROOT:-}" ]]; then
++    echo "ERROR: REPO_ROOT not set" >&2
++    return 1
++  fi
++
++  if [[ ! -f "${REPO_ROOT}/.env" ]]; then
++    return 1
++  fi
++
++  set -a
++  source "${REPO_ROOT}/.env"
++  set +a
++}
++
++require_env() {
++  local var_name="$1"
++  local var_value="${!var_name:-}"
++
++  if [[ -z "$var_value" ]]; then
++    echo "ERROR: $var_name is not set" >&2
++    return 1
++  fi
++
++  return 0
++}
++
++get_env() {
++  local var_name="$1"
++  local default="$2"
++  echo "${!var_name:-$default}"
++}
++
++init_env() {
++  load_env
++
++  export CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
++  export GITHUB_PAT="${GITHUB_PAT:-}"
++  export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++  export OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
++  export POLL_INTERVAL="${POLL_INTERVAL:-60}"
++}
+diff --git a/scripts/lib/hot-reload.sh b/scripts/lib/hot-reload.sh
+new file mode 100755
+index 0000000..37f759a
+--- /dev/null
++++ b/scripts/lib/hot-reload.sh
+@@ -0,0 +1,226 @@
++#!/usr/bin/env bash
++# hot-reload.sh — Shared library for hot-reloading configuration via SIGHUP or automatic file watching.
++#
++# Usage:
++#   source "${SCRIPT_DIR}/lib/hot-reload.sh"
++#   init_hot_reload "$REPO_ROOT"
++#   # In main loop, replace "sleep $INTERVAL" with:
++#   interruptible_sleep "$INTERVAL"
++#
++# Features:
++#   - SIGHUP signal triggers immediate reload
++#   - Automatic .env file change detection (every 10 seconds)
++#   - Variables are tracked: FORGEJO_HOST, OLLAMA_HOST, OLLAMA_MODEL, POLL_INTERVAL, etc.
++
++set -euo pipefail
++
++# Global state for hot-reload
++RELOAD_REQUESTED=false
++REPO_ROOT_PATH=""
++CONFIG_SNAPSHOT=""
++ENV_FILE=""
++LAST_ENV_MTIME=""
++
++# Get .env modification time
++get_env_mtime() {
++  if [[ -f "$ENV_FILE" ]]; then
++    # Use stat with %Y for modification time
++    stat --format=%Y "$ENV_FILE" 2>/dev/null || { echo "0"; return 1; }
++  else
++    echo "0"
++    return 1
++  fi
++}
++
++# Check if .env has been modified
++check_env_changed() {
++  local current_mtime
++  current_mtime=$(get_env_mtime)
++  
++  if [[ -z "$LAST_ENV_MTIME" ]]; then
++    LAST_ENV_MTIME="$current_mtime"
++    return 1
++  fi
++  
++  if [[ "$current_mtime" != "$LAST_ENV_MTIME" ]]; then
++    return 0  # Changed
++  fi
++  
++  return 1  # Not changed
++}
++
++# Initialize hot-reload functionality
++init_hot_reload() {
++  local repo_root="$1"
++  REPO_ROOT_PATH="$(cd "$repo_root" && pwd)"
++  ENV_FILE="${REPO_ROOT_PATH}/.env"
++  
++  # Capture initial config snapshot
++  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
++  LAST_ENV_MTIME=$(get_env_mtime)
++  
++  # Set up signal handler for SIGHUP
++  trap 'handle_sighup' HUP
++  
++  echo "[hot-reload] Initialized. Send SIGHUP or edit .env to reload config."
++  echo "[hot-reload] Initial config: $(echo "$CONFIG_SNAPSHOT" | head -1)"
++}
++
++# Handle SIGHUP signal
++handle_sighup() {
++  RELOAD_REQUESTED=true
++}
++
++# Reload configuration from .env
++reload_config() {
++  echo "[hot-reload] Reloading configuration..."
++  
++  # Track old values for comparison
++  local old_model="$OLLAMA_MODEL"
++  local old_host="$OLLAMA_HOST"
++  local old_interval="$INTERVAL"
++  local old_forgejo="$FORGEJO_HOST"
++  
++  # Re-source .env with export
++  if [[ -f "${REPO_ROOT_PATH}/.env" ]]; then
++    set -a
++    source "${REPO_ROOT_PATH}/.env" 2>/dev/null || true
++    set +a
++  else
++    echo "[hot-reload] WARNING: .env not found at ${REPO_ROOT_PATH}/.env"
++  fi
++  
++  # Set defaults if not in .env
++  FORGEJO_HOST="${FORGEJO_HOST:-http://localhost:1234}"
++  AUTH="${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}"
++  OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++  OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
++  INTERVAL="${INTERVAL:-${POLL_INTERVAL:-60}}"
++  
++  # Log changes
++  echo "[hot-reload] Configuration reloaded:"
++  [[ "$old_model" != "$OLLAMA_MODEL" ]] && echo "  OLLAMA_MODEL: ${old_model:-<unset>} -> ${OLLAMA_MODEL}"
++  [[ "$old_host" != "$OLLAMA_HOST" ]] && echo "  OLLAMA_HOST: ${old_host:-<unset>} -> ${OLLAMA_HOST}"
++  [[ "$old_interval" != "$INTERVAL" ]] && echo "  INTERVAL: ${old_interval:-60} -> ${INTERVAL}"
++  [[ "$old_forgejo" != "$FORGEJO_HOST" ]] && echo "  FORGEJO_HOST: ${old_forgejo:-<unset>} -> ${FORGEJO_HOST}"
++  
++  # Update snapshot and mtime
++  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
++  LAST_ENV_MTIME=$(get_env_mtime)
++  RELOAD_REQUESTED=false
++  
++  echo "[hot-reload] Reload complete."
++}
++
++# Interruptible sleep that checks for reload requests (SIGHUP or .env changes)
++# Replaces: sleep "$INTERVAL"
++interruptible_sleep() {
++  local duration="${1:-60}"
++  local elapsed=0
++  local check_interval=3
++  local last_check=0
++  local last_mtime="0"
++  
++  # Get initial mtime
++  last_mtime=$(get_env_mtime)
++  
++  while [[ $elapsed -lt $duration ]]; do
++    # Only check every check_interval seconds
++    if [[ $((elapsed - last_check)) -ge $check_interval ]]; then
++      last_check=$elapsed
++      
++      local current_mtime
++      current_mtime=$(get_env_mtime)
++      
++      # Check for file changes
++      if [[ "$current_mtime" != "$last_mtime" ]]; then
++        reload_config
++        last_mtime="$current_mtime"
++      fi
++      
++      if [[ "$RELOAD_REQUESTED" == true ]]; then
++        reload_config
++        RELOAD_REQUESTED=false
++      fi
++    fi
++    
++    sleep 1
++    elapsed=$((elapsed + 1))
++  done
++}
++
++# Capture current config as a single-line string for comparison
++capture_config_snapshot() {
++  echo "OLLAMA_MODEL=${OLLAMA_MODEL:-},OLLAMA_HOST=${OLLAMA_HOST:-},INTERVAL=${INTERVAL:-60},FORGEJO_HOST=${FORGEJO_HOST:-}"
++}
++
++# Reload configuration from .env
++reload_config() {
++  echo "[hot-reload] Reloading configuration..."
++  
++  # Track old values for comparison
++  local old_model="$OLLAMA_MODEL"
++  local old_host="$OLLAMA_HOST"
++  local old_interval="$INTERVAL"
++  local old_forgejo="$FORGEJO_HOST"
++  
++  # Re-source .env with export
++  if [[ -f "${REPO_ROOT_PATH}/.env" ]]; then
++    set -a
++    source "${REPO_ROOT_PATH}/.env" 2>/dev/null || true
++    set +a
++  else
++    echo "[hot-reload] WARNING: .env not found at ${REPO_ROOT_PATH}/.env"
++  fi
++  
++  # Set defaults if not in .env
++  FORGEJO_HOST="${FORGEJO_HOST:-http://localhost:1234}"
++  AUTH="${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}"
++  OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++  OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
++  INTERVAL="${INTERVAL:-${POLL_INTERVAL:-60}}"
++  
++  # Log changes
++  echo "[hot-reload] Configuration reloaded:"
++  [[ "$old_model" != "$OLLAMA_MODEL" ]] && echo "  OLLAMA_MODEL: ${old_model:-<unset>} -> ${OLLAMA_MODEL}"
++  [[ "$old_host" != "$OLLAMA_HOST" ]] && echo "  OLLAMA_HOST: ${old_host:-<unset>} -> ${OLLAMA_HOST}"
++  [[ "$old_interval" != "$INTERVAL" ]] && echo "  INTERVAL: ${old_interval:-60} -> ${INTERVAL}"
++  [[ "$old_forgejo" != "$FORGEJO_HOST" ]] && echo "  FORGEJO_HOST: ${old_forgejo:-<unset>} -> ${FORGEJO_HOST}"
++  
++  # Update snapshot
++  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
++  RELOAD_REQUESTED=false
++  
++  echo "[hot-reload] Reload complete."
++}
++
++# Interruptible sleep that checks for reload requests
++# Replaces: sleep "$INTERVAL"
++interruptible_sleep() {
++  local duration="${1:-60}"
++  local elapsed=0
++  
++  while [[ $elapsed -lt $duration ]]; do
++    # Check if reload was requested
++    if [[ "$RELOAD_REQUESTED" == true ]]; then
++      reload_config
++    fi
++    
++    sleep 1
++    elapsed=$((elapsed + 1))
++  done
++}
++
++# Check if reload is requested (non-blocking, for use in loops)
++check_reload() {
++  if [[ "$RELOAD_REQUESTED" == true ]]; then
++    reload_config
++    return 0
++  fi
++  return 1
++}
++
++# Get current reload status (for debugging)
++is_reload_requested() {
++  echo "$RELOAD_REQUESTED"
++}
+diff --git a/scripts/lib/json-escape.py b/scripts/lib/json-escape.py
+new file mode 100644
+index 0000000..5f71b37
+--- /dev/null
++++ b/scripts/lib/json-escape.py
+@@ -0,0 +1,7 @@
++#!/usr/bin/env python3
++"""Escape a string for JSON."""
++
++import sys
++import json
++
++print(json.dumps(sys.stdin.read()))
+diff --git a/scripts/lib/ollama-client.sh b/scripts/lib/ollama-client.sh
+new file mode 100755
+index 0000000..a84c0d8
+--- /dev/null
++++ b/scripts/lib/ollama-client.sh
+@@ -0,0 +1,85 @@
++#!/usr/bin/env bash
++# ollama-client.sh — Ollama API wrapper for code review.
++
++OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
++
++# Resolve Ollama host - always try localhost first for local development
++resolve_ollama_host() {
++  # First try localhost (works with docker and podman when Ollama runs locally)
++  if curl -sf "http://localhost:11434/api/tags" >/dev/null 2>&1; then
++    echo "http://localhost:11434"
++    return
++  fi
++  
++  # Then try host.containers.internal (podman on macOS)
++  if curl -sf "http://host.containers.internal:11434/api/tags" >/dev/null 2>&1; then
++    echo "http://host.containers.internal:11434"
++    return
++  fi
++  
++  # Use env value if set and working
++  if [[ -n "$OLLAMA_HOST" ]]; then
++    if curl -sf "${OLLAMA_HOST}/api/tags" >/dev/null 2>&1; then
++      echo "$OLLAMA_HOST"
++      return
++    fi
++  fi
++  
++  echo ""
++}
++
++# Check if Ollama is available
++ollama_available() {
++  local host
++  host=$(resolve_ollama_host)
++  [[ -n "$host" ]] && curl -sf "${host}/api/tags" >/dev/null 2>&1
++}
++
++# Generate completion
++ollama_generate() {
++  local prompt="$1"
++  local model="${2:-$OLLAMA_MODEL}"
++  
++  local host
++  host=$(resolve_ollama_host)
++  
++  if [[ -z "$host" ]]; then
++    echo '{"error": "Ollama not available"}'
++    return 1
++  fi
++  
++  curl -sf -X POST "${host}/api/generate" \
++    -H "Content-Type: application/json" \
++    -d "{
++      \"model\": \"${model}\",
++      \"prompt\": \"${prompt}\",
++      \"stream\": false
++    }"
++}
++
++# Generate review for a diff
++ollama_review() {
++  local diff="$1"
++  
++  local review_prompt="You are a code reviewer. Review the following git diff and provide constructive feedback. Focus on bugs, security issues, code quality, and potential improvements. Output in JSON format:
++
++{
++  \"issues\": [
++    {\"line\": \"10\", \"severity\": \"high\", \"description\": \"issue description\"}
++  ],
++  \"suggestions\": [
++    {\"line\": \"15\", \"description\": \"suggestion\"}
++  ],
++  \"summary\": \"one sentence overall assessment\"
++}
++
++DIFF:
++${diff}"
++
++  local response
++  response=$(ollama_generate "$review_prompt")
++  
++  # Extract response field
++  echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true
++}
+\ No newline at end of file
+diff --git a/scripts/reload.sh b/scripts/reload.sh
+new file mode 100755
+index 0000000..78ac9e9
+--- /dev/null
++++ b/scripts/reload.sh
+@@ -0,0 +1,138 @@
++#!/usr/bin/env bash
++# reload.sh — Send SIGHUP to running watchers to reload configuration.
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++PID_FILES=(
++  "runner-data/watch-prs.pid"
++  "watcher-prs.pid"
++)
++
++log_info() {
++  echo "[reload] $*"
++}
++
++log_error() {
++  echo "[reload] ERROR: $*" >&2
++}
++
++log_skip() {
++  echo "[reload] SKIP: $*"
++}
++
++check_pid() {
++  local pidfile="$1"
++  local full_path="$REPO_ROOT/$pidfile"
++  
++  if [[ ! -f "$full_path" ]]; then
++    return 1
++  fi
++  
++  local pid
++  pid=$(cat "$full_path" 2>/dev/null)
++  
++  if [[ -z "$pid" ]]; then
++    return 1
++  fi
++  
++  if kill -0 "$pid" 2>/dev/null; then
++    return 0
++  fi
++  
++  return 1
++}
++
++send_sighup() {
++  local pidfile="$1"
++  local full_path="$REPO_ROOT/$pidfile"
++  local pid
++  
++  pid=$(cat "$full_path" 2>/dev/null)
++  
++  if kill -HUP "$pid" 2>/dev/null; then
++    log_info "Sent SIGHUP to $(basename "$pidfile" .pid) (PID: $pid)"
++    return 0
++  else
++    log_error "Failed to send SIGHUP to PID $pid"
++    return 1
++  fi
++}
++
++show_status() {
++  log_info "Hot-reloadable processes:"
++  echo ""
++  
++  local found_any=false
++  
++  for pidfile in "${PID_FILES[@]}"; do
++    local full_path="$REPO_ROOT/$pidfile"
++    local name
++    name=$(basename "$pidfile" .pid)
++    
++    if [[ -f "$full_path" ]]; then
++      local pid
++      pid=$(cat "$full_path" 2>/dev/null || echo "unknown")
++      
++      if kill -0 "$pid" 2>/dev/null; then
++        echo "  ✓ $name: running (PID $pid)"
++        found_any=true
++      else
++        echo "  ✗ $name: not running (stale PID file)"
++      fi
++    else
++      echo "  - $name: not running"
++    fi
++  done
++  
++  echo ""
++  if [[ "$found_any" == false ]]; then
++    log_info "No reloadable processes running."
++  fi
++}
++
++main() {
++  local action="reload"
++  
++  for arg in "$@"; do
++    case "$arg" in
++      -h|--help)
++        echo "Usage: $(basename "$0") [options]"
++        echo "Options: --status, -h, --help"
++        exit 0
++        ;;
++      --status)
++        action="status"
++        ;;
++    esac
++  done
++  
++  case "$action" in
++    status)
++      show_status
++      ;;
++    reload)
++      log_info "Reloading watchers..."
++      echo ""
++      
++      local reloaded=0
++      local skipped=0
++      
++      for pidfile in "${PID_FILES[@]}"; do
++        if check_pid "$pidfile"; then
++          send_sighup "$pidfile" && ((reloaded++)) || ((skipped++))
++        else
++          log_skip "$(basename "$pidfile" .pid): not running"
++          ((skipped++))
++        fi
++      done
++      
++      echo ""
++      log_info "Reload complete: $reloaded signaled, $skipped skipped"
++      ;;
++  esac
++}
++
++main "$@"
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+new file mode 100755
+index 0000000..7c2800d
+--- /dev/null
++++ b/scripts/watch-prs.sh
+@@ -0,0 +1,364 @@
++#!/usr/bin/env bash
++# watch-prs.sh — Daemon that watches Codeberg repos for open PRs and posts AI reviews.
++#
++# Flow:
++#   1. Poll configured Codeberg repos for open PRs
++#   2. Check SHA against state file
++#   3. If new/updated: fetch diff, send to Ollama, post review
++#
++# Usage:
++#   ./watch-prs.sh                    # daemon mode, 60s interval
++#   ./watch-prs.sh -i 30             # custom interval
++#   ./watch-prs.sh -r owner/repo     # watch specific repo
++#   ./watch-prs.sh --once            # single cycle
++
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++# Lock
++WATCHER_LOCK_FILE="${REPO_ROOT}/watcher-prs.lock"
++WATCHER_PID_FILE="${REPO_ROOT}/watcher-prs.pid"
++exec 9>"$WATCHER_LOCK_FILE"
++if ! flock -n 9; then
++  echo "watch-prs.sh is already running. Exiting." >&2
++  exit 1
++fi
++echo $$ > "$WATCHER_PID_FILE"
++
++trap 'rm -f "$WATCHER_PID_FILE"' EXIT INT TERM
++
++# Hot-reload support
++source "${SCRIPT_DIR}/lib/hot-reload.sh"
++init_hot_reload "$REPO_ROOT"
++
++# Load env
++source "${REPO_ROOT}/.env" 2>/dev/null || true
++
++# Config
++CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
++GITHUB_PAT="${GITHUB_PAT:-}"
++INTERVAL="${POLL_INTERVAL:-60}"
++REPOS_FILTER=""
++RUN_ONCE=false
++STATE_FILE="${REPO_ROOT}/runner-data/pr-reviews.json"
++
++# Ollama settings
++source "${SCRIPT_DIR}/lib/ollama-client.sh"
++OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
++
++usage() {
++  cat <<EOF
++Usage: $(basename "$0") [options]
++
++Watch Codeberg repos for open PRs and post AI reviews.
++
++Options:
++  -i <seconds>      Poll interval (default: ${INTERVAL})
++  -r <repo>         Watch specific repo (e.g., gbrennon/BitPill)
++  --once            Single cycle
++  -h, --help        This help
++
++Environment:
++  POLL_INTERVAL     Interval in seconds (default: 60)
++  CODEBERG_TOKEN   API token for Codeberg (required for private repos)
++  OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
++  OLLAMA_MODEL      Model to use (default: code-review)
++
++State:
++  ${STATE_FILE}
++EOF
++  exit 0
++}
++
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    -i) INTERVAL="$2"; shift 2 ;;
++    -r) REPOS_FILTER="$2"; shift 2 ;;
++    --once) RUN_ONCE=true; shift ;;
++    -h|--help) usage ;;
++    *) echo "Unknown: $1" >&2; usage ;;
++  esac
++done
++
++init_state() {
++  mkdir -p "$(dirname "$STATE_FILE")"
++  if [[ ! -f "$STATE_FILE" ]]; then
++    echo '{"reviewed":{}}' > "$STATE_FILE"
++  fi
++}
++
++load_state() {
++  if [[ -f "$STATE_FILE" ]]; then
++    cat "$STATE_FILE"
++  else
++    echo '{"reviewed":{}}'
++  fi
++}
++
++is_reviewed() {
++  local owner_repo="$1"
++  local pr_number="$2"
++  local sha="$3"
++  
++  local state
++  state=$(load_state)
++  
++  python3 -c "
++import sys, json
++try:
++    d = json.loads('${state}')
++except:
++    print('false')
++    sys.exit(0)
++
++key = '${owner_repo}/${pr_number}'
++entry = d.get('reviewed', {}).get(key, {})
++if entry.get('sha') == '${sha}':
++    print('true')
++else:
++    print('false')
++" 2>/dev/null || echo "false"
++}
++
++get_repos() {
++  if [[ -n "$REPOS_FILTER" ]]; then
++    echo "$REPOS_FILTER"
++    return
++  fi
++  
++  if [[ -z "$CODEBERG_TOKEN" ]]; then
++    echo "ERROR: CODEBERG_TOKEN required for listing repos" >&2
++    return
++  fi
++  
++  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++    "https://codeberg.org/api/v1/user/repos?limit=50" \
++    | python3 -c "
++import sys, json
++data = json.load(sys.stdin)
++for r in data:
++    print(r['full_name'])
++" 2>/dev/null || true
++}
++
++get_open_prs() {
++  local repo="$1"
++  
++  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++    "https://codeberg.org/api/v1/repos/${repo}/pulls?state=open&limit=20" \
++    | python3 -c "
++import sys, json
++data = json.load(sys.stdin)
++prs = data if isinstance(data, list) else data.get('data', [])
++for pr in prs:
++    if pr.get('draft', False):
++        continue
++    num = pr.get('number', '')
++    title = pr.get('title', '')
++    sha = pr.get('head', {}).get('sha', '')
++    if num and sha:
++        print(f'{num}|{sha}|{title}')
++" 2>/dev/null || true
++}
++
++get_diff() {
++  local repo="$1"
++  local pr_number="$2"
++  
++  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++    "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
++}
++
++process_pr() {
++  local repo="$1"
++  local pr_number="$2"
++  local pr_sha="$3"
++  local pr_title="$4"
++  
++  echo "  PR #${pr_number}: ${pr_title:0:50}..."
++  
++  if [[ "$(is_reviewed "$repo" "$pr_number" "$pr_sha")" == "true" ]]; then
++    echo "    -> already reviewed (SHA: ${pr_sha:0:7})"
++    return 0
++  fi
++  
++  echo "    -> NEW/UPDATED, analyzing..."
++  
++  if ! ollama_available; then
++    echo "    -> ERROR: Ollama not available"
++    return 1
++  fi
++  
++  local diff
++  diff=$(get_diff "$repo" "$pr_number")
++  
++  if [[ -z "$diff" ]] || [[ ${#diff} -lt 50 ]]; then
++    echo "    -> SKIP: No diff available"
++    return 0
++  fi
++  
++  echo "    -> Sending to Ollama (model: ${OLLAMA_MODEL})..."
++  
++  local review_prompt
++  review_prompt=$(DIFF_CONTENT="$diff" python3 "${SCRIPT_DIR}/lib/build-prompt.py")
++  
++  local ollama_host
++  ollama_host=$(resolve_ollama_host)
++  
++  local response
++  response=$(python3 -c "
++import json
++import os
++import sys
++
++data = {
++    'model': os.environ.get('OLLAMA_MODEL', 'code-review'),
++    'prompt': sys.stdin.read(),
++    'stream': False
++}
++print(json.dumps(data))
++" <<< "$review_prompt" | curl -sf -X POST "${ollama_host}/api/generate" \
++    -H "Content-Type: application/json" \
++    -d @- 2>&1) || {
++      echo "    -> ERROR: Ollama request failed"
++      return 1
++    }
++  
++  local review
++  review=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',''))" 2>/dev/null || true)
++  
++  if [[ -z "$review" ]]; then
++    echo "    -> ERROR: No review from Ollama"
++    return 1
++  fi
++  
++  echo "    -> Posting review to Codeberg..."
++  
++  local api_token="${CODEBERG_TOKEN:-${GITHUB_PAT}}"
++  if [[ -z "$api_token" ]]; then
++    echo "    -> ERROR: No API token"
++    return 1
++  fi
++  
++  local verdict comment_body build_output
++  build_output=$(REVIEW_JSON="$review" OLLAMA_MODEL="$OLLAMA_MODEL" python3 "${SCRIPT_DIR}/lib/build-comment.py")
++  verdict=$(echo "$build_output" | head -1)
++  comment_body=$(echo "$build_output" | tail -n +2)
++  
++  echo "    -> Verdict: ${verdict}"
++  
++  # Post comment
++  local escaped_body
++  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++  
++  local post_result
++  post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
++    -H "Authorization: token $api_token" \
++    -H "Content-Type: application/json" \
++    -d "{\"body\": ${escaped_body}}" 2>&1) || true
++  
++  if [[ -n "$post_result" ]]; then
++    echo "    -> Review comment posted!"
++    
++    # Try to post formal review
++    local review_result
++    review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
++      -H "Authorization: token $api_token" \
++      -H "Content-Type: application/json" \
++      -d "{\"type\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
++    
++    if [[ -n "$review_result" ]]; then
++      echo "    -> Review (${verdict}) submitted!"
++    fi
++    
++    # Update state
++    local state
++    state=$(load_state)
++    STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
++import os, json
++state = json.loads(os.environ.get('STATE_JSON', '{}'))
++repo = os.environ.get('REPO', '')
++pr_num = os.environ.get('PR_NUMBER', '')
++pr_sha = os.environ.get('PR_SHA', '')
++key = f'{repo}/{pr_num}'
++if 'reviewed' not in state:
++    state['reviewed'] = {}
++state['reviewed'][key] = {'sha': pr_sha}
++print(json.dumps(state))
++" > "$STATE_FILE"
++    
++    echo "    -> State updated"
++  else
++    echo "    -> ERROR: Failed to post to Codeberg"
++    return 1
++  fi
++  
++  return 0
++}
++
++cycle() {
++  local cycle_num="$1"
++  echo ""
++  echo "=== Cycle #${cycle_num} ==="
++  
++  local repos
++  repos=$(get_repos)
++  
++  if [[ -z "$repos" ]]; then
++    echo "No repos found"
++    return
++  fi
++  
++  local repo_count
++  repo_count=$(echo "$repos" | wc -l)
++  echo "Watching ${repo_count} repo(s)"
++  
++  echo "$repos" | while read -r repo; do
++    [[ -z "$repo" ]] && continue
++    
++    echo ""
++    echo "Repo: $repo"
++    
++    local prs
++    prs=$(get_open_prs "$repo")
++    
++    if [[ -z "$prs" ]]; then
++      echo "  No open PRs"
++      continue
++    fi
++    
++    echo "$prs" | while IFS='|' read -r pr_number pr_sha pr_title; do
++      process_pr "$repo" "$pr_number" "$pr_sha" "$pr_title" || true
++    done
++  done
++}
++
++init_state
++
++if ! ollama_available; then
++  echo "WARNING: Ollama not available. PR reviews will fail."
++fi
++
++echo "==> AI PR Review Watcher (Codeberg)"
++echo "    Interval: ${INTERVAL}s"
++echo "    Repos: ${REPOS_FILTER:-all}"
++echo "    Ollama: $(resolve_ollama_host)"
++echo "    Model: ${OLLAMA_MODEL}"
++echo "    Hot-reload: ENABLED (edit .env to reload)"
++echo "    Ctrl+C to stop"
++
++cycle_num=0
++
++while true; do
++  cycle_num=$((cycle_num + 1))
++  cycle "$cycle_num" || true
++  
++  if [[ "$RUN_ONCE" == true ]]; then
++    break
++  fi
++  
++  interruptible_sleep "$INTERVAL"
++done

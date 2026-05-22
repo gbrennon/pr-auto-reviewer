@@ -1,0 +1,204 @@
+diff --git a/src/target/riscv32.c b/src/target/riscv32.c
+index a4dca1bef..c66c69445 100644
+--- a/src/target/riscv32.c
++++ b/src/target/riscv32.c
+@@ -84,6 +84,11 @@
+ #define RV_SH_A1_A0 (RV_STORE_HALF | RV_RS2_A1 | RV_RS1_A0) // 0x00b51023U // sh a1, 0(a0)
+ #define RV_SB_A1_A0 (RV_STORE_BYTE | RV_RS2_A1 | RV_RS1_A0) // 0x00b50023U // sb a1, 0(a0)
+ 
++#define RV_ADDI         0x00000013U
++#define RV_IMM12(x)     ((x << 20U) & 0xfff00000U)
++/* RV32I opcodes: load word/half/byte from address A0 into A1 (clobber), postincrement A0 */
++#define RV_ADDI_A0_A0_4 (RV_ADDI | RV_RD_A0 | RV_RS1_A0 | RV_IMM12(4U)) // 0x00450513U // addi a0, a0, 4
++
+ static size_t riscv32_reg_read(target_s *target, uint32_t reg, void *data, size_t max);
+ static size_t riscv32_reg_write(target_s *target, uint32_t reg, const void *data, size_t max);
+ static void riscv32_regs_read(target_s *target, void *data);
+@@ -606,6 +611,11 @@ static void riscv32_progbuf_mem_read(
+ 	const uint8_t access_width = riscv_mem_access_width(hart, src, len);
+ 	const uint8_t access_length = 1U << access_width;
+ 
++	bool use_abstractauto = false;
++	/* If Abstract Command Autoexec is supported, then use efficient sequential reads */
++	if (len / access_length > 1U && (hart->flags & RV_HART_FLAG_ABSTRACTAUTO) != 0U)
++		use_abstractauto = true;
++
+ 	uint32_t progbuf_read = RV_LOAD_BYTE;
+ 	switch (access_width) {
+ 	case RV_MEM_ACCESS_8_BIT:
+@@ -623,9 +633,13 @@ static void riscv32_progbuf_mem_read(
+ 	/* Fill the program buffer */
+ 	if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE, progbuf_read))
+ 		return;
++	if (use_abstractauto)
++		if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + 1U, RV_ADDI_A0_A0_4))
++			return;
++	const uint8_t last_slot = use_abstractauto ? 2U : 1U;
+ 	/* Append literal ebreak (if impebreak is not reached) */
+-	if (hart->progbuf_size > 1U) {
+-		if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + 1U, RV_EBREAK))
++	if (hart->progbuf_size > last_slot) {
++		if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + last_slot, RV_EBREAK))
+ 			return;
+ 	}
+ 
+@@ -634,10 +648,9 @@ static void riscv32_progbuf_mem_read(
+ 	riscv_csr_read(hart, RV_GPR_A0, &a0_save);
+ 	riscv_csr_read(hart, RV_GPR_A1, &a1_save);
+ 
+-	uint8_t *const data = (uint8_t *)dest;
+-	for (size_t offset = 0; offset < len; offset += access_length) {
++	do {
+ 		/* Write the source address to DATA0 */
+-		if (!riscv_dm_write(hart->dbg_module, RV_DM_DATA0, src + offset))
++		if (!riscv_dm_write(hart->dbg_module, RV_DM_DATA0, src))
+ 			break;
+ 		/* Copy the source address from DATA0 to GPR A0 and launch the progbuf postexec */
+ 		bool result = riscv_dm_write(hart->dbg_module, RV_DM_ABST_COMMAND,
+@@ -647,13 +660,34 @@ static void riscv32_progbuf_mem_read(
+ 		result &= riscv_command_wait_complete(hart);
+ 		if (!result)
+ 			break;
+-		uint32_t value = 0;
+-		result = riscv_csr_read(hart, RV_GPR_A1, &value);
++
++		/* Copy the read value from GPR A1 to DATA0 but do not extract it yet */
++		result = riscv_dm_write(hart->dbg_module, RV_DM_ABST_COMMAND, RV_DM_ABST_CMD_ACCESS_REG | RV_ABST_READ | RV_REG_XFER | RV_ABST_POSTEXEC |
++			RV_REG_ACCESS_32_BIT | RV_GPR_A1);
++		result &= riscv_command_wait_complete(hart);
+ 		if (!result)
+ 			break;
++
++		if (use_abstractauto)
++			riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, RV_ABST_AUTO_DATA0);
++	} while(false);
++
++	uint8_t *const data = (uint8_t *)dest;
++	for (size_t offset = 0; offset < len - access_length; offset += access_length) {
++		/* Extract the read value from DATA0 */
++		uint32_t value = 0;
++		if (!riscv_dm_read(hart->dbg_module, RV_DM_DATA0, &value))
++			break;
+ 		riscv32_unpack_data(data + offset, value, access_width);
+ 	}
+ 
++	if (use_abstractauto)
++		riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, 0);
++	/* Get last value read from memory */
++	uint32_t value_last = 0;
++	riscv_dm_read(hart->dbg_module, RV_DM_DATA0, &value_last);
++	riscv32_unpack_data(data + len - access_length, value_last, access_width);
++
+ 	riscv_csr_write(hart, RV_GPR_A0, &a0_save);
+ 	riscv_csr_write(hart, RV_GPR_A1, &a1_save);
+ }
+@@ -682,9 +716,11 @@ static void riscv32_progbuf_mem_write(
+ 	/* Fill the program buffer */
+ 	if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE, progbuf_write))
+ 		return;
++	if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + 1U, RV_ADDI_A0_A0_4))
++		return;
+ 	/* Append literal ebreak (if impebreak is not reached) */
+-	if (hart->progbuf_size > 1U) {
+-		if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + 1U, RV_EBREAK))
++	if (hart->progbuf_size > 2U) {
++		if (!riscv_dm_write(hart->dbg_module, RV_DM_PROGBUF_BASE + 2U, RV_EBREAK))
+ 			return;
+ 	}
+ 
+@@ -693,15 +729,14 @@ static void riscv32_progbuf_mem_write(
+ 	riscv_csr_read(hart, RV_GPR_A0, &a0_save);
+ 	riscv_csr_read(hart, RV_GPR_A1, &a1_save);
+ 
+-	const uint8_t *const data = (const uint8_t *)src;
+-	for (size_t offset = 0; offset < len; offset += access_length) {
++	do {
+ 		/* Prepare the destination address in GPR A0 */
+-		const uint32_t dest_a0 = dest + offset;
++		const uint32_t dest_a0 = dest;
+ 		if (!riscv_csr_write(hart, RV_GPR_A0, &dest_a0))
+ 			break;
+ 
+ 		/* Pack the data to write into GPR A1 */
+-		uint32_t value = riscv32_pack_data(data + offset, access_width);
++		uint32_t value = riscv32_pack_data(src, access_width);
+ 		if (!riscv_dm_write(hart->dbg_module, RV_DM_DATA0, value))
+ 			break;
+ 		/* Copy the write value from DATA0 to GPR A1 and launch the progbuf postexec */
+@@ -711,8 +746,24 @@ static void riscv32_progbuf_mem_write(
+ 		result &= riscv_command_wait_complete(hart);
+ 		if (!result)
+ 			break;
++
++		/* If Abstract Command Autoexec is supported, then use efficient sequential reads */
++		if (len / access_length > 1 && hart->flags & RV_HART_FLAG_ABSTRACTAUTO)
++			riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, RV_ABST_AUTO_DATA0);
++	} while(false);
++
++	const uint8_t *const data = (const uint8_t *)src;
++	for (size_t offset = access_length; offset < len; offset += access_length) {
++		/* Pack the data to write into GPR A1 */
++		uint32_t value = riscv32_pack_data(data + offset, access_width);
++		/* Hammer the write through DATA0 */
++		if (!riscv_dm_write(hart->dbg_module, RV_DM_DATA0, value))
++			break;
+ 	}
+ 
++	if (len / access_length > 1 && hart->flags & RV_HART_FLAG_ABSTRACTAUTO)
++		riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, 0);
++
+ 	riscv_csr_write(hart, RV_GPR_A0, &a0_save);
+ 	riscv_csr_write(hart, RV_GPR_A1, &a1_save);
+ }
+diff --git a/src/target/riscv_debug.c b/src/target/riscv_debug.c
+index 0047b91f1..b90fd5400 100644
+--- a/src/target/riscv_debug.c
++++ b/src/target/riscv_debug.c
+@@ -682,6 +682,15 @@ static uint32_t riscv_hart_discover_isa(riscv_hart_s *const hart)
+ 	/* Memory access using just 1 progbuf slot is possible */
+ 	if (hart->progbuf_size >= 1U)
+ 		hart->flags |= RV_HART_FLAG_MEMORY_PROGBUF;
++	/* Check via WARL semantics whether abstract autoexec is possible */
++	if (hart->progbuf_size >= 2U) {
++		riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, RV_ABST_AUTO_DATA_MASK);
++		uint32_t abstract_auto = 0;
++		riscv_dm_read(hart->dbg_module, RV_DM_ABST_AUTO, &abstract_auto);
++		if (abstract_auto & RV_ABST_AUTO_DATA0)
++			hart->flags |= RV_HART_FLAG_ABSTRACTAUTO;
++		riscv_dm_write(hart->dbg_module, RV_DM_ABST_AUTO, 0U);
++	}
+ 	/* Check we have at least enough data registers for arg0 */
+ 	if (data_registers >= 4)
+ 		hart->access_width = 128U;
+diff --git a/src/target/riscv_debug.h b/src/target/riscv_debug.h
+index 85b2ce52c..a262ffb5b 100644
+--- a/src/target/riscv_debug.h
++++ b/src/target/riscv_debug.h
+@@ -102,6 +102,7 @@ typedef enum riscv_match_size {
+ #define RV_HART_FLAG_MEMORY_SYSBUS      (1U << 4U)
+ #define RV_HART_FLAG_DATA_GPR_ONLY      (1U << 5U) /* Hart supports Abstract Data commands for GPRs only */
+ #define RV_HART_FLAG_MEMORY_PROGBUF     (1U << 6U)
++#define RV_HART_FLAG_ABSTRACTAUTO       (1U << 7U)
+ 
+ typedef struct riscv_dmi riscv_dmi_s;
+ 
+@@ -181,6 +182,7 @@ typedef struct riscv_hart {
+ #define RV_DM_DATA3             0x07U
+ #define RV_DM_ABST_CTRLSTATUS   0x16U
+ #define RV_DM_ABST_COMMAND      0x17U
++#define RV_DM_ABST_AUTO         0x18U
+ #define RV_DM_PROGBUF_BASE      0x20U
+ #define RV_DM_SYSBUS_CTRLSTATUS 0x38U
+ #define RV_DM_SYSBUS_ADDR0      0x39U
+@@ -208,6 +210,11 @@ typedef struct riscv_hart {
+ #define RV_ABST_MEM_ADDR_POST_INC 0x00080000U
+ #define RV_ABST_MEM_ACCESS_SHIFT  20U
+ 
++#define RV_ABST_AUTO_DATA0        0x1U
++#define RV_ABST_AUTO_DATA_MASK    0xfffU
++#define RV_ABST_AUTO_PROGBUF0     0x10000U
++#define RV_ABST_AUTO_PROGBUF_MASK 0xffff0000U
++
+ #define RV_SYSBUS_MEM_ADDR_POST_INC 0x00010000U
+ #define RV_SYSBUS_MEM_READ_ON_ADDR  0x00100000U
+ #define RV_SYSBUS_MEM_READ_ON_DATA  0x00008000U

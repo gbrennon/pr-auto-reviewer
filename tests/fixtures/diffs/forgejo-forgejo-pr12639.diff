@@ -1,0 +1,5148 @@
+diff --git a/.semgrep/tests/xorm.go b/.semgrep/tests/xorm.go
+index 00b86acee1..422f1ee2fe 100644
+--- a/.semgrep/tests/xorm.go
++++ b/.semgrep/tests/xorm.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type ActionUser struct {
+diff --git a/assets/go-licenses.json b/assets/go-licenses.json
+index 7f1498042c..067e903e59 100644
+--- a/assets/go-licenses.json
++++ b/assets/go-licenses.json
+@@ -194,6 +194,11 @@
+     "path": "code.forgejo.org/go-chi/session/LICENSE",
+     "licenseText": "Apache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and\ndistribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright\nowner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities\nthat control, are controlled by, or are under common control with that entity.\nFor the purposes of this definition, \"control\" means (i) the power, direct or\nindirect, to cause the direction or management of such entity, whether by\ncontract or otherwise, or (ii) ownership of fifty percent (50%) or more of the\noutstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising\npermissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including\nbut not limited to software source code, documentation source, and configuration\nfiles.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or\ntranslation of a Source form, including but not limited to compiled object code,\ngenerated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made\navailable under the License, as indicated by a copyright notice that is included\nin or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that\nis based on (or derived from) the Work and for which the editorial revisions,\nannotations, elaborations, or other modifications represent, as a whole, an\noriginal work of authorship. For the purposes of this License, Derivative Works\nshall not include works that remain separable from, or merely link (or bind by\nname) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version\nof the Work and any modifications or additions to that Work or Derivative Works\nthereof, that is intentionally submitted to Licensor for inclusion in the Work\nby the copyright owner or by an individual or Legal Entity authorized to submit\non behalf of the copyright owner. For the purposes of this definition,\n\"submitted\" means any form of electronic, verbal, or written communication sent\nto the Licensor or its representatives, including but not limited to\ncommunication on electronic mailing lists, source code control systems, and\nissue tracking systems that are managed by, or on behalf of, the Licensor for\nthe purpose of discussing and improving the Work, but excluding communication\nthat is conspicuously marked or otherwise designated in writing by the copyright\nowner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf\nof whom a Contribution has been received by Licensor and subsequently\nincorporated within the Work.\n\n2. Grant of Copyright License.\n\nSubject to the terms and conditions of this License, each Contributor hereby\ngrants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,\nirrevocable copyright license to reproduce, prepare Derivative Works of,\npublicly display, publicly perform, sublicense, and distribute the Work and such\nDerivative Works in Source or Object form.\n\n3. Grant of Patent License.\n\nSubject to the terms and conditions of this License, each Contributor hereby\ngrants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,\nirrevocable (except as stated in this section) patent license to make, have\nmade, use, offer to sell, sell, import, and otherwise transfer the Work, where\nsuch license applies only to those patent claims licensable by such Contributor\nthat are necessarily infringed by their Contribution(s) alone or by combination\nof their Contribution(s) with the Work to which such Contribution(s) was\nsubmitted. If You institute patent litigation against any entity (including a\ncross-claim or counterclaim in a lawsuit) alleging that the Work or a\nContribution incorporated within the Work constitutes direct or contributory\npatent infringement, then any patent licenses granted to You under this License\nfor that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution.\n\nYou may reproduce and distribute copies of the Work or Derivative Works thereof\nin any medium, with or without modifications, and in Source or Object form,\nprovided that You meet the following conditions:\n\nYou must give any other recipients of the Work or Derivative Works a copy of\nthis License; and\nYou must cause any modified files to carry prominent notices stating that You\nchanged the files; and\nYou must retain, in the Source form of any Derivative Works that You distribute,\nall copyright, patent, trademark, and attribution notices from the Source form\nof the Work, excluding those notices that do not pertain to any part of the\nDerivative Works; and\nIf the Work includes a \"NOTICE\" text file as part of its distribution, then any\nDerivative Works that You distribute must include a readable copy of the\nattribution notices contained within such NOTICE file, excluding those notices\nthat do not pertain to any part of the Derivative Works, in at least one of the\nfollowing places: within a NOTICE text file distributed as part of the\nDerivative Works; within the Source form or documentation, if provided along\nwith the Derivative Works; or, within a display generated by the Derivative\nWorks, if and wherever such third-party notices normally appear. The contents of\nthe NOTICE file are for informational purposes only and do not modify the\nLicense. You may add Your own attribution notices within Derivative Works that\nYou distribute, alongside or as an addendum to the NOTICE text from the Work,\nprovided that such additional attribution notices cannot be construed as\nmodifying the License.\nYou may add Your own copyright statement to Your modifications and may provide\nadditional or different license terms and conditions for use, reproduction, or\ndistribution of Your modifications, or for any such Derivative Works as a whole,\nprovided Your use, reproduction, and distribution of the Work otherwise complies\nwith the conditions stated in this License.\n\n5. Submission of Contributions.\n\nUnless You explicitly state otherwise, any Contribution intentionally submitted\nfor inclusion in the Work by You to the Licensor shall be under the terms and\nconditions of this License, without any additional terms or conditions.\nNotwithstanding the above, nothing herein shall supersede or modify the terms of\nany separate license agreement you may have executed with Licensor regarding\nsuch Contributions.\n\n6. Trademarks.\n\nThis License does not grant permission to use the trade names, trademarks,\nservice marks, or product names of the Licensor, except as required for\nreasonable and customary use in describing the origin of the Work and\nreproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty.\n\nUnless required by applicable law or agreed to in writing, Licensor provides the\nWork (and each Contributor provides its Contributions) on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied,\nincluding, without limitation, any warranties or conditions of TITLE,\nNON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are\nsolely responsible for determining the appropriateness of using or\nredistributing the Work and assume any risks associated with Your exercise of\npermissions under this License.\n\n8. Limitation of Liability.\n\nIn no event and under no legal theory, whether in tort (including negligence),\ncontract, or otherwise, unless required by applicable law (such as deliberate\nand grossly negligent acts) or agreed to in writing, shall any Contributor be\nliable to You for damages, including any direct, indirect, special, incidental,\nor consequential damages of any character arising as a result of this License or\nout of the use or inability to use the Work (including but not limited to\ndamages for loss of goodwill, work stoppage, computer failure or malfunction, or\nany and all other commercial damages or losses), even if such Contributor has\nbeen advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability.\n\nWhile redistributing the Work or Derivative Works thereof, You may choose to\noffer, and charge a fee for, acceptance of support, warranty, indemnity, or\nother liability obligations and/or rights consistent with this License. However,\nin accepting such obligations, You may act only on Your own behalf and on Your\nsole responsibility, not on behalf of any other Contributor, and only if You\nagree to indemnify, defend, and hold each Contributor harmless for any liability\nincurred by, or claims asserted against, such Contributor by reason of your\naccepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nAPPENDIX: How to apply the Apache License to your work\n\nTo apply the Apache License to your work, attach the following boilerplate\nnotice, with the fields enclosed by brackets \"[]\" replaced with your own\nidentifying information. (Don't include the brackets!) The text should be\nenclosed in the appropriate comment syntax for the file format. We also\nrecommend that a file or class name and description of purpose be included on\nthe same \"printed page\" as the copyright notice for easier identification within\nthird-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License."
+   },
++  {
++    "name": "code.forgejo.org/xorm/xorm",
++    "path": "code.forgejo.org/xorm/xorm/LICENSE",
++    "licenseText": "Copyright (c) 2013 - 2015 The Xorm Authors\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the name of the {organization} nor the names of its\n  contributors may be used to endorse or promote products derived from\n  this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
++  },
+   {
+     "name": "code.gitea.io/sdk/gitea",
+     "path": "code.gitea.io/sdk/gitea/LICENSE",
+@@ -1298,10 +1303,5 @@
+     "name": "xorm.io/builder",
+     "path": "xorm.io/builder/LICENSE",
+     "licenseText": "Copyright (c) 2016 The Xorm Authors\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the name of the {organization} nor the names of its\n  contributors may be used to endorse or promote products derived from\n  this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+-  },
+-  {
+-    "name": "xorm.io/xorm",
+-    "path": "xorm.io/xorm/LICENSE",
+-    "licenseText": "Copyright (c) 2013 - 2015 The Xorm Authors\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the name of the {organization} nor the names of its\n  contributors may be used to endorse or promote products derived from\n  this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n"
+   }
+ ]
+diff --git a/cmd/migrate_storage.go b/cmd/migrate_storage.go
+index 14ce222c9b..f36fc9480e 100644
+--- a/cmd/migrate_storage.go
++++ b/cmd/migrate_storage.go
+@@ -22,8 +22,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/storage"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/urfave/cli/v3"
+-	"xorm.io/xorm"
+ )
+ 
+ // CmdMigrateStorage represents the available migrate storage sub-command.
+diff --git a/go.mod b/go.mod
+index 59605e8e77..f26b3046f9 100644
+--- a/go.mod
++++ b/go.mod
+@@ -16,6 +16,7 @@ require (
+ 	code.forgejo.org/go-chi/cache v1.0.1
+ 	code.forgejo.org/go-chi/captcha v1.0.2
+ 	code.forgejo.org/go-chi/session v1.0.4
++	code.forgejo.org/xorm/xorm v1.4.0
+ 	code.gitea.io/sdk/gitea v0.21.0
+ 	code.superseriousbusiness.org/exif-terminator v0.11.2
+ 	code.superseriousbusiness.org/go-jpeg-image-structure/v2 v2.3.0
+@@ -113,7 +114,6 @@ require (
+ 	gopkg.in/ini.v1 v1.67.0
+ 	mvdan.cc/xurls/v2 v2.6.0
+ 	xorm.io/builder v0.3.13
+-	xorm.io/xorm v1.3.9
+ )
+ 
+ require (
+@@ -185,7 +185,6 @@ require (
+ 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+ 	github.com/go-webauthn/x v0.2.3 // indirect
+ 	github.com/go-xmlfmt/xmlfmt v0.0.0-20191208150333-d5b6f63a941b // indirect
+-	github.com/goccy/go-json v0.10.5 // indirect
+ 	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551 // indirect
+ 	github.com/golang/snappy v1.0.0 // indirect
+ 	github.com/google/btree v1.1.3 // indirect
+@@ -268,5 +267,3 @@ replace github.com/mholt/archiver/v3 => code.forgejo.org/forgejo/archiver/v3 v3.
+ replace github.com/gliderlabs/ssh => code.forgejo.org/forgejo/ssh v0.0.0-20241211213324-5fc306ca0616
+ 
+ replace git.sr.ht/~mariusor/go-xsd-duration => code.forgejo.org/forgejo/go-xsd-duration v0.0.0-20220703122237-02e73435a078
+-
+-replace xorm.io/xorm v1.3.9 => code.forgejo.org/xorm/xorm v1.3.9-forgejo.12
+diff --git a/go.sum b/go.sum
+index a790c948e5..857bb77b32 100644
+--- a/go.sum
++++ b/go.sum
+@@ -42,8 +42,8 @@ code.forgejo.org/go-chi/captcha v1.0.2 h1:vyHDPXkpjDv8bLO9NqtWzZayzstD/WpJ5xwEkA
+ code.forgejo.org/go-chi/captcha v1.0.2/go.mod h1:lxiPLcJ76UCZHoH31/Wbum4GUi2NgjfFZLrJkKv1lLE=
+ code.forgejo.org/go-chi/session v1.0.4 h1:WQ1NaVxcCpxYwCliEGypKclZnOCjh3p1fk8XciJc62U=
+ code.forgejo.org/go-chi/session v1.0.4/go.mod h1:+sSTiomM5C8AUPtxZyTENIbcTz22kcVottKO0lnmDRk=
+-code.forgejo.org/xorm/xorm v1.3.9-forgejo.12 h1:EodlU2MGu/EeAdUpEOe+X4cU/qlnJol1ucJ0sHUCM1o=
+-code.forgejo.org/xorm/xorm v1.3.9-forgejo.12/go.mod h1:ozQINrM8b7uYFMBB/w19nUTTLcda3RKTQ8HspocVKdg=
++code.forgejo.org/xorm/xorm v1.4.0 h1:GCriXqUmpRWTWT2RyQy6ollwsNeKPaKQP+vwvGhwOM4=
++code.forgejo.org/xorm/xorm v1.4.0/go.mod h1:qmv9puvai7NQemIWf+qZSLpUn5VdCzGso9/KMcK7zCE=
+ code.gitea.io/sdk/gitea v0.21.0 h1:69n6oz6kEVHRo1+APQQyizkhrZrLsTLXey9142pfkD4=
+ code.gitea.io/sdk/gitea v0.21.0/go.mod h1:tnBjVhuKJCn8ibdyyhvUyxrR1Ca2KHEoTWoukNhXQPA=
+ code.pfad.fr/check v1.1.0 h1:GWvjdzhSEgHvEHe2uJujDcpmZoySKuHQNrZMfzfO0bE=
+@@ -334,8 +334,6 @@ github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJA
+ github.com/gobwas/httphead v0.1.0/go.mod h1:O/RXo79gxV8G+RqlR/otEwx4Q36zl9rqC5u12GKvMCM=
+ github.com/gobwas/pool v0.2.1/go.mod h1:q8bcK0KcYlCgd9e7WYLm9LpyS+YeLd8JVDW6WezmKEw=
+ github.com/gobwas/ws v1.2.1/go.mod h1:hRKAFb8wOxFROYNsT1bqfWnhX+b5MFeJM9r2ZSwg/KY=
+-github.com/goccy/go-json v0.10.5 h1:Fq85nIqj+gXn/S5ahsiTlK3TmC85qgirsdTP/+DeaC4=
+-github.com/goccy/go-json v0.10.5/go.mod h1:oq7eo15ShAhp70Anwd5lgX2pLfOS3QCiwU/PULtXL6M=
+ github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f h1:3BSP1Tbs2djlpprl7wCLuiqMaUh5SJkkzI2gDs+FgLs=
+ github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f/go.mod h1:Pcatq5tYkCW2Q6yrR2VRHlbHpZ/R4/7qyL1TCF7vl14=
+ github.com/gogs/go-gogs-client v0.0.0-20210131175652-1d7215cd8d85 h1:UjoPNDAQ5JPCjlxoJd6K8ALZqSDDhk2ymieAZOVaDg0=
+@@ -553,8 +551,6 @@ github.com/msteinert/pam/v2 v2.1.0 h1:er5F9TKV5nGFuTt12ubtqPHEUdeBwReP7vd3wovidG
+ github.com/msteinert/pam/v2 v2.1.0/go.mod h1:KT28NNIcDFf3PcBmNI2mIGO4zZJ+9RSs/At2PB3IDVc=
+ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
+ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
+-github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=
+-github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
+ github.com/niklasfasching/go-org v1.9.1 h1:/3s4uTPOF06pImGa2Yvlp24yKXZoTYM+nsIlMzfpg/0=
+ github.com/niklasfasching/go-org v1.9.1/go.mod h1:ZAGFFkWvUQcpazmi/8nHqwvARpr1xpb+Es67oUGX/48=
+ github.com/nwaples/rardecode/v2 v2.2.0 h1:4ufPGHiNe1rYJxYfehALLjup4Ls3ck42CWwjKiOqu0A=
+@@ -608,8 +604,6 @@ github.com/prometheus/procfs v0.15.1 h1:YagwOFzUgYfKKHX6Dr+sHT7km/hxC76UB0leargg
+ github.com/prometheus/procfs v0.15.1/go.mod h1:fB45yRUv8NstnjriLhBQLuOUt+WW4BsoGhij/e3PBqk=
+ github.com/redis/go-redis/v9 v9.19.0 h1:XPVaaPSnG6RhYf7p+rmSa9zZfeVAnWsH5h3lxthOm/k=
+ github.com/redis/go-redis/v9 v9.19.0/go.mod h1:v/M13XI1PVCDcm01VtPFOADfZtHf8YW3baQf57KlIkA=
+-github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
+-github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
+ github.com/rhysd/actionlint v1.7.10 h1:FL3XIEs72G4/++168vlv5FKOWMSWvWIQw1kBCadyOcM=
+ github.com/rhysd/actionlint v1.7.10/go.mod h1:ZHX/hrmknlsJN73InPTKsKdXpAv9wVdrJy8h8HAwFHg=
+ github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
+@@ -991,14 +985,6 @@ honnef.co/go/tools v0.0.0-20190106161140-3f1c8253044a/go.mod h1:rf3lG4BRIbNafJWh
+ honnef.co/go/tools v0.0.0-20190418001031-e561f6794a2a/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
+ honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
+ honnef.co/go/tools v0.0.1-2019.2.3/go.mod h1:a3bituU0lyd329TUQxRnasdCoJDkEUEAqEt0JzvZhAg=
+-modernc.org/libc v1.72.0 h1:IEu559v9a0XWjw0DPoVKtXpO2qt5NVLAnFaBbjq+n8c=
+-modernc.org/libc v1.72.0/go.mod h1:tTU8DL8A+XLVkEY3x5E/tO7s2Q/q42EtnNWda/L5QhQ=
+-modernc.org/mathutil v1.7.1 h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=
+-modernc.org/mathutil v1.7.1/go.mod h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJg=
+-modernc.org/memory v1.11.0 h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=
+-modernc.org/memory v1.11.0/go.mod h1:/JP4VbVC+K5sU2wZi9bHoq2MAkCnrt2r98UGeSK7Mjw=
+-modernc.org/sqlite v1.50.0 h1:eMowQSWLK0MeiQTdmz3lqoF5dqclujdlIKeJA11+7oM=
+-modernc.org/sqlite v1.50.0/go.mod h1:m0w8xhwYUVY3H6pSDwc3gkJ/irZT/0YEXwBlhaxQEew=
+ mvdan.cc/xurls/v2 v2.6.0 h1:3NTZpeTxYVWNSokW3MKeyVkz/j7uYXYiMtXRUfmjbgI=
+ mvdan.cc/xurls/v2 v2.6.0/go.mod h1:bCvEZ1XvdA6wDnxY7jPPjEmigDtvtvPXAD/Exa9IMSk=
+ rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
+diff --git a/models/activities/action.go b/models/activities/action.go
+index 9b67bd67f6..ad924b7667 100644
+--- a/models/activities/action.go
++++ b/models/activities/action.go
+@@ -32,8 +32,8 @@ import (
+ 	"forgejo.org/modules/structs"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ // ActionType represents the type of an action.
+diff --git a/models/activities/repo_activity.go b/models/activities/repo_activity.go
+index 0b9522be1b..f18ff3f2b4 100644
+--- a/models/activities/repo_activity.go
++++ b/models/activities/repo_activity.go
+@@ -16,7 +16,7 @@ import (
+ 	"forgejo.org/modules/git"
+ 	"forgejo.org/modules/gitrepo"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // ActivityAuthorData represents statistical git commit count data
+diff --git a/models/auth/oauth2.go b/models/auth/oauth2.go
+index 9ef89cb624..b9c8bc78c7 100644
+--- a/models/auth/oauth2.go
++++ b/models/auth/oauth2.go
+@@ -21,10 +21,10 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	uuid "github.com/google/uuid"
+ 	"golang.org/x/crypto/bcrypt"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // OAuth2Application represents an OAuth2 client (RFC 6749)
+diff --git a/models/auth/source.go b/models/auth/source.go
+index fd016e02da..b1c3df34ea 100644
+--- a/models/auth/source.go
++++ b/models/auth/source.go
+@@ -15,9 +15,9 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/convert"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/convert"
+ )
+ 
+ // Type represents an login type.
+diff --git a/models/auth/source_test.go b/models/auth/source_test.go
+index ed21aef253..68cb60ed5f 100644
+--- a/models/auth/source_test.go
++++ b/models/auth/source_test.go
+@@ -12,9 +12,9 @@ import (
+ 	"forgejo.org/models/unittest"
+ 	"forgejo.org/modules/json"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ type TestSource struct {
+diff --git a/models/db/collation.go b/models/db/collation.go
+index 768ada89e6..bb87926a07 100644
+--- a/models/db/collation.go
++++ b/models/db/collation.go
+@@ -12,8 +12,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ type CheckCollationsResult struct {
+diff --git a/models/db/context.go b/models/db/context.go
+index b51861d896..486b08e28c 100644
+--- a/models/db/context.go
++++ b/models/db/context.go
+@@ -10,8 +10,8 @@ import (
+ 	"fmt"
+ 	"slices"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // DefaultContext is the default context to run xorm queries in
+diff --git a/models/db/convert.go b/models/db/convert.go
+index 1f37e49176..88481d9bd4 100644
+--- a/models/db/convert.go
++++ b/models/db/convert.go
+@@ -11,8 +11,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ // ConvertDatabaseTable converts database and tables from utf8 to utf8mb4 if it's mysql and set ROW_FORMAT=dynamic
+diff --git a/models/db/engine.go b/models/db/engine.go
+index 1c8ad9d3f5..bc7556a76f 100755
+--- a/models/db/engine.go
++++ b/models/db/engine.go
+@@ -19,10 +19,10 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/contexts"
+-	"xorm.io/xorm/names"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/contexts"
++	"code.forgejo.org/xorm/xorm/names"
++	"code.forgejo.org/xorm/xorm/schemas"
+ 
+ 	_ "github.com/go-sql-driver/mysql" // Needed for the MySQL driver
+ )
+diff --git a/models/db/engine_test.go b/models/db/engine_test.go
+index 5172068698..134cffe876 100644
+--- a/models/db/engine_test.go
++++ b/models/db/engine_test.go
+@@ -17,9 +17,9 @@ import (
+ 
+ 	_ "forgejo.org/cmd" // for TestPrimaryKeys
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ func TestDumpDatabase(t *testing.T) {
+diff --git a/models/db/foreign_keys.go b/models/db/foreign_keys.go
+index 1bf022596d..686874faab 100644
+--- a/models/db/foreign_keys.go
++++ b/models/db/foreign_keys.go
+@@ -11,7 +11,7 @@ import (
+ 
+ 	"forgejo.org/modules/container"
+ 
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ type schemaWithDefaultBean struct {
+diff --git a/models/db/list.go b/models/db/list.go
+index 71e9a0b1d2..f5153c8231 100644
+--- a/models/db/list.go
++++ b/models/db/list.go
+@@ -8,8 +8,8 @@ import (
+ 
+ 	"forgejo.org/modules/setting"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ const (
+diff --git a/models/db/log.go b/models/db/log.go
+index 387709cc50..696b043237 100644
+--- a/models/db/log.go
++++ b/models/db/log.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/log"
+ 
+-	xormlog "xorm.io/xorm/log"
++	xormlog "code.forgejo.org/xorm/xorm/log"
+ )
+ 
+ // XORMLogBridge a logger bridge from Logger to xorm
+diff --git a/models/db/optional_test.go b/models/db/optional_test.go
+index fedf20161f..c69e411463 100644
+--- a/models/db/optional_test.go
++++ b/models/db/optional_test.go
+@@ -10,9 +10,9 @@ import (
+ 	"forgejo.org/models/unittest"
+ 	"forgejo.org/modules/optional"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func TestOptionFieldInt(t *testing.T) {
+diff --git a/models/db/sql_postgres_with_schema.go b/models/db/sql_postgres_with_schema.go
+index 3851fa6e87..d4fb093ff3 100644
+--- a/models/db/sql_postgres_with_schema.go
++++ b/models/db/sql_postgres_with_schema.go
+@@ -13,8 +13,8 @@ import (
+ 
+ 	"forgejo.org/modules/setting"
+ 
++	"code.forgejo.org/xorm/xorm/dialects"
+ 	"github.com/jackc/pgx/v5/stdlib"
+-	"xorm.io/xorm/dialects"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/README.md b/models/forgejo_migrations/README.md
+index 578b75c8a0..693c093cb4 100644
+--- a/models/forgejo_migrations/README.md
++++ b/models/forgejo_migrations/README.md
+@@ -61,7 +61,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/foreign_key_utils.go b/models/forgejo_migrations/foreign_key_utils.go
+index 2a792fd66b..6fbbe87e95 100644
+--- a/models/forgejo_migrations/foreign_key_utils.go
++++ b/models/forgejo_migrations/foreign_key_utils.go
+@@ -8,8 +8,8 @@ import (
+ 
+ 	"forgejo.org/modules/log"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // syncForeignKeyWithDelete will delete any records that match `cond`, and if present, log and warn to the
+diff --git a/models/forgejo_migrations/index_utils.go b/models/forgejo_migrations/index_utils.go
+index dda08e4018..54a14c10e9 100644
+--- a/models/forgejo_migrations/index_utils.go
++++ b/models/forgejo_migrations/index_utils.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func dropIndexIfExists(x *xorm.Engine, tableName, indexName string) error {
+diff --git a/models/forgejo_migrations/migrate.go b/models/forgejo_migrations/migrate.go
+index d64009db51..3bfdd639b4 100644
+--- a/models/forgejo_migrations/migrate.go
++++ b/models/forgejo_migrations/migrate.go
+@@ -16,8 +16,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/names"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/names"
+ )
+ 
+ // ForgejoMigration table contains a record of migrations applied to the database.  (Note that there are older
+diff --git a/models/forgejo_migrations/migrate_test.go b/models/forgejo_migrations/migrate_test.go
+index 87dea780d8..c7c2f33cd4 100644
+--- a/models/forgejo_migrations/migrate_test.go
++++ b/models/forgejo_migrations/migrate_test.go
+@@ -10,9 +10,9 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/test"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ func noOpMigration(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations/v14a_actions-approval-and-trust.go b/models/forgejo_migrations/v14a_actions-approval-and-trust.go
+index f8be109dda..e24c6bdb92 100644
+--- a/models/forgejo_migrations/v14a_actions-approval-and-trust.go
++++ b/models/forgejo_migrations/v14a_actions-approval-and-trust.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_add-action_task-index.go b/models/forgejo_migrations/v14a_add-action_task-index.go
+index 6dd56c3e85..6ef7c5e4cf 100644
+--- a/models/forgejo_migrations/v14a_add-action_task-index.go
++++ b/models/forgejo_migrations/v14a_add-action_task-index.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_add-foreign-keys-collaboration.go b/models/forgejo_migrations/v14a_add-foreign-keys-collaboration.go
+index 774dfe158c..6b44379a89 100644
+--- a/models/forgejo_migrations/v14a_add-foreign-keys-collaboration.go
++++ b/models/forgejo_migrations/v14a_add-foreign-keys-collaboration.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_add-foreign-keys-forgejo_auth_token.go b/models/forgejo_migrations/v14a_add-foreign-keys-forgejo_auth_token.go
+index 4aea62da50..787a6f5d1d 100644
+--- a/models/forgejo_migrations/v14a_add-foreign-keys-forgejo_auth_token.go
++++ b/models/forgejo_migrations/v14a_add-foreign-keys-forgejo_auth_token.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_add-foreign-keys-pull_request-1.go b/models/forgejo_migrations/v14a_add-foreign-keys-pull_request-1.go
+index 6e67207c7d..5b7d4ce763 100644
+--- a/models/forgejo_migrations/v14a_add-foreign-keys-pull_request-1.go
++++ b/models/forgejo_migrations/v14a_add-foreign-keys-pull_request-1.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_add-forgejo-migrations-table.go b/models/forgejo_migrations/v14a_add-forgejo-migrations-table.go
+index 8f22983e80..dcdae8414c 100644
+--- a/models/forgejo_migrations/v14a_add-forgejo-migrations-table.go
++++ b/models/forgejo_migrations/v14a_add-forgejo-migrations-table.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_ap-change-fedi-handle-structure.go b/models/forgejo_migrations/v14a_ap-change-fedi-handle-structure.go
+index a412ceb737..bcdfc54b8a 100644
+--- a/models/forgejo_migrations/v14a_ap-change-fedi-handle-structure.go
++++ b/models/forgejo_migrations/v14a_ap-change-fedi-handle-structure.go
+@@ -19,7 +19,7 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/validation"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_migrate_task_secrets.go b/models/forgejo_migrations/v14a_migrate_task_secrets.go
+index 3484a024b2..1fd0c86d72 100644
+--- a/models/forgejo_migrations/v14a_migrate_task_secrets.go
++++ b/models/forgejo_migrations/v14a_migrate_task_secrets.go
+@@ -18,8 +18,8 @@ import (
+ 	"forgejo.org/modules/structs"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_migrate_webhook_authorization.go b/models/forgejo_migrations/v14a_migrate_webhook_authorization.go
+index 5921329b3e..2cbffe46d6 100644
+--- a/models/forgejo_migrations/v14a_migrate_webhook_authorization.go
++++ b/models/forgejo_migrations/v14a_migrate_webhook_authorization.go
+@@ -14,8 +14,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table.go b/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table.go
+index 2eff0014cd..4027a1d3b3 100644
+--- a/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table.go
++++ b/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table_test.go b/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table_test.go
+index 8383c238d6..668ba3c618 100644
+--- a/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table_test.go
++++ b/models/forgejo_migrations/v14a_remove-is-deleted-column-from-activity-action-table_test.go
+@@ -9,8 +9,8 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func Test_removeIsDeletedColumnFromActivityActionTable(t *testing.T) {
+diff --git a/models/forgejo_migrations/v14a_rework-notification.go b/models/forgejo_migrations/v14a_rework-notification.go
+index 04303559e8..89ad001508 100644
+--- a/models/forgejo_migrations/v14a_rework-notification.go
++++ b/models/forgejo_migrations/v14a_rework-notification.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_rm-repository-issue-stat-fields.go b/models/forgejo_migrations/v14a_rm-repository-issue-stat-fields.go
+index 72442fc387..2caa9aa8db 100644
+--- a/models/forgejo_migrations/v14a_rm-repository-issue-stat-fields.go
++++ b/models/forgejo_migrations/v14a_rm-repository-issue-stat-fields.go
+@@ -6,8 +6,8 @@ package forgejo_migrations
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14a_set_remote_user_prohibit_login.go b/models/forgejo_migrations/v14a_set_remote_user_prohibit_login.go
+index 9f453e05f3..ba327a8e2b 100644
+--- a/models/forgejo_migrations/v14a_set_remote_user_prohibit_login.go
++++ b/models/forgejo_migrations/v14a_set_remote_user_prohibit_login.go
+@@ -11,8 +11,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14b_action-reindexing.go b/models/forgejo_migrations/v14b_action-reindexing.go
+index 83dc452191..02e8543629 100644
+--- a/models/forgejo_migrations/v14b_action-reindexing.go
++++ b/models/forgejo_migrations/v14b_action-reindexing.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14b_action-run-add-workflow-directory.go b/models/forgejo_migrations/v14b_action-run-add-workflow-directory.go
+index 51d4e24280..6a67c2cfd9 100644
+--- a/models/forgejo_migrations/v14b_action-run-add-workflow-directory.go
++++ b/models/forgejo_migrations/v14b_action-run-add-workflow-directory.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14b_add-action_run-preexecutionerrorcode.go b/models/forgejo_migrations/v14b_add-action_run-preexecutionerrorcode.go
+index 01ea6ce673..d3177c46d5 100644
+--- a/models/forgejo_migrations/v14b_add-action_run-preexecutionerrorcode.go
++++ b/models/forgejo_migrations/v14b_add-action_run-preexecutionerrorcode.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v14b_rm-repository-actionrun-stat-fields.go b/models/forgejo_migrations/v14b_rm-repository-actionrun-stat-fields.go
+index 62f693e780..7d985c280b 100644
+--- a/models/forgejo_migrations/v14b_rm-repository-actionrun-stat-fields.go
++++ b/models/forgejo_migrations/v14b_rm-repository-actionrun-stat-fields.go
+@@ -6,8 +6,8 @@ package forgejo_migrations
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15a_remove-softdelete-action_runner_token.go b/models/forgejo_migrations/v15a_remove-softdelete-action_runner_token.go
+index c0f2e964a9..577c0c934a 100644
+--- a/models/forgejo_migrations/v15a_remove-softdelete-action_runner_token.go
++++ b/models/forgejo_migrations/v15a_remove-softdelete-action_runner_token.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15b_add-access_token-owned-repos.go b/models/forgejo_migrations/v15b_add-access_token-owned-repos.go
+index dd96c55c05..e8b8951040 100644
+--- a/models/forgejo_migrations/v15b_add-access_token-owned-repos.go
++++ b/models/forgejo_migrations/v15b_add-access_token-owned-repos.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15b_add-access_token_resource.go b/models/forgejo_migrations/v15b_add-access_token_resource.go
+index 2e4afbcd43..7ac47706a5 100644
+--- a/models/forgejo_migrations/v15b_add-access_token_resource.go
++++ b/models/forgejo_migrations/v15b_add-access_token_resource.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15b_add-ephemeral_runner.go b/models/forgejo_migrations/v15b_add-ephemeral_runner.go
+index 746763aa66..8e17d41933 100644
+--- a/models/forgejo_migrations/v15b_add-ephemeral_runner.go
++++ b/models/forgejo_migrations/v15b_add-ephemeral_runner.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15b_add-foreign-keys-action_runner_token.go b/models/forgejo_migrations/v15b_add-foreign-keys-action_runner_token.go
+index 584addf77b..a49317734a 100644
+--- a/models/forgejo_migrations/v15b_add-foreign-keys-action_runner_token.go
++++ b/models/forgejo_migrations/v15b_add-foreign-keys-action_runner_token.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15b_add-runner_request_key.go b/models/forgejo_migrations/v15b_add-runner_request_key.go
+index fb8150469b..2810790af0 100644
+--- a/models/forgejo_migrations/v15b_add-runner_request_key.go
++++ b/models/forgejo_migrations/v15b_add-runner_request_key.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15c_add_job_handle.go b/models/forgejo_migrations/v15c_add_job_handle.go
+index 59dca1b991..171366bd62 100644
+--- a/models/forgejo_migrations/v15c_add_job_handle.go
++++ b/models/forgejo_migrations/v15c_add_job_handle.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15c_add_mirror_remoteaddressauth.go b/models/forgejo_migrations/v15c_add_mirror_remoteaddressauth.go
+index b2f30235ad..b808641861 100644
+--- a/models/forgejo_migrations/v15c_add_mirror_remoteaddressauth.go
++++ b/models/forgejo_migrations/v15c_add_mirror_remoteaddressauth.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15c_add_schedule_spec_time_zones.go b/models/forgejo_migrations/v15c_add_schedule_spec_time_zones.go
+index d72d585725..d013e294ce 100644
+--- a/models/forgejo_migrations/v15c_add_schedule_spec_time_zones.go
++++ b/models/forgejo_migrations/v15c_add_schedule_spec_time_zones.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/optional"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v15c_fix-project-sorting-unique-constraints.go b/models/forgejo_migrations/v15c_fix-project-sorting-unique-constraints.go
+index 9fc28d523c..caa7c56dc6 100644
+--- a/models/forgejo_migrations/v15c_fix-project-sorting-unique-constraints.go
++++ b/models/forgejo_migrations/v15c_fix-project-sorting-unique-constraints.go
+@@ -9,7 +9,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v16a_add_authorized_integration.go b/models/forgejo_migrations/v16a_add_authorized_integration.go
+index 4cfd5219f4..bee3d49401 100644
+--- a/models/forgejo_migrations/v16a_add_authorized_integration.go
++++ b/models/forgejo_migrations/v16a_add_authorized_integration.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config.go b/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config.go
+index efe737ad5a..a551f3e0b9 100644
+--- a/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config.go
++++ b/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config.go
+@@ -11,8 +11,8 @@ import (
+ 	"forgejo.org/modules/json"
+ 	"forgejo.org/modules/optional"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config_test.go b/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config_test.go
+index 865c0e394b..1eab37dce5 100644
+--- a/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config_test.go
++++ b/models/forgejo_migrations/v16a_add_oidcsubjectformat_actions_unit_config_test.go
+@@ -10,9 +10,9 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm/convert"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/convert"
+ )
+ 
+ func Test_setOIDCSubjectFormatLegacy15(t *testing.T) {
+diff --git a/models/forgejo_migrations/v16b_add-login-source-id-to-forgejo-auth-token.go b/models/forgejo_migrations/v16b_add-login-source-id-to-forgejo-auth-token.go
+index 3839e4a25b..8c7fa22e8d 100644
+--- a/models/forgejo_migrations/v16b_add-login-source-id-to-forgejo-auth-token.go
++++ b/models/forgejo_migrations/v16b_add-login-source-id-to-forgejo-auth-token.go
+@@ -6,7 +6,7 @@ package forgejo_migrations
+ import (
+ 	"forgejo.org/modules/optional"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v16b_authorized_integration_name_description.go b/models/forgejo_migrations/v16b_authorized_integration_name_description.go
+index 3f5450310f..53efa36141 100644
+--- a/models/forgejo_migrations/v16b_authorized_integration_name_description.go
++++ b/models/forgejo_migrations/v16b_authorized_integration_name_description.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/db"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations/v16c_authorized_integration_ui.go b/models/forgejo_migrations/v16c_authorized_integration_ui.go
+index 4c5ee8dd5e..56c562b2b5 100644
+--- a/models/forgejo_migrations/v16c_authorized_integration_ui.go
++++ b/models/forgejo_migrations/v16c_authorized_integration_ui.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/forgejo_migrations_legacy/migrate.go b/models/forgejo_migrations_legacy/migrate.go
+index b1782de777..0408b96979 100644
+--- a/models/forgejo_migrations_legacy/migrate.go
++++ b/models/forgejo_migrations_legacy/migrate.go
+@@ -17,8 +17,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/names"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/names"
+ )
+ 
+ // ForgejoVersion describes the Forgejo version table. Should have only one row with id = 1.
+@@ -191,7 +191,7 @@ func Migrate(x *xorm.Engine) error {
+ 		// If the version record does not exist we think it is a fresh installation and we can skip all migrations;
+ 		// engine init calls `SyncAllTables` which will create the fresh database.
+ 		upToDate := &ForgejoVersion{ID: 1, Version: ExpectedVersion()}
+-		if _, err := x.InsertOne(upToDate); err != nil {
++		if _, err := x.Insert(upToDate); err != nil {
+ 			return fmt.Errorf("insert: %w", err)
+ 		}
+ 		// continue with the migration routine, but nothing will be applied; this allows transition into the newer
+diff --git a/models/forgejo_migrations_legacy/migrate_test.go b/models/forgejo_migrations_legacy/migrate_test.go
+index 4c1de20c26..9a23f9562c 100644
+--- a/models/forgejo_migrations_legacy/migrate_test.go
++++ b/models/forgejo_migrations_legacy/migrate_test.go
+@@ -9,9 +9,9 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/test"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ // TestEnsureUpToDate tests the behavior of EnsureUpToDate.
+@@ -31,7 +31,7 @@ func TestEnsureUpToDate(t *testing.T) {
+ 	require.Error(t, err)
+ 
+ 	// Insert 'good' Forgejo Version row.
+-	_, err = x.InsertOne(&ForgejoVersion{ID: 1, Version: ExpectedVersion()})
++	_, err = x.Insert(&ForgejoVersion{ID: 1, Version: ExpectedVersion()})
+ 	require.NoError(t, err)
+ 
+ 	err = EnsureUpToDate(x)
+@@ -68,13 +68,13 @@ func TestMigrateFailWithCorruption(t *testing.T) {
+ 	require.NotNil(t, x)
+ 
+ 	// ID != 1
+-	_, err := x.InsertOne(&ForgejoVersion{ID: 100, Version: 100})
++	_, err := x.Insert(&ForgejoVersion{ID: 100, Version: 100})
+ 	require.NoError(t, err)
+ 	err = Migrate(x)
+ 	require.ErrorContains(t, err, "corrupted records in the table `forgejo_version`")
+ 
+ 	// Two versions...
+-	_, err = x.InsertOne(&ForgejoVersion{ID: 1, Version: 1000})
++	_, err = x.Insert(&ForgejoVersion{ID: 1, Version: 1000})
+ 	require.NoError(t, err)
+ 	err = Migrate(x)
+ 	require.ErrorContains(t, err, "unexpected records in the table `forgejo_version`")
+diff --git a/models/forgejo_migrations_legacy/v13.go b/models/forgejo_migrations_legacy/v13.go
+index 6c216b3732..f19dbbbd97 100644
+--- a/models/forgejo_migrations_legacy/v13.go
++++ b/models/forgejo_migrations_legacy/v13.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddHideArchiveLinksToRelease(x *xorm.Engine) error {
+ 	type Release struct {
+diff --git a/models/forgejo_migrations_legacy/v14.go b/models/forgejo_migrations_legacy/v14.go
+index 7085fb0722..1e563e9990 100644
+--- a/models/forgejo_migrations_legacy/v14.go
++++ b/models/forgejo_migrations_legacy/v14.go
+@@ -6,7 +6,7 @@ package forgejo_migrations_legacy
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RemoveGiteaSpecificColumnsFromRepositoryAndBadge(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v15.go b/models/forgejo_migrations_legacy/v15.go
+index 13e1651fd3..7266b668fb 100644
+--- a/models/forgejo_migrations_legacy/v15.go
++++ b/models/forgejo_migrations_legacy/v15.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type (
+diff --git a/models/forgejo_migrations_legacy/v16.go b/models/forgejo_migrations_legacy/v16.go
+index 7d18751262..61588b2942 100644
+--- a/models/forgejo_migrations_legacy/v16.go
++++ b/models/forgejo_migrations_legacy/v16.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ type FederatedUser struct {
+ 	ID               int64  `xorm:"pk autoincr"`
+diff --git a/models/forgejo_migrations_legacy/v17.go b/models/forgejo_migrations_legacy/v17.go
+index 403351e221..18695b60b8 100644
+--- a/models/forgejo_migrations_legacy/v17.go
++++ b/models/forgejo_migrations_legacy/v17.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddNormalizedFederatedURIToUser(x *xorm.Engine) error {
+ 	type User struct {
+diff --git a/models/forgejo_migrations_legacy/v18.go b/models/forgejo_migrations_legacy/v18.go
+index e2d2937bfa..2cb31b91ef 100644
+--- a/models/forgejo_migrations_legacy/v18.go
++++ b/models/forgejo_migrations_legacy/v18.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ type FollowingRepo struct {
+ 	ID               int64  `xorm:"pk autoincr"`
+diff --git a/models/forgejo_migrations_legacy/v19.go b/models/forgejo_migrations_legacy/v19.go
+index e0a48a388d..8cb2f935dc 100644
+--- a/models/forgejo_migrations_legacy/v19.go
++++ b/models/forgejo_migrations_legacy/v19.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddExternalURLColumnToAttachmentTable(x *xorm.Engine) error {
+ 	type Attachment struct {
+diff --git a/models/forgejo_migrations_legacy/v1_20/v1.go b/models/forgejo_migrations_legacy/v1_20/v1.go
+index f0cb125557..86932dc461 100644
+--- a/models/forgejo_migrations_legacy/v1_20/v1.go
++++ b/models/forgejo_migrations_legacy/v1_20/v1.go
+@@ -6,7 +6,7 @@ package forgejo_v1_20
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddForgejoBlockedUser(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_20/v2.go b/models/forgejo_migrations_legacy/v1_20/v2.go
+index 3f79ac3801..5bad3ac1b4 100644
+--- a/models/forgejo_migrations_legacy/v1_20/v2.go
++++ b/models/forgejo_migrations_legacy/v1_20/v2.go
+@@ -3,7 +3,7 @@
+ package forgejo_v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateSemVerTable(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_20/v3.go b/models/forgejo_migrations_legacy/v1_20/v3.go
+index 49530df556..2bf96f996d 100644
+--- a/models/forgejo_migrations_legacy/v1_20/v3.go
++++ b/models/forgejo_migrations_legacy/v1_20/v3.go
+@@ -6,7 +6,7 @@ package forgejo_v1_20
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type AuthorizationToken struct {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v10.go b/models/forgejo_migrations_legacy/v1_22/v10.go
+index cf45abdd24..c2b5acaf70 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v10.go
++++ b/models/forgejo_migrations_legacy/v1_22/v10.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPronounsToUser(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v11.go b/models/forgejo_migrations_legacy/v1_22/v11.go
+index f0f92bd04c..7e4b0c76a6 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v11.go
++++ b/models/forgejo_migrations_legacy/v1_22/v11.go
+@@ -6,7 +6,7 @@ package v1_22
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCreatedToIssue(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v12.go b/models/forgejo_migrations_legacy/v1_22/v12.go
+index 51354bd3c2..1b152ba50a 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v12.go
++++ b/models/forgejo_migrations_legacy/v1_22/v12.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddRepoArchiveDownloadCount(x *xorm.Engine) error {
+ 	type RepoArchiveDownloadCount struct {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v4.go b/models/forgejo_migrations_legacy/v1_22/v4.go
+index 499d377bb4..b5e57b782c 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v4.go
++++ b/models/forgejo_migrations_legacy/v1_22/v4.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddDefaultPermissionsToRepoUnit(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v5.go b/models/forgejo_migrations_legacy/v1_22/v5.go
+index 1671d3eed2..a606ee1376 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v5.go
++++ b/models/forgejo_migrations_legacy/v1_22/v5.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type RepoFlag struct {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v6.go b/models/forgejo_migrations_legacy/v1_22/v6.go
+index 072f8e6a15..4c342ec056 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v6.go
++++ b/models/forgejo_migrations_legacy/v1_22/v6.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddWikiBranchToRepository(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v7.go b/models/forgejo_migrations_legacy/v1_22/v7.go
+index e7f6eb412b..cf8829aaed 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v7.go
++++ b/models/forgejo_migrations_legacy/v1_22/v7.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddUserRepoUnitHintsSetting(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v8.go b/models/forgejo_migrations_legacy/v1_22/v8.go
+index f23b00d2ad..226ff7322b 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v8.go
++++ b/models/forgejo_migrations_legacy/v1_22/v8.go
+@@ -6,7 +6,7 @@ package v1_22
+ import (
+ 	"strings"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RemoveSSHSignaturesFromReleaseNotes(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v1_22/v9.go b/models/forgejo_migrations_legacy/v1_22/v9.go
+index e3cdea97f2..a52d1a01fa 100644
+--- a/models/forgejo_migrations_legacy/v1_22/v9.go
++++ b/models/forgejo_migrations_legacy/v1_22/v9.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddApplyToAdminsSetting(x *xorm.Engine) error {
+ 	type ProtectedBranch struct {
+diff --git a/models/forgejo_migrations_legacy/v20.go b/models/forgejo_migrations_legacy/v20.go
+index 4bd0be6047..fcca5464ac 100644
+--- a/models/forgejo_migrations_legacy/v20.go
++++ b/models/forgejo_migrations_legacy/v20.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ type (
+ 	QuotaLimitSubject  int
+diff --git a/models/forgejo_migrations_legacy/v21.go b/models/forgejo_migrations_legacy/v21.go
+index cc7da2772c..e4cd4b69f0 100644
+--- a/models/forgejo_migrations_legacy/v21.go
++++ b/models/forgejo_migrations_legacy/v21.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddSSHKeypairToPushMirror(x *xorm.Engine) error {
+ 	type PushMirror struct {
+diff --git a/models/forgejo_migrations_legacy/v22.go b/models/forgejo_migrations_legacy/v22.go
+index 892a5ce851..7062450b61 100644
+--- a/models/forgejo_migrations_legacy/v22.go
++++ b/models/forgejo_migrations_legacy/v22.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddLegacyToWebAuthnCredential(x *xorm.Engine) error {
+ 	type WebauthnCredential struct {
+diff --git a/models/forgejo_migrations_legacy/v23.go b/models/forgejo_migrations_legacy/v23.go
+index 48aac74204..98e103a042 100644
+--- a/models/forgejo_migrations_legacy/v23.go
++++ b/models/forgejo_migrations_legacy/v23.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ // AddDeleteBranchAfterMergeToAutoMerge: add DeleteBranchAfterMerge column, setting existing rows to false
+ func AddDeleteBranchAfterMergeToAutoMerge(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v24.go b/models/forgejo_migrations_legacy/v24.go
+index bf3b7b2220..840d647a8c 100644
+--- a/models/forgejo_migrations_legacy/v24.go
++++ b/models/forgejo_migrations_legacy/v24.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddPurposeToForgejoAuthToken(x *xorm.Engine) error {
+ 	type ForgejoAuthToken struct {
+diff --git a/models/forgejo_migrations_legacy/v25.go b/models/forgejo_migrations_legacy/v25.go
+index 8c4b623c84..2bb3c6890f 100644
+--- a/models/forgejo_migrations_legacy/v25.go
++++ b/models/forgejo_migrations_legacy/v25.go
+@@ -15,8 +15,8 @@ import (
+ 	"forgejo.org/modules/secret"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func MigrateTwoFactorToKeying(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v26.go b/models/forgejo_migrations_legacy/v26.go
+index 03d05ad96d..bed3dd37db 100644
+--- a/models/forgejo_migrations_legacy/v26.go
++++ b/models/forgejo_migrations_legacy/v26.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddHashBlake2bToPackageBlob(x *xorm.Engine) error {
+ 	type PackageBlob struct {
+diff --git a/models/forgejo_migrations_legacy/v27.go b/models/forgejo_migrations_legacy/v27.go
+index 531170d06f..229eb63efd 100644
+--- a/models/forgejo_migrations_legacy/v27.go
++++ b/models/forgejo_migrations_legacy/v27.go
+@@ -6,7 +6,7 @@ package forgejo_migrations_legacy
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCreatedUnixToRedirect(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v28.go b/models/forgejo_migrations_legacy/v28.go
+index 443c3f5d66..9866e20899 100644
+--- a/models/forgejo_migrations_legacy/v28.go
++++ b/models/forgejo_migrations_legacy/v28.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddHidePronounsOptionToUser(x *xorm.Engine) error {
+ 	type User struct {
+diff --git a/models/forgejo_migrations_legacy/v29.go b/models/forgejo_migrations_legacy/v29.go
+index 9b79139fcc..205e36ecaf 100644
+--- a/models/forgejo_migrations_legacy/v29.go
++++ b/models/forgejo_migrations_legacy/v29.go
+@@ -6,7 +6,7 @@ package forgejo_migrations_legacy
+ import (
+ 	"database/sql"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPublicKeyInformationForFederation(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v30.go b/models/forgejo_migrations_legacy/v30.go
+index 2ffafd3fe7..2b9a4df489 100644
+--- a/models/forgejo_migrations_legacy/v30.go
++++ b/models/forgejo_migrations_legacy/v30.go
+@@ -11,7 +11,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func MigrateNormalizedFederatedURI(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v30_test.go b/models/forgejo_migrations_legacy/v30_test.go
+index 73bfefac90..c5b05d05c2 100644
+--- a/models/forgejo_migrations_legacy/v30_test.go
++++ b/models/forgejo_migrations_legacy/v30_test.go
+@@ -10,8 +10,8 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func Test_MigrateNormalizedFederatedURI(t *testing.T) {
+diff --git a/models/forgejo_migrations_legacy/v31.go b/models/forgejo_migrations_legacy/v31.go
+index f500ffa231..6be3113ff8 100644
+--- a/models/forgejo_migrations_legacy/v31.go
++++ b/models/forgejo_migrations_legacy/v31.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations_legacy
+ 
+ import (
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func SetTopicsAsEmptySlice(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v32.go b/models/forgejo_migrations_legacy/v32.go
+index 6d63664ba7..5edbcdef2f 100644
+--- a/models/forgejo_migrations_legacy/v32.go
++++ b/models/forgejo_migrations_legacy/v32.go
+@@ -20,7 +20,7 @@ import (
+ 	"forgejo.org/modules/packages/maven"
+ 	packages_service "forgejo.org/services/packages"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ var getPackage = packages_service.GetPackageFileStream
+diff --git a/models/forgejo_migrations_legacy/v33.go b/models/forgejo_migrations_legacy/v33.go
+index b29c5feeb3..5063294211 100644
+--- a/models/forgejo_migrations_legacy/v33.go
++++ b/models/forgejo_migrations_legacy/v33.go
+@@ -9,7 +9,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func dropOldFederationHostIndexes(x *xorm.Engine) {
+diff --git a/models/forgejo_migrations_legacy/v34.go b/models/forgejo_migrations_legacy/v34.go
+index c1a1bfc8d6..8c62fa589e 100644
+--- a/models/forgejo_migrations_legacy/v34.go
++++ b/models/forgejo_migrations_legacy/v34.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddNotifyEmailToActionRun(x *xorm.Engine) error {
+ 	type ActionRun struct {
+diff --git a/models/forgejo_migrations_legacy/v35.go b/models/forgejo_migrations_legacy/v35.go
+index ea3765fce5..c0c21e209a 100644
+--- a/models/forgejo_migrations_legacy/v35.go
++++ b/models/forgejo_migrations_legacy/v35.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations_legacy
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // see https://codeberg.org/forgejo/forgejo/issues/8373
+diff --git a/models/forgejo_migrations_legacy/v36.go b/models/forgejo_migrations_legacy/v36.go
+index 5c13f3878e..c8d86794a7 100644
+--- a/models/forgejo_migrations_legacy/v36.go
++++ b/models/forgejo_migrations_legacy/v36.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations_legacy
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixWikiUnitDefaultPermission(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v37.go b/models/forgejo_migrations_legacy/v37.go
+index 508f798055..992abb56e8 100644
+--- a/models/forgejo_migrations_legacy/v37.go
++++ b/models/forgejo_migrations_legacy/v37.go
+@@ -4,7 +4,7 @@
+ package forgejo_migrations_legacy
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPushMirrorBranchFilter(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v38.go b/models/forgejo_migrations_legacy/v38.go
+index 93cff2cabb..048307c28f 100644
+--- a/models/forgejo_migrations_legacy/v38.go
++++ b/models/forgejo_migrations_legacy/v38.go
+@@ -6,7 +6,7 @@ package forgejo_migrations_legacy
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddResolvedUnixToAbuseReport(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v39.go b/models/forgejo_migrations_legacy/v39.go
+index 616404f7eb..b960abc7a1 100644
+--- a/models/forgejo_migrations_legacy/v39.go
++++ b/models/forgejo_migrations_legacy/v39.go
+@@ -13,8 +13,8 @@ import (
+ 	"forgejo.org/modules/secret"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func MigrateActionSecretsToKeying(x *xorm.Engine) error {
+diff --git a/models/forgejo_migrations_legacy/v40.go b/models/forgejo_migrations_legacy/v40.go
+index 50dccd393c..e5b180ab4b 100644
+--- a/models/forgejo_migrations_legacy/v40.go
++++ b/models/forgejo_migrations_legacy/v40.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddIndexForReleaseSha1(x *xorm.Engine) error {
+ 	type Release struct {
+diff --git a/models/forgejo_migrations_legacy/v41.go b/models/forgejo_migrations_legacy/v41.go
+index 6dd25486c6..c1692eccc0 100644
+--- a/models/forgejo_migrations_legacy/v41.go
++++ b/models/forgejo_migrations_legacy/v41.go
+@@ -8,8 +8,8 @@ import (
+ 
+ 	"forgejo.org/modules/log"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // syncForeignKeyWithDelete will delete any records that match `cond`, and if present, log and warn to the
+diff --git a/models/forgejo_migrations_legacy/v42.go b/models/forgejo_migrations_legacy/v42.go
+index 940c270699..240e095677 100644
+--- a/models/forgejo_migrations_legacy/v42.go
++++ b/models/forgejo_migrations_legacy/v42.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddActionRunConcurrency(x *xorm.Engine) error {
+ 	type ActionRun struct {
+diff --git a/models/forgejo_migrations_legacy/v43.go b/models/forgejo_migrations_legacy/v43.go
+index 215299031c..72563e6642 100644
+--- a/models/forgejo_migrations_legacy/v43.go
++++ b/models/forgejo_migrations_legacy/v43.go
+@@ -3,7 +3,7 @@
+ 
+ package forgejo_migrations_legacy
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddActionRunPreExecutionError(x *xorm.Engine) error {
+ 	type ActionRun struct {
+diff --git a/models/forgejo_migrations_legacy/v44.go b/models/forgejo_migrations_legacy/v44.go
+index 9f2fcef4f4..4ab4c81738 100644
+--- a/models/forgejo_migrations_legacy/v44.go
++++ b/models/forgejo_migrations_legacy/v44.go
+@@ -4,8 +4,8 @@
+ package forgejo_migrations_legacy
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func AddForeignKeysAccess(x *xorm.Engine) error {
+diff --git a/models/git/commit_status.go b/models/git/commit_status.go
+index 4ae926eed6..fba35432d4 100644
+--- a/models/git/commit_status.go
++++ b/models/git/commit_status.go
+@@ -24,8 +24,8 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/translation"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // CommitStatus holds a single Status of a single Commit
+diff --git a/models/gitea_migrations/base/db.go b/models/gitea_migrations/base/db.go
+index d716e05caf..a212608ac8 100644
+--- a/models/gitea_migrations/base/db.go
++++ b/models/gitea_migrations/base/db.go
+@@ -14,8 +14,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ // RecreateTables returns a function that will recreate the tables for the provided beans using the newly provided bean
+diff --git a/models/gitea_migrations/base/db_test.go b/models/gitea_migrations/base/db_test.go
+index 4633c7de10..2184a7ab26 100644
+--- a/models/gitea_migrations/base/db_test.go
++++ b/models/gitea_migrations/base/db_test.go
+@@ -9,7 +9,7 @@ import (
+ 	migrations_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm/names"
++	"code.forgejo.org/xorm/xorm/names"
+ )
+ 
+ func Test_DropTableColumns(t *testing.T) {
+diff --git a/models/gitea_migrations/migrations.go b/models/gitea_migrations/migrations.go
+index 9b30f9940d..67d436ded2 100644
+--- a/models/gitea_migrations/migrations.go
++++ b/models/gitea_migrations/migrations.go
+@@ -34,8 +34,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	forgejo_service "forgejo.org/services/forgejo"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/names"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/names"
+ )
+ 
+ const minDBVersion = 70 // Gitea 1.5.3
+@@ -457,7 +457,7 @@ func Migrate(x *xorm.Engine) error {
+ 		// If the version record does not exist we think it is a fresh installation and we can skip all migrations;
+ 		// engine init calls `SyncAllTables` which will create the fresh database.
+ 		upToDate := &Version{ID: 1, Version: maxDBVer}
+-		if _, err := x.InsertOne(upToDate); err != nil {
++		if _, err := x.Insert(upToDate); err != nil {
+ 			return fmt.Errorf("insert: %w", err)
+ 		}
+ 		// continue with the migration routine, but nothing will be applied; this allows transition into the newer
+diff --git a/models/gitea_migrations/migrations_test.go b/models/gitea_migrations/migrations_test.go
+index 600b7e3b7a..b939c479d1 100644
+--- a/models/gitea_migrations/migrations_test.go
++++ b/models/gitea_migrations/migrations_test.go
+@@ -51,13 +51,13 @@ func TestMigrateFailWithCorruption(t *testing.T) {
+ 	require.NotNil(t, x)
+ 
+ 	// ID != 1
+-	_, err := x.InsertOne(&Version{ID: 100, Version: 100})
++	_, err := x.Insert(&Version{ID: 100, Version: 100})
+ 	require.NoError(t, err)
+ 	err = Migrate(x)
+ 	require.ErrorContains(t, err, "corrupted records in the table `version`")
+ 
+ 	// Two versions...
+-	_, err = x.InsertOne(&Version{ID: 1, Version: 1000})
++	_, err = x.Insert(&Version{ID: 1, Version: 1000})
+ 	require.NoError(t, err)
+ 	err = Migrate(x)
+ 	require.ErrorContains(t, err, "unexpected records in the table `version`")
+diff --git a/models/gitea_migrations/test/tests.go b/models/gitea_migrations/test/tests.go
+index 086127a2e8..41b3cec728 100644
+--- a/models/gitea_migrations/test/tests.go
++++ b/models/gitea_migrations/test/tests.go
+@@ -24,8 +24,8 @@ import (
+ 	"forgejo.org/modules/testlogger"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ 
+ 	_ "github.com/jackc/pgx/v5/stdlib" // Import pgx driver
+ )
+diff --git a/models/gitea_migrations/v1_10/v100.go b/models/gitea_migrations/v1_10/v100.go
+index 1742bea296..517e2c28f1 100644
+--- a/models/gitea_migrations/v1_10/v100.go
++++ b/models/gitea_migrations/v1_10/v100.go
+@@ -8,7 +8,7 @@ import (
+ 	"strings"
+ 	"time"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func UpdateMigrationServiceTypes(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_10/v101.go b/models/gitea_migrations/v1_10/v101.go
+index 6c8dfe2486..b25230f0fe 100644
+--- a/models/gitea_migrations/v1_10/v101.go
++++ b/models/gitea_migrations/v1_10/v101.go
+@@ -4,7 +4,7 @@
+ package v1_10
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ChangeSomeColumnsLengthOfExternalLoginUser(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_10/v88.go b/models/gitea_migrations/v1_10/v88.go
+index eb8e81c19e..ab6afd4287 100644
+--- a/models/gitea_migrations/v1_10/v88.go
++++ b/models/gitea_migrations/v1_10/v88.go
+@@ -7,7 +7,7 @@ import (
+ 	"crypto/sha1"
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func hashContext(context string) string {
+diff --git a/models/gitea_migrations/v1_10/v89.go b/models/gitea_migrations/v1_10/v89.go
+index 0df2a6e17b..b3d0283f8f 100644
+--- a/models/gitea_migrations/v1_10/v89.go
++++ b/models/gitea_migrations/v1_10/v89.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddOriginalMigrationInfo(x *xorm.Engine) error {
+ 	// Issue see models/issue.go
+diff --git a/models/gitea_migrations/v1_10/v90.go b/models/gitea_migrations/v1_10/v90.go
+index 5521a97e32..190680850d 100644
+--- a/models/gitea_migrations/v1_10/v90.go
++++ b/models/gitea_migrations/v1_10/v90.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func ChangeSomeColumnsLengthOfRepo(x *xorm.Engine) error {
+ 	type Repository struct {
+diff --git a/models/gitea_migrations/v1_10/v91.go b/models/gitea_migrations/v1_10/v91.go
+index 08db6c2742..5072dfdd84 100644
+--- a/models/gitea_migrations/v1_10/v91.go
++++ b/models/gitea_migrations/v1_10/v91.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddIndexOnRepositoryAndComment(x *xorm.Engine) error {
+ 	type Repository struct {
+diff --git a/models/gitea_migrations/v1_10/v92.go b/models/gitea_migrations/v1_10/v92.go
+index b6c04a9234..378bf43620 100644
+--- a/models/gitea_migrations/v1_10/v92.go
++++ b/models/gitea_migrations/v1_10/v92.go
+@@ -4,8 +4,8 @@
+ package v1_10
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func RemoveLingeringIndexStatus(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_10/v93.go b/models/gitea_migrations/v1_10/v93.go
+index c131be9a8d..7aabba8571 100644
+--- a/models/gitea_migrations/v1_10/v93.go
++++ b/models/gitea_migrations/v1_10/v93.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddEmailNotificationEnabledToUser(x *xorm.Engine) error {
+ 	// User see models/user.go
+diff --git a/models/gitea_migrations/v1_10/v94.go b/models/gitea_migrations/v1_10/v94.go
+index 13b7d7b303..6d79d13989 100644
+--- a/models/gitea_migrations/v1_10/v94.go
++++ b/models/gitea_migrations/v1_10/v94.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddStatusCheckColumnsForProtectedBranches(x *xorm.Engine) error {
+ 	type ProtectedBranch struct {
+diff --git a/models/gitea_migrations/v1_10/v95.go b/models/gitea_migrations/v1_10/v95.go
+index 86b52026bf..75022fc525 100644
+--- a/models/gitea_migrations/v1_10/v95.go
++++ b/models/gitea_migrations/v1_10/v95.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddCrossReferenceColumns(x *xorm.Engine) error {
+ 	// Comment see models/comment.go
+diff --git a/models/gitea_migrations/v1_10/v96.go b/models/gitea_migrations/v1_10/v96.go
+index bcbd618b49..552062d6e1 100644
+--- a/models/gitea_migrations/v1_10/v96.go
++++ b/models/gitea_migrations/v1_10/v96.go
+@@ -9,7 +9,7 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DeleteOrphanedAttachments(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_10/v97.go b/models/gitea_migrations/v1_10/v97.go
+index 5872bb63e5..8410a45e62 100644
+--- a/models/gitea_migrations/v1_10/v97.go
++++ b/models/gitea_migrations/v1_10/v97.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddRepoAdminChangeTeamAccessColumnForUser(x *xorm.Engine) error {
+ 	type User struct {
+diff --git a/models/gitea_migrations/v1_10/v98.go b/models/gitea_migrations/v1_10/v98.go
+index d21c326459..f66ce0b7b2 100644
+--- a/models/gitea_migrations/v1_10/v98.go
++++ b/models/gitea_migrations/v1_10/v98.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_10
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddOriginalAuthorOnMigratedReleases(x *xorm.Engine) error {
+ 	type Release struct {
+diff --git a/models/gitea_migrations/v1_10/v99.go b/models/gitea_migrations/v1_10/v99.go
+index addae66be9..bf90e69929 100644
+--- a/models/gitea_migrations/v1_10/v99.go
++++ b/models/gitea_migrations/v1_10/v99.go
+@@ -6,7 +6,7 @@ package v1_10
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTaskTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v102.go b/models/gitea_migrations/v1_11/v102.go
+index 53288f18ec..f9ef7a9c90 100644
+--- a/models/gitea_migrations/v1_11/v102.go
++++ b/models/gitea_migrations/v1_11/v102.go
+@@ -6,7 +6,7 @@ package v1_11
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropColumnHeadUserNameOnPullRequest(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v103.go b/models/gitea_migrations/v1_11/v103.go
+index a515710160..702e0d4146 100644
+--- a/models/gitea_migrations/v1_11/v103.go
++++ b/models/gitea_migrations/v1_11/v103.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddWhitelistDeployKeysToBranches(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v104.go b/models/gitea_migrations/v1_11/v104.go
+index 606690009d..a9a5355e3d 100644
+--- a/models/gitea_migrations/v1_11/v104.go
++++ b/models/gitea_migrations/v1_11/v104.go
+@@ -6,7 +6,7 @@ package v1_11
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RemoveLabelUnneededCols(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v105.go b/models/gitea_migrations/v1_11/v105.go
+index d86973a0f6..d437414558 100644
+--- a/models/gitea_migrations/v1_11/v105.go
++++ b/models/gitea_migrations/v1_11/v105.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTeamIncludesAllRepositories(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v106.go b/models/gitea_migrations/v1_11/v106.go
+index edffe18683..6b1370785c 100644
+--- a/models/gitea_migrations/v1_11/v106.go
++++ b/models/gitea_migrations/v1_11/v106.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // RepoWatchMode specifies what kind of watch the user has on a repository
+diff --git a/models/gitea_migrations/v1_11/v107.go b/models/gitea_migrations/v1_11/v107.go
+index a158e3bb50..f491d64fd6 100644
+--- a/models/gitea_migrations/v1_11/v107.go
++++ b/models/gitea_migrations/v1_11/v107.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTemplateToRepo(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v108.go b/models/gitea_migrations/v1_11/v108.go
+index 8f14504ceb..509d2d30dd 100644
+--- a/models/gitea_migrations/v1_11/v108.go
++++ b/models/gitea_migrations/v1_11/v108.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCommentIDOnNotification(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v109.go b/models/gitea_migrations/v1_11/v109.go
+index f7616aec7b..18ae10da5e 100644
+--- a/models/gitea_migrations/v1_11/v109.go
++++ b/models/gitea_migrations/v1_11/v109.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCanCreateOrgRepoColumnForTeam(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v110.go b/models/gitea_migrations/v1_11/v110.go
+index 0468dcd1ea..0e6117509c 100644
+--- a/models/gitea_migrations/v1_11/v110.go
++++ b/models/gitea_migrations/v1_11/v110.go
+@@ -4,8 +4,8 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func ChangeReviewContentToText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v111.go b/models/gitea_migrations/v1_11/v111.go
+index 59ca416af0..01b95f84a8 100644
+--- a/models/gitea_migrations/v1_11/v111.go
++++ b/models/gitea_migrations/v1_11/v111.go
+@@ -7,7 +7,7 @@ import (
+ 	"fmt"
+ 	"slices"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBranchProtectionCanPushAndEnableWhitelist(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v112.go b/models/gitea_migrations/v1_11/v112.go
+index 22054e6f68..41ae76a223 100644
+--- a/models/gitea_migrations/v1_11/v112.go
++++ b/models/gitea_migrations/v1_11/v112.go
+@@ -10,8 +10,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func RemoveAttachmentMissedRepo(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v113.go b/models/gitea_migrations/v1_11/v113.go
+index a4d54f66fb..5f165ba3a8 100644
+--- a/models/gitea_migrations/v1_11/v113.go
++++ b/models/gitea_migrations/v1_11/v113.go
+@@ -6,7 +6,7 @@ package v1_11
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FeatureChangeTargetBranch(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v114.go b/models/gitea_migrations/v1_11/v114.go
+index 9467a8a90c..6924561d43 100644
+--- a/models/gitea_migrations/v1_11/v114.go
++++ b/models/gitea_migrations/v1_11/v114.go
+@@ -6,7 +6,7 @@ package v1_11
+ import (
+ 	"net/url"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func SanitizeOriginalURL(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v115.go b/models/gitea_migrations/v1_11/v115.go
+index 84364e310b..8b364ec9d0 100644
+--- a/models/gitea_migrations/v1_11/v115.go
++++ b/models/gitea_migrations/v1_11/v115.go
+@@ -17,7 +17,7 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameExistingUserAvatarName(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_11/v116.go b/models/gitea_migrations/v1_11/v116.go
+index 729fbad18b..b6af1ba825 100644
+--- a/models/gitea_migrations/v1_11/v116.go
++++ b/models/gitea_migrations/v1_11/v116.go
+@@ -4,7 +4,7 @@
+ package v1_11
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ExtendTrackedTimes(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v117.go b/models/gitea_migrations/v1_12/v117.go
+index 73b58ca34b..1159436349 100644
+--- a/models/gitea_migrations/v1_12/v117.go
++++ b/models/gitea_migrations/v1_12/v117.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBlockOnRejectedReviews(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v118.go b/models/gitea_migrations/v1_12/v118.go
+index e8b4249743..8663b0f84b 100644
+--- a/models/gitea_migrations/v1_12/v118.go
++++ b/models/gitea_migrations/v1_12/v118.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddReviewCommitAndStale(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v119.go b/models/gitea_migrations/v1_12/v119.go
+index b4bf29a935..d817663560 100644
+--- a/models/gitea_migrations/v1_12/v119.go
++++ b/models/gitea_migrations/v1_12/v119.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixMigratedRepositoryServiceType(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v120.go b/models/gitea_migrations/v1_12/v120.go
+index 14d515f5a7..f01ae099f8 100644
+--- a/models/gitea_migrations/v1_12/v120.go
++++ b/models/gitea_migrations/v1_12/v120.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddOwnerNameOnRepository(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v121.go b/models/gitea_migrations/v1_12/v121.go
+index a28ae4e1c9..9129e3af41 100644
+--- a/models/gitea_migrations/v1_12/v121.go
++++ b/models/gitea_migrations/v1_12/v121.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_12
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddIsRestricted(x *xorm.Engine) error {
+ 	// User see models/user.go
+diff --git a/models/gitea_migrations/v1_12/v122.go b/models/gitea_migrations/v1_12/v122.go
+index bc1b175f6a..e473978ff3 100644
+--- a/models/gitea_migrations/v1_12/v122.go
++++ b/models/gitea_migrations/v1_12/v122.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRequireSignedCommits(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v123.go b/models/gitea_migrations/v1_12/v123.go
+index 52b10bb850..d90a141578 100644
+--- a/models/gitea_migrations/v1_12/v123.go
++++ b/models/gitea_migrations/v1_12/v123.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddReactionOriginals(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v124.go b/models/gitea_migrations/v1_12/v124.go
+index 9a93f436d4..0d76f7b626 100644
+--- a/models/gitea_migrations/v1_12/v124.go
++++ b/models/gitea_migrations/v1_12/v124.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddUserRepoMissingColumns(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v125.go b/models/gitea_migrations/v1_12/v125.go
+index 7f582ecff5..fa363571d8 100644
+--- a/models/gitea_migrations/v1_12/v125.go
++++ b/models/gitea_migrations/v1_12/v125.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddReviewMigrateInfo(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v126.go b/models/gitea_migrations/v1_12/v126.go
+index 64fd7f7478..6df479ca5b 100644
+--- a/models/gitea_migrations/v1_12/v126.go
++++ b/models/gitea_migrations/v1_12/v126.go
+@@ -4,8 +4,8 @@
+ package v1_12
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func FixTopicRepositoryCount(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v127.go b/models/gitea_migrations/v1_12/v127.go
+index f686fa617c..10b75ab1a1 100644
+--- a/models/gitea_migrations/v1_12/v127.go
++++ b/models/gitea_migrations/v1_12/v127.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddLanguageStats(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v128.go b/models/gitea_migrations/v1_12/v128.go
+index 8fca974616..abca0edd97 100644
+--- a/models/gitea_migrations/v1_12/v128.go
++++ b/models/gitea_migrations/v1_12/v128.go
+@@ -14,7 +14,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixMergeBase(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v129.go b/models/gitea_migrations/v1_12/v129.go
+index 3e4d3aca68..5f00655c61 100644
+--- a/models/gitea_migrations/v1_12/v129.go
++++ b/models/gitea_migrations/v1_12/v129.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func PurgeUnusedDependencies(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v130.go b/models/gitea_migrations/v1_12/v130.go
+index 383ef47492..ad8d8de141 100644
+--- a/models/gitea_migrations/v1_12/v130.go
++++ b/models/gitea_migrations/v1_12/v130.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/modules/json"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ExpandWebhooks(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v131.go b/models/gitea_migrations/v1_12/v131.go
+index 1266c2f185..c33a19426c 100644
+--- a/models/gitea_migrations/v1_12/v131.go
++++ b/models/gitea_migrations/v1_12/v131.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddSystemWebhookColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v132.go b/models/gitea_migrations/v1_12/v132.go
+index 8b1ae6db93..d9840c201c 100644
+--- a/models/gitea_migrations/v1_12/v132.go
++++ b/models/gitea_migrations/v1_12/v132.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBranchProtectionProtectedFilesColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v133.go b/models/gitea_migrations/v1_12/v133.go
+index 69e20597d8..329eba464d 100644
+--- a/models/gitea_migrations/v1_12/v133.go
++++ b/models/gitea_migrations/v1_12/v133.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_12
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddEmailHashTable(x *xorm.Engine) error {
+ 	// EmailHash represents a pre-generated hash map
+diff --git a/models/gitea_migrations/v1_12/v134.go b/models/gitea_migrations/v1_12/v134.go
+index 1fabdcae96..876eb9a6e6 100644
+--- a/models/gitea_migrations/v1_12/v134.go
++++ b/models/gitea_migrations/v1_12/v134.go
+@@ -14,7 +14,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RefixMergeBase(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v135.go b/models/gitea_migrations/v1_12/v135.go
+index 5df0ad7fc4..52fb9dfcf4 100644
+--- a/models/gitea_migrations/v1_12/v135.go
++++ b/models/gitea_migrations/v1_12/v135.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddOrgIDLabelColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v136.go b/models/gitea_migrations/v1_12/v136.go
+index 7d246a82be..b88fb7378e 100644
+--- a/models/gitea_migrations/v1_12/v136.go
++++ b/models/gitea_migrations/v1_12/v136.go
+@@ -15,7 +15,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCommitDivergenceToPulls(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v137.go b/models/gitea_migrations/v1_12/v137.go
+index 9d38483488..0edf1ced56 100644
+--- a/models/gitea_migrations/v1_12/v137.go
++++ b/models/gitea_migrations/v1_12/v137.go
+@@ -4,7 +4,7 @@
+ package v1_12
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBlockOnOutdatedBranch(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v138.go b/models/gitea_migrations/v1_12/v138.go
+index 4485adeb2d..b84367d796 100644
+--- a/models/gitea_migrations/v1_12/v138.go
++++ b/models/gitea_migrations/v1_12/v138.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddResolveDoerIDCommentColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_12/v139.go b/models/gitea_migrations/v1_12/v139.go
+index 51e57b984a..57ce9530b6 100644
+--- a/models/gitea_migrations/v1_12/v139.go
++++ b/models/gitea_migrations/v1_12/v139.go
+@@ -6,7 +6,7 @@ package v1_12
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func PrependRefsHeadsToIssueRefs(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v140.go b/models/gitea_migrations/v1_13/v140.go
+index c9213a3f54..06c6875c24 100644
+--- a/models/gitea_migrations/v1_13/v140.go
++++ b/models/gitea_migrations/v1_13/v140.go
+@@ -9,7 +9,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixLanguageStatsToSaveSize(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v141.go b/models/gitea_migrations/v1_13/v141.go
+index b54bc1727c..505d2eb5ac 100644
+--- a/models/gitea_migrations/v1_13/v141.go
++++ b/models/gitea_migrations/v1_13/v141.go
+@@ -6,7 +6,7 @@ package v1_13
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddKeepActivityPrivateUserColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v142.go b/models/gitea_migrations/v1_13/v142.go
+index 8939f6f2f8..a86afe5ca8 100644
+--- a/models/gitea_migrations/v1_13/v142.go
++++ b/models/gitea_migrations/v1_13/v142.go
+@@ -6,8 +6,8 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/log"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func SetIsArchivedToFalse(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v143.go b/models/gitea_migrations/v1_13/v143.go
+index 6a8da8b06d..ba574e3a17 100644
+--- a/models/gitea_migrations/v1_13/v143.go
++++ b/models/gitea_migrations/v1_13/v143.go
+@@ -6,7 +6,7 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RecalculateStars(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_13/v144.go b/models/gitea_migrations/v1_13/v144.go
+index f138338514..9d5232084d 100644
+--- a/models/gitea_migrations/v1_13/v144.go
++++ b/models/gitea_migrations/v1_13/v144.go
+@@ -6,8 +6,8 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/log"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func UpdateMatrixWebhookHTTPMethod(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v145.go b/models/gitea_migrations/v1_13/v145.go
+index f7d3895c84..072114954c 100644
+--- a/models/gitea_migrations/v1_13/v145.go
++++ b/models/gitea_migrations/v1_13/v145.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func IncreaseLanguageField(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v146.go b/models/gitea_migrations/v1_13/v146.go
+index e6a476a288..bf7e6efcc0 100644
+--- a/models/gitea_migrations/v1_13/v146.go
++++ b/models/gitea_migrations/v1_13/v146.go
+@@ -6,7 +6,7 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddProjectsInfo(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v147.go b/models/gitea_migrations/v1_13/v147.go
+index 831ef5842a..33e0eba974 100644
+--- a/models/gitea_migrations/v1_13/v147.go
++++ b/models/gitea_migrations/v1_13/v147.go
+@@ -6,7 +6,7 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateReviewsForCodeComments(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v148.go b/models/gitea_migrations/v1_13/v148.go
+index d276db3d61..d9cccb12c3 100644
+--- a/models/gitea_migrations/v1_13/v148.go
++++ b/models/gitea_migrations/v1_13/v148.go
+@@ -4,7 +4,7 @@
+ package v1_13
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func PurgeInvalidDependenciesComments(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v149.go b/models/gitea_migrations/v1_13/v149.go
+index c1bfe8b09e..89f3585faf 100644
+--- a/models/gitea_migrations/v1_13/v149.go
++++ b/models/gitea_migrations/v1_13/v149.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCreatedAndUpdatedToMilestones(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v150.go b/models/gitea_migrations/v1_13/v150.go
+index 0f92712327..e1f35f3a40 100644
+--- a/models/gitea_migrations/v1_13/v150.go
++++ b/models/gitea_migrations/v1_13/v150.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPrimaryKeyToRepoTopic(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v151.go b/models/gitea_migrations/v1_13/v151.go
+index 09abfd4b9e..260f8e18ac 100644
+--- a/models/gitea_migrations/v1_13/v151.go
++++ b/models/gitea_migrations/v1_13/v151.go
+@@ -11,8 +11,8 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func SetDefaultPasswordToArgon2(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v152.go b/models/gitea_migrations/v1_13/v152.go
+index 648e26446f..8a98c730f2 100644
+--- a/models/gitea_migrations/v1_13/v152.go
++++ b/models/gitea_migrations/v1_13/v152.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_13
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddTrustModelToRepository(x *xorm.Engine) error {
+ 	type Repository struct {
+diff --git a/models/gitea_migrations/v1_13/v153.go b/models/gitea_migrations/v1_13/v153.go
+index e5462fc162..c875972c27 100644
+--- a/models/gitea_migrations/v1_13/v153.go
++++ b/models/gitea_migrations/v1_13/v153.go
+@@ -4,7 +4,7 @@
+ package v1_13
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTeamReviewRequestSupport(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_13/v154.go b/models/gitea_migrations/v1_13/v154.go
+index 89dc7821b2..8b2a3ee7dd 100644
+--- a/models/gitea_migrations/v1_13/v154.go
++++ b/models/gitea_migrations/v1_13/v154.go
+@@ -6,7 +6,7 @@ package v1_13
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTimeStamps(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v155.go b/models/gitea_migrations/v1_14/v155.go
+index 505a9ae033..8cc759aa1a 100644
+--- a/models/gitea_migrations/v1_14/v155.go
++++ b/models/gitea_migrations/v1_14/v155.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddChangedProtectedFilesPullRequestColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v156.go b/models/gitea_migrations/v1_14/v156.go
+index 7bbd9f4c85..9f16d9bfe3 100644
+--- a/models/gitea_migrations/v1_14/v156.go
++++ b/models/gitea_migrations/v1_14/v156.go
+@@ -12,7 +12,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // Copy paste from models/repo.go because we cannot import models package
+diff --git a/models/gitea_migrations/v1_14/v157.go b/models/gitea_migrations/v1_14/v157.go
+index ba69f71130..22447d91a1 100644
+--- a/models/gitea_migrations/v1_14/v157.go
++++ b/models/gitea_migrations/v1_14/v157.go
+@@ -4,7 +4,7 @@
+ package v1_14
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixRepoTopics(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v158.go b/models/gitea_migrations/v1_14/v158.go
+index 2ab3c8a1f0..69150e7595 100644
+--- a/models/gitea_migrations/v1_14/v158.go
++++ b/models/gitea_migrations/v1_14/v158.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func UpdateCodeCommentReplies(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v159.go b/models/gitea_migrations/v1_14/v159.go
+index d8193d25bc..c6da90668f 100644
+--- a/models/gitea_migrations/v1_14/v159.go
++++ b/models/gitea_migrations/v1_14/v159.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func UpdateReactionConstraint(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v160.go b/models/gitea_migrations/v1_14/v160.go
+index 73f3798954..8e6407adba 100644
+--- a/models/gitea_migrations/v1_14/v160.go
++++ b/models/gitea_migrations/v1_14/v160.go
+@@ -4,7 +4,7 @@
+ package v1_14
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBlockOnOfficialReviewRequests(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v161.go b/models/gitea_migrations/v1_14/v161.go
+index b689a75a05..4cf57d9dcb 100644
+--- a/models/gitea_migrations/v1_14/v161.go
++++ b/models/gitea_migrations/v1_14/v161.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ConvertTaskTypeToString(x *xorm.Engine) error {
+@@ -46,7 +46,7 @@ func ConvertTaskTypeToString(x *xorm.Engine) error {
+ 	}
+ 
+ 	// to keep the migration could be rerun
+-	exist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "hook_task", "type")
++	exist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "hook_task", "type")
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/models/gitea_migrations/v1_14/v162.go b/models/gitea_migrations/v1_14/v162.go
+index 69016f3f72..7ce883b331 100644
+--- a/models/gitea_migrations/v1_14/v162.go
++++ b/models/gitea_migrations/v1_14/v162.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ConvertWebhookTaskTypeToString(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v163.go b/models/gitea_migrations/v1_14/v163.go
+index 4c838df865..7ca7d4ea56 100644
+--- a/models/gitea_migrations/v1_14/v163.go
++++ b/models/gitea_migrations/v1_14/v163.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ConvertTopicNameFrom25To50(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v164.go b/models/gitea_migrations/v1_14/v164.go
+index d2fd9b8464..2528d5c6c6 100644
+--- a/models/gitea_migrations/v1_14/v164.go
++++ b/models/gitea_migrations/v1_14/v164.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // OAuth2Grant here is a snapshot of models.OAuth2Grant for this version
+diff --git a/models/gitea_migrations/v1_14/v165.go b/models/gitea_migrations/v1_14/v165.go
+index 11b46e5742..a0856f0ab6 100644
+--- a/models/gitea_migrations/v1_14/v165.go
++++ b/models/gitea_migrations/v1_14/v165.go
+@@ -6,8 +6,8 @@ package v1_14
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func ConvertHookTaskTypeToVarcharAndTrim(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v166.go b/models/gitea_migrations/v1_14/v166.go
+index 4c106bd7da..c9d2eaef35 100644
+--- a/models/gitea_migrations/v1_14/v166.go
++++ b/models/gitea_migrations/v1_14/v166.go
+@@ -7,12 +7,12 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"golang.org/x/crypto/argon2"
+ 	"golang.org/x/crypto/bcrypt"
+ 	"golang.org/x/crypto/pbkdf2"
+ 	"golang.org/x/crypto/scrypt"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func RecalculateUserEmptyPWD(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_14/v167.go b/models/gitea_migrations/v1_14/v167.go
+index d77bbc401e..226c73e06a 100644
+--- a/models/gitea_migrations/v1_14/v167.go
++++ b/models/gitea_migrations/v1_14/v167.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddUserRedirect(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_14/v168.go b/models/gitea_migrations/v1_14/v168.go
+index aa93eec19b..b62e966242 100644
+--- a/models/gitea_migrations/v1_14/v168.go
++++ b/models/gitea_migrations/v1_14/v168.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_14
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func RecreateUserTableToFixDefaultValues(_ *xorm.Engine) error {
+ 	return nil
+diff --git a/models/gitea_migrations/v1_14/v169.go b/models/gitea_migrations/v1_14/v169.go
+index 4f9df0d96f..620f811c2f 100644
+--- a/models/gitea_migrations/v1_14/v169.go
++++ b/models/gitea_migrations/v1_14/v169.go
+@@ -4,7 +4,7 @@
+ package v1_14
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CommentTypeDeleteBranchUseOldRef(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v170.go b/models/gitea_migrations/v1_14/v170.go
+index a2ff4623e1..ed5d1300e9 100644
+--- a/models/gitea_migrations/v1_14/v170.go
++++ b/models/gitea_migrations/v1_14/v170.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddDismissedReviewColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v171.go b/models/gitea_migrations/v1_14/v171.go
+index 7b200e960a..dea1b72b71 100644
+--- a/models/gitea_migrations/v1_14/v171.go
++++ b/models/gitea_migrations/v1_14/v171.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddSortingColToProjectBoard(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v172.go b/models/gitea_migrations/v1_14/v172.go
+index c410d393f1..6a1cd53a65 100644
+--- a/models/gitea_migrations/v1_14/v172.go
++++ b/models/gitea_migrations/v1_14/v172.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddSessionTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v173.go b/models/gitea_migrations/v1_14/v173.go
+index 7752fbe966..ac775795f1 100644
+--- a/models/gitea_migrations/v1_14/v173.go
++++ b/models/gitea_migrations/v1_14/v173.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTimeIDCommentColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v174.go b/models/gitea_migrations/v1_14/v174.go
+index 4049e43070..e2ac1e1b38 100644
+--- a/models/gitea_migrations/v1_14/v174.go
++++ b/models/gitea_migrations/v1_14/v174.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRepoTransfer(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v175.go b/models/gitea_migrations/v1_14/v175.go
+index 49fa17d046..3761b0152f 100644
+--- a/models/gitea_migrations/v1_14/v175.go
++++ b/models/gitea_migrations/v1_14/v175.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixPostgresIDSequences(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_14/v176.go b/models/gitea_migrations/v1_14/v176.go
+index ef5dce9a02..e4aaa79450 100644
+--- a/models/gitea_migrations/v1_14/v176.go
++++ b/models/gitea_migrations/v1_14/v176.go
+@@ -4,7 +4,7 @@
+ package v1_14
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // RemoveInvalidLabels looks through the database to look for comments and issue_labels
+diff --git a/models/gitea_migrations/v1_14/v177.go b/models/gitea_migrations/v1_14/v177.go
+index 96676bf8d9..acba5ab3c7 100644
+--- a/models/gitea_migrations/v1_14/v177.go
++++ b/models/gitea_migrations/v1_14/v177.go
+@@ -6,7 +6,7 @@ package v1_14
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // DeleteOrphanedIssueLabels looks through the database for issue_labels where the label no longer exists and deletes them.
+diff --git a/models/gitea_migrations/v1_15/v178.go b/models/gitea_migrations/v1_15/v178.go
+index ca3a5c262e..7242de61ff 100644
+--- a/models/gitea_migrations/v1_15/v178.go
++++ b/models/gitea_migrations/v1_15/v178.go
+@@ -4,7 +4,7 @@
+ package v1_15
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddLFSMirrorColumns(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v179.go b/models/gitea_migrations/v1_15/v179.go
+index eb87702475..94d087bf05 100644
+--- a/models/gitea_migrations/v1_15/v179.go
++++ b/models/gitea_migrations/v1_15/v179.go
+@@ -6,8 +6,8 @@ package v1_15
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func ConvertAvatarURLToText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v180.go b/models/gitea_migrations/v1_15/v180.go
+index 0b68c3ceb7..8f2c8c04b2 100644
+--- a/models/gitea_migrations/v1_15/v180.go
++++ b/models/gitea_migrations/v1_15/v180.go
+@@ -7,8 +7,8 @@ import (
+ 	"forgejo.org/modules/json"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func DeleteMigrationCredentials(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_15/v181.go b/models/gitea_migrations/v1_15/v181.go
+index fb1d3d7a75..2daa5ef026 100644
+--- a/models/gitea_migrations/v1_15/v181.go
++++ b/models/gitea_migrations/v1_15/v181.go
+@@ -6,7 +6,7 @@ package v1_15
+ import (
+ 	"strings"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPrimaryEmail2EmailAddress(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v182.go b/models/gitea_migrations/v1_15/v182.go
+index 069f9890cd..af9c20230e 100644
+--- a/models/gitea_migrations/v1_15/v182.go
++++ b/models/gitea_migrations/v1_15/v182.go
+@@ -4,7 +4,7 @@
+ package v1_15
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIssueResourceIndexTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v183.go b/models/gitea_migrations/v1_15/v183.go
+index 5684e35699..94448e75eb 100644
+--- a/models/gitea_migrations/v1_15/v183.go
++++ b/models/gitea_migrations/v1_15/v183.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreatePushMirrorTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v184.go b/models/gitea_migrations/v1_15/v184.go
+index 58cf99af43..12be7e99d1 100644
+--- a/models/gitea_migrations/v1_15/v184.go
++++ b/models/gitea_migrations/v1_15/v184.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameTaskErrorsToMessage(x *xorm.Engine) error {
+@@ -21,13 +21,13 @@ func RenameTaskErrorsToMessage(x *xorm.Engine) error {
+ 	}
+ 
+ 	// This migration maybe rerun so that we should check if it has been run
+-	messageExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "task", "message")
++	messageExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "task", "message")
+ 	if err != nil {
+ 		return err
+ 	}
+ 
+ 	if messageExist {
+-		errorsExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "task", "errors")
++		errorsExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "task", "errors")
+ 		if err != nil {
+ 			return err
+ 		}
+diff --git a/models/gitea_migrations/v1_15/v185.go b/models/gitea_migrations/v1_15/v185.go
+index 60af59edca..096b3eb25f 100644
+--- a/models/gitea_migrations/v1_15/v185.go
++++ b/models/gitea_migrations/v1_15/v185.go
+@@ -4,7 +4,7 @@
+ package v1_15
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRepoArchiver(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v186.go b/models/gitea_migrations/v1_15/v186.go
+index 55d3199335..c1afd617af 100644
+--- a/models/gitea_migrations/v1_15/v186.go
++++ b/models/gitea_migrations/v1_15/v186.go
+@@ -6,7 +6,7 @@ package v1_15
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateProtectedTagTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v187.go b/models/gitea_migrations/v1_15/v187.go
+index 76c29755f1..89f4203ace 100644
+--- a/models/gitea_migrations/v1_15/v187.go
++++ b/models/gitea_migrations/v1_15/v187.go
+@@ -6,7 +6,7 @@ package v1_15
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropWebhookColumns(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_15/v188.go b/models/gitea_migrations/v1_15/v188.go
+index 4494e6ff05..1e3e6ad12d 100644
+--- a/models/gitea_migrations/v1_15/v188.go
++++ b/models/gitea_migrations/v1_15/v188.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_15
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddKeyIsVerified(x *xorm.Engine) error {
+ 	type GPGKey struct {
+diff --git a/models/gitea_migrations/v1_16/v189.go b/models/gitea_migrations/v1_16/v189.go
+index a2ba3a0c64..d348a15a28 100644
+--- a/models/gitea_migrations/v1_16/v189.go
++++ b/models/gitea_migrations/v1_16/v189.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/json"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func UnwrapLDAPSourceCfg(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v190.go b/models/gitea_migrations/v1_16/v190.go
+index 1eb6b6ddb4..93b1908154 100644
+--- a/models/gitea_migrations/v1_16/v190.go
++++ b/models/gitea_migrations/v1_16/v190.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddAgitFlowPullRequest(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v191.go b/models/gitea_migrations/v1_16/v191.go
+index 427476b70b..d2f51121fa 100644
+--- a/models/gitea_migrations/v1_16/v191.go
++++ b/models/gitea_migrations/v1_16/v191.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AlterIssueAndCommentTextFieldsToLongText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v192.go b/models/gitea_migrations/v1_16/v192.go
+index 0e2fd522f9..d9b38c1fd8 100644
+--- a/models/gitea_migrations/v1_16/v192.go
++++ b/models/gitea_migrations/v1_16/v192.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RecreateIssueResourceIndexTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v193.go b/models/gitea_migrations/v1_16/v193.go
+index a5af2de380..2c6c0f641d 100644
+--- a/models/gitea_migrations/v1_16/v193.go
++++ b/models/gitea_migrations/v1_16/v193.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRepoIDForAttachment(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v194.go b/models/gitea_migrations/v1_16/v194.go
+index 2e4ed8340e..d4c70d8afe 100644
+--- a/models/gitea_migrations/v1_16/v194.go
++++ b/models/gitea_migrations/v1_16/v194.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBranchProtectionUnprotectedFilesColumn(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v195.go b/models/gitea_migrations/v1_16/v195.go
+index 4fd42b7bd2..c05b47c65d 100644
+--- a/models/gitea_migrations/v1_16/v195.go
++++ b/models/gitea_migrations/v1_16/v195.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTableCommitStatusIndex(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v196.go b/models/gitea_migrations/v1_16/v196.go
+index 6c9caa100f..4ae7c02bbc 100644
+--- a/models/gitea_migrations/v1_16/v196.go
++++ b/models/gitea_migrations/v1_16/v196.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddColorColToProjectBoard(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v197.go b/models/gitea_migrations/v1_16/v197.go
+index 862bdfdcbd..876010e1ba 100644
+--- a/models/gitea_migrations/v1_16/v197.go
++++ b/models/gitea_migrations/v1_16/v197.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRenamedBranchTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v198.go b/models/gitea_migrations/v1_16/v198.go
+index 5d3043eb46..6df87b014c 100644
+--- a/models/gitea_migrations/v1_16/v198.go
++++ b/models/gitea_migrations/v1_16/v198.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTableIssueContentHistory(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v200.go b/models/gitea_migrations/v1_16/v200.go
+index de57fad8fe..df6f9e39c0 100644
+--- a/models/gitea_migrations/v1_16/v200.go
++++ b/models/gitea_migrations/v1_16/v200.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTableAppState(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v201.go b/models/gitea_migrations/v1_16/v201.go
+index 2c43698b0c..6127b1d4dc 100644
+--- a/models/gitea_migrations/v1_16/v201.go
++++ b/models/gitea_migrations/v1_16/v201.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropTableRemoteVersion(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v202.go b/models/gitea_migrations/v1_16/v202.go
+index d8c8fdcadc..f73953f997 100644
+--- a/models/gitea_migrations/v1_16/v202.go
++++ b/models/gitea_migrations/v1_16/v202.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateUserSettingsTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v203.go b/models/gitea_migrations/v1_16/v203.go
+index c3241cba57..f1998c2a6d 100644
+--- a/models/gitea_migrations/v1_16/v203.go
++++ b/models/gitea_migrations/v1_16/v203.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddProjectIssueSorting(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v204.go b/models/gitea_migrations/v1_16/v204.go
+index 4d375307e7..d4bbbbe20b 100644
+--- a/models/gitea_migrations/v1_16/v204.go
++++ b/models/gitea_migrations/v1_16/v204.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_16
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddSSHKeyIsVerified(x *xorm.Engine) error {
+ 	type PublicKey struct {
+diff --git a/models/gitea_migrations/v1_16/v205.go b/models/gitea_migrations/v1_16/v205.go
+index a89edfdef4..f5780a2d4b 100644
+--- a/models/gitea_migrations/v1_16/v205.go
++++ b/models/gitea_migrations/v1_16/v205.go
+@@ -6,8 +6,8 @@ package v1_16
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func MigrateUserPasswordSalt(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v206.go b/models/gitea_migrations/v1_16/v206.go
+index 01a9c386eb..46f6949181 100644
+--- a/models/gitea_migrations/v1_16/v206.go
++++ b/models/gitea_migrations/v1_16/v206.go
+@@ -6,7 +6,7 @@ package v1_16
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddAuthorizeColForTeamUnit(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v207.go b/models/gitea_migrations/v1_16/v207.go
+index 19126ead1f..c84150e77e 100644
+--- a/models/gitea_migrations/v1_16/v207.go
++++ b/models/gitea_migrations/v1_16/v207.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddWebAuthnCred(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v208.go b/models/gitea_migrations/v1_16/v208.go
+index fb643324f4..09bd6e4a31 100644
+--- a/models/gitea_migrations/v1_16/v208.go
++++ b/models/gitea_migrations/v1_16/v208.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func UseBase32HexForCredIDInWebAuthnCredential(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v209.go b/models/gitea_migrations/v1_16/v209.go
+index 230838647b..97332d0541 100644
+--- a/models/gitea_migrations/v1_16/v209.go
++++ b/models/gitea_migrations/v1_16/v209.go
+@@ -4,7 +4,7 @@
+ package v1_16
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func IncreaseCredentialIDTo410(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_16/v210.go b/models/gitea_migrations/v1_16/v210.go
+index f48ab11db6..62541819fc 100644
+--- a/models/gitea_migrations/v1_16/v210.go
++++ b/models/gitea_migrations/v1_16/v210.go
+@@ -12,8 +12,8 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func parseU2FRegistration(raw []byte) (pubKey *ecdh.PublicKey, keyHandle []byte, err error) {
+diff --git a/models/gitea_migrations/v1_16/v210_test.go b/models/gitea_migrations/v1_16/v210_test.go
+index 7972c191f0..41522ccb28 100644
+--- a/models/gitea_migrations/v1_16/v210_test.go
++++ b/models/gitea_migrations/v1_16/v210_test.go
+@@ -10,9 +10,9 @@ import (
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func TestParseU2FRegistration(t *testing.T) {
+diff --git a/models/gitea_migrations/v1_17/v211.go b/models/gitea_migrations/v1_17/v211.go
+index 517cf19388..09297ad661 100644
+--- a/models/gitea_migrations/v1_17/v211.go
++++ b/models/gitea_migrations/v1_17/v211.go
+@@ -4,7 +4,7 @@
+ package v1_17
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateForeignReferenceTable(_ *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v212.go b/models/gitea_migrations/v1_17/v212.go
+index 23868c0bb2..f60b4eb5d0 100644
+--- a/models/gitea_migrations/v1_17/v212.go
++++ b/models/gitea_migrations/v1_17/v212.go
+@@ -6,7 +6,7 @@ package v1_17
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPackageTables(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v213.go b/models/gitea_migrations/v1_17/v213.go
+index b2bbdf7279..8a2a1b348d 100644
+--- a/models/gitea_migrations/v1_17/v213.go
++++ b/models/gitea_migrations/v1_17/v213.go
+@@ -4,7 +4,7 @@
+ package v1_17
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddAllowMaintainerEdit(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v214.go b/models/gitea_migrations/v1_17/v214.go
+index 1925324f0f..e67ca52fd2 100644
+--- a/models/gitea_migrations/v1_17/v214.go
++++ b/models/gitea_migrations/v1_17/v214.go
+@@ -4,7 +4,7 @@
+ package v1_17
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddAutoMergeTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v215.go b/models/gitea_migrations/v1_17/v215.go
+index 431103c98e..8d8674153b 100644
+--- a/models/gitea_migrations/v1_17/v215.go
++++ b/models/gitea_migrations/v1_17/v215.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/models/pull"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddReviewViewedFiles(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v217.go b/models/gitea_migrations/v1_17/v217.go
+index fef48b7a5b..5eab5ac0c9 100644
+--- a/models/gitea_migrations/v1_17/v217.go
++++ b/models/gitea_migrations/v1_17/v217.go
+@@ -6,7 +6,7 @@ package v1_17
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AlterHookTaskTextFieldsToLongText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v218.go b/models/gitea_migrations/v1_17/v218.go
+index 412d124286..935d5234aa 100644
+--- a/models/gitea_migrations/v1_17/v218.go
++++ b/models/gitea_migrations/v1_17/v218.go
+@@ -7,8 +7,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ type improveActionTableIndicesAction struct {
+diff --git a/models/gitea_migrations/v1_17/v219.go b/models/gitea_migrations/v1_17/v219.go
+index 7ca6a26be6..e9eba6b6ed 100644
+--- a/models/gitea_migrations/v1_17/v219.go
++++ b/models/gitea_migrations/v1_17/v219.go
+@@ -9,7 +9,7 @@ import (
+ 	"forgejo.org/models/repo"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddSyncOnCommitColForPushMirror(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v220.go b/models/gitea_migrations/v1_17/v220.go
+index 4e010e5b76..00125962f8 100644
+--- a/models/gitea_migrations/v1_17/v220.go
++++ b/models/gitea_migrations/v1_17/v220.go
+@@ -7,8 +7,8 @@ import (
+ 	packages_model "forgejo.org/models/packages"
+ 	container_module "forgejo.org/modules/packages/container"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func AddContainerRepositoryProperty(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_17/v221.go b/models/gitea_migrations/v1_17/v221.go
+index 3ef34e3f06..adcc52fd41 100644
+--- a/models/gitea_migrations/v1_17/v221.go
++++ b/models/gitea_migrations/v1_17/v221.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func StoreWebauthnCredentialIDAsBytes(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_17/v222.go b/models/gitea_migrations/v1_17/v222.go
+index 77095f4e7e..40f1502f3e 100644
+--- a/models/gitea_migrations/v1_17/v222.go
++++ b/models/gitea_migrations/v1_17/v222.go
+@@ -11,12 +11,12 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropOldCredentialIDColumn(x *xorm.Engine) error {
+ 	// This migration maybe rerun so that we should check if it has been run
+-	credentialIDExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webauthn_credential", "credential_id")
++	credentialIDExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webauthn_credential", "credential_id")
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -24,7 +24,7 @@ func DropOldCredentialIDColumn(x *xorm.Engine) error {
+ 		// Column is already non-extant
+ 		return nil
+ 	}
+-	credentialIDBytesExists, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webauthn_credential", "credential_id_bytes")
++	credentialIDBytesExists, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webauthn_credential", "credential_id_bytes")
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/models/gitea_migrations/v1_17/v223.go b/models/gitea_migrations/v1_17/v223.go
+index 4cc91c4f46..5715d7f74f 100644
+--- a/models/gitea_migrations/v1_17/v223.go
++++ b/models/gitea_migrations/v1_17/v223.go
+@@ -11,17 +11,17 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameCredentialIDBytes(x *xorm.Engine) error {
+ 	// This migration maybe rerun so that we should check if it has been run
+-	credentialIDExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webauthn_credential", "credential_id")
++	credentialIDExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webauthn_credential", "credential_id")
+ 	if err != nil {
+ 		return err
+ 	}
+ 	if credentialIDExist {
+-		credentialIDBytesExists, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webauthn_credential", "credential_id_bytes")
++		credentialIDBytesExists, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webauthn_credential", "credential_id_bytes")
+ 		if err != nil {
+ 			return err
+ 		}
+diff --git a/models/gitea_migrations/v1_18/v224.go b/models/gitea_migrations/v1_18/v224.go
+index 6dc12020ea..161a776657 100644
+--- a/models/gitea_migrations/v1_18/v224.go
++++ b/models/gitea_migrations/v1_18/v224.go
+@@ -4,7 +4,7 @@
+ package v1_18
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateUserBadgesTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_18/v225.go b/models/gitea_migrations/v1_18/v225.go
+index 266eccfff8..1992e80a05 100644
+--- a/models/gitea_migrations/v1_18/v225.go
++++ b/models/gitea_migrations/v1_18/v225.go
+@@ -6,7 +6,7 @@ package v1_18
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AlterPublicGPGKeyContentFieldsToMediumText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_18/v226.go b/models/gitea_migrations/v1_18/v226.go
+index 8ed9761476..40c59a43fd 100644
+--- a/models/gitea_migrations/v1_18/v226.go
++++ b/models/gitea_migrations/v1_18/v226.go
+@@ -4,8 +4,8 @@
+ package v1_18
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func FixPackageSemverField(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_18/v227.go b/models/gitea_migrations/v1_18/v227.go
+index d39a010159..24acef9d8e 100644
+--- a/models/gitea_migrations/v1_18/v227.go
++++ b/models/gitea_migrations/v1_18/v227.go
+@@ -6,7 +6,7 @@ package v1_18
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type SystemSetting struct {
+diff --git a/models/gitea_migrations/v1_18/v228.go b/models/gitea_migrations/v1_18/v228.go
+index 3f5b69734d..03f89fdf14 100644
+--- a/models/gitea_migrations/v1_18/v228.go
++++ b/models/gitea_migrations/v1_18/v228.go
+@@ -6,7 +6,7 @@ package v1_18
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTeamInviteTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_18/v229.go b/models/gitea_migrations/v1_18/v229.go
+index b544e063d0..04913c43b1 100644
+--- a/models/gitea_migrations/v1_18/v229.go
++++ b/models/gitea_migrations/v1_18/v229.go
+@@ -8,8 +8,8 @@ import (
+ 
+ 	"forgejo.org/models/issues"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func UpdateOpenMilestoneCounts(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_18/v230.go b/models/gitea_migrations/v1_18/v230.go
+index 078fce7643..d76cbbe78e 100644
+--- a/models/gitea_migrations/v1_18/v230.go
++++ b/models/gitea_migrations/v1_18/v230.go
+@@ -4,7 +4,7 @@
+ package v1_18
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AddConfidentialColumnToOAuth2ApplicationTable: add ConfidentialClient column, setting existing rows to true
+diff --git a/models/gitea_migrations/v1_19/v231.go b/models/gitea_migrations/v1_19/v231.go
+index 8ef1e4e743..148b79cd68 100644
+--- a/models/gitea_migrations/v1_19/v231.go
++++ b/models/gitea_migrations/v1_19/v231.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexForHookTask(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v232.go b/models/gitea_migrations/v1_19/v232.go
+index 2aab2cf830..0f3615c65b 100644
+--- a/models/gitea_migrations/v1_19/v232.go
++++ b/models/gitea_migrations/v1_19/v232.go
+@@ -6,7 +6,7 @@ package v1_19
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AlterPackageVersionMetadataToLongText(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v233.go b/models/gitea_migrations/v1_19/v233.go
+index e62e8a9356..923513025b 100644
+--- a/models/gitea_migrations/v1_19/v233.go
++++ b/models/gitea_migrations/v1_19/v233.go
+@@ -11,8 +11,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	api "forgejo.org/modules/structs"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func batchProcess[T any](x *xorm.Engine, buf []T, query func(limit, start int) *xorm.Session, process func(*xorm.Session, T) error) error {
+diff --git a/models/gitea_migrations/v1_19/v234.go b/models/gitea_migrations/v1_19/v234.go
+index e00b1cc2b6..1a60ccacf2 100644
+--- a/models/gitea_migrations/v1_19/v234.go
++++ b/models/gitea_migrations/v1_19/v234.go
+@@ -6,7 +6,7 @@ package v1_19
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreatePackageCleanupRuleTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v235.go b/models/gitea_migrations/v1_19/v235.go
+index 297d90f65a..9e63777a05 100644
+--- a/models/gitea_migrations/v1_19/v235.go
++++ b/models/gitea_migrations/v1_19/v235.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexForAccessToken(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v236.go b/models/gitea_migrations/v1_19/v236.go
+index c453f95e04..b4e917bcea 100644
+--- a/models/gitea_migrations/v1_19/v236.go
++++ b/models/gitea_migrations/v1_19/v236.go
+@@ -6,7 +6,7 @@ package v1_19
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateSecretsTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v237.go b/models/gitea_migrations/v1_19/v237.go
+index cf30226ccd..b2f7ce3252 100644
+--- a/models/gitea_migrations/v1_19/v237.go
++++ b/models/gitea_migrations/v1_19/v237.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropForeignReferenceTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v238.go b/models/gitea_migrations/v1_19/v238.go
+index b257315319..33a032954d 100644
+--- a/models/gitea_migrations/v1_19/v238.go
++++ b/models/gitea_migrations/v1_19/v238.go
+@@ -6,7 +6,7 @@ package v1_19
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AddUpdatedUnixToLFSMetaObject adds an updated column to the LFSMetaObject to allow for garbage collection
+diff --git a/models/gitea_migrations/v1_19/v239.go b/models/gitea_migrations/v1_19/v239.go
+index 8f4a65be95..21fef0de27 100644
+--- a/models/gitea_migrations/v1_19/v239.go
++++ b/models/gitea_migrations/v1_19/v239.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddScopeForAccessTokens(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v240.go b/models/gitea_migrations/v1_19/v240.go
+index c49ce2f49a..264ed3c988 100644
+--- a/models/gitea_migrations/v1_19/v240.go
++++ b/models/gitea_migrations/v1_19/v240.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/models/db"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddActionsTables(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_19/v241.go b/models/gitea_migrations/v1_19/v241.go
+index e35801a057..8a8d23489c 100644
+--- a/models/gitea_migrations/v1_19/v241.go
++++ b/models/gitea_migrations/v1_19/v241.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AddCardTypeToProjectTable: add CardType column, setting existing rows to CardTypeTextOnly
+diff --git a/models/gitea_migrations/v1_19/v242.go b/models/gitea_migrations/v1_19/v242.go
+index 87ca9cf214..d07f10a641 100644
+--- a/models/gitea_migrations/v1_19/v242.go
++++ b/models/gitea_migrations/v1_19/v242.go
+@@ -6,7 +6,7 @@ package v1_19
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AlterPublicGPGKeyImportContentFieldToMediumText: set GPGKeyImport Content field to MEDIUMTEXT
+diff --git a/models/gitea_migrations/v1_19/v243.go b/models/gitea_migrations/v1_19/v243.go
+index 9c3f372594..3f6aa8fbbf 100644
+--- a/models/gitea_migrations/v1_19/v243.go
++++ b/models/gitea_migrations/v1_19/v243.go
+@@ -4,7 +4,7 @@
+ package v1_19
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddExclusiveLabel(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v244.go b/models/gitea_migrations/v1_20/v244.go
+index 76cdccaca5..6e49ca4243 100644
+--- a/models/gitea_migrations/v1_20/v244.go
++++ b/models/gitea_migrations/v1_20/v244.go
+@@ -4,7 +4,7 @@
+ package v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddNeedApprovalToActionRun(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v245.go b/models/gitea_migrations/v1_20/v245.go
+index 730af95ad0..d0d67b735c 100644
+--- a/models/gitea_migrations/v1_20/v245.go
++++ b/models/gitea_migrations/v1_20/v245.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameWebhookOrgToOwner(x *xorm.Engine) error {
+@@ -19,13 +19,13 @@ func RenameWebhookOrgToOwner(x *xorm.Engine) error {
+ 	}
+ 
+ 	// This migration maybe rerun so that we should check if it has been run
+-	ownerExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webhook", "owner_id")
++	ownerExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webhook", "owner_id")
+ 	if err != nil {
+ 		return err
+ 	}
+ 
+ 	if ownerExist {
+-		orgExist, err := x.Dialect().IsColumnExist(x.DB(), context.Background(), "webhook", "org_id")
++		orgExist, err := x.Dialect().IsColumnExist(context.Background(), x.DB(), "webhook", "org_id")
+ 		if err != nil {
+ 			return err
+ 		}
+diff --git a/models/gitea_migrations/v1_20/v246.go b/models/gitea_migrations/v1_20/v246.go
+index 22bf723404..e0ba2b4bbd 100644
+--- a/models/gitea_migrations/v1_20/v246.go
++++ b/models/gitea_migrations/v1_20/v246.go
+@@ -4,7 +4,7 @@
+ package v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddNewColumnForProject(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v247.go b/models/gitea_migrations/v1_20/v247.go
+index 056699d744..9cd6601d4c 100644
+--- a/models/gitea_migrations/v1_20/v247.go
++++ b/models/gitea_migrations/v1_20/v247.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // FixIncorrectProjectType: set individual project's type from 3(TypeOrganization) to 1(TypeIndividual)
+diff --git a/models/gitea_migrations/v1_20/v248.go b/models/gitea_migrations/v1_20/v248.go
+index 4f2091e4bc..46029b5ad4 100644
+--- a/models/gitea_migrations/v1_20/v248.go
++++ b/models/gitea_migrations/v1_20/v248.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_20
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddVersionToActionRunner(x *xorm.Engine) error {
+ 	type ActionRunner struct {
+diff --git a/models/gitea_migrations/v1_20/v249.go b/models/gitea_migrations/v1_20/v249.go
+index 0aebb2a343..45a59f95c6 100644
+--- a/models/gitea_migrations/v1_20/v249.go
++++ b/models/gitea_migrations/v1_20/v249.go
+@@ -6,8 +6,8 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ type Action struct {
+diff --git a/models/gitea_migrations/v1_20/v250.go b/models/gitea_migrations/v1_20/v250.go
+index e12223691f..e029242418 100644
+--- a/models/gitea_migrations/v1_20/v250.go
++++ b/models/gitea_migrations/v1_20/v250.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/json"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ChangeContainerMetadataMultiArch(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v251.go b/models/gitea_migrations/v1_20/v251.go
+index 7d2d259df6..5c80624a41 100644
+--- a/models/gitea_migrations/v1_20/v251.go
++++ b/models/gitea_migrations/v1_20/v251.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixIncorrectOwnerTeamUnitAccessMode(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v252.go b/models/gitea_migrations/v1_20/v252.go
+index 435cce7ebe..6592817d7e 100644
+--- a/models/gitea_migrations/v1_20/v252.go
++++ b/models/gitea_migrations/v1_20/v252.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixIncorrectAdminTeamUnitAccessMode(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v253.go b/models/gitea_migrations/v1_20/v253.go
+index 73354fd485..47ede268c1 100644
+--- a/models/gitea_migrations/v1_20/v253.go
++++ b/models/gitea_migrations/v1_20/v253.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixExternalTrackerAndExternalWikiAccessModeInOwnerAndAdminTeam(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v254.go b/models/gitea_migrations/v1_20/v254.go
+index 9cdbfb3916..5e3af2eb6b 100644
+--- a/models/gitea_migrations/v1_20/v254.go
++++ b/models/gitea_migrations/v1_20/v254.go
+@@ -4,7 +4,7 @@
+ package v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddActionTaskOutputTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v255.go b/models/gitea_migrations/v1_20/v255.go
+index baa3c4b6d8..251b4e1203 100644
+--- a/models/gitea_migrations/v1_20/v255.go
++++ b/models/gitea_migrations/v1_20/v255.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddArchivedUnixToRepository(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v256.go b/models/gitea_migrations/v1_20/v256.go
+index 7b84c1e154..76d8603ba1 100644
+--- a/models/gitea_migrations/v1_20/v256.go
++++ b/models/gitea_migrations/v1_20/v256.go
+@@ -4,7 +4,7 @@
+ package v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIsInternalColumnToPackage(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v257.go b/models/gitea_migrations/v1_20/v257.go
+index 8045909dba..5ba12e325f 100644
+--- a/models/gitea_migrations/v1_20/v257.go
++++ b/models/gitea_migrations/v1_20/v257.go
+@@ -6,7 +6,7 @@ package v1_20
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateActionArtifactTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v258.go b/models/gitea_migrations/v1_20/v258.go
+index 1d3faffdae..19334e5657 100644
+--- a/models/gitea_migrations/v1_20/v258.go
++++ b/models/gitea_migrations/v1_20/v258.go
+@@ -4,7 +4,7 @@
+ package v1_20
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPinOrderToIssue(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_20/v259.go b/models/gitea_migrations/v1_20/v259.go
+index 1ae8b2e30f..4c45317044 100644
+--- a/models/gitea_migrations/v1_20/v259.go
++++ b/models/gitea_migrations/v1_20/v259.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // unknownAccessTokenScope represents the scope for an access token that isn't
+diff --git a/models/gitea_migrations/v1_21/v260.go b/models/gitea_migrations/v1_21/v260.go
+index 31f9c5b161..eda2b9a9d6 100644
+--- a/models/gitea_migrations/v1_21/v260.go
++++ b/models/gitea_migrations/v1_21/v260.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropCustomLabelsColumnOfActionRunner(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v261.go b/models/gitea_migrations/v1_21/v261.go
+index 83a4927704..df4c7b30d7 100644
+--- a/models/gitea_migrations/v1_21/v261.go
++++ b/models/gitea_migrations/v1_21/v261.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateVariableTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v262.go b/models/gitea_migrations/v1_21/v262.go
+index 6e88e29b9d..7547c617f6 100644
+--- a/models/gitea_migrations/v1_21/v262.go
++++ b/models/gitea_migrations/v1_21/v262.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddTriggerEventToActionRun(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v263.go b/models/gitea_migrations/v1_21/v263.go
+index 55c418bde0..c55acb4347 100644
+--- a/models/gitea_migrations/v1_21/v263.go
++++ b/models/gitea_migrations/v1_21/v263.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AddGitSizeAndLFSSizeToRepositoryTable: add GitSize and LFSSize columns to Repository
+diff --git a/models/gitea_migrations/v1_21/v264.go b/models/gitea_migrations/v1_21/v264.go
+index acd2c9bb48..0e5afdebe1 100644
+--- a/models/gitea_migrations/v1_21/v264.go
++++ b/models/gitea_migrations/v1_21/v264.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/db"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddBranchTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v265.go b/models/gitea_migrations/v1_21/v265.go
+index b6892acc27..8f7c4d4262 100644
+--- a/models/gitea_migrations/v1_21/v265.go
++++ b/models/gitea_migrations/v1_21/v265.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AlterActionArtifactTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v266.go b/models/gitea_migrations/v1_21/v266.go
+index 440549e868..8ece23d73e 100644
+--- a/models/gitea_migrations/v1_21/v266.go
++++ b/models/gitea_migrations/v1_21/v266.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func ReduceCommitStatus(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v267.go b/models/gitea_migrations/v1_21/v267.go
+index 13992d8776..93aecfd5b2 100644
+--- a/models/gitea_migrations/v1_21/v267.go
++++ b/models/gitea_migrations/v1_21/v267.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateActionTasksVersionTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v268.go b/models/gitea_migrations/v1_21/v268.go
+index b677d2383e..2505898deb 100644
+--- a/models/gitea_migrations/v1_21/v268.go
++++ b/models/gitea_migrations/v1_21/v268.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // UpdateActionsRefIndex updates the index of actions ref field
+diff --git a/models/gitea_migrations/v1_21/v269.go b/models/gitea_migrations/v1_21/v269.go
+index 042040927d..f6dbd35e6b 100644
+--- a/models/gitea_migrations/v1_21/v269.go
++++ b/models/gitea_migrations/v1_21/v269.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func DropDeletedBranchTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v270.go b/models/gitea_migrations/v1_21/v270.go
+index ab7c5660ba..4b5999f302 100644
+--- a/models/gitea_migrations/v1_21/v270.go
++++ b/models/gitea_migrations/v1_21/v270.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixPackagePropertyTypo(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v271.go b/models/gitea_migrations/v1_21/v271.go
+index 38b171c323..6e0dcf005e 100644
+--- a/models/gitea_migrations/v1_21/v271.go
++++ b/models/gitea_migrations/v1_21/v271.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddArchivedUnixColumnInLabelTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v272.go b/models/gitea_migrations/v1_21/v272.go
+index 14c1e0c4b0..67b60795f8 100644
+--- a/models/gitea_migrations/v1_21/v272.go
++++ b/models/gitea_migrations/v1_21/v272.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddVersionToActionRunTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v273.go b/models/gitea_migrations/v1_21/v273.go
+index d6ec80d3d5..928279910a 100644
+--- a/models/gitea_migrations/v1_21/v273.go
++++ b/models/gitea_migrations/v1_21/v273.go
+@@ -6,7 +6,7 @@ package v1_21
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddActionScheduleTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v274.go b/models/gitea_migrations/v1_21/v274.go
+index a1211d1fdd..2117da708f 100644
+--- a/models/gitea_migrations/v1_21/v274.go
++++ b/models/gitea_migrations/v1_21/v274.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddExpiredUnixColumnInActionArtifactTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v275.go b/models/gitea_migrations/v1_21/v275.go
+index 2bfe5c72fa..d39a641946 100644
+--- a/models/gitea_migrations/v1_21/v275.go
++++ b/models/gitea_migrations/v1_21/v275.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddScheduleIDForActionRun(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v276.go b/models/gitea_migrations/v1_21/v276.go
+index 3b0bc23da7..6c65d9f366 100644
+--- a/models/gitea_migrations/v1_21/v276.go
++++ b/models/gitea_migrations/v1_21/v276.go
+@@ -7,7 +7,7 @@ import (
+ 	repo_model "forgejo.org/models/repo"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddRemoteAddressToMirrors(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v277.go b/models/gitea_migrations/v1_21/v277.go
+index 0c102eddde..90659e7833 100644
+--- a/models/gitea_migrations/v1_21/v277.go
++++ b/models/gitea_migrations/v1_21/v277.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexToIssueUserIssueID(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v278.go b/models/gitea_migrations/v1_21/v278.go
+index 846f228678..64b46bfbe8 100644
+--- a/models/gitea_migrations/v1_21/v278.go
++++ b/models/gitea_migrations/v1_21/v278.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexToCommentDependentIssueID(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_21/v279.go b/models/gitea_migrations/v1_21/v279.go
+index beb39effe1..61df0f6024 100644
+--- a/models/gitea_migrations/v1_21/v279.go
++++ b/models/gitea_migrations/v1_21/v279.go
+@@ -4,7 +4,7 @@
+ package v1_21
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexToActionUserID(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v280.go b/models/gitea_migrations/v1_22/v280.go
+index 2271cb6089..3f0bd7e68e 100644
+--- a/models/gitea_migrations/v1_22/v280.go
++++ b/models/gitea_migrations/v1_22/v280.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameUserThemes(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v281.go b/models/gitea_migrations/v1_22/v281.go
+index 2eeca9be82..d37ccd1738 100644
+--- a/models/gitea_migrations/v1_22/v281.go
++++ b/models/gitea_migrations/v1_22/v281.go
+@@ -6,7 +6,7 @@ package v1_22
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func CreateAuthTokenTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v282.go b/models/gitea_migrations/v1_22/v282.go
+index eed64c30f7..2188d80e76 100644
+--- a/models/gitea_migrations/v1_22/v282.go
++++ b/models/gitea_migrations/v1_22/v282.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexToPullAutoMergeDoerID(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v283.go b/models/gitea_migrations/v1_22/v283.go
+index 33a2513069..8a7e63d042 100644
+--- a/models/gitea_migrations/v1_22/v283.go
++++ b/models/gitea_migrations/v1_22/v283.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCombinedIndexToIssueUser(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v284.go b/models/gitea_migrations/v1_22/v284.go
+index 31b38f6aed..d21bd581e5 100644
+--- a/models/gitea_migrations/v1_22/v284.go
++++ b/models/gitea_migrations/v1_22/v284.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIgnoreStaleApprovalsColumnToProtectedBranchTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v285.go b/models/gitea_migrations/v1_22/v285.go
+index fed89f670e..475155e7fa 100644
+--- a/models/gitea_migrations/v1_22/v285.go
++++ b/models/gitea_migrations/v1_22/v285.go
+@@ -6,7 +6,7 @@ package v1_22
+ import (
+ 	"time"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPreviousDurationToActionRun(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v286.go b/models/gitea_migrations/v1_22/v286.go
+index 05247bb436..0afd87cd9e 100644
+--- a/models/gitea_migrations/v1_22/v286.go
++++ b/models/gitea_migrations/v1_22/v286.go
+@@ -8,7 +8,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func expandHashReferencesToSha256(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_22/v286_test.go b/models/gitea_migrations/v1_22/v286_test.go
+index fd630508ec..2a343b1766 100644
+--- a/models/gitea_migrations/v1_22/v286_test.go
++++ b/models/gitea_migrations/v1_22/v286_test.go
+@@ -8,9 +8,9 @@ import (
+ 
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ func PrepareOldRepository(t *testing.T) (*xorm.Engine, func()) {
+diff --git a/models/gitea_migrations/v1_22/v287.go b/models/gitea_migrations/v1_22/v287.go
+index 5fd901f9de..3e7e8a1b5d 100644
+--- a/models/gitea_migrations/v1_22/v287.go
++++ b/models/gitea_migrations/v1_22/v287.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type BadgeUnique struct {
+diff --git a/models/gitea_migrations/v1_22/v288.go b/models/gitea_migrations/v1_22/v288.go
+index 78be3b6ef2..cd20bbf07b 100644
+--- a/models/gitea_migrations/v1_22/v288.go
++++ b/models/gitea_migrations/v1_22/v288.go
+@@ -6,7 +6,7 @@ package v1_22
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ type Blocking struct {
+diff --git a/models/gitea_migrations/v1_22/v289.go b/models/gitea_migrations/v1_22/v289.go
+index 78689a4ffa..e39698bd41 100644
+--- a/models/gitea_migrations/v1_22/v289.go
++++ b/models/gitea_migrations/v1_22/v289.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddDefaultWikiBranch(x *xorm.Engine) error {
+ 	type Repository struct {
+diff --git a/models/gitea_migrations/v1_22/v290.go b/models/gitea_migrations/v1_22/v290.go
+index ebafab6567..b764a68d76 100644
+--- a/models/gitea_migrations/v1_22/v290.go
++++ b/models/gitea_migrations/v1_22/v290.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	webhook_module "forgejo.org/modules/webhook"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // HookTask represents a hook task.
+diff --git a/models/gitea_migrations/v1_22/v291.go b/models/gitea_migrations/v1_22/v291.go
+index 823a644a95..e4eface41a 100644
+--- a/models/gitea_migrations/v1_22/v291.go
++++ b/models/gitea_migrations/v1_22/v291.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddCommentIDIndexofAttachment(x *xorm.Engine) error {
+ 	type Attachment struct {
+diff --git a/models/gitea_migrations/v1_22/v293.go b/models/gitea_migrations/v1_22/v293.go
+index e9c9746b26..1b53efb5a8 100644
+--- a/models/gitea_migrations/v1_22/v293.go
++++ b/models/gitea_migrations/v1_22/v293.go
+@@ -7,7 +7,7 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // CheckProjectColumnsConsistency ensures there is exactly one default board per project present
+diff --git a/models/gitea_migrations/v1_22/v294.go b/models/gitea_migrations/v1_22/v294.go
+index 6c52372306..780e47fe7b 100644
+--- a/models/gitea_migrations/v1_22/v294.go
++++ b/models/gitea_migrations/v1_22/v294.go
+@@ -4,7 +4,7 @@
+ package v1_22
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // AddUniqueIndexForProjectIssue adds unique indexes for project issue table
+diff --git a/models/gitea_migrations/v1_22/v294_test.go b/models/gitea_migrations/v1_22/v294_test.go
+index 197fada2a0..948c8ad8d6 100644
+--- a/models/gitea_migrations/v1_22/v294_test.go
++++ b/models/gitea_migrations/v1_22/v294_test.go
+@@ -9,9 +9,9 @@ import (
+ 
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func Test_AddUniqueIndexForProjectIssue(t *testing.T) {
+diff --git a/models/gitea_migrations/v1_22/v295.go b/models/gitea_migrations/v1_22/v295.go
+index 319b1a399b..b3c6d00fbf 100644
+--- a/models/gitea_migrations/v1_22/v295.go
++++ b/models/gitea_migrations/v1_22/v295.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddCommitStatusSummary(x *xorm.Engine) error {
+ 	type CommitStatusSummary struct {
+diff --git a/models/gitea_migrations/v1_22/v296.go b/models/gitea_migrations/v1_22/v296.go
+index 75350f9f65..1e337bb6f7 100644
+--- a/models/gitea_migrations/v1_22/v296.go
++++ b/models/gitea_migrations/v1_22/v296.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddCommitStatusSummary2(x *xorm.Engine) error {
+ 	type CommitStatusSummary struct {
+diff --git a/models/gitea_migrations/v1_22/v298.go b/models/gitea_migrations/v1_22/v298.go
+index 7700173a00..bc0d5758bc 100644
+--- a/models/gitea_migrations/v1_22/v298.go
++++ b/models/gitea_migrations/v1_22/v298.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_22
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func DropWronglyCreatedTable(x *xorm.Engine) error {
+ 	return x.DropTables("o_auth2_application")
+diff --git a/models/gitea_migrations/v1_23/v299.go b/models/gitea_migrations/v1_23/v299.go
+index 73ce19c875..1428374aa9 100644
+--- a/models/gitea_migrations/v1_23/v299.go
++++ b/models/gitea_migrations/v1_23/v299.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_23
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddContentVersionToIssueAndComment(x *xorm.Engine) error {
+ 	type Issue struct {
+diff --git a/models/gitea_migrations/v1_23/v300.go b/models/gitea_migrations/v1_23/v300.go
+index 404d8dbea8..bf2e675c7f 100644
+--- a/models/gitea_migrations/v1_23/v300.go
++++ b/models/gitea_migrations/v1_23/v300.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_23
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddForcePushBranchProtection(x *xorm.Engine) error {
+ 	type ProtectedBranch struct {
+diff --git a/models/gitea_migrations/v1_23/v301.go b/models/gitea_migrations/v1_23/v301.go
+index f2a4d8c559..2a436aed31 100644
+--- a/models/gitea_migrations/v1_23/v301.go
++++ b/models/gitea_migrations/v1_23/v301.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_23
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ // AddSkipSeconderyAuthToOAuth2ApplicationTable: add SkipSecondaryAuthorization column, setting existing rows to false
+ func AddSkipSecondaryAuthColumnToOAuth2ApplicationTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_23/v302.go b/models/gitea_migrations/v1_23/v302.go
+index 1b056993bd..a0ffee8a45 100644
+--- a/models/gitea_migrations/v1_23/v302.go
++++ b/models/gitea_migrations/v1_23/v302.go
+@@ -6,7 +6,7 @@ package v1_23
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIndexToActionTaskStoppedLogExpired(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_23/v303.go b/models/gitea_migrations/v1_23/v303.go
+index f6cbf7d859..20684a90c0 100644
+--- a/models/gitea_migrations/v1_23/v303.go
++++ b/models/gitea_migrations/v1_23/v303.go
+@@ -6,8 +6,8 @@ package v1_23
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func GiteaLastDrop(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_23/v303_test.go b/models/gitea_migrations/v1_23/v303_test.go
+index 5eee15c47a..8b794c431d 100644
+--- a/models/gitea_migrations/v1_23/v303_test.go
++++ b/models/gitea_migrations/v1_23/v303_test.go
+@@ -8,8 +8,8 @@ import (
+ 
+ 	migration_tests "forgejo.org/models/gitea_migrations/test"
+ 
++	"code.forgejo.org/xorm/xorm/schemas"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/schemas"
+ )
+ 
+ func Test_GiteaLastDrop(t *testing.T) {
+diff --git a/models/gitea_migrations/v1_6/v70.go b/models/gitea_migrations/v1_6/v70.go
+index eb669f57b6..0b2c27d47a 100644
+--- a/models/gitea_migrations/v1_6/v70.go
++++ b/models/gitea_migrations/v1_6/v70.go
+@@ -9,7 +9,7 @@ import (
+ 
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddIssueDependencies(x *xorm.Engine) (err error) {
+diff --git a/models/gitea_migrations/v1_6/v71.go b/models/gitea_migrations/v1_6/v71.go
+index 9d2128090f..b92ed88545 100644
+--- a/models/gitea_migrations/v1_6/v71.go
++++ b/models/gitea_migrations/v1_6/v71.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddScratchHash(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_6/v72.go b/models/gitea_migrations/v1_6/v72.go
+index 7cd2331376..0facfe3244 100644
+--- a/models/gitea_migrations/v1_6/v72.go
++++ b/models/gitea_migrations/v1_6/v72.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddReview(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_7/v73.go b/models/gitea_migrations/v1_7/v73.go
+index e0b7a28537..2f2de6fb65 100644
+--- a/models/gitea_migrations/v1_7/v73.go
++++ b/models/gitea_migrations/v1_7/v73.go
+@@ -4,7 +4,7 @@
+ package v1_7
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddMustChangePassword(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_7/v74.go b/models/gitea_migrations/v1_7/v74.go
+index 376be37a24..44853821ef 100644
+--- a/models/gitea_migrations/v1_7/v74.go
++++ b/models/gitea_migrations/v1_7/v74.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_7
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddApprovalWhitelistsToProtectedBranches(x *xorm.Engine) error {
+ 	type ProtectedBranch struct {
+diff --git a/models/gitea_migrations/v1_7/v75.go b/models/gitea_migrations/v1_7/v75.go
+index ef11575466..27e9c29cd9 100644
+--- a/models/gitea_migrations/v1_7/v75.go
++++ b/models/gitea_migrations/v1_7/v75.go
+@@ -4,8 +4,8 @@
+ package v1_7
+ 
+ import (
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func ClearNonusedData(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_8/v76.go b/models/gitea_migrations/v1_8/v76.go
+index 8d47280b41..eb8d94ea75 100644
+--- a/models/gitea_migrations/v1_8/v76.go
++++ b/models/gitea_migrations/v1_8/v76.go
+@@ -8,7 +8,7 @@ import (
+ 
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddPullRequestRebaseWithMerge(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_8/v77.go b/models/gitea_migrations/v1_8/v77.go
+index 4fe5ebe635..3228fff2f9 100644
+--- a/models/gitea_migrations/v1_8/v77.go
++++ b/models/gitea_migrations/v1_8/v77.go
+@@ -4,7 +4,7 @@
+ package v1_8
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddUserDefaultTheme(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_8/v78.go b/models/gitea_migrations/v1_8/v78.go
+index 829435ead6..fe51aec9b4 100644
+--- a/models/gitea_migrations/v1_8/v78.go
++++ b/models/gitea_migrations/v1_8/v78.go
+@@ -6,7 +6,7 @@ package v1_8
+ import (
+ 	"forgejo.org/models/gitea_migrations/base"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func RenameRepoIsBareToIsEmpty(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_8/v79.go b/models/gitea_migrations/v1_8/v79.go
+index c8e0db531f..58272086f8 100644
+--- a/models/gitea_migrations/v1_8/v79.go
++++ b/models/gitea_migrations/v1_8/v79.go
+@@ -6,7 +6,7 @@ package v1_8
+ import (
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddCanCloseIssuesViaCommitInAnyBranch(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_8/v80.go b/models/gitea_migrations/v1_8/v80.go
+index 6f9df47a93..bf4836fda1 100644
+--- a/models/gitea_migrations/v1_8/v80.go
++++ b/models/gitea_migrations/v1_8/v80.go
+@@ -3,7 +3,7 @@
+ 
+ package v1_8
+ 
+-import "xorm.io/xorm"
++import "code.forgejo.org/xorm/xorm"
+ 
+ func AddIsLockedToIssues(x *xorm.Engine) error {
+ 	// Issue see models/issue.go
+diff --git a/models/gitea_migrations/v1_8/v81.go b/models/gitea_migrations/v1_8/v81.go
+index 8152a47ad7..139f67feb8 100644
+--- a/models/gitea_migrations/v1_8/v81.go
++++ b/models/gitea_migrations/v1_8/v81.go
+@@ -6,8 +6,8 @@ package v1_8
+ import (
+ 	"fmt"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ func ChangeU2FCounterType(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v82.go b/models/gitea_migrations/v1_9/v82.go
+index 235c73c504..462fa95c1e 100644
+--- a/models/gitea_migrations/v1_9/v82.go
++++ b/models/gitea_migrations/v1_9/v82.go
+@@ -11,7 +11,7 @@ import (
+ 	"forgejo.org/modules/git"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func FixReleaseSha1OnReleaseTable(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v83.go b/models/gitea_migrations/v1_9/v83.go
+index 9640564a44..34a1690827 100644
+--- a/models/gitea_migrations/v1_9/v83.go
++++ b/models/gitea_migrations/v1_9/v83.go
+@@ -6,7 +6,7 @@ package v1_9
+ import (
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddUploaderIDForAttachment(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v84.go b/models/gitea_migrations/v1_9/v84.go
+index 423915ae57..c9ff02eb35 100644
+--- a/models/gitea_migrations/v1_9/v84.go
++++ b/models/gitea_migrations/v1_9/v84.go
+@@ -4,7 +4,7 @@
+ package v1_9
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddGPGKeyImport(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v85.go b/models/gitea_migrations/v1_9/v85.go
+index acb0316c32..f80bb442e0 100644
+--- a/models/gitea_migrations/v1_9/v85.go
++++ b/models/gitea_migrations/v1_9/v85.go
+@@ -11,7 +11,7 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func HashAppToken(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v86.go b/models/gitea_migrations/v1_9/v86.go
+index 9464ff0cf6..ac226b2e69 100644
+--- a/models/gitea_migrations/v1_9/v86.go
++++ b/models/gitea_migrations/v1_9/v86.go
+@@ -4,7 +4,7 @@
+ package v1_9
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddHTTPMethodToWebhook(x *xorm.Engine) error {
+diff --git a/models/gitea_migrations/v1_9/v87.go b/models/gitea_migrations/v1_9/v87.go
+index 81a4ebf80d..3b4fa2f271 100644
+--- a/models/gitea_migrations/v1_9/v87.go
++++ b/models/gitea_migrations/v1_9/v87.go
+@@ -4,7 +4,7 @@
+ package v1_9
+ 
+ import (
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func AddAvatarFieldToRepository(x *xorm.Engine) error {
+diff --git a/models/issues/issue_search.go b/models/issues/issue_search.go
+index a8644758ce..f96eea2e17 100644
+--- a/models/issues/issue_search.go
++++ b/models/issues/issue_search.go
+@@ -17,8 +17,8 @@ import (
+ 	"forgejo.org/modules/container"
+ 	"forgejo.org/modules/optional"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // IssuesOptions represents options of an issue.
+diff --git a/models/issues/issue_stats.go b/models/issues/issue_stats.go
+index 03660803a4..17be646af4 100644
+--- a/models/issues/issue_stats.go
++++ b/models/issues/issue_stats.go
+@@ -9,8 +9,8 @@ import (
+ 
+ 	"forgejo.org/models/db"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // IssueStats represents issue statistic information.
+diff --git a/models/issues/pull_list.go b/models/issues/pull_list.go
+index 10e39c6a49..9fcef3b715 100644
+--- a/models/issues/pull_list.go
++++ b/models/issues/pull_list.go
+@@ -16,7 +16,7 @@ import (
+ 	"forgejo.org/modules/log"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // PullRequestsOptions holds the options for PRs
+diff --git a/models/issues/tracked_time.go b/models/issues/tracked_time.go
+index 54173681bd..491d073edb 100644
+--- a/models/issues/tracked_time.go
++++ b/models/issues/tracked_time.go
+@@ -15,8 +15,8 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // TrackedTime represents a time that was spent for a specific issue.
+diff --git a/models/packages/package.go b/models/packages/package.go
+index c06dcf5eb3..8c9a916059 100644
+--- a/models/packages/package.go
++++ b/models/packages/package.go
+@@ -12,8 +12,8 @@ import (
+ 	"forgejo.org/models/db"
+ 	"forgejo.org/modules/util"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ func init() {
+diff --git a/models/repo/repo_unit.go b/models/repo/repo_unit.go
+index 2cde375775..8846c142b0 100644
+--- a/models/repo/repo_unit.go
++++ b/models/repo/repo_unit.go
+@@ -17,8 +17,8 @@ import (
+ 	"forgejo.org/modules/timeutil"
+ 	"forgejo.org/modules/util"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/convert"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/convert"
+ )
+ 
+ // ErrUnitTypeNotExist represents a "UnitTypeNotExist" kind of error.
+diff --git a/models/unittest/fault_injector.go b/models/unittest/fault_injector.go
+index 20a40cce45..e83db6c7fe 100644
+--- a/models/unittest/fault_injector.go
++++ b/models/unittest/fault_injector.go
+@@ -6,7 +6,7 @@ import (
+ 	"context"
+ 	"errors"
+ 
+-	"xorm.io/xorm/contexts"
++	"code.forgejo.org/xorm/xorm/contexts"
+ )
+ 
+ var (
+diff --git a/models/unittest/fault_injector_test.go b/models/unittest/fault_injector_test.go
+index 7b1e601d51..15b3437b04 100644
+--- a/models/unittest/fault_injector_test.go
++++ b/models/unittest/fault_injector_test.go
+@@ -5,8 +5,8 @@ package unittest
+ import (
+ 	"testing"
+ 
++	"code.forgejo.org/xorm/xorm/contexts"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/contexts"
+ )
+ 
+ func TestFaultInjector(t *testing.T) {
+diff --git a/models/unittest/fixtures.go b/models/unittest/fixtures.go
+index 0019ae147b..e7c4aa7105 100644
+--- a/models/unittest/fixtures.go
++++ b/models/unittest/fixtures.go
+@@ -15,8 +15,8 @@ import (
+ 	"forgejo.org/modules/container"
+ 	"forgejo.org/modules/setting"
+ 
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ var fixturesLoader *loader
+diff --git a/models/unittest/testdb.go b/models/unittest/testdb.go
+index c926a85df6..d2959fa43c 100644
+--- a/models/unittest/testdb.go
++++ b/models/unittest/testdb.go
+@@ -24,9 +24,9 @@ import (
+ 	"forgejo.org/modules/util"
+ 	"forgejo.org/services/stats"
+ 
++	"code.forgejo.org/xorm/xorm"
++	"code.forgejo.org/xorm/xorm/names"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+-	"xorm.io/xorm/names"
+ )
+ 
+ // giteaRoot a path to the gitea root
+diff --git a/models/user/moderation.go b/models/user/moderation.go
+index fe8eef1806..450c5e30ed 100644
+--- a/models/user/moderation.go
++++ b/models/user/moderation.go
+@@ -13,7 +13,7 @@ import (
+ 	"forgejo.org/modules/json"
+ 	"forgejo.org/modules/timeutil"
+ 
+-	"xorm.io/xorm/names"
++	"code.forgejo.org/xorm/xorm/names"
+ )
+ 
+ // UserData represents a trimmed down user that is used for preserving
+diff --git a/models/user/search.go b/models/user/search.go
+index 25c23a3740..54a1ac0dfe 100644
+--- a/models/user/search.go
++++ b/models/user/search.go
+@@ -13,8 +13,8 @@ import (
+ 	"forgejo.org/modules/optional"
+ 	"forgejo.org/modules/structs"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"xorm.io/builder"
+-	"xorm.io/xorm"
+ )
+ 
+ // SearchUserOptions contains the options for searching
+diff --git a/modules/optional/option.go b/modules/optional/option.go
+index 2793f985e8..fcaaabec16 100644
+--- a/modules/optional/option.go
++++ b/modules/optional/option.go
+@@ -9,7 +9,7 @@ import (
+ 	"reflect"
+ 	"strconv"
+ 
+-	"xorm.io/xorm/schemas"
++	"code.forgejo.org/xorm/xorm/schemas"
+ )
+ 
+ type Option[T any] []T
+diff --git a/modules/setting/database.go b/modules/setting/database.go
+index 4299044d1f..112029e694 100644
+--- a/modules/setting/database.go
++++ b/modules/setting/database.go
+@@ -14,7 +14,7 @@ import (
+ 	"strings"
+ 	"time"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ var (
+diff --git a/routers/common/db.go b/routers/common/db.go
+index 09c2c4072e..1c2bac41c1 100644
+--- a/routers/common/db.go
++++ b/routers/common/db.go
+@@ -15,7 +15,7 @@ import (
+ 	"forgejo.org/modules/setting"
+ 	"forgejo.org/modules/setting/config"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ // InitDBEngine In case of problems connecting to DB, retry connection. Eg, PGSQL in Docker Container on Synology
+diff --git a/routers/web/admin/auths.go b/routers/web/admin/auths.go
+index e03fea9da2..891df52843 100644
+--- a/routers/web/admin/auths.go
++++ b/routers/web/admin/auths.go
+@@ -25,7 +25,7 @@ import (
+ 	"forgejo.org/services/context"
+ 	"forgejo.org/services/forms"
+ 
+-	"xorm.io/xorm/convert"
++	"code.forgejo.org/xorm/xorm/convert"
+ )
+ 
+ const (
+diff --git a/services/doctor/dbversion.go b/services/doctor/dbversion.go
+index c032a2c488..a06150288a 100644
+--- a/services/doctor/dbversion.go
++++ b/services/doctor/dbversion.go
+@@ -10,7 +10,7 @@ import (
+ 	"forgejo.org/models/gitea_migrations"
+ 	"forgejo.org/modules/log"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ func checkDBVersion(ctx context.Context, logger log.Logger, autofix bool) error {
+diff --git a/services/packages/debian/repository.go b/services/packages/debian/repository.go
+index e84ae45ebe..9aeef004c0 100644
+--- a/services/packages/debian/repository.go
++++ b/services/packages/debian/repository.go
+@@ -24,12 +24,12 @@ import (
+ 	"forgejo.org/modules/util"
+ 	packages_service "forgejo.org/services/packages"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/ProtonMail/go-crypto/openpgp"
+ 	"github.com/ProtonMail/go-crypto/openpgp/armor"
+ 	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
+ 	"github.com/ProtonMail/go-crypto/openpgp/packet"
+ 	"github.com/ulikunitz/xz"
+-	"xorm.io/xorm"
+ )
+ 
+ // GetOrCreateRepositoryVersion gets or creates the internal repository package
+diff --git a/services/packages/packages.go b/services/packages/packages.go
+index c75b4559c8..f6ad824cb2 100644
+--- a/services/packages/packages.go
++++ b/services/packages/packages.go
+@@ -24,7 +24,7 @@ import (
+ 	"forgejo.org/modules/storage"
+ 	notify_service "forgejo.org/services/notify"
+ 
+-	"xorm.io/xorm"
++	"code.forgejo.org/xorm/xorm"
+ )
+ 
+ var (
+diff --git a/services/stats/stats_test.go b/services/stats/stats_test.go
+index cf86eeaf10..eaceddbbe5 100644
+--- a/services/stats/stats_test.go
++++ b/services/stats/stats_test.go
+@@ -13,9 +13,9 @@ import (
+ 	"forgejo.org/modules/optional"
+ 	"forgejo.org/modules/timeutil"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ func TestQueueAndFlush(t *testing.T) {
+diff --git a/tests/e2e/declare_repos_test.go b/tests/e2e/declare_repos_test.go
+index ce1e04bb4e..9296f81bfc 100644
+--- a/tests/e2e/declare_repos_test.go
++++ b/tests/e2e/declare_repos_test.go
+@@ -25,9 +25,9 @@ import (
+ 	"forgejo.org/services/wiki"
+ 	"forgejo.org/tests/forgery"
+ 
++	"code.forgejo.org/xorm/xorm/convert"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/convert"
+ )
+ 
+ // first entry represents filename
+diff --git a/tests/forgery/repo.go b/tests/forgery/repo.go
+index bfa0a51681..4045bde657 100644
+--- a/tests/forgery/repo.go
++++ b/tests/forgery/repo.go
+@@ -15,8 +15,8 @@ import (
+ 	repo_service "forgejo.org/services/repository"
+ 	wiki_service "forgejo.org/services/wiki"
+ 
++	"code.forgejo.org/xorm/xorm/convert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/convert"
+ )
+ 
+ type CreateRepositoryOptions struct {
+diff --git a/tests/integration/migration-test/migration_test.go b/tests/integration/migration-test/migration_test.go
+index 58d525a8f7..98887c3493 100644
+--- a/tests/integration/migration-test/migration_test.go
++++ b/tests/integration/migration-test/migration_test.go
+@@ -29,10 +29,10 @@ import (
+ 	"forgejo.org/modules/util"
+ 	"forgejo.org/tests"
+ 
++	"code.forgejo.org/xorm/xorm"
+ 	_ "github.com/jackc/pgx/v5/stdlib" // Import pgx driver
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm"
+ )
+ 
+ var currentEngine *xorm.Engine
+diff --git a/tests/test_utils.go b/tests/test_utils.go
+index 8314e8c58a..57c9c9bcd6 100644
+--- a/tests/test_utils.go
++++ b/tests/test_utils.go
+@@ -43,8 +43,8 @@ import (
+ 	files_service "forgejo.org/services/repository/files"
+ 	"forgejo.org/tests/forgery"
+ 
++	"code.forgejo.org/xorm/xorm/convert"
+ 	"github.com/stretchr/testify/require"
+-	"xorm.io/xorm/convert"
+ 
+ 	_ "github.com/jackc/pgx/v5/stdlib" // Import pgx driver
+ )

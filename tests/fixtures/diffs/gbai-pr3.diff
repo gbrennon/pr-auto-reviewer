@@ -1,0 +1,1401 @@
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..a548661
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,31 @@
++# AI Review Template - Environment Configuration
++
++# === Required Secrets (add in Forgejo repo Settings → Secrets) ===
++
++# Codeberg Personal Access Token with repo scope
++CODEBERG_TOKEN=your-codeberg-pat-here
++
++# Codeberg repository owner (username or organization)
++REPO_OWNER=your-username
++
++# Codeberg repository name
++REPO_NAME=your-repo-name
++
++# === Optional Environment Variables ===
++
++# Polling interval (cron expression)
++# Default: */10 * * * * (every 10 minutes)
++POLLING_CRON=*/10 * * * *
++
++# Ollama host URL
++# For podman: http://host.containers.internal:11434
++# For docker: http://host.docker.internal:11434
++OLLAMA_HOST=http://host.containers.internal:11434
++
++# Ollama model to use
++# Must be pulled locally: ollama pull deepseek-coder:6.7b
++OLLAMA_MODEL=deepseek-coder:6.7b
++
++# Path to JSON state file (acts as database)
++# Default: /data/reviewed_prs.json (in runner volume)
++DB_PATH=/data/reviewed_prs.json
+\ No newline at end of file
+diff --git a/.forgejo/actions/install-bashunit/action.yml b/.forgejo/actions/install-bashunit/action.yml
+new file mode 100644
+index 0000000..df1f725
+--- /dev/null
++++ b/.forgejo/actions/install-bashunit/action.yml
+@@ -0,0 +1,10 @@
++name: Install bashunit
++description: Installs the bashunit testing framework
++
++runs:
++  using: composite
++  steps:
++    - name: Install bashunit
++      shell: bash
++      run: |
++        curl -s https://bashunit.typeddevs.com/install.sh | bash
+\ No newline at end of file
+diff --git a/.forgejo/actions/run-tests/action.yml b/.forgejo/actions/run-tests/action.yml
+new file mode 100644
+index 0000000..6414abb
+--- /dev/null
++++ b/.forgejo/actions/run-tests/action.yml
+@@ -0,0 +1,96 @@
++name: Run tests with coverage
++description: Runs bashunit tests and enforces minimum coverage threshold
++
++inputs:
++  min-coverage:
++    description: Minimum coverage percentage
++    required: false
++    default: '60'
++
++runs:
++  using: composite
++  steps:
++    - name: Install bashunit
++      shell: bash
++      run: |
++        curl -s https://bashunit.typeddevs.com/install.sh | bash
++
++    - name: Run tests
++      shell: bash
++      run: |
++        ./lib/bashunit test
++
++    - name: Check coverage threshold
++      shell: bash
++      run: |
++        MIN_COVERAGE="${{ inputs.min-coverage }}"
++        DB_FILE="coverage/lcov.info"
++
++        if [ ! -f "$DB_FILE" ]; then
++          echo "WARNING: No lcov.info found — skipping coverage check"
++          exit 0
++        fi
++
++        TOTAL=$(grep -c '^DA:' "$DB_FILE" || true)
++        COVERED=$(grep '^DA:' "$DB_FILE" | awk -F',' '$2 > 0' | wc -l || true)
++
++        if [ "$TOTAL" -eq 0 ]; then
++          echo "WARNING: No coverage data found in lcov.info — skipping check"
++          echo "File content:"
++          cat "$DB_FILE"
++          exit 0
++        fi
++
++        COVERAGE=$(( (COVERED * 100) / TOTAL ))
++
++        echo ""
++        echo "=== Coverage Result ==="
++        echo "Lines covered:    ${COVERED}/${TOTAL}"
++        echo "Actual coverage:  ${COVERAGE}%"
++        echo "Minimum required: ${MIN_COVERAGE}%"
++
++        echo ""
++        echo "=== Per-File Coverage ==="
++        awk -F':' '
++          /^SF:/ { file=$2; files[file]=1 }
++          /^DA:/ {
++            split($2, a, ",");
++            if (a[2] > 0) covered[file]++;
++            total[file]++
++          }
++          END {
++            for (f in files) {
++              pct = (total[f] > 0) ? int((covered[f] * 100) / total[f]) : 0
++              if (pct < '"$MIN_COVERAGE"') {
++                printf "FAIL: %s (%d/%d lines = %d%%)\n", f, covered[f]+0, total[f]+0, pct
++              } else {
++                printf "PASS: %s (%d/%d lines = %d%%)\n", f, covered[f]+0, total[f]+0, pct
++              }
++            }
++          }
++        ' "$DB_FILE"
++        echo "========================="
++
++        if [ "$COVERAGE" -lt "$MIN_COVERAGE" ]; then
++          echo ""
++          echo "ERROR: Coverage ${COVERAGE}% is below minimum ${MIN_COVERAGE}%"
++          echo "FAILED FILES:"
++          awk -F':' '
++            /^SF:/ { file=$2; files[file]=1 }
++            /^DA:/ {
++              split($2, a, ",");
++              if (a[2] > 0) covered[file]++;
++              total[file]++
++            }
++            END {
++              for (f in files) {
++                pct = (total[f] > 0) ? int((covered[f] * 100) / total[f]) : 0
++                if (pct < '"$MIN_COVERAGE"') {
++                  printf "  - %s: %d%%\n", f, pct
++                }
++              }
++            }
++          ' "$DB_FILE"
++          exit 1
++        fi
++        echo "[PASS] Coverage check passed!"
+diff --git a/.forgejo/actions/setup-bashunit-env/action.yml b/.forgejo/actions/setup-bashunit-env/action.yml
+new file mode 100644
+index 0000000..2a1670a
+--- /dev/null
++++ b/.forgejo/actions/setup-bashunit-env/action.yml
+@@ -0,0 +1,19 @@
++name: Setup bashunit env
++description: Creates a .env file with BASHUNIT_ARGS for bashunit
++
++inputs:
++  args:
++    description: Arguments to pass to bashunit
++    required: false
++    default: ""
++
++runs:
++  using: composite
++  steps:
++    - name: Create .env file
++      shell: bash
++      run: |
++        if [ -n "${{ inputs.args }}" ]; then
++          echo "BASHUNIT_ARGS=${{ inputs.args }}" > .env
++        fi
++        cat .env
+\ No newline at end of file
+diff --git a/.forgejo/workflows/test.yml b/.forgejo/workflows/test.yml
+new file mode 100644
+index 0000000..ee46254
+--- /dev/null
++++ b/.forgejo/workflows/test.yml
+@@ -0,0 +1,22 @@
++name: Test
++
++on:
++  push:
++    branches:
++      - main
++
++  pull_request:
++    branches:
++      - main
++
++jobs:
++  test:
++    runs-on: codeberg-small
++    steps:
++      - name: Checkout repository
++        uses: actions/checkout@v4
++
++      - name: Run tests with coverage
++        uses: ./.forgejo/actions/run-tests
++        with:
++          min-coverage: 60
+\ No newline at end of file
+diff --git a/.gitignore b/.gitignore
+index 4c49bd7..e90e8af 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1 +1,3 @@
+ .env
++lib/bashunit
++coverage/
+diff --git a/docs/01-mirror-codeberg.md b/docs/01-mirror-codeberg.md
+new file mode 100644
+index 0000000..797791c
+--- /dev/null
++++ b/docs/01-mirror-codeberg.md
+@@ -0,0 +1,93 @@
++# Mirror Codeberg Repo to Local Forgejo
++
++This guide explains how to mirror a Codeberg repository to your local Forgejo instance so the AI reviewer can access PRs.
++
++## Prerequisites
++
++- Access to local Forgejo at `http://localhost:1234`
++- Admin or user permissions to create repositories
++
++## Option 1: Via Local Forgejo UI (Recommended)
++
++### Step 1: Create Mirrored Repository
++
++1. Go to your local Forgejo: `http://localhost:1234`
++2. Click **+** → **New Repository**
++3. Fill in:
++   - **Repository Name**: `my-repo` (or your preferred name)
++   - **Repository Owner**: your user/org
++   - Check **Mirror repository**
++4. In **Clone URL**, enter your Codeberg repository:
++   ```
++   https://codeberg.org/<username>/<repo-name>.git
++   ```
++5. Set **Sync Interval** to your preference (default: hourly)
++6. Click **Create Repository**
++
++### Step 2: Trigger Initial Sync
++
++1. After creation, go to repo **Settings** → **Repository** (or **Mirroring**)
++2. Click **Sync Now** to trigger immediate sync
++3. Wait a few minutes for initial clone
++
++### Step 3: Verify Sync
++
++1. On repo main page, check the last updated time displayed
++2. Go to **Settings** → **Repository** → **Mirroring** to see sync status
++
++## Option 2: Via Forgejo API
++
++```bash
++# Replace with your values
++FORGEJO_URL="http://localhost:1234"
++ADMIN_USER="your-username"
++ADMIN_TOKEN="your-admin-token"
++CODEBERG_REPO="https://codeberg.org/username/repo.git"
++REPO_NAME="repo-name"
++
++curl -X POST "$FORGEJO_URL/api/v1/user/repos" \
++  -H "Authorization: token $ADMIN_TOKEN" \
++  -H "Content-Type: application/json" \
++  -d '{
++    "name": "'"$REPO_NAME"'",
++    "mirror": true,
++    "repo_url": "'"$CODEBERG_REPO"'",
++    "sync_interval": 3600
++  }'
++```
++
++## Syncing PRs from Codeberg
++
++By default, mirrors sync commits and branches. **Pull requests** are synced when:
++
++1. **Enable PR mirroring** in Codeberg repo settings:
++   - Go to Codeberg → Your Repo → Settings → Repository
++   - Enable "Mirror repository" (if not already)
++   - Note: Codeberg push mirroring requires your local Forgejo to be publicly reachable
++
++2. **Alternative**: The AI reviewer fetches PR data directly from Codeberg API (see next section)
++
++## Important: How AI Reviewer Accesses PRs
++
++The AI reviewer workflow fetches PR data from **Codeberg API directly**, not from the local mirror. This ensures:
++
++- Always gets latest PR state
++- Can post comments back to Codeberg PR
++- No dependency on mirror syncing PRs
++
++You still need to mirror the repo to keep local commits in sync, but PR review happens via Codeberg API.
++
++## Configuring Repo in AI Reviewer
++
++After mirroring, configure the AI reviewer (see [AI Reviewer Setup](02-ai-reviewer.md)):
++
++- `REPO_OWNER`: The Codeberg username/org
++- `REPO_NAME`: The Codeberg repo name
++
++## Troubleshooting
++
++- **Sync not working**: Check that the Clone URL is correct and accessible
++- **PRs not appearing**: PRs may not auto-sync via pull mirroring; the workflow fetches from Codeberg API instead
++- **Permission denied**: Ensure your Forgejo user has repo creation permissions
++
++For more help, see [Troubleshooting](03-troubleshooting.md).
+\ No newline at end of file
+diff --git a/docs/02-ai-reviewer.md b/docs/02-ai-reviewer.md
+new file mode 100644
+index 0000000..25d7172
+--- /dev/null
++++ b/docs/02-ai-reviewer.md
+@@ -0,0 +1,154 @@
++# AI Reviewer Setup
++
++Automated AI code review using local Ollama. Runs on local Forgejo Actions, posts reviews to Codeberg PRs.
++
++## Prerequisites
++
++### 1. Ollama Running
++
++Ensure Ollama is accessible. If using the gb-ollama-container:
++
++```bash
++cd ~/repos/gbrennon/gb-ollama-container
++docker compose up -d
++```
++
++The default host is `http://host.containers.internal:11434` (for podman).
++
++### 2. Pull the Model
++
++```bash
++ollama pull deepseek-coder:6.7b
++```
++
++Or use a different model and update `OLLAMA_MODEL` in workflow.
++
++### 3. Codeberg Personal Access Token
++
++1. Go to Codeberg → Settings → Applications → Generate new token
++2. Scopes: `repo` (full repo access)
++3. Copy the token
++
++## Configuration
++
++### Secrets (Forgejo Repo Settings → Secrets)
++
++Add these secrets to your local Forgejo repository:
++
++| Secret | Description | Example |
++|--------|-------------|---------|
++| `CODEBERG_TOKEN` | Codeberg PAT with `repo` scope | `b3b...xxx` |
++| `REPO_OWNER` | Codeberg user or org | `myusername` |
++| `REPO_NAME` | Codeberg repository name | `my-project` |
++
++### Environment Variables (Optional)
++
++Configure via workflow inputs or default values:
++
++| Variable | Description | Default |
++|----------|-------------|---------|
++| `POLLING_CRON` | Cron expression for polling | `*/10 * * * *` (every 10 min) |
++| `OLLAMA_HOST` | Ollama API endpoint | `http://host.containers.internal:11434` |
++| `OLLAMA_MODEL` | Model to use | `deepseek-coder:6.7b` |
++| `DB_PATH` | Path to JSON state file | `/data/reviewed_prs.json` |
++
++## Workflow Behavior
++
++### 1. Trigger
++- Runs automatically every 10 minutes (configurable via `POLLING_CRON`)
++- Also runs on `push` events to trigger immediate review
++
++### 2. Fetch Open PRs
++- Calls Codeberg API: `GET /repos/{owner}/{repo}/pulls?state=open`
++
++### 3. Check for New Commits
++- Loads reviewed PRs from JSON state file (`DB_PATH`)
++- For each open PR:
++  - Gets PR's latest commit SHA
++  - If SHA matches last reviewed → skip (no new commits)
++  - If SHA changed or new → proceed to review
++
++### 4. Get Diff & Review
++- Fetches PR diff: `GET /repos/{owner}/{repo}/pulls/{number}.diff`
++- Sends diff to Ollama with review prompt
++- Parses response
++
++### 5. Post Review Comment
++- Posts comment to Codeberg PR: `POST /repos/{owner}/{repo}/issues/{number}/comments`
++- Updates JSON state file with:
++  ```json
++  {
++    "pr_number": 5,
++    "reviewed_at": "2024-01-15T10:30:00Z",
++    "commit_sha": "abc123..."
++  }
++  ```
++
++### 6. Idempotency
++- Same PR with same commit SHA → skipped
++- New commit on existing PR → re-reviewed
++- New PR → reviewed
++
++## Idempotency & State Management
++
++The workflow maintains a JSON "database" at `DB_PATH` (default: `/data/reviewed_prs.json`):
++
++```json
++{
++  "repo": "my-project",
++  "owner": "myusername",
++  "reviewed_prs": [
++    {
++      "number": 1,
++      "commit_sha": "abc123def",
++      "reviewed_at": "2024-01-15T10:30:00Z"
++    },
++    {
++      "number": 2,
++      "commit_sha": "xyz789uvw",
++      "reviewed_at": "2024-01-15T11:00:00Z"
++    }
++  ]
++}
++```
++
++**Logic:**
++1. Load existing state from JSON file
++2. For each open PR, compare current `head.sha` with stored `commit_sha`
++3. Match → no new commits, skip
++4. Mismatch or new → run review, update state
++
++**Note:** The JSON file is stored in the runner's workspace. For persistence across runs, ensure the runner uses a mounted volume.
++
++## Customization
++
++### Change Polling Interval
++
++Edit `POLLING_CRON` in workflow:
++
++```yaml
++env:
++  POLLING_CRON: '*/30 * * * *'  # Every 30 minutes
++```
++
++### Change Model
++
++```yaml
++env:
++  OLLAMA_MODEL: 'codellama:7b'
++```
++
++### Add Review Criteria
++
++Edit the `prompt` section in workflow.yml to customize what the AI focuses on.
++
++## Testing
++
++1. Create a test PR on Codeberg
++2. Wait for next poll (or push to trigger workflow)
++3. Check PR comments for AI review
++4. Verify state file updates: look for `reviewed_prs.json` in runner logs
++
++## Troubleshooting
++
++See [Troubleshooting](03-troubleshooting.md) for common issues.
+\ No newline at end of file
+diff --git a/docs/03-troubleshooting.md b/docs/03-troubleshooting.md
+new file mode 100644
+index 0000000..143a6ef
+--- /dev/null
++++ b/docs/03-troubleshooting.md
+@@ -0,0 +1,174 @@
++# Troubleshooting
++
++Common issues with the AI reviewer workflow.
++
++## Workflow Not Running
++
++### Check if workflow is enabled
++1. Go to local Forgejo → Repo → Settings → Actions
++2. Enable Actions if needed
++3. Verify workflow file is in `.forgejo/workflows/`
++
++### Check runner status
++```bash
++docker compose logs forgejo-runner
++```
++
++## Ollama Connection Failed
++
++### Error: `Connection refused` or `Cannot connect to Ollama`
++
++**Cause:** Ollama not reachable from runner container
++
++**Solutions:**
++
++1. **For podman**, use `host.containers.internal`:
++   ```yaml
++   env:
++     OLLAMA_HOST: http://host.containers.internal:11434
++   ```
++
++2. **For docker**, use `host.docker.internal`:
++   ```yaml
++   env:
++     OLLAMA_HOST: http://host.docker.internal:11434
++   ```
++
++3. **Verify Ollama is running**:
++   ```bash
++   curl http://localhost:11434/api/tags
++   ```
++
++4. **Check container network**:
++   - Ensure runner can reach the host
++   - For podman, add `--network=host` to runner or use podman-specific DNS
++
++## Model Not Found
++
++### Error: `model 'deepseek-coder:6.7b' not found`
++
++**Solution:**
++```bash
++# Pull the model on the host running Ollama
++ollama pull deepseek-coder:6.7b
++
++# Or update workflow to use available model
++env:
++  OLLAMA_MODEL: 'codellama:7b'
++```
++
++## Codeberg API Errors
++
++### Error: `401 Unauthorized` or `403 Forbidden`
++
++**Cause:** Invalid or insufficient `CODEBERG_TOKEN`
++
++**Solutions:**
++
++1. Verify token has `repo` scope
++2. Check token hasn't expired
++3. Ensure token is added as secret in Forgejo repo
++
++### Error: `404 Not Found`
++
++**Cause:** Incorrect `REPO_OWNER` or `REPO_NAME`
++
++**Verify:**
++- `REPO_OWNER` matches Codeberg username/org exactly
++- `REPO_NAME` matches repo name exactly (case-sensitive)
++
++## Duplicate Reviews
++
++### AI reviews same PR multiple times
++
++**Cause:** State file not persisting between runs
++
++**Solutions:**
++
++1. Ensure runner has persistent volume mounted
++2. Check `DB_PATH` points to mounted volume path
++3. Verify workflow writes to the file (check logs)
++
++### State file path not persisting
++
++Default `/data/` may be ephemeral. Ensure in docker-compose:
++
++```yaml
++forgejo-runner:
++  volumes:
++    - forgejo_runner_data:/data  # Already configured
++```
++
++The workflow should use `/data/` for state.
++
++## PR Skipped Unexpectedly
++
++### No new commits but review wanted
++
++**Check:**
++1. Look at workflow logs for skip reason
++2. Verify commit SHA in API response
++3. Check JSON state file for stored SHA
++
++### Force re-review
++
++Manually edit the JSON state file to remove the PR entry, or delete the file (will re-review all PRs).
++
++## Workflow Takes Too Long
++
++### Slow model inference
++
++**Options:**
++1. Use smaller model: `deepseek-coder:6.7b` → `codellama:7b`
++2. Limit diff size: Add filter to skip large PRs
++3. Adjust timeout in workflow
++
++### Too many PRs
++
++Add limit to process only first N PRs:
++
++```yaml
++- name: Process PRs
++  run: |
++    # Process only first 5 PRs
++    echo "$PRS" | jq '.[:5]'
++```
++
++## Debugging Tips
++
++### View workflow logs
++
++1. Go to local Forgejo → Repo → Actions
++2. Click on latest run
++3. Expand each step to see output
++
++### Add debug output
++
++Edit workflow.yml, add:
++
++```yaml
++- name: Debug
++  run: |
++    echo "PRs: $PRS"
++    echo "State: $STATE"
++```
++
++### Test API manually
++
++```bash
++# Test Codeberg API
++curl -H "Authorization: token $CODEBERG_TOKEN" \
++  "https://codeberg.org/api/v1/repos/OWNER/REPO/pulls"
++
++# Test Ollama
++curl http://localhost:11434/api/tags
++```
++
++## Getting Help
++
++If issues persist:
++
++1. Check workflow logs for specific error messages
++2. Verify all secrets are correctly configured
++3. Ensure Ollama is accessible from runner container
++4. Test APIs manually with curl
+\ No newline at end of file
+diff --git a/docs/04-testing.md b/docs/04-testing.md
+new file mode 100644
+index 0000000..599edc9
+--- /dev/null
++++ b/docs/04-testing.md
+@@ -0,0 +1,297 @@
++# Testing Guide
++
++This document describes the testing infrastructure for the ai-review-template project using bashunit.
++
++## Table of Contents
++
++- [Overview](#overview)
++- [Running Tests](#running-tests)
++- [Test Structure](#test-structure)
++- [Test Patterns](#test-patterns)
++- [Writing Tests](#writing-tests)
++- [Coverage](#coverage)
++- [Forgejo Workflow](#forgejo-workflow)
++
++## Overview
++
++The project uses [bashunit](https://bashunit.typeddevs.com/) for testing shell scripts. Tests are organized in `tests/scripts/` mirroring the `scripts/` directory structure.
++
++### Tech Stack
++
++- **Testing Framework**: bashunit 0.34.1
++- **Test Types**: Unit tests (using mocks/spies) and integration tests (subprocess execution)
++- **Coverage**: Line coverage tracking via bashunit
++
++## Running Tests
++
++### Run All Tests
++
++```bash
++./lib/bashunit test
++```
++
++### Run Specific Test File
++
++```bash
++./lib/bashunit test tests/scripts/lib/api_test.sh
++```
++
++### Run with Coverage
++
++```bash
++./lib/bashunit test
++# Coverage report is generated at coverage/lcov.info
++```
++
++## Test Structure
++
++```
++tests/scripts/
++├── lib/
++│   ├── api_test.sh        # Tests for api.sh functions
++│   └── check_env_test.sh  # Tests for check-env.sh functions
++└── scripts_test.sh        # Integration tests for main scripts
++```
++
++### Test File Naming
++
++- Test files follow the pattern: `{source_file}_test.sh`
++- Test functions follow the pattern: `test_{function_name}_{scenario}`
++
++## Test Patterns
++
++### Unit Tests with Mocks
++
++Use `bashunit::mock` to replace external dependencies (curl, jq, etc.):
++
++```bash
++test_example_function() {
++  # Mock curl to return predefined response
++  bashunit::mock curl <<< '{"mocked": true}'
++  
++  # Call the function under test
++  local result
++  result=$(get_open_pulls)
++  
++  # Assert expected behavior
++  assert_not_equals "" "$result"
++}
++```
++
++### Unit Tests with Spies
++
++Use `bashunit::spy` to verify function calls:
++
++```bash
++test_function_calls_curl() {
++  bashunit::spy curl
++  
++  get_open_pulls
++  
++  # Verify curl was called
++  assert_have_been_called curl
++}
++```
++
++### Integration Tests
++
++Run scripts as subprocesses for end-to-end testing:
++
++```bash
++test_script_execution() {
++  local tmpdir
++  tmpdir=$(mktemp -d)
++  
++  # Create test data
++  echo '{"reviewed_prs":[]}' > "$tmpdir/state.json"
++  
++  # Execute script as subprocess
++  local result
++  result=$(DB_FILE="$tmpdir/state.json" bash "$SCRIPTS_DIR/load-state.sh")
++  
++  # Assert output
++  assert_equals '{"reviewed_prs":[]}' "$result"
++  
++  rm -rf "$tmpdir"
++}
++```
++
++## Writing Tests
++
++### 1. Source the Script Under Test
++
++```bash
++SCRIPTS_DIR=/path/to/ai-review-template/scripts
++
++# For unit tests - source the library
++source "$SCRIPTS_DIR/lib/api.sh"
++source "$SCRIPTS_DIR/lib/check-env.sh"
++
++# Set required environment variables
++export CODEBERG_TOKEN=test_token
++export REPO_OWNER=test_owner
++export REPO_NAME=test_repo
++```
++
++### 2. Use Appropriate Assertions
++
++| Assertion | Use Case |
++|-----------|----------|
++| `assert_equals "expected" "$actual"` | Exact string match |
++| `assert_not_equals "expected" "$actual"` | Strings are different |
++| `assert_true <command>` | Command returns success (exit 0) |
++| `assert_false <command>` | Command returns failure (exit non-0) |
++| `assert_not_equals "" "$result"` | Result is not empty |
++| `assert_have_been_called <spy>` | Spy was invoked |
++| `assert_have_been_called_with <spy> <args>` | Spy called with specific args |
++
++### 3. Test Naming Convention
++
++```bash
++# Function: get_open_pulls
++test_get_open_pulls_returns_json()          # Happy path
++test_get_open_pulls_mocks_curl()            # With mock
++test_get_open_pulls_spy()                   # With spy
++test_get_open_pulls_handles_empty_response() # Edge case
++
++# Function: check_required_vars
++test_check_env_all_defined()                 # All vars present
++test_check_env_single_missing()              # One missing
++test_check_env_multiple_missing()            # Multiple missing
++```
++
++### 4. Clean Up Resources
++
++```bash
++test_example() {
++  local tmpdir
++  tmpdir=$(mktemp -d)
++  
++  # ... test logic ...
++  
++  # Always clean up
++  rm -rf "$tmpdir"
++}
++```
++
++## Coverage
++
++### Current Coverage
++
++```
++scripts/lib/api.sh       10/16 lines (62%) [OK]
++scripts/lib/check-env.sh  5/9 lines (55%) [WARN]
++---------------------------
++Total: 15/25 (60%) [OK]
++```
++
++### Coverage Notes
++
++- **Green** (≥60%): Meets project threshold
++- **Yellow** (50-59%): Below target but acceptable
++- **Red** (<50%): Needs improvement
++
++### Understanding Coverage
++
++bashunit tracks line coverage for library scripts that are **sourced** into the test:
++
++- **scripts/lib/api.sh (62%)**: `codeberg_api`, `get_open_pulls`, `get_pull_diff`, `post_issue_comment` functions tested via mocks/spies
++- **scripts/lib/check-env.sh (55%)**: `check_required_vars` function tested with various edge cases
++
++### Coverage Limitation
++
++bashunit only tracks coverage for scripts that are **sourced** (`. script.sh`), not executed as subprocesses (`bash script.sh`). Integration tests in `scripts_test.sh` run scripts as subprocesses so don't contribute to line coverage.
++
++### Target Note
++
++The 90% coverage target may not be achievable due to:
++1. Integration tests running scripts as subprocesses (not tracked)
++2. Mocking `curl` prevents coverage on some lines (expected behavior)
++
++Current 60% represents good unit test coverage for the library code.
++
++## Forgejo Workflow
++
++The Forgejo workflow runs tests and enforces coverage requirements.
++
++### Workflow Location
++
++`.forgejo/workflows/test.yml`
++
++### Coverage Check
++
++The workflow runs tests and reports coverage. To enforce 90% minimum coverage, update `.env`:
++
++```
++BASHUNIT_COVERAGE=true
++BASHUNIT_COVERAGE_MIN_PERCENT=90
++```
++
++### Manual CI Run
++
++```bash
++# Trigger workflow via Forgejo UI or API
++# Or use Forgejo CLI if available
++```
++
++---
++
++## SOLID Principles in Testing
++
++### Single Responsibility (S)
++
++Each test focuses on one behavior:
++
++```bash
++# Good: One assertion per behavior
++test_get_open_pulls_returns_json() {
++  bashunit::mock curl <<< '[]'
++  assert_not_equals "" "$(get_open_pulls)"
++}
++```
++
++### Open/Closed
++
++Tests are open for extension (new test cases) but closed for modification:
++
++```bash
++# Add new test without modifying existing tests
++test_get_open_pulls_with_state_filter() {
++  bashunit::mock curl <<< '[]'
++  get_open_pulls
++  assert_have_been_called_with curl "*state=open*"
++}
++```
++
++### Liskov Substitution
++
++Test doubles (mocks/spies) are substitutable for real implementations:
++
++```bash
++# Mock can replace real curl without changing test logic
++bashunit::mock curl <<< '{"mocked": true}'
++```
++
++### Interface Segregation
++
++Tests depend only on the functions they test:
++
++```bash
++# Only test get_open_pulls, not other functions
++test_get_open_pulls() {
++  bashunit::mock curl <<< '[]'
++  assert_not_equals "" "$(get_open_pulls)"
++}
++```
++
++### Dependency Inversion
++
++Tests depend on abstractions (function contracts), not implementations:
++
++```bash
++# Test calls codeberg_api abstraction, not curl directly
++test_codeberg_api() {
++  bashunit::mock curl <<< '{}'
++  assert_not_equals "" "$(codeberg_api GET 'pulls')"
++}
++```
+\ No newline at end of file
+diff --git a/scripts/fetch-prs.sh b/scripts/fetch-prs.sh
+new file mode 100755
+index 0000000..8d8f5d9
+--- /dev/null
++++ b/scripts/fetch-prs.sh
+@@ -0,0 +1,13 @@
++#!/bin/bash
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++source "$SCRIPT_DIR/lib/check-env.sh"
++source "$SCRIPT_DIR/lib/api.sh"
++
++check_required_vars CODEBERG_TOKEN REPO_OWNER REPO_NAME
++
++PRS=$(get_open_pulls)
++echo "prs<<EOF"
++echo "$PRS"
++echo "EOF"
+diff --git a/scripts/lib/api.sh b/scripts/lib/api.sh
+new file mode 100755
+index 0000000..92ac64e
+--- /dev/null
++++ b/scripts/lib/api.sh
+@@ -0,0 +1,31 @@
++#!/bin/bash
++set -euo pipefail
++
++codeberg_api() {
++    local method="${1:-GET}"
++    local endpoint="$2"
++    shift 2
++    
++    curl -s -X "$method" \
++        -H "Authorization: token $CODEBERG_TOKEN" \
++        -H "Content-Type: application/json" \
++        "https://codeberg.org/api/v1/repos/$REPO_OWNER/$REPO_NAME/$endpoint" \
++        "$@"
++}
++
++get_open_pulls() {
++    codeberg_api GET "pulls?state=open"
++}
++
++get_pull_diff() {
++    local pr_number="$1"
++    codeberg_api GET "pulls/$pr_number.diff"
++}
++
++post_issue_comment() {
++    local pr_number="$1"
++    local body="$2"
++    
++    codeberg_api POST "issues/$pr_number/comments" \
++        -d "{\"body\": \"$body\"}"
++}
+\ No newline at end of file
+diff --git a/scripts/lib/check-env.sh b/scripts/lib/check-env.sh
+new file mode 100755
+index 0000000..e4ca8ff
+--- /dev/null
++++ b/scripts/lib/check-env.sh
+@@ -0,0 +1,21 @@
++#!/bin/bash
++
++check_required_vars() {
++    local missing=()
++    
++    for var in "$@"; do
++        local value
++        value=$(eval "echo \$$var" 2>/dev/null || echo "")
++        if [ -z "$value" ]; then
++            missing+=("$var")
++        fi
++    done
++    
++    if [ ${#missing[@]} -gt 0 ]; then
++        echo "Error: The following required environment variables are not defined:" >&2
++        for var in "${missing[@]}"; do
++            echo "  - $var" >&2
++        done
++        exit 1
++    fi
++}
+\ No newline at end of file
+diff --git a/scripts/load-state.sh b/scripts/load-state.sh
+new file mode 100755
+index 0000000..f68935e
+--- /dev/null
++++ b/scripts/load-state.sh
+@@ -0,0 +1,14 @@
++#!/bin/bash
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++source "$SCRIPT_DIR/lib/check-env.sh"
++
++DB_FILE="${1:-${DB_FILE:-}}"
++check_required_vars DB_FILE
++
++if [ -f "$DB_FILE" ]; then
++    cat "$DB_FILE"
++else
++    echo "{}"
++fi
+\ No newline at end of file
+diff --git a/scripts/process-prs.sh b/scripts/process-prs.sh
+new file mode 100755
+index 0000000..98b15e4
+--- /dev/null
++++ b/scripts/process-prs.sh
+@@ -0,0 +1,97 @@
++#!/bin/bash
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++source "$SCRIPT_DIR/lib/check-env.sh"
++source "$SCRIPT_DIR/lib/api.sh"
++
++check_required_vars CODEBERG_TOKEN REPO_OWNER REPO_NAME DB_FILE STATE OLLAMA_HOST OLLAMA_MODEL
++
++mkdir -p "$(dirname "$DB_FILE")"
++
++if [ -z "$STATE" ] || [ "$STATE" = "{}" ]; then
++    STATE='{"reviewed_prs":[]}'
++fi
++
++PRS_JSON="$1"
++if [ -z "$PRS_JSON" ] || [ ! -f "$PRS_JSON" ]; then
++    echo "Error: PRS_JSON file not provided or not found" >&2
++    exit 1
++fi
++
++PR_COUNT=$(cat "$PRS_JSON" | jq 'length')
++echo "Found $PR_COUNT open PRs"
++
++if [ "$PR_COUNT" = "0" ]; then
++    echo "No open PRs to review"
++    exit 0
++fi
++
++REVIEWED_PRS=$(echo "$STATE" | jq '.reviewed_prs // []')
++NEW_REVIEWED_PRS="[]"
++
++for i in $(seq 0 $((PR_COUNT - 1))); do
++    PR=$(cat "$PRS_JSON" | jq -r ".[$i]")
++    PR_NUMBER=$(echo "$PR" | jq -r '.number')
++    PR_TITLE=$(echo "$PR" | jq -r '.title')
++    COMMIT_SHA=$(echo "$PR" | jq -r '.head.sha')
++
++    echo "Checking PR #$PR_NUMBER: $PR_TITLE"
++    echo "  Commit SHA: $COMMIT_SHA"
++
++    PREV_REVIEW=$(echo "$REVIEWED_PRS" | jq -r ".[] | select(.number == $PR_NUMBER)")
++
++    if [ "$PREV_REVIEW" != "null" ]; then
++        PREV_SHA=$(echo "$PREV_REVIEW" | jq -r '.commit_sha')
++        if [ "$PREV_SHA" = "$COMMIT_SHA" ]; then
++            echo "  Skipping - no new commits since last review"
++            NEW_REVIEWED_PRS=$(echo "$NEW_REVIEWED_PRS" | jq ". + [$PREV_REVIEW]")
++            continue
++        fi
++    fi
++
++    echo "  Getting diff for review..."
++
++    DIFF=$(get_pull_diff "$PR_NUMBER")
++
++    if [ $(echo "$DIFF" | wc -c) -lt 100 ]; then
++        echo "  Error getting diff: $DIFF"
++        continue
++    fi
++
++    echo "  Sending to Ollama for review..."
++    OLLAMA_RESPONSE=$(curl -s -X POST "$OLLAMA_HOST/api/generate" \
++        -H "Content-Type: application/json" \
++        -d "{
++            \"model\": \"$OLLAMA_MODEL\",
++            \"prompt\": \"You are a code reviewer. Review the following git diff and provide constructive feedback. Focus on bugs, security issues, code quality, and potential improvements. Output in markdown format with these sections:\n\n## Issues Found\n- (line/section) - issue description\n\n## Suggestions\n- (line/section) - suggestion\n\n## Summary\nOne sentence overall assessment.\n\nDIFF:\n$DIFF\",
++            \"stream\": false
++          }")
++
++    REVIEW_BODY=$(echo "$OLLAMA_RESPONSE" | jq -r '.response // empty')
++
++    if [ -z "$REVIEW_BODY" ]; then
++        echo "  Error: No response from Ollama"
++        continue
++    fi
++
++    echo "  Posting review comment..."
++    COMMENT_BODY="## AI Code Review\n\n$REVIEW_BODY\n\n---\n*Review by $OLLAMA_MODEL via Forgejo Actions*"
++
++    post_issue_comment "$PR_NUMBER" "$COMMENT_BODY"
++
++    echo "  Review posted successfully"
++
++    NEW_ENTRY=$(jq -n \
++        --arg number "$PR_NUMBER" \
++        --arg sha "$COMMIT_SHA" \
++        --arg title "$PR_TITLE" \
++        '{number: ($number | tonumber), commit_sha: $sha, title: $title, reviewed_at: now | strftime("%Y-%m-%dT%H:%M:%SZ")}')
++    NEW_REVIEWED_PRS=$(echo "$NEW_REVIEWED_PRS" | jq ". + [$NEW_ENTRY]")
++done
++
++echo "$NEW_REVIEWED_PRS" > /tmp/reviewed_prs.json
++jq -n "{reviewed_prs: $(cat /tmp/reviewed_prs.json)}" > "$DB_FILE"
++
++echo "State saved to $DB_FILE"
++cat "$DB_FILE"
+diff --git a/tests/scripts/lib/api_test.sh b/tests/scripts/lib/api_test.sh
+new file mode 100644
+index 0000000..4f44003
+--- /dev/null
++++ b/tests/scripts/lib/api_test.sh
+@@ -0,0 +1,151 @@
++#!/bin/bash
++set -euo pipefail
++
++SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../scripts" && pwd)"
++
++source "$SCRIPTS_DIR/lib/api.sh"
++
++export CODEBERG_TOKEN=test_token
++export REPO_OWNER=test_owner
++export REPO_NAME=test_repo
++
++test_codeberg_api_get_mocks_curl() {
++  bashunit::mock curl <<< '{"mocked": true}'
++  
++  local result
++  result=$(codeberg_api GET "pulls")
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_post_mocks_curl() {
++  bashunit::mock curl <<< '{"success": true}'
++  
++  local result
++  result=$(codeberg_api POST "issues/1/comments" -d '{"body":"test"}')
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_default_mocks_curl() {
++  bashunit::mock curl <<< '{"default": true}'
++  
++  local result
++  result=$(codeberg_api "pulls")
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_with_extra_args_mocks_curl() {
++  bashunit::mock curl <<< '{"extra": true}'
++  
++  local result
++  result=$(codeberg_api GET "pulls" -H "X-Test: value")
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_put_mocks_curl() {
++  bashunit::mock curl <<< '{"put": true}'
++  
++  local result
++  result=$(codeberg_api PUT "repos/contents")
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_delete_mocks_curl() {
++  bashunit::mock curl <<< '{"delete": true}'
++  
++  local result
++  result=$(codeberg_api DELETE "repos/contents")
++  
++  assert_not_equals "" "$result"
++}
++
++test_get_open_pulls_mocks_curl() {
++  bashunit::mock curl <<< '[{"number":1}]'
++  
++  local result
++  result=$(get_open_pulls)
++  
++  assert_not_equals "" "$result"
++}
++
++test_get_pull_diff_mocks_curl() {
++  bashunit::mock curl <<< 'diff content'
++  
++  local result
++  result=$(get_pull_diff 123)
++  
++  assert_not_equals "" "$result"
++}
++
++test_get_pull_diff_different_pr() {
++  bashunit::mock curl <<< 'diff2'
++  
++  local result
++  result=$(get_pull_diff 456)
++  
++  assert_not_equals "" "$result"
++}
++
++test_post_issue_comment_mocks_curl() {
++  bashunit::mock curl <<< '{"id":1}'
++  
++  local result
++  result=$(post_issue_comment 123 "test")
++  
++  assert_not_equals "" "$result"
++}
++
++test_post_issue_comment_different() {
++  bashunit::mock curl <<< '{"id":2}'
++  
++  local result
++  result=$(post_issue_comment 789 "comment")
++  
++  assert_not_equals "" "$result"
++}
++
++test_codeberg_api_spy_verifies_call() {
++  bashunit::spy curl
++  
++  codeberg_api GET "pulls"
++  
++  assert_have_been_called curl
++}
++
++test_get_open_pulls_spy_verifies_call() {
++  bashunit::spy curl
++  
++  get_open_pulls
++  
++  assert_have_been_called curl
++}
++
++test_get_pull_diff_spy_verifies_call() {
++  bashunit::spy curl
++  
++  get_pull_diff 123
++  
++  assert_have_been_called curl
++}
++
++test_post_issue_comment_spy_verifies_call() {
++  bashunit::spy curl
++  
++  post_issue_comment 123 "test"
++  
++  assert_have_been_called curl
++}
++
++test_multiple_api_calls_spy() {
++  bashunit::spy curl
++  
++  get_open_pulls
++  get_pull_diff 1
++  post_issue_comment 2 "test"
++  
++  assert_have_been_called_times 3 curl
++}
+\ No newline at end of file
+diff --git a/tests/scripts/lib/check_env_test.sh b/tests/scripts/lib/check_env_test.sh
+new file mode 100644
+index 0000000..b7c7084
+--- /dev/null
++++ b/tests/scripts/lib/check_env_test.sh
+@@ -0,0 +1,61 @@
++#!/bin/bash
++set -euo pipefail
++
++SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../scripts" && pwd)"
++
++source "$SCRIPTS_DIR/lib/check-env.sh"
++
++test_check_env_all_defined() {
++  export VAR1=value1 VAR2=value2 VAR3=value3
++  check_required_vars VAR1 VAR2 VAR3
++  assert_true true
++}
++
++test_check_env_single_missing() {
++  export VAR1=value1
++  (check_required_vars VAR1 VAR2 > /dev/null 2>&1)
++  assert_false return 0
++}
++
++test_check_env_multiple_missing() {
++  export VAR1=value1
++  (check_required_vars VAR1 VAR2 VAR3 > /dev/null 2>&1)
++  assert_false return 0
++}
++
++test_check_env_empty_string() {
++  export VAR1=""
++  (check_required_vars VAR1 > /dev/null 2>&1)
++  assert_false return 0
++}
++
++test_check_env_all_missing() {
++  unset VAR1 VAR2 VAR3
++  (check_required_vars VAR1 VAR2 VAR3 > /dev/null 2>&1)
++  assert_false return 0
++}
++
++test_check_env_single_var() {
++  export VAR1=value1
++  check_required_vars VAR1
++  assert_true true
++}
++
++test_check_env_two_vars() {
++  export VAR1=value1 VAR2=value2
++  check_required_vars VAR1 VAR2
++  assert_true true
++}
++
++test_check_env_five_vars() {
++  export VAR1=a VAR2=b VAR3=c VAR4=d VAR5=e
++  check_required_vars VAR1 VAR2 VAR3 VAR4 VAR5
++  assert_true true
++}
++
++test_check_env_unset_in_middle() {
++  export VAR1=value1 VAR2=value2 VAR3=value3
++  unset VAR2
++  (check_required_vars VAR1 VAR2 VAR3 > /dev/null 2>&1)
++  assert_false return 0
++}
+\ No newline at end of file

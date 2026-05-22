@@ -1,0 +1,8 @@
+{
+  "owner": "bookstack",
+  "repo": "bookstack",
+  "full_repo": "bookstack/bookstack",
+  "pr_number": 6108,
+  "head_sha": "426f9ac4934308da9f57580bc0e2fe399346cbb1",
+  "title": "Permissions: Started addition of revision-view permission"
+}

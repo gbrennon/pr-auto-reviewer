@@ -1,0 +1,40 @@
+{
+  "verdict": "changes_requested",
+  "summary": "ReportGenerator has multiple issues: it creates a SqlConnection directly with hardcoded credentials (including sa password in clear text), opens the connection without a using block (risk of leaked connections), uses string interpolation in SQL (injection risk), and the entire class is tightly coupled to SqlConnection, making it untestable.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "critical",
+      "category": "security",
+      "file_path": "Services/ReportGenerator.cs",
+      "description": "Hardcoded database credentials including sa password in connection string. Use a connection string from configuration (appsettings.json / environment variables) instead."
+    },
+    {
+      "number": 2,
+      "severity": "high",
+      "category": "security",
+      "file_path": "Services/ReportGenerator.cs",
+      "description": "SQL injection vulnerability: month and year parameters are interpolated directly into the SQL query. Use parameterized queries with SqlParameter."
+    },
+    {
+      "number": 3,
+      "severity": "medium",
+      "category": "bug",
+      "file_path": "Services/ReportGenerator.cs",
+      "description": "SqlConnection is not disposed. Wrap in a 'using' statement to ensure the connection is returned to the pool even on exceptions."
+    },
+    {
+      "number": 4,
+      "severity": "medium",
+      "category": "design",
+      "file_path": "Services/ReportGenerator.cs",
+      "description": "Tight coupling to SqlConnection makes unit testing impossible. Inject an IDbConnection or a repository abstraction via constructor injection."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 11,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

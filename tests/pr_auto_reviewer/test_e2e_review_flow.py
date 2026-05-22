@@ -35,6 +35,12 @@ class MockPrLister(PrListerPort):
         self.last_repo = repository
         return self._prs
 
+    def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
+        for p in self._prs:
+            if p.pr_id.number == pr_number:
+                return p
+        return None
+
 
 class TestPollingDaemonE2E:
     """E2E tests for PollingDaemon."""
@@ -42,7 +48,7 @@ class TestPollingDaemonE2E:
     def test_daemon_fetches_repos_and_prs(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon fetches repos and PRs in a cycle."""
         repo_lister = MockRepoLister(["repo1", "repo2"])
@@ -52,7 +58,7 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
@@ -62,7 +68,7 @@ class TestPollingDaemonE2E:
     def test_daemon_processes_open_prs(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon processes open (non-draft) PRs."""
         open_pr = OpenPullRequest(
@@ -79,17 +85,17 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        mock_review_service.execute.assert_called_once()
+        stub_review_service.assert_called_once()
 
     def test_daemon_skips_draft_prs(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon skips draft PRs."""
         draft_pr = OpenPullRequest(
@@ -106,17 +112,17 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        mock_review_service.execute.assert_not_called()
+        stub_review_service.assert_not_called()
 
     def test_daemon_handles_empty_repos(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon handles empty repos list."""
         repo_lister = MockRepoLister([])
@@ -126,17 +132,17 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        mock_review_service.execute.assert_not_called()
+        stub_review_service.assert_not_called()
 
     def test_daemon_handles_empty_prs(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon handles repo with no open PRs."""
         repo_lister = MockRepoLister(["test/repo"])
@@ -146,19 +152,19 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        mock_review_service.execute.assert_not_called()
+        stub_review_service.assert_not_called()
         assert pr_lister.call_count == 1
         assert pr_lister.last_repo == "test/repo"
 
     def test_daemon_calls_review_service_with_correct_command(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon calls review service with correct command."""
         open_pr = OpenPullRequest(
@@ -175,13 +181,13 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        mock_review_service.execute.assert_called_once()
-        call_args = mock_review_service.execute.call_args
+        stub_review_service.assert_called_once()
+        call_args = stub_review_service.call_args
         command = call_args[0][0]
 
         assert command.pr_id.repository == "owner/repo"
@@ -192,7 +198,7 @@ class TestPollingDaemonE2E:
     def test_daemon_multiple_prs_in_multiple_repos(
         self,
         polling_daemon_config: PollingDaemonConfig,
-        mock_review_service,
+        stub_review_service,
     ) -> None:
         """Daemon processes multiple PRs from multiple repos."""
         pr1 = OpenPullRequest(
@@ -224,6 +230,13 @@ class TestPollingDaemonE2E:
                     return [pr2]
                 return []
 
+            def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
+                for pr_list in ([pr1], [pr2]):
+                    for p in pr_list:
+                        if p.pr_id.number == pr_number:
+                            return p
+                return None
+
         repo_lister = MultiRepoLister()
         pr_lister = MultiPrLister()
 
@@ -231,12 +244,12 @@ class TestPollingDaemonE2E:
             config=polling_daemon_config,
             repo_lister=repo_lister,
             pr_lister=pr_lister,
-            review_service=mock_review_service,
+            review_service=stub_review_service,
         )
 
         daemon._run_cycle()
 
-        assert mock_review_service.execute.call_count == 2
+        assert stub_review_service.call_count == 2
 
 
 class TestCliRunnerE2E:
@@ -258,7 +271,7 @@ class TestCliRunnerE2E:
 
     def test_review_command_with_existing_pr(
         self,
-        mock_review_service,
+        stub_review_service,
         mock_process_service,
         mock_review_reader,
         mock_item_parser,
@@ -273,7 +286,7 @@ class TestCliRunnerE2E:
         pr_lister = MockPrLister([open_pr])
 
         runner = CliRunner(
-            review_service=mock_review_service,
+            review_service=stub_review_service,
             process_commands_service=mock_process_service,
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
@@ -283,11 +296,11 @@ class TestCliRunnerE2E:
         result = runner._run_review(["--repo", "test/repo", "--pr", "1"])
 
         assert result == 0
-        mock_review_service.execute.assert_called_once()
+        stub_review_service.assert_called_once()
 
     def test_review_command_pr_not_found(
         self,
-        mock_review_service,
+        stub_review_service,
         mock_process_service,
         mock_review_reader,
         mock_item_parser,
@@ -296,7 +309,7 @@ class TestCliRunnerE2E:
         pr_lister = MockPrLister([])
 
         runner = CliRunner(
-            review_service=mock_review_service,
+            review_service=stub_review_service,
             process_commands_service=mock_process_service,
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
@@ -306,11 +319,11 @@ class TestCliRunnerE2E:
         result = runner._run_review(["--repo", "test/repo", "--pr", "999"])
 
         assert result == 1
-        mock_review_service.execute.assert_not_called()
+        stub_review_service.assert_not_called()
 
     def test_list_items_command(
         self,
-        mock_review_service,
+        stub_review_service,
         mock_process_service,
         mock_review_reader,
         mock_item_parser,
@@ -332,7 +345,7 @@ class TestCliRunnerE2E:
 
         pr_lister = MockPrLister([])
         runner = CliRunner(
-            review_service=mock_review_service,
+            review_service=stub_review_service,
             process_commands_service=mock_process_service,
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
@@ -345,7 +358,7 @@ class TestCliRunnerE2E:
 
     def test_process_commands_command(
         self,
-        mock_review_service,
+        stub_review_service,
         mock_process_service,
         mock_review_reader,
         mock_item_parser,
@@ -360,7 +373,7 @@ class TestCliRunnerE2E:
         pr_lister = MockPrLister([open_pr])
 
         runner = CliRunner(
-            review_service=mock_review_service,
+            review_service=stub_review_service,
             process_commands_service=mock_process_service,
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
@@ -374,7 +387,7 @@ class TestCliRunnerE2E:
 
     def test_routes_correctly(
         self,
-        mock_review_service,
+        stub_review_service,
         mock_process_service,
         mock_review_reader,
         mock_item_parser,
@@ -389,7 +402,7 @@ class TestCliRunnerE2E:
         pr_lister = MockPrLister([open_pr])
 
         runner = CliRunner(
-            review_service=mock_review_service,
+            review_service=stub_review_service,
             process_commands_service=mock_process_service,
             review_reader=mock_review_reader,
             pr_lister=pr_lister,

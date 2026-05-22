@@ -17,6 +17,8 @@ class GitRepoListerAdapter(RepoListerPort):
 
     def list_repos(self) -> list[str]:
         """List all repositories owned by the authenticated user."""
+        if self._repos_filter:
+            return [self._repos_filter]
         try:
             user_data = self._client.get("/user")
             username = user_data.get("login") or user_data.get("username")

@@ -1,0 +1,26 @@
+{
+  "verdict": "changes_requested",
+  "summary": "OrderService is a classic God Class anti-pattern: it directly instantiates and manages six dependencies (Database, EmailSender, InvoicePdf, PaymentGateway, AuditLog, MetricsCollector) and handles order placement, cancellation, and report generation all in one class. This violates the Single Responsibility Principle and makes the class impossible to unit test.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "high",
+      "category": "design",
+      "file_path": "src/main/java/com/example/OrderService.java",
+      "description": "God class anti-pattern: OrderService handles too many concerns. Split into separate services (OrderPlacementService, OrderCancellationService, ReportService) and inject dependencies via constructor instead of instantiating them directly."
+    },
+    {
+      "number": 2,
+      "severity": "medium",
+      "category": "testability",
+      "file_path": "src/main/java/com/example/OrderService.java",
+      "description": "Hard-coded dependency instantiation makes unit testing impossible. Use dependency injection (e.g., constructor injection) to allow mocking in tests."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 7,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

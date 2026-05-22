@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR introduces useful configuration examples and improves the README with detailed instructions. Minor suggestions to enhance clarity and completeness.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 2,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

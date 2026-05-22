@@ -58,7 +58,7 @@ setup_env() {
 }
 
 check_service_status() {
-  if systemctl --user is-active --quiet pr-ai-auto-reviewer.service 2>/dev/null; then
+  if systemctl --user is-active --quiet pr-auto-reviewer.service 2>/dev/null; then
     return 0
   fi
   return 1
@@ -68,8 +68,8 @@ pause_service() {
   if check_service_status; then
     log_info "Pausing systemd service..."
     
-    systemctl --user stop pr-ai-auto-reviewer.service 2>/dev/null || true
-    systemctl --user disable --now pr-ai-auto-reviewer.service 2>/dev/null || true
+    systemctl --user stop pr-auto-reviewer.service 2>/dev/null || true
+    systemctl --user disable --now pr-auto-reviewer.service 2>/dev/null || true
     
     sleep 2
     
@@ -93,7 +93,7 @@ pause_service() {
 
 resume_service() {
   log_info "Resuming systemd service..."
-  systemctl --user enable --now pr-ai-auto-reviewer.service 2>/dev/null || true
+  systemctl --user enable --now pr-auto-reviewer.service 2>/dev/null || true
 }
 
 check_ollama() {
@@ -142,14 +142,14 @@ start_project() {
     log_warn "FORGEJO_TOKEN is empty. Reviews will fail for private repos."
   fi
 
-  log_info "Running watch-prs.sh --once (single cycle)..."
+  log_info "Running pr-auto-reviewer daemon-once (single cycle)..."
   log_info "To stop early: Ctrl+C"
   log_info "Service will resume after this completes or is interrupted."
 
-  if timeout 300 bash "$REPO_ROOT/scripts/watch-prs.sh" --once; then
-    log_info "watch-prs.sh completed"
+  if timeout 300 python -m pr_auto_reviewer watch-prs --once; then
+    log_info "daemon-once completed"
   else
-    log_warn "watch-prs.sh interrupted or timed out"
+    log_warn "daemon-once interrupted or timed out"
   fi
 
   if [[ "$service_was_running" == "true" ]]; then

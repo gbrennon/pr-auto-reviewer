@@ -1,0 +1,18 @@
+diff --git a/src/infrastructure/persistence/json_dose_record_repository.rs b/src/infrastructure/persistence/json_dose_record_repository.rs
+index 2b5ca08..b250f03 100644
+--- a/src/infrastructure/persistence/json_dose_record_repository.rs
++++ b/src/infrastructure/persistence/json_dose_record_repository.rs
+@@ -91,11 +91,13 @@ impl DoseRecordRepository for JsonDoseRecordRepository {
+         &self,
+         medication_id: &MedicationId,
+     ) -> Result<Vec<DoseRecord>, StorageError> {
++        // This will list DoseReord in the inverse order
+         let records = self.records.lock().unwrap();
+         Ok(records
+             .iter()
+             .filter(|r| r.medication_id() == medication_id)
+             .cloned()
++            .rev()
+             .collect())
+     }
+ 

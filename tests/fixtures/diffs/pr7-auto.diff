@@ -1,0 +1,68 @@
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index a5e668b..dea9f2e 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -137,12 +137,16 @@ get_repos() {
+   fi
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "https://codeberg.org/api/v1/user/repos?limit=50" \
++    "${API_BASE}/user/repos?limit=50" \
+     | python3 -c "
+ import sys, json
+-data = json.load(sys.stdin)
+-for r in data:
+-    print(r['full_name'])
++try:
++    data = json.load(sys.stdin)
++    if isinstance(data, list):
++        for r in data:
++            print(r.get('full_name', ''))
++except Exception:
++    pass
+ " 2>/dev/null || true
+ }
+ 
+@@ -150,19 +154,22 @@ get_open_prs() {
+   local repo="$1"
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "https://codeberg.org/api/v1/repos/${repo}/pulls?state=open&limit=20" \
++    "${API_BASE}/repos/${repo}/pulls?state=open&limit=20" \
+     | python3 -c "
+ import sys, json
+-data = json.load(sys.stdin)
+-prs = data if isinstance(data, list) else data.get('data', [])
+-for pr in prs:
+-    if pr.get('draft', False):
+-        continue
+-    num = pr.get('number', '')
+-    title = pr.get('title', '')
+-    sha = pr.get('head', {}).get('sha', '')
+-    if num and sha:
+-        print(f'{num}|{sha}|{title}')
++try:
++    data = json.load(sys.stdin)
++    prs = data if isinstance(data, list) else data.get('data', [])
++    for pr in prs:
++        if pr.get('draft', False):
++            continue
++        num = pr.get('number', '')
++        title = pr.get('title', '')
++        sha = pr.get('head', {}).get('sha', '')
++        if num and sha:
++            print(f'{num}|{sha}|{title}')
++except Exception:
++    pass
+ " 2>/dev/null || true
+ }
+ 
+@@ -171,7 +178,7 @@ get_diff() {
+   local pr_number="$2"
+   
+   curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+-    "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
++    "${API_BASE}/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
+ }
+ 
+ process_pr() {

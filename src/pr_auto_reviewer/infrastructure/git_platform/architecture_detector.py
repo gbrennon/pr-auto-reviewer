@@ -1,7 +1,7 @@
 """ArchitectureDetector — infrastructure utility, not a port.
 
 Inspects repository file tree entries for known layout patterns
-to produce an architecture hint string for ReviewContext.
+to produce an architecture hint string for RepositoryContext.
 """
 
 from __future__ import annotations

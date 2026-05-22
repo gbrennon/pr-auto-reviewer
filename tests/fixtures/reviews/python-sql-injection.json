@@ -1,0 +1,19 @@
+{
+  "verdict": "changes_requested",
+  "summary": "The UserRepository.find_by_name method uses f-string interpolation to build SQL queries, which is vulnerable to SQL injection attacks. User input (name parameter) is directly concatenated into the query string without parameterization or sanitization.",
+  "model_used": "code-review",
+  "items": [
+    {
+      "number": 1,
+      "severity": "critical",
+      "category": "security",
+      "file_path": "app/repository.py",
+      "description": "SQL injection vulnerability in find_by_name: f-string interpolation of user input into SQL query. Use parameterized queries instead: cursor.execute('SELECT * FROM users WHERE name = ?', (name,))."
+    }
+  ],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 6,
+  "head_sha": "258cbb25a86b592a76eeefdc232cb48a23ee09a8"
+}

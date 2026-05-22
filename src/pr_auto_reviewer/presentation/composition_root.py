@@ -84,7 +84,7 @@ class CompositionRoot:
         review_service = ReviewPullRequestService(
             pr_repository=c.pr_repository,
             changeset_fetcher=c.changeset_fetcher,
-            repository_context=c.repository_context,
+            review_context_factory=c.review_context_factory,
             llm_review=c.llm_review,
             review_publisher=c.review_publisher,
         )
@@ -110,6 +110,7 @@ class CompositionRoot:
             review_reader=c.review_reader,
             pr_lister=c.pr_lister,
             review_item_parser=review_item_parser,
+            pr_repository=c.pr_repository,
         )
 
         return ApplicationComponents(

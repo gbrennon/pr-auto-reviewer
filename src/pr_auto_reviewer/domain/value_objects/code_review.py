@@ -15,6 +15,9 @@ class CodeReview:
     """
 
     verdict: ReviewVerdict
-    summary: str
+    reason: str = ""
+    summary: str = ""
     items: list[ReviewItem] = field(default_factory=list)
+    suggestions: list[dict] = field(default_factory=list)
+    praise: list[dict] = field(default_factory=list)
     model_used: str = ""

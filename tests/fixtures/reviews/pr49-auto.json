@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The README has been updated with a detailed testing guide, which is helpful for ensuring the feature works as intended.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 49,
+  "head_sha": "2c8bbf014df126ada5afdbe54665d18b508ba3dc"
+}

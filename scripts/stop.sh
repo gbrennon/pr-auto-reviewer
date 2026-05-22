@@ -4,5 +4,5 @@
 set -e
 
 echo "Stopping service..."
-systemctl --user stop pr-ai-auto-reviewer.service
+systemctl --user stop pr-auto-reviewer.service
 echo "Service stopped."

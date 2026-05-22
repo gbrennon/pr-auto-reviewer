@@ -1,0 +1,309 @@
+diff --git a/app/Entities/Controllers/PageRevisionController.php b/app/Entities/Controllers/PageRevisionController.php
+index 4bc15e6e9..cc6b79bfe 100644
+--- a/app/Entities/Controllers/PageRevisionController.php
++++ b/app/Entities/Controllers/PageRevisionController.php
+@@ -34,6 +34,7 @@ class PageRevisionController extends Controller
+      */
+     public function index(Request $request, string $bookSlug, string $pageSlug)
+     {
++        $this->checkPermission(Permission::RevisionViewAll);
+         $page = $this->pageQueries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+         $listOptions = SimpleListOptions::fromRequest($request, 'page_revisions', true)->withSortOptions([
+             'id' => trans('entities.pages_revisions_sort_number')
+@@ -65,6 +66,8 @@ class PageRevisionController extends Controller
+      */
+     public function show(string $bookSlug, string $pageSlug, int $revisionId)
+     {
++        $this->checkPermission(Permission::RevisionViewAll);
++
+         $page = $this->pageQueries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+         /** @var ?PageRevision $revision */
+         $revision = $page->revisions()->where('id', '=', $revisionId)->first();
+@@ -94,6 +97,8 @@ class PageRevisionController extends Controller
+      */
+     public function changes(string $bookSlug, string $pageSlug, int $revisionId)
+     {
++        $this->checkPermission(Permission::RevisionViewAll);
++
+         $page = $this->pageQueries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+         /** @var ?PageRevision $revision */
+         $revision = $page->revisions()->where('id', '=', $revisionId)->first();
+@@ -129,6 +134,7 @@ class PageRevisionController extends Controller
+      */
+     public function restore(string $bookSlug, string $pageSlug, int $revisionId)
+     {
++        $this->checkPermission(Permission::RevisionViewAll);
+         $page = $this->pageQueries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+         $this->checkOwnablePermission(Permission::PageUpdate, $page);
+ 
+@@ -144,6 +150,7 @@ class PageRevisionController extends Controller
+      */
+     public function destroy(string $bookSlug, string $pageSlug, int $revId)
+     {
++        $this->checkPermission(Permission::RevisionViewAll);
+         $page = $this->pageQueries->findVisibleBySlugsOrFail($bookSlug, $pageSlug);
+         $this->checkOwnablePermission(Permission::PageDelete, $page);
+ 
+diff --git a/app/Permissions/Permission.php b/app/Permissions/Permission.php
+index 04878ada0..0fbe9693d 100644
+--- a/app/Permissions/Permission.php
++++ b/app/Permissions/Permission.php
+@@ -118,6 +118,8 @@ enum Permission: string
+     case PageViewAll = 'page-view-all';
+     case PageViewOwn = 'page-view-own';
+ 
++    case RevisionViewAll = 'revision-view-all';
++
+     /**
+      * Get the generic permissions which may be queried for entities.
+      */
+diff --git a/database/migrations/2026_04_19_141616_add_revision_view_all_permission.php b/database/migrations/2026_04_19_141616_add_revision_view_all_permission.php
+new file mode 100644
+index 000000000..e4b51ff70
+--- /dev/null
++++ b/database/migrations/2026_04_19_141616_add_revision_view_all_permission.php
+@@ -0,0 +1,67 @@
++<?php
++
++use Carbon\Carbon;
++use Illuminate\Database\Migrations\Migration;
++
++return new class extends Migration
++{
++    /**
++     * Run the migrations.
++     */
++    public function up(): void
++    {
++        // Create new revision-view-all permission
++        $permissionId = DB::table('role_permissions')->insertGetId([
++            'name'         => 'revision-view-all',
++            'created_at'   => Carbon::now()->toDateTimeString(),
++            'updated_at'   => Carbon::now()->toDateTimeString(),
++        ]);
++
++        // Get ids of page view permissions
++        $pageViewPermissions = DB::table('role_permissions')
++            ->whereIn('name', [
++                'page-view-own',
++                'page-view-all',
++            ])->get();
++
++        if ($pageViewPermissions->count() === 0) {
++            return;
++        }
++
++        // Get role ids which have page view permission
++        $applicableRoleIds = DB::table('permission_role')
++            ->whereIn('permission_id', $pageViewPermissions->pluck('id'))
++            ->pluck('role_id')
++            ->unique()
++            ->all();
++
++        // Assign the new permission to relevant roles
++        $newPermissionRoles = array_values(array_map(function (int $roleId) use ($permissionId) {
++            return [
++                'role_id'       => $roleId,
++                'permission_id' => $permissionId,
++            ];
++        }, $applicableRoleIds));
++
++        DB::table('permission_role')->insert($newPermissionRoles);
++    }
++
++    /**
++     * Reverse the migrations.
++     */
++    public function down(): void
++    {
++        // Get the permission to remove
++        $revisionViewPermission = DB::table('role_permissions')
++            ->where('name', '=', 'revision-view-all')
++            ->first();
++
++        if (!$revisionViewPermission) {
++            return;
++        }
++
++        // Remove the permission, and its use on roles, from the database
++        DB::table('permission_role')->where('permission_id', '=', $revisionViewPermission->id)->delete();
++        DB::table('role_permissions')->where('id', '=', $revisionViewPermission->id)->delete();
++    }
++};
+diff --git a/lang/en/settings.php b/lang/en/settings.php
+index c4d1eb136..3937c650f 100644
+--- a/lang/en/settings.php
++++ b/lang/en/settings.php
+@@ -207,6 +207,7 @@ return [
+     'role_all' => 'All',
+     'role_own' => 'Own',
+     'role_controlled_by_asset' => 'Controlled by the asset they are uploaded to',
++    'role_controlled_by_page_delete' => 'Controlled by page delete permissions',
+     'role_save' => 'Save Role',
+     'role_users' => 'Users in this role',
+     'role_users_none' => 'No users are currently assigned to this role',
+diff --git a/resources/views/entities/meta.blade.php b/resources/views/entities/meta.blade.php
+index 060c197a4..6c425a240 100644
+--- a/resources/views/entities/meta.blade.php
++++ b/resources/views/entities/meta.blade.php
+@@ -9,7 +9,7 @@
+         </div>
+     @endif
+ 
+-    @if ($entity->isA('page'))
++    @if ($entity->isA('page') && userCan(\BookStack\Permissions\Permission::RevisionViewAll))
+         <a href="{{ $entity->getUrl('/revisions') }}" class="entity-meta-item">
+             @icon('history'){{ trans('entities.meta_revision', ['revisionCount' => $entity->revision_count]) }}
+         </a>
+diff --git a/resources/views/exports/parts/meta.blade.php b/resources/views/exports/parts/meta.blade.php
+index 00117f4a1..07eff14a4 100644
+--- a/resources/views/exports/parts/meta.blade.php
++++ b/resources/views/exports/parts/meta.blade.php
+@@ -1,5 +1,5 @@
+ <div class="entity-meta">
+-    @if ($entity->isA('page'))
++    @if ($entity->isA('page') && userCan(\BookStack\Permissions\Permission::RevisionViewAll))
+         @icon('history'){{ trans('entities.meta_revision', ['revisionCount' => $entity->revision_count]) }} <br>
+     @endif
+ 
+diff --git a/resources/views/pages/parts/show-sidebar-section-actions.blade.php b/resources/views/pages/parts/show-sidebar-section-actions.blade.php
+index ae115b69e..94061ecb3 100644
+--- a/resources/views/pages/parts/show-sidebar-section-actions.blade.php
++++ b/resources/views/pages/parts/show-sidebar-section-actions.blade.php
+@@ -24,10 +24,12 @@
+                 </a>
+             @endif
+         @endif
+-        <a href="{{ $page->getUrl('/revisions') }}" data-shortcut="revisions" class="icon-list-item">
+-            <span>@icon('history')</span>
+-            <span>{{ trans('entities.revisions') }}</span>
+-        </a>
++        @if(userCan(\BookStack\Permissions\Permission::RevisionViewAll))
++            <a href="{{ $page->getUrl('/revisions') }}" data-shortcut="revisions" class="icon-list-item">
++                <span>@icon('history')</span>
++                <span>{{ trans('entities.revisions') }}</span>
++            </a>
++        @endif
+         @if(userCan(\BookStack\Permissions\Permission::RestrictionsManage, $page))
+             <a href="{{ $page->getUrl('/permissions') }}" data-shortcut="permissions" class="icon-list-item">
+                 <span>@icon('lock')</span>
+diff --git a/resources/views/settings/roles/parts/form.blade.php b/resources/views/settings/roles/parts/form.blade.php
+index 5a9eca7d2..890f79057 100644
+--- a/resources/views/settings/roles/parts/form.blade.php
++++ b/resources/views/settings/roles/parts/form.blade.php
+@@ -79,6 +79,7 @@
+             @include('settings.roles.parts.asset-permissions-row', ['title' => trans('entities.books'), 'permissionPrefix' => 'book'])
+             @include('settings.roles.parts.asset-permissions-row', ['title' => trans('entities.chapters'), 'permissionPrefix' => 'chapter'])
+             @include('settings.roles.parts.asset-permissions-row', ['title' => trans('entities.pages'), 'permissionPrefix' => 'page'])
++            @include('settings.roles.parts.revisions-permissions-row', ['title' => trans('entities.revisions'), 'permissionPrefix' => 'revision'])
+             @include('settings.roles.parts.related-asset-permissions-row', ['title' => trans('entities.images'), 'permissionPrefix' => 'image'])
+             @include('settings.roles.parts.related-asset-permissions-row', ['title' => trans('entities.attachments'), 'permissionPrefix' => 'attachment'])
+             @include('settings.roles.parts.related-asset-permissions-row', ['title' => trans('entities.comments'), 'permissionPrefix' => 'comment'])
+diff --git a/resources/views/settings/roles/parts/revisions-permissions-row.blade.php b/resources/views/settings/roles/parts/revisions-permissions-row.blade.php
+new file mode 100644
+index 000000000..326925ef9
+--- /dev/null
++++ b/resources/views/settings/roles/parts/revisions-permissions-row.blade.php
+@@ -0,0 +1,22 @@
++<div class="item-list-row flex-container-row items-center wrap">
++    <div class="flex py-s px-m min-width-s">
++        <strong>{{ $title }}</strong> <br>
++        <a href="#" refs="permissions-table@toggle-row" class="text-small text-link">{{ trans('common.toggle_all') }}</a>
++    </div>
++    <div class="flex py-s px-m min-width-xxs">
++        <small class="hide-over-m bold">{{ trans('common.create') }}<br></small>
++        <strong class="text-muted opacity-70 text-large">-</strong>
++    </div>
++    <div class="flex py-s px-m min-width-xxs">
++        <small class="hide-over-m bold">{{ trans('common.view') }}<br></small>
++        @include('settings.roles.parts.checkbox', ['permission' => $permissionPrefix . '-view-all', 'label' => trans('settings.role_all')])
++    </div>
++    <div class="flex py-s px-m min-width-xxs">
++        <small class="hide-over-m bold">{{ trans('common.edit') }}<br></small>
++        <strong class="text-muted opacity-70 text-large">-</strong>
++    </div>
++    <div class="flex py-s px-m min-width-xxs">
++        <small class="hide-over-m bold">{{ trans('common.delete') }}<br></small>
++        <small>{{ trans('settings.role_controlled_by_page_delete') }}</small>
++    </div>
++</div>
+diff --git a/tests/Entity/PageRevisionTest.php b/tests/Entity/PageRevisionTest.php
+index 132a10fa4..8b46e84a6 100644
+--- a/tests/Entity/PageRevisionTest.php
++++ b/tests/Entity/PageRevisionTest.php
+@@ -4,6 +4,8 @@ namespace Tests\Entity;
+ 
+ use BookStack\Activity\ActivityType;
+ use BookStack\Entities\Models\Page;
++use BookStack\Entities\Models\PageRevision;
++use BookStack\Permissions\Permission;
+ use Tests\TestCase;
+ 
+ class PageRevisionTest extends TestCase
+@@ -257,6 +259,33 @@ class PageRevisionTest extends TestCase
+         $revisionView->assertDontSee('dontwantthishere');
+     }
+ 
++    public function test_access_to_revision_operation_requires_revision_view_all_permission()
++    {
++        $editor = $this->users->editor();
++        $this->actingAs($editor);
++
++        $page = $this->entities->page();
++        $this->createRevisions($page, 3);
++        /** @var PageRevision $revision */
++        $revision = $page->revisions()->orderBy('id', 'desc')->first();
++
++        $this->get($page->getUrl())->assertSee($page->getUrl('/revisions'), false);
++        $this->get($page->getUrl('/revisions'))->assertOk();
++        $this->get($revision->getUrl())->assertOk();
++        $this->get($revision->getUrl('/changes'))->assertOk();
++        $this->put($revision->getUrl('/restore'))->assertRedirect($page->getUrl());
++        $this->delete($revision->getUrl('/delete'))->assertRedirect($page->getUrl('/revisions'));
++
++        $this->permissions->removeUserRolePermissions($editor, [Permission::RevisionViewAll]);
++
++        $this->get($page->getUrl())->assertDontSee($page->getUrl('/revisions'), false);
++        $this->assertPermissionError($this->get($page->getUrl('/revisions')));
++        $this->assertPermissionError($this->get($revision->getUrl()));
++        $this->assertPermissionError($this->get($revision->getUrl('/changes')));
++        $this->assertPermissionError($this->put($revision->getUrl('/restore')));
++        $this->assertPermissionError($this->delete($revision->getUrl('/delete')));
++    }
++
+     public function test_revision_restore_action_only_visible_with_permission()
+     {
+         $page = $this->entities->page();
+diff --git a/tests/Exports/HtmlExportTest.php b/tests/Exports/HtmlExportTest.php
+index f23352e0e..223a8c922 100644
+--- a/tests/Exports/HtmlExportTest.php
++++ b/tests/Exports/HtmlExportTest.php
+@@ -5,6 +5,7 @@ namespace Tests\Exports;
+ use BookStack\Entities\Models\Book;
+ use BookStack\Entities\Models\Chapter;
+ use BookStack\Entities\Models\Page;
++use BookStack\Permissions\Permission;
+ use Illuminate\Support\Facades\Storage;
+ use Tests\TestCase;
+ 
+@@ -229,6 +230,20 @@ class HtmlExportTest extends TestCase
+         $resp->assertDontSee('ExportWizardTheFifth');
+     }
+ 
++    public function test_page_export_only_includes_revision_count_if_user_has_revision_view_permissions()
++    {
++        $editor = $this->users->editor();
++        $page = $this->entities->page();
++
++        $resp = $this->actingAs($editor)->get($page->getUrl('/export/html'));
++        $resp->assertSee('Revision #');
++
++        $this->permissions->removeUserRolePermissions($editor, [Permission::RevisionViewAll]);
++
++        $resp = $this->actingAs($editor)->get($page->getUrl('/export/html'));
++        $resp->assertDontSee('Revision #');
++    }
++
+     public function test_html_exports_contain_csp_meta_tag()
+     {
+         $entities = [

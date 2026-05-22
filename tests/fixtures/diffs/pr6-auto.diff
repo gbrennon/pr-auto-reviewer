@@ -1,0 +1,1333 @@
+diff --git a/.env.example b/.env.example
+index 694a111..4da9b07 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,19 +1,25 @@
+-# Codeberg PR AI Auto-Reviewer Configuration
++# PR Auto-Reviewer Configuration
++#
++# Configuration is loaded from (in order of priority):
++#   1. ~/.config/pr-auto-reviewer/config (preferred - used by service)
++#   2. .env in the repo root (fallback)
++#
++# The install-service.sh script creates ~/.config/pr-auto-reviewer/config
++# if it doesn't exist.
+ 
+-# Required: Codeberg API token
+-# Generate at: https://codeberg.org/settings/applications
+-# Required scopes:
+-#   - user (read)
+-#   - repository (read, write)
+-#   - issue (write)
+-CODEBERG_TOKEN=
++# === FORGEJO/CODEBERG ===
++FORGEJO_TOKEN=           # Required - Generate at https://codeberg.org/settings/applications (scopes: repo, read:user)
++FORGEJO_MODE=codeberg    # "local" or "codeberg" (default: codeberg)
++FORGEJO_HOST=https://codeberg.org
+ 
+-# Optional: GitHub PAT (for GitHub repos)
+-GITHUB_PAT=
++# === REVIEWER ===
++FORGEJO_REVIEWER_TOKEN=  # Required - Different user's token (scopes: repo)
++FORGEJO_REVIEWER_USERNAME=  # Required - Username of reviewer account
+ 
+-# Optional: Ollama settings
++# === OLLAMA ===
+ OLLAMA_HOST=http://localhost:11434
+-OLLAMA_MODEL=code-review
+-
+-# Optional: Poll interval in seconds (default: 60)
++OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
+ POLL_INTERVAL=60
++
++# === DEBUG (optional) ===
++DEBUG=0
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index 5415798..c603182 100644
+--- a/README.md
++++ b/README.md
+@@ -1,15 +1,15 @@
+ # PR Auto Reviewer
+ 
+-An AI-powered code review assistant that automatically reviews pull requests on Codeberg using local Ollama AI models. Think of it as having an extra team member who never sleeps and always provides constructive feedback on your PRs.
++An AI-powered code review assistant that automatically reviews pull requests on Forgejo or Codeberg using local Ollama AI models. Think of it as having an extra team member who never sleeps and always provides constructive feedback on your PRs.
+ 
+ ## How It Works
+ 
+-This project sits between your Codeberg repositories and a local Ollama instance. Here's the flow:
++This project sits between your Forgejo/Codeberg repositories and a local Ollama instance. Here's the flow:
+ 
+-1. **Watches for PRs** - Continuously polls your Codeberg repos for open pull requests
++1. **Watches for PRs** - Continuously polls your repositories for open pull requests
+ 2. **Fetches the diff** - When a new or updated PR is found, it downloads the changes
+ 3. **Sends to AI** - The diff is sent to your Ollama model for analysis
+-4. **Posts review** - A formatted review comment is posted directly on the PR
++4. **Posts review** - A formal review (approve/request changes) is posted on the PR
+ 
+ ## Why Use It
+ 
+@@ -17,18 +17,32 @@ This project sits between your Codeberg repositories and a local Ollama instance
+ - **Privacy-first** - Your code never leaves your machine; it runs entirely locally
+ - **Learning tool** - The AI suggestions can help developers grow their skills
+ - **Catches basics** - Frees up human reviewers to focus on architecture and logic, not style nits
++- **Multi-platform** - Works with both Forgejo (local/self-hosted) and Codeberg
+ 
+ ## What It Does NOT Do
+ 
+-- It does not approve or merge PRs automatically (verdict is informational only)
++- It does not merge PRs automatically (verdict is informational only)
+ - It does not replace human code review
+ - It does not store your code anywhere
++- It does not self-review (reviewer must be a different account than PR author)
+ 
+ ## Requirements
+ 
+-- **Ollama** - A local AI inference server. Ollama runs entirely on your machine.
+-- **Codeberg account** - Where your repositories live
+-- **API token** - Required to read PRs and post review comments
++- **Ollama** - A local AI inference server. [Install from ollama.ai](https://ollama.ai)
++- **Forgejo or Codeberg account** - Where your repositories live
++- **systemd** - Required for the service (Linux systems with systemd)
++- **Two API tokens** - One from your account, one from a reviewer account
++
++## Supported Platforms
++
++Currently supports:
++- Forgejo (local and self-hosted)
++- Codeberg
++
++Planned support (not yet available):
++- GitHub
++- GitLab
++- Other Git-based platforms
+ 
+ ## Quick Start
+ 
+@@ -37,39 +51,62 @@ This project sits between your Codeberg repositories and a local Ollama instance
+ git clone https://codeberg.org/gbrennon/pr-auto-reviewer.git
+ cd pr-auto-reviewer
+ 
+-# Create your configuration file
+-cp .env.example .env
+-
+-# Edit .env with your Codeberg API token
+-# Generate one at: https://codeberg.org/settings/applications
+-# See docs/permissions.md for required scopes
+-
+-# Bootstrap starts everything
+-bash scripts/bootstrap.sh
++# Run the install script - creates config and sets up systemd service
++bash scripts/install-service.sh
+ ```
+ 
+-## Understanding the Scopes
++The install script will:
++1. Create `~/.config/pr-auto-reviewer/config` with the configuration template
++2. Set up the systemd user service
++3. Start the service immediately
+ 
+-When generating your Codeberg token, you'll need specific scopes:
++## Configuration
+ 
+-| Scope | Why It's Needed |
+-|-------|-----------------|
+-| `user` (read) | To identify your account and list your repositories |
+-| `repository` (read) | To fetch PR details and diffs |
+-| `repository` (write) | To submit formal reviews |
+-| `issue` (write) | To post review comments on PRs |
++Edit your config file at `~/.config/pr-auto-reviewer/config`:
+ 
+-See `docs/permissions.md` for the full breakdown.
++```bash
++# === FORGEJO/CODEBERG ===
++FORGEJO_TOKEN=           # Required - Your account token (scopes: repo, read:user)
++FORGEJO_HOST=https://codeberg.org
++
++# === REVIEWER ===
++FORGEJO_REVIEWER_TOKEN=  # Required - Different user's token (scopes: repo)
++FORGEJO_REVIEWER_USERNAME=  # Required - Username of reviewer account
++
++# === OLLAMA ===
++OLLAMA_HOST=http://localhost:11434
++OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
++POLL_INTERVAL=60
++```
++
++### Generating Tokens
++
++1. **Owner token** (FORGEJO_TOKEN): Generate at https://codeberg.org/settings/applications
++   - Scopes: `repo`, `read:user`
++
++2. **Reviewer token** (FORGEJO_REVIEWER_TOKEN): Generate from a different account
++   - Scopes: `repo`
++   - Get the username from the reviewer's account
++
++### Switching Between Forgejo and Codeberg
++
++By default, the app connects to Codeberg. To use a local Forgejo instance:
++
++```bash
++FORGEJO_HOST=http://forgejo.local:3000
++```
++
++Set `FORGEJO_HOST` to your Forgejo instance URL in your config file. The API path (`/api/v1`) is automatically appended.
+ 
+ ## Usage
+ 
+ ### Starting the Watcher
+ 
+ ```bash
+-# Using bootstrap (recommended) - handles dependency checks and env loading
+-bash scripts/bootstrap.sh
++# Install and start the service (creates config, sets up systemd)
++bash scripts/install-service.sh
+ 
+-# Or directly
++# Or run manually without installing
+ bash scripts/watch-prs.sh
+ ```
+ 
+@@ -85,47 +122,51 @@ bash scripts/watch-prs.sh -i 30
+ # Single run (good for testing)
+ bash scripts/watch-prs.sh --once
+ 
+-# Stop all running services
+-bash scripts/autostart/autostart.sh --stop
++# Check service status
++systemctl --user status pr-ai-auto-reviewer.service
+ 
+-# Check what's running
+-bash scripts/autostart/autostart.sh --status
++# Stop the service
++systemctl --user stop pr-ai-auto-reviewer.service
++
++# View logs
++journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
+ ```
+ 
+-## Configuration
++## Starting on Boot
+ 
+-Edit your `.env` file:
++By default, the service starts when you log in. To start automatically at boot (even without an active login session):
+ 
+ ```bash
+-# Required: Your Codeberg API token
+-CODEBERG_TOKEN=your_token_here
+-
+-# Optional: Ollama settings
+-OLLAMA_HOST=http://localhost:11434
+-OLLAMA_MODEL=code-review
+-
+-# Optional: How often to check for new PRs (in seconds)
+-POLL_INTERVAL=60
++loginctl enable-linger $USER
+ ```
+ 
+ ## The Review Output
+ 
+-When the AI reviews a PR, it posts a comment that looks like this:
++When the AI reviews a PR, it posts a formal review with verdict:
+ 
++- **Approved** - The changes look good
++- **Changes Requested** - There are issues that should be addressed
++
++The review includes:
++- Issues found (with severity: HIGH, MEDIUM, LOW)
++- Suggestions for improvement
++- Praise for good practices
++- Summary
++
++Example:
+ ```markdown
+-## AI Code Review ✅
++## AI Code Review
+ 
+ **Verdict:** Approved
+ 
+-### Issues Found
+-- src/auth.rs:45: Consider using constant-time comparison for passwords
++### Issues
++- [MEDIUM] [architecture] src/auth.rs:45: Consider using constant-time comparison
+ 
+-### Suggestions  
+-- Consider adding a unit test for the new validate_email function
++### Suggestions
++- Consider adding a unit test for the validate_email function
+ 
+ ### Praise
+ - Clean separation of concerns in the router
+-- Good use of Rust's type system
+ 
+ **Summary:** Solid implementation. Ready to merge once the security concern is addressed.
+ 
+@@ -133,86 +174,72 @@ When the AI reviews a PR, it posts a comment that looks like this:
+ *Review by code-review via PR AI Auto-Reviewer*
+ ```
+ 
+-The "verdict" is either:
+-- **Approved** - The changes look good
+-- **Changes Requested** - There are issues that should be addressed
+-
+ ## Hot Reload
+ 
+-You can change settings without restarting:
++You can change settings without restarting the service. Edit `~/.config/pr-auto-reviewer/config` and the service will reload within 10 seconds. You can also trigger a reload:
+ 
+ ```bash
+-# Change the AI model
+-sed -i 's/OLLAMA_MODEL=.*/OLLAMA_MODEL=llama3.2/' .env
+-
+-# Or manually trigger a reload
+-bash scripts/reload.sh
++# Trigger config reload
++pkill -HUP -f "watch-prs.sh"
+ ```
+ 
+-The watcher will pick up the changes within 10 seconds.
+-
+ ## Setting Up the AI Model
+ 
+-The default model is `code-review`. If you don't have it:
++Check what models you have available:
+ 
+ ```bash
+ # List available models
+ ollama list
+ 
+-# Use a different model temporarily
+-OLLAMA_MODEL=qwen2.5-coder:14b bash scripts/watch-prs.sh
++# Pull a model if needed (example)
++ollama pull code-review
+ ```
+ 
+-## Project Structure
++## Manual/Dev Mode
+ 
+-See `docs/structure.md` for a detailed breakdown of files and directories.
++For development or testing without installing the service, you can use `.env` in the repo:
++
++```bash
++# Create .env in repo root
++cp .env.example .env
++# Edit .env with your tokens
++
++# Run manually
++bash scripts/watch-prs.sh --once
++```
++
++The watcher will use `.env` from the repo when no user config exists at `~/.config/pr-auto-reviewer/config`.
++
++## Project Structure
+ 
+ ```
+ pr-auto-reviewer/
+ ├── scripts/
+ │   ├── bootstrap.sh          # Entry point - starts everything
++│   ├── install-service.sh    # Install as systemd service
+ │   ├── watch-prs.sh          # Main daemon that watches and reviews
+ │   ├── reload.sh             # Trigger config reload
+ │   ├── autostart/            # Service manager
+ │   └── lib/                  # Shared helper scripts
+-├── docs/
+-│   ├── structure.md          # File structure explanation
+-│   ├── features.md           # Implemented and planned features
+-│   └── permissions.md        # Token scope documentation
+-├── .env.example              # Configuration template
+-└── runner-data/              # State storage (PR reviews, PIDs)
++├── .env.example              # Configuration template (for manual mode)
++└── runner-data/              # State storage (reviewed PRs)
+ ```
+ 
+-## Current Status
+-
+-### Implemented
+-
+-- **Codeberg PR watching** - Watches all your repos or specific ones
+-- **AI code review** - Uses local Ollama to review PRs
+-- **Review posting** - Posts comments and formal reviews to Codeberg
+-- **Draft PR skipping** - Skips draft PRs automatically
+-- **Duplicate prevention** - Won't re-review unchanged PRs
+-- **Hot reload** - Config changes detected without restart
+-- **Autostart system** - Background service management
+-- **Single cycle mode** - Run once for testing
+-
+-### Not Yet Implemented
+-
+-- **GitHub support** - Not tested, API not implemented
+-- **Webhook mode** - Currently polling only (60s interval)
+-- **Per-repo config** - Same settings for all repos
+-- **Docker container** - Not available yet
+-- **Systemd units** - Not available yet
+-
+-See `docs/features.md` for the complete feature list.
+-
+ ## Troubleshooting
+ 
+ ### "No repos found"
+-Your token might be missing the `read:user` scope. Check your token at https://codeberg.org/settings/applications
++Your token might be missing the `read:user` scope.
+ 
+-### "Failed to post to Codeberg"
+-Your token might be missing the `issue` (write) scope.
++Regenerate your token at https://codeberg.org/settings/applications with both `repo` and `read:user` scopes.
++
++### "Self-review detected"
++The reviewer token belongs to the same account as the PR author.
++
++Use a different account's token for `FORGEJO_REVIEWER_TOKEN`.
++
++### "Failed to post review"
++- Check that `FORGEJO_REVIEWER_TOKEN` is valid and has `repo` scope
++- Verify `FORGEJO_REVIEWER_USERNAME` is correct
+ 
+ ### "Ollama not available"
+ Make sure Ollama is running:
+@@ -222,6 +249,12 @@ ollama serve
+ curl http://localhost:11434/api/tags
+ ```
+ 
++### Service won't start
++Check systemd logs:
++```bash
++journalctl --user -u pr-ai-auto-reviewer.service --no-pager -f
++```
++
+ ## License
+ 
+ MIT
+diff --git a/scripts/autostart/lib.sh b/scripts/autostart/lib.sh
+index c57d313..ead8449 100755
+--- a/scripts/autostart/lib.sh
++++ b/scripts/autostart/lib.sh
+@@ -6,10 +6,16 @@ set -euo pipefail
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ 
+-# Load environment
+-if [[ -f "${REPO_ROOT}/.env" ]]; then
++CONFIG_FILE="${HOME}/.config/pr-auto-reviewer/config"
++REPO_ENV="${REPO_ROOT}/.env"
++
++if [[ -f "$CONFIG_FILE" ]]; then
+   set -a
+-  source "${REPO_ROOT}/.env"
++  source "$CONFIG_FILE"
++  set +a
++elif [[ -f "$REPO_ENV" ]]; then
++  set -a
++  source "$REPO_ENV"
+   set +a
+ fi
+ 
+@@ -77,7 +83,11 @@ run_background() {
+   
+   {
+     set -a
+-    source "${REPO_ROOT}/.env"
++    if [[ -f "$CONFIG_FILE" ]]; then
++      source "$CONFIG_FILE"
++    elif [[ -f "$REPO_ENV" ]]; then
++      source "$REPO_ENV"
++    fi
+     set +a
+     exec bash "$script"
+   } >> "$logs" 2>&1 &
+diff --git a/scripts/bootstrap.sh b/scripts/bootstrap.sh
+index 3b88f65..2f07f40 100755
+--- a/scripts/bootstrap.sh
++++ b/scripts/bootstrap.sh
+@@ -35,14 +35,65 @@ check_deps() {
+ }
+ 
+ setup_env() {
+-  if [[ -f "$REPO_ROOT/.env" ]]; then
+-    log_info ".env loaded"
+-  else
+-    log_error ".env not found. Create it from .env.example template."
+-    return 1
++  if [[ -f "${HOME}/.config/pr-auto-reviewer/config" ]]; then
++    log_info "Using user config: ~/.config/pr-auto-reviewer/config"
++    set -a
++    source "${HOME}/.config/pr-auto-reviewer/config"
++    set +a
++    return 0
+   fi
+ 
+-  init_env
++  if [[ -f "$REPO_ROOT/.env" ]]; then
++    log_info ".env loaded from repo"
++    set -a
++    source "$REPO_ROOT/.env"
++    set +a
++    return 0
++  fi
++
++  log_error "No config found. Either:"
++  log_error "  - Install: bash scripts/install-service.sh"
++  log_error "  - Manual: cp .env.example .env and edit"
++  return 1
++}
++
++check_service_status() {
++  if systemctl --user is-active --quiet pr-ai-auto-reviewer.service 2>/dev/null; then
++    return 0
++  fi
++  return 1
++}
++
++pause_service() {
++  if check_service_status; then
++    log_info "Pausing systemd service..."
++    
++    systemctl --user stop pr-ai-auto-reviewer.service 2>/dev/null || true
++    systemctl --user disable --now pr-ai-auto-reviewer.service 2>/dev/null || true
++    
++    sleep 2
++    
++    local pids
++    pids=$(pgrep -f "/scripts/watch-prs.sh" 2>/dev/null || true)
++    if [[ -n "$pids" ]]; then
++      log_info "Killing old watch-prs: $pids"
++      for pid in $pids; do
++        kill -9 "$pid" 2>/dev/null || true
++      done
++    fi
++    
++    rm -f "$REPO_ROOT/watcher-prs.lock" 2>/dev/null || true
++    rm -f "$REPO_ROOT/watcher-prs.pid" 2>/dev/null || true
++    
++    sleep 1
++    return 0
++  fi
++  return 1
++}
++
++resume_service() {
++  log_info "Resuming systemd service..."
++  systemctl --user enable --now pr-ai-auto-reviewer.service 2>/dev/null || true
+ }
+ 
+ check_ollama() {
+@@ -79,22 +130,32 @@ create_dirs() {
+ start_project() {
+   log_info "Starting PR AI Auto-Reviewer..."
+ 
+-  if [[ ! -f "$REPO_ROOT/.env" ]]; then
+-    log_error ".env file missing. Run bootstrap again after configuring."
+-    return 1
++  local service_was_running=false
++
++  if check_service_status; then
++    log_info "Systemd service is running, pausing for manual validation..."
++    pause_service
++    service_was_running=true
+   fi
+ 
+-  if [[ -z "$CODEBERG_TOKEN" ]]; then
+-    log_warn "CODEBERG_TOKEN is empty. Reviews will fail for private repos."
++  if [[ -z "$FORGEJO_TOKEN" ]]; then
++    log_warn "FORGEJO_TOKEN is empty. Reviews will fail for private repos."
+   fi
+ 
+-  if bash "$REPO_ROOT/scripts/autostart/autostart.sh" --status 2>/dev/null | grep -q "watch-prs.*running"; then
+-    log_info "watch-prs is already running, skipping start"
+-    return 0
++  log_info "Running watch-prs.sh --once (single cycle)..."
++  log_info "To stop early: Ctrl+C"
++  log_info "Service will resume after this completes or is interrupted."
++
++  if timeout 300 bash "$REPO_ROOT/scripts/watch-prs.sh" --once; then
++    log_info "watch-prs.sh completed"
++  else
++    log_warn "watch-prs.sh interrupted or timed out"
+   fi
+ 
+-  log_info "watch-prs not running, starting..."
+-  bash "$REPO_ROOT/scripts/autostart/autostart.sh"
++  if [[ "$service_was_running" == "true" ]]; then
++    log_info "Resuming systemd service..."
++    resume_service
++  fi
+ }
+ 
+ main() {
+diff --git a/scripts/install-service.sh b/scripts/install-service.sh
+index 062fc1a..8efebe2 100755
+--- a/scripts/install-service.sh
++++ b/scripts/install-service.sh
+@@ -1,22 +1,76 @@
+ #!/usr/bin/env bash
+-# install-service.sh — Install PR AI Auto-Reviewer as a systemd user service
+-
+ set -euo pipefail
+ 
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ 
++if ! command -v systemctl &>/dev/null; then
++    echo "ERROR: systemd is required. This script uses systemd user services." >&2
++    exit 1
++fi
++
++if ! command -v bash &>/dev/null; then
++    echo "ERROR: bash is required to run this script." >&2
++    exit 1
++fi
++
+ SYSTEMD_DIR="${HOME}/.config/systemd/user"
+ SERVICE_FILE="pr-ai-auto-reviewer.service"
+ SERVICE_NAME="pr-ai-auto-reviewer.service"
++CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
++CONFIG_FILE="${CONFIG_DIR}/config"
++
++setup_config() {
++    if [[ ! -f "$CONFIG_FILE" ]]; then
++        echo "Creating config at $CONFIG_FILE..."
++        mkdir -p "$CONFIG_DIR"
++        cat > "$CONFIG_FILE" <<'EOF'
++# PR Auto-Reviewer Configuration
++
++# === FORGEJO/CODEBERG ===
++FORGEJO_TOKEN=           # Required - Generate at https://codeberg.org/settings/applications (scopes: repo, read:user)
++FORGEJO_MODE=codeberg    # "local" or "codeberg" (default: codeberg)
++FORGEJO_HOST=https://codeberg.org
++
++# === REVIEWER ===
++FORGEJO_REVIEWER_TOKEN=  # Required - Different user's token (scopes: repo)
++FORGEJO_REVIEWER_USERNAME=  # Required
++
++# === OLLAMA ===
++OLLAMA_HOST=http://localhost:11434
++OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
++POLL_INTERVAL=60
++
++# === DEBUG ===
++DEBUG=0
++EOF
++        echo "Config created. Please edit $CONFIG_FILE with your tokens and model."
++    else
++        echo "Config already exists at $CONFIG_FILE"
++    fi
++}
+ 
+ install_service() {
+     echo "Installing $SERVICE_NAME to $SYSTEMD_DIR/"
+-
+     mkdir -p "$SYSTEMD_DIR"
+ 
+-    sed "s|%h|${HOME}|g; s|%u|${USER}|g" \
+-        "$REPO_ROOT/$SERVICE_FILE" > "$SYSTEMD_DIR/$SERVICE_FILE"
++    cat > "$SYSTEMD_DIR/$SERVICE_FILE" <<EOF
++[Unit]
++Description=PR AI Auto-Reviewer
++After=network-online.target
++Wants=network-online.target
++
++[Service]
++Type=simple
++User=${USER}
++WorkingDirectory=${REPO_ROOT}
++ExecStart=/usr/bin/bash ${REPO_ROOT}/scripts/watch-prs.sh
++Restart=on-failure
++RestartSec=10
++
++[Install]
++WantedBy=default.target
++EOF
+ 
+     echo "Reloading systemd user daemon..."
+     systemctl --user daemon-reload
+@@ -33,8 +87,10 @@ install_service() {
+ }
+ 
+ main() {
++    setup_config
++    
+     if [[ -f "$SYSTEMD_DIR/$SERVICE_FILE" ]]; then
+-        echo "Service already installed, reinstalling..."
++        echo "Service already installed, updating..."
+         systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+         install_service
+     else
+@@ -42,4 +98,4 @@ main() {
+     fi
+ }
+ 
+-main "$@"
++main "$@"
+\ No newline at end of file
+diff --git a/scripts/lib/build-comment.py b/scripts/lib/build-comment.py
+index d960441..5e56711 100644
+--- a/scripts/lib/build-comment.py
++++ b/scripts/lib/build-comment.py
+@@ -75,15 +75,12 @@ def main():
+     # Determine verdict
+     verdict = determine_verdict(review)
+ 
+-    # Determine emoji and text for verdict
+     if verdict == "approved":
+-        verdict_emoji = "✅"
+         verdict_text = "Approved"
+     else:
+-        verdict_emoji = "❌"
+         verdict_text = "Changes Requested"
+ 
+-    body = f"## AI Code Review {verdict_emoji}\n\n"
++    body = f"## AI Code Review\n\n"
+     body += f"**Verdict:** {verdict_text}\n\n"
+ 
+     if issues:
+diff --git a/scripts/lib/config-loader.sh b/scripts/lib/config-loader.sh
+new file mode 100644
+index 0000000..f8041c3
+--- /dev/null
++++ b/scripts/lib/config-loader.sh
+@@ -0,0 +1,36 @@
++#!/usr/bin/env bash
++# config-loader.sh — Load configuration from user config directory or repo
++
++CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
++CONFIG_FILE="${CONFIG_DIR}/config"
++REPO_CONFIG="${REPO_ROOT:-.}/.env"
++
++load_config() {
++    if [[ -f "$CONFIG_FILE" ]]; then
++        set -a
++        source "$CONFIG_FILE"
++        set +a
++        return 0
++    fi
++
++    if [[ -f "$REPO_CONFIG" ]]; then
++        set -a
++        source "$REPO_CONFIG"
++        set +a
++        return 0
++    fi
++
++    echo "ERROR: No config file found at $CONFIG_FILE or $REPO_CONFIG" >&2
++    echo "       Run 'bash scripts/install-service.sh' to create one, or create $CONFIG_FILE manually." >&2
++    return 1
++}
++
++get_config_path() {
++    if [[ -f "$CONFIG_FILE" ]]; then
++        echo "$CONFIG_FILE"
++    elif [[ -f "$REPO_CONFIG" ]]; then
++        echo "$REPO_CONFIG"
++    else
++        echo ""
++    fi
++}
+\ No newline at end of file
+diff --git a/scripts/lib/env-loader.sh b/scripts/lib/env-loader.sh
+index 88e8c4a..85c8d0a 100644
+--- a/scripts/lib/env-loader.sh
++++ b/scripts/lib/env-loader.sh
+@@ -1,47 +1,52 @@
+ #!/usr/bin/env bash
+-# env-loader.sh — Load and validate environment variables from .env
++# env-loader.sh — Load and validate environment variables from config
+ 
+ set -euo pipefail
+ 
+ load_env() {
+-  if [[ -z "${REPO_ROOT:-}" ]]; then
+-    echo "ERROR: REPO_ROOT not set" >&2
++    CONFIG_FILE="${HOME}/.config/pr-auto-reviewer/config"
++    REPO_ENV="${REPO_ROOT:-.}/.env"
++    
++    if [[ -f "$CONFIG_FILE" ]]; then
++        set -a
++        source "$CONFIG_FILE"
++        set +a
++        return 0
++    fi
++    
++    if [[ -f "$REPO_ENV" ]]; then
++        set -a
++        source "$REPO_ENV"
++        set +a
++        return 0
++    fi
++    
++    echo "ERROR: No config file found at $CONFIG_FILE or $REPO_ENV" >&2
+     return 1
+-  fi
+-
+-  if [[ ! -f "${REPO_ROOT}/.env" ]]; then
+-    return 1
+-  fi
+-
+-  set -a
+-  source "${REPO_ROOT}/.env"
+-  set +a
+ }
+ 
+ require_env() {
+-  local var_name="$1"
+-  local var_value="${!var_name:-}"
++    local var_name="$1"
++    local var_value="${!var_name:-}"
+ 
+-  if [[ -z "$var_value" ]]; then
+-    echo "ERROR: $var_name is not set" >&2
+-    return 1
+-  fi
++    if [[ -z "$var_value" ]]; then
++        echo "ERROR: $var_name is not set" >&2
++        return 1
++    fi
+ 
+-  return 0
++    return 0
+ }
+ 
+ get_env() {
+-  local var_name="$1"
+-  local default="$2"
+-  echo "${!var_name:-$default}"
++    local var_name="$1"
++    local default="$2"
++    echo "${!var_name:-$default}"
+ }
+ 
+ init_env() {
+-  load_env
++    load_env || true
+ 
+-  export CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
+-  export GITHUB_PAT="${GITHUB_PAT:-}"
+-  export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+-  export OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
+-  export POLL_INTERVAL="${POLL_INTERVAL:-60}"
+-}
++    export OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++    export OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
++    export POLL_INTERVAL="${POLL_INTERVAL:-60}"
++}
+\ No newline at end of file
+diff --git a/scripts/lib/hot-reload.sh b/scripts/lib/hot-reload.sh
+index 37f759a..80ac640 100755
+--- a/scripts/lib/hot-reload.sh
++++ b/scripts/lib/hot-reload.sh
+@@ -1,226 +1,128 @@
+ #!/usr/bin/env bash
+ # hot-reload.sh — Shared library for hot-reloading configuration via SIGHUP or automatic file watching.
+-#
+-# Usage:
+-#   source "${SCRIPT_DIR}/lib/hot-reload.sh"
+-#   init_hot_reload "$REPO_ROOT"
+-#   # In main loop, replace "sleep $INTERVAL" with:
+-#   interruptible_sleep "$INTERVAL"
+-#
+-# Features:
+-#   - SIGHUP signal triggers immediate reload
+-#   - Automatic .env file change detection (every 10 seconds)
+-#   - Variables are tracked: FORGEJO_HOST, OLLAMA_HOST, OLLAMA_MODEL, POLL_INTERVAL, etc.
+ 
+ set -euo pipefail
+ 
+-# Global state for hot-reload
+ RELOAD_REQUESTED=false
+ REPO_ROOT_PATH=""
+ CONFIG_SNAPSHOT=""
+-ENV_FILE=""
+-LAST_ENV_MTIME=""
++CONFIG_FILE=""
++REPO_ENV=""
++LAST_CONFIG_MTIME=""
+ 
+-# Get .env modification time
+-get_env_mtime() {
+-  if [[ -f "$ENV_FILE" ]]; then
+-    # Use stat with %Y for modification time
+-    stat --format=%Y "$ENV_FILE" 2>/dev/null || { echo "0"; return 1; }
+-  else
+-    echo "0"
+-    return 1
+-  fi
++get_config_mtime() {
++    if [[ -f "$CONFIG_FILE" ]]; then
++        stat --format=%Y "$CONFIG_FILE" 2>/dev/null || echo "0"
++    elif [[ -f "$REPO_ENV" ]]; then
++        stat --format=%Y "$REPO_ENV" 2>/dev/null || echo "0"
++    else
++        echo "0"
++    fi
+ }
+ 
+-# Check if .env has been modified
+-check_env_changed() {
+-  local current_mtime
+-  current_mtime=$(get_env_mtime)
+-  
+-  if [[ -z "$LAST_ENV_MTIME" ]]; then
+-    LAST_ENV_MTIME="$current_mtime"
+-    return 1
+-  fi
+-  
+-  if [[ "$current_mtime" != "$LAST_ENV_MTIME" ]]; then
+-    return 0  # Changed
+-  fi
+-  
+-  return 1  # Not changed
++check_config_changed() {
++    local current_mtime
++    current_mtime=$(get_config_mtime)
++    
++    if [[ -z "$LAST_CONFIG_MTIME" ]]; then
++        LAST_CONFIG_MTIME="$current_mtime"
++        return 1
++    fi
++    
++    [[ "$current_mtime" != "$LAST_CONFIG_MTIME" ]]
++}
++
++load_config_file() {
++    if [[ -f "$CONFIG_FILE" ]]; then
++        set -a
++        source "$CONFIG_FILE" 2>/dev/null || true
++        set +a
++        return 0
++    fi
++    
++    if [[ -f "$REPO_ENV" ]]; then
++        set -a
++        source "$REPO_ENV" 2>/dev/null || true
++        return 0
++    fi
++    
++    return 1
+ }
+ 
+-# Initialize hot-reload functionality
+ init_hot_reload() {
+-  local repo_root="$1"
+-  REPO_ROOT_PATH="$(cd "$repo_root" && pwd)"
+-  ENV_FILE="${REPO_ROOT_PATH}/.env"
+-  
+-  # Capture initial config snapshot
+-  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
+-  LAST_ENV_MTIME=$(get_env_mtime)
+-  
+-  # Set up signal handler for SIGHUP
+-  trap 'handle_sighup' HUP
+-  
+-  echo "[hot-reload] Initialized. Send SIGHUP or edit .env to reload config."
+-  echo "[hot-reload] Initial config: $(echo "$CONFIG_SNAPSHOT" | head -1)"
++    local repo_root="$1"
++    REPO_ROOT_PATH="$(cd "$repo_root" && pwd)"
++    CONFIG_FILE="${HOME}/.config/pr-auto-reviewer/config"
++    REPO_ENV="${REPO_ROOT_PATH}/.env"
++    
++    load_config_file
++    
++    CONFIG_SNAPSHOT="$(capture_config_snapshot)"
++    LAST_CONFIG_MTIME=$(get_config_mtime)
++    
++    trap 'handle_sighup' HUP
++    
++    echo "[hot-reload] Initialized. Send SIGHUP or edit config to reload."
++    echo "[hot-reload] Initial config: $(echo "$CONFIG_SNAPSHOT" | head -1)"
+ }
+ 
+-# Handle SIGHUP signal
+ handle_sighup() {
+-  RELOAD_REQUESTED=true
++    RELOAD_REQUESTED=true
+ }
+ 
+-# Reload configuration from .env
+ reload_config() {
+-  echo "[hot-reload] Reloading configuration..."
+-  
+-  # Track old values for comparison
+-  local old_model="$OLLAMA_MODEL"
+-  local old_host="$OLLAMA_HOST"
+-  local old_interval="$INTERVAL"
+-  local old_forgejo="$FORGEJO_HOST"
+-  
+-  # Re-source .env with export
+-  if [[ -f "${REPO_ROOT_PATH}/.env" ]]; then
+-    set -a
+-    source "${REPO_ROOT_PATH}/.env" 2>/dev/null || true
+-    set +a
+-  else
+-    echo "[hot-reload] WARNING: .env not found at ${REPO_ROOT_PATH}/.env"
+-  fi
+-  
+-  # Set defaults if not in .env
+-  FORGEJO_HOST="${FORGEJO_HOST:-http://localhost:1234}"
+-  AUTH="${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}"
+-  OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+-  OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
+-  INTERVAL="${INTERVAL:-${POLL_INTERVAL:-60}}"
+-  
+-  # Log changes
+-  echo "[hot-reload] Configuration reloaded:"
+-  [[ "$old_model" != "$OLLAMA_MODEL" ]] && echo "  OLLAMA_MODEL: ${old_model:-<unset>} -> ${OLLAMA_MODEL}"
+-  [[ "$old_host" != "$OLLAMA_HOST" ]] && echo "  OLLAMA_HOST: ${old_host:-<unset>} -> ${OLLAMA_HOST}"
+-  [[ "$old_interval" != "$INTERVAL" ]] && echo "  INTERVAL: ${old_interval:-60} -> ${INTERVAL}"
+-  [[ "$old_forgejo" != "$FORGEJO_HOST" ]] && echo "  FORGEJO_HOST: ${old_forgejo:-<unset>} -> ${FORGEJO_HOST}"
+-  
+-  # Update snapshot and mtime
+-  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
+-  LAST_ENV_MTIME=$(get_env_mtime)
+-  RELOAD_REQUESTED=false
+-  
+-  echo "[hot-reload] Reload complete."
+-}
+-
+-# Interruptible sleep that checks for reload requests (SIGHUP or .env changes)
+-# Replaces: sleep "$INTERVAL"
+-interruptible_sleep() {
+-  local duration="${1:-60}"
+-  local elapsed=0
+-  local check_interval=3
+-  local last_check=0
+-  local last_mtime="0"
+-  
+-  # Get initial mtime
+-  last_mtime=$(get_env_mtime)
+-  
+-  while [[ $elapsed -lt $duration ]]; do
+-    # Only check every check_interval seconds
+-    if [[ $((elapsed - last_check)) -ge $check_interval ]]; then
+-      last_check=$elapsed
+-      
+-      local current_mtime
+-      current_mtime=$(get_env_mtime)
+-      
+-      # Check for file changes
+-      if [[ "$current_mtime" != "$last_mtime" ]]; then
+-        reload_config
+-        last_mtime="$current_mtime"
+-      fi
+-      
+-      if [[ "$RELOAD_REQUESTED" == true ]]; then
+-        reload_config
+-        RELOAD_REQUESTED=false
+-      fi
+-    fi
++    echo "[hot-reload] Reloading configuration..."
+     
+-    sleep 1
+-    elapsed=$((elapsed + 1))
+-  done
++    local old_model="$OLLAMA_MODEL"
++    local old_host="$OLLAMA_HOST"
++    local old_interval="$INTERVAL"
++    local old_forgejo="$FORGEJO_HOST"
++    
++    load_config_file || echo "[hot-reload] WARNING: No config file found"
++    
++    FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
++    OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
++    OLLAMA_MODEL="${OLLAMA_MODEL:-code-review}"
++    INTERVAL="${INTERVAL:-${POLL_INTERVAL:-60}}"
++    
++    echo "[hot-reload] Configuration reloaded:"
++    [[ "$old_model" != "$OLLAMA_MODEL" ]] && echo "  OLLAMA_MODEL: ${old_model:-<unset>} -> $OLLAMA_MODEL"
++    [[ "$old_host" != "$OLLAMA_HOST" ]] && echo "  OLLAMA_HOST: ${old_host:-<unset>} -> $OLLAMA_HOST"
++    [[ "$old_interval" != "$INTERVAL" ]] && echo "  INTERVAL: ${old_interval:-60} -> $INTERVAL"
++    [[ "$old_forgejo" != "$FORGEJO_HOST" ]] && echo "  FORGEJO_HOST: ${old_forgejo:-<unset>} -> $FORGEJO_HOST"
++    
++    CONFIG_SNAPSHOT="$(capture_config_snapshot)"
++    RELOAD_REQUESTED=false
++    
++    echo "[hot-reload] Reload complete."
+ }
+ 
+-# Capture current config as a single-line string for comparison
+ capture_config_snapshot() {
+-  echo "OLLAMA_MODEL=${OLLAMA_MODEL:-},OLLAMA_HOST=${OLLAMA_HOST:-},INTERVAL=${INTERVAL:-60},FORGEJO_HOST=${FORGEJO_HOST:-}"
++    echo "OLLAMA_MODEL=${OLLAMA_MODEL:-},OLLAMA_HOST=${OLLAMA_HOST:-},INTERVAL=${INTERVAL:-60},FORGEJO_HOST=${FORGEJO_HOST:-}"
+ }
+ 
+-# Reload configuration from .env
+-reload_config() {
+-  echo "[hot-reload] Reloading configuration..."
+-  
+-  # Track old values for comparison
+-  local old_model="$OLLAMA_MODEL"
+-  local old_host="$OLLAMA_HOST"
+-  local old_interval="$INTERVAL"
+-  local old_forgejo="$FORGEJO_HOST"
+-  
+-  # Re-source .env with export
+-  if [[ -f "${REPO_ROOT_PATH}/.env" ]]; then
+-    set -a
+-    source "${REPO_ROOT_PATH}/.env" 2>/dev/null || true
+-    set +a
+-  else
+-    echo "[hot-reload] WARNING: .env not found at ${REPO_ROOT_PATH}/.env"
+-  fi
+-  
+-  # Set defaults if not in .env
+-  FORGEJO_HOST="${FORGEJO_HOST:-http://localhost:1234}"
+-  AUTH="${FORGEJO_ADMIN_USER}:${FORGEJO_ADMIN_PASSWORD}"
+-  OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+-  OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:14b}"
+-  INTERVAL="${INTERVAL:-${POLL_INTERVAL:-60}}"
+-  
+-  # Log changes
+-  echo "[hot-reload] Configuration reloaded:"
+-  [[ "$old_model" != "$OLLAMA_MODEL" ]] && echo "  OLLAMA_MODEL: ${old_model:-<unset>} -> ${OLLAMA_MODEL}"
+-  [[ "$old_host" != "$OLLAMA_HOST" ]] && echo "  OLLAMA_HOST: ${old_host:-<unset>} -> ${OLLAMA_HOST}"
+-  [[ "$old_interval" != "$INTERVAL" ]] && echo "  INTERVAL: ${old_interval:-60} -> ${INTERVAL}"
+-  [[ "$old_forgejo" != "$FORGEJO_HOST" ]] && echo "  FORGEJO_HOST: ${old_forgejo:-<unset>} -> ${FORGEJO_HOST}"
+-  
+-  # Update snapshot
+-  CONFIG_SNAPSHOT="$(capture_config_snapshot)"
+-  RELOAD_REQUESTED=false
+-  
+-  echo "[hot-reload] Reload complete."
+-}
+-
+-# Interruptible sleep that checks for reload requests
+-# Replaces: sleep "$INTERVAL"
+ interruptible_sleep() {
+-  local duration="${1:-60}"
+-  local elapsed=0
+-  
+-  while [[ $elapsed -lt $duration ]]; do
+-    # Check if reload was requested
+-    if [[ "$RELOAD_REQUESTED" == true ]]; then
+-      reload_config
+-    fi
++    local interval="$1"
++    local count=0
+     
+-    sleep 1
+-    elapsed=$((elapsed + 1))
+-  done
++    while [[ $count -lt $interval ]]; do
++        sleep 1
++        ((count++)) || true
++        
++        if [[ "$RELOAD_REQUESTED" == "true" ]]; then
++            reload_config
++            count=0
++        elif check_config_changed; then
++            reload_config
++            count=0
++        fi
++    done
+ }
+ 
+-# Check if reload is requested (non-blocking, for use in loops)
+-check_reload() {
+-  if [[ "$RELOAD_REQUESTED" == true ]]; then
+-    reload_config
+-    return 0
+-  fi
+-  return 1
+-}
+-
+-# Get current reload status (for debugging)
+-is_reload_requested() {
+-  echo "$RELOAD_REQUESTED"
+-}
++apply_hot_reload() {
++    if [[ "$RELOAD_REQUESTED" == "true" ]]; then
++        reload_config
++    elif check_config_changed; then
++        reload_config
++    fi
++}
+\ No newline at end of file
+diff --git a/scripts/watch-prs.sh b/scripts/watch-prs.sh
+index 596b569..a5e668b 100755
+--- a/scripts/watch-prs.sh
++++ b/scripts/watch-prs.sh
+@@ -33,12 +33,14 @@ trap 'rm -f "$WATCHER_PID_FILE"' EXIT INT TERM
+ source "${SCRIPT_DIR}/lib/hot-reload.sh"
+ init_hot_reload "$REPO_ROOT"
+ 
+-# Load env
+-source "${REPO_ROOT}/.env" 2>/dev/null || true
++# Load config from ~/.config/pr-auto-reviewer/config or repo .env
++source "${SCRIPT_DIR}/lib/config-loader.sh"
++load_config
+ 
+ # Config
+-CODEBERG_TOKEN="${CODEBERG_TOKEN:-}"
+-GITHUB_PAT="${GITHUB_PAT:-}"
++FORGEJO_HOST="${FORGEJO_HOST:-https://codeberg.org}"
++FORGEJO_TOKEN="${FORGEJO_TOKEN:-}"
++API_BASE="${FORGEJO_HOST}/api/v1"
+ INTERVAL="${POLL_INTERVAL:-60}"
+ REPOS_FILTER=""
+ RUN_ONCE=false
+@@ -63,7 +65,7 @@ Options:
+ 
+ Environment:
+   POLL_INTERVAL     Interval in seconds (default: 60)
+-  CODEBERG_TOKEN   API token for Codeberg (required for private repos)
++  FORGEJO_TOKEN   API token for Codeberg (required for private repos)
+   OLLAMA_HOST       Ollama endpoint (default: http://localhost:11434)
+   OLLAMA_MODEL      Model to use (default: code-review)
+ 
+@@ -129,12 +131,12 @@ get_repos() {
+     return
+   fi
+   
+-  if [[ -z "$CODEBERG_TOKEN" ]]; then
+-    echo "ERROR: CODEBERG_TOKEN required for listing repos" >&2
++  if [[ -z "$FORGEJO_TOKEN" ]]; then
++    echo "ERROR: FORGEJO_TOKEN required for listing repos" >&2
+     return
+   fi
+   
+-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+     "https://codeberg.org/api/v1/user/repos?limit=50" \
+     | python3 -c "
+ import sys, json
+@@ -147,7 +149,7 @@ for r in data:
+ get_open_prs() {
+   local repo="$1"
+   
+-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+     "https://codeberg.org/api/v1/repos/${repo}/pulls?state=open&limit=20" \
+     | python3 -c "
+ import sys, json
+@@ -168,7 +170,7 @@ get_diff() {
+   local repo="$1"
+   local pr_number="$2"
+   
+-  curl -sf -H "Authorization: token ${CODEBERG_TOKEN}" \
++  curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+     "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}.diff" 2>/dev/null || true
+ }
+ 
+@@ -237,7 +239,7 @@ print(json.dumps(data))
+   
+   echo "    -> Posting review to Codeberg..."
+   
+-  local api_token="${CODEBERG_TOKEN:-${GITHUB_PAT}}"
++  local api_token="${FORGEJO_TOKEN:-}"
+   if [[ -z "$api_token" ]]; then
+     echo "    -> ERROR: No API token"
+     return 1
+@@ -249,44 +251,60 @@ print(json.dumps(data))
+   comment_body=$(echo "$build_output" | tail -n +2)
+   
+   echo "    -> Verdict: ${verdict}"
+-  
+-    # Post comment
+-    local escaped_body
+-    escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
+-    
+-    local post_result
+-    post_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/issues/${pr_number}/comments" \
+-      -H "Authorization: token $api_token" \
+-      -H "Content-Type: application/json" \
+-      -d "{\"body\": ${escaped_body}}" 2>&1) || true
+-    
+-    if [[ -n "$post_result" ]]; then
+-      echo "    -> Review comment posted!"
+-      
+-      # Try to submit formal review (only works for others' PRs, not your own)
+-      # Codeberg rejects approving/requesting changes on your own PRs
+-      local review_result
+-      review_result=$(curl -sf -X POST "https://codeberg.org/api/v1/repos/${repo}/pulls/${pr_number}/reviews" \
+-        -H "Authorization: token $api_token" \
+-        -H "Content-Type: application/json" \
+-        -d "{\"event\":\"${verdict}\",\"body\":${escaped_body}}" 2>&1) || true
+-      
+-      local review_id
+-      review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+-      
+-      if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
+-        echo "    -> Review (${verdict}) submitted!"
+-      else
+-        # Check if it's a "reject your own pull" error
+-        if echo "$review_result" | grep -q "reject your own pull"; then
+-          echo "    -> Note: Cannot approve own PRs via API (Codeberg limitation)"
+-        fi
+-      fi
+-      
+-      # Update state
+-      local state
+-      state=$(load_state)
+-      STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
++
++  # Post formal review using reviewer token (not comment)
++  local escaped_body
++  escaped_body=$(echo "$comment_body" | python3 "${SCRIPT_DIR}/lib/json-escape.py")
++
++  local reviewer_token="${FORGEJO_REVIEWER_TOKEN:-}"
++  local reviewer_username="${FORGEJO_REVIEWER_USERNAME:-}"
++
++  if [[ -z "$reviewer_token" ]]; then
++    echo "    -> ERROR: FORGEJO_REVIEWER_TOKEN not set"
++    return 1
++  fi
++
++  if [[ -z "$reviewer_username" ]]; then
++    echo "    -> ERROR: FORGEJO_REVIEWER_USERNAME not set"
++    return 1
++  fi
++
++  # Convert verdict to event
++  local event
++  case "$verdict" in
++    approved) event="APPROVED" ;;
++    changes_requested) event="REQUEST_CHANGES" ;;
++    *) event="COMMENT" ;;
++  esac
++
++  # Request reviewer using owner token
++  local request_result
++  request_result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/requested_reviewers" \
++    -H "Authorization: token $api_token" \
++    -H "Content-Type: application/json" \
++    -d "{\"reviewers\":[\"$reviewer_username\"]}" 2>&1) || true
++
++  # Post formal review using reviewer token
++  local review_result
++  review_result=$(curl -sf -X POST "${API_BASE}/repos/${repo}/pulls/${pr_number}/reviews" \
++    -H "Authorization: token $reviewer_token" \
++    -H "accept: application/json" \
++    -H "Content-Type: application/json" \
++    -d "{\"event\":\"${event}\",\"body\":${escaped_body}}" 2>&1) || true
++
++  local review_id
++  review_id=$(echo "$review_result" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
++
++  if [[ -n "$review_id" ]] && [[ "$review_id" != "" ]]; then
++    echo "    -> Review (${verdict}) submitted!"
++  else
++    echo "    -> ERROR: Failed to submit formal review: $review_result"
++    return 1
++  fi
++
++  local state
++  state=$(load_state)
++  STATE_JSON="$state" REPO="$repo" PR_NUMBER="$pr_number" PR_SHA="$pr_sha" python3 -c "
+ import os, json
+ state = json.loads(os.environ.get('STATE_JSON', '{}'))
+ repo = os.environ.get('REPO', '')
+@@ -298,14 +316,9 @@ if 'reviewed' not in state:
+ state['reviewed'][key] = {'sha': pr_sha}
+ print(json.dumps(state))
+ " > "$STATE_FILE"
+-      
+-      echo "    -> State updated"
+-    else
+-      echo "    -> ERROR: Failed to post to Codeberg"
+-      return 1
+-    fi
+-    
+-    return 0
++
++  echo "    -> State updated"
++  return 0
+ }
+ 
+ cycle() {

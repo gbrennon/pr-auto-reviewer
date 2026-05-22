@@ -1,0 +1,8 @@
+{
+  "owner": "blackmagic-debug",
+  "repo": "blackmagic",
+  "full_repo": "blackmagic-debug/blackmagic",
+  "pr_number": 2225,
+  "head_sha": "2aa2d4bc558ad323dc7d917489142031bf9ce660",
+  "title": "WIP: Feature: RV32I Progbuf-based memory access support, with autoexec"
+}

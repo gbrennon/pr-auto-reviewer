@@ -37,13 +37,13 @@ class PollingDaemon:
         self._repo_lister = repo_lister
         self._pr_lister = pr_lister
         self._review_service = review_service
-        self._shutdown_requested = False
+        self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
 
     def _setup_signal_handlers(self) -> None:
         def handle_signal(signum: int, frame: object) -> None:
-            logger.info("Shutdown signal received, finishing current cycle...")
-            self._shutdown_requested = True
+            logger.info("Shutdown signal received, stopping...")
+            raise KeyboardInterrupt
 
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)
@@ -55,15 +55,21 @@ class PollingDaemon:
             f"run_once={self._config.run_once})"
         )
 
-        while not self._shutdown_requested:
-            self._run_cycle()
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                logger.info("=== Cycle #%d ===", cycle)
+                self._run_cycle()
 
-            if self._config.run_once or self._shutdown_requested:
-                break
+                if self._config.run_once:
+                    break
 
-            time.sleep(self._config.poll_interval_seconds)
+                time.sleep(self._config.poll_interval_seconds)
+        except KeyboardInterrupt:
+            pass
 
-        logger.info("PollingDaemon stopped")
+        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""
@@ -74,19 +80,25 @@ class PollingDaemon:
             return
 
         for repo in repos:
-            if self._shutdown_requested:
-                break
-
             open_prs = self._pr_lister.list_open(repo)
+
+            # If force_pr is set, also fetch that specific PR (may be closed/merged)
+            if self._force_pr is not None:
+                forced = self._pr_lister.get_pr(repo, self._force_pr)
+                if forced is not None:
+                    # Avoid duplicates: only add if not already in open_prs
+                    if not any(p.pr_id.number == self._force_pr for p in open_prs):
+                        open_prs.append(forced)
+                        logger.info(
+                            "Force-fetched PR #%d in %s (state-agnostic)",
+                            self._force_pr, repo,
+                        )
 
             if not open_prs:
                 logger.debug(f"No open PRs in {repo}")
                 continue
 
             for pr in open_prs:
-                if self._shutdown_requested:
-                    break
-
                 if pr.is_draft:
                     logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
                     continue
@@ -95,21 +107,29 @@ class PollingDaemon:
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
-        logger.info(f"Reviewing PR #{pr.pr_id.number} in {pr.pr_id.repository}")
+        force = self._force_pr == pr.pr_id.number
+        logger.info(
+            "Reviewing PR #%d in %s (title=%r, sha=%s)",
+            pr.pr_id.number, pr.pr_id.repository, pr.title,
+            str(pr.head_sha)[:7],
+        )
 
         command = ReviewPullRequestCommand(
             pr_id=pr.pr_id,
             head_sha=pr.head_sha,
             title=pr.title,
+            description=pr.description,
+            force=force,
         )
 
         try:
             self._review_service.execute(command)
+            logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
         except EmptyDiffError:
-            logger.warning(f"Empty diff, skipping PR #{pr.pr_id.number}")
+            logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
         except LlmUnavailableError:
             logger.error("LLM unavailable, will retry next cycle")
         except ReviewPublishError as e:
-            logger.error(f"Publish failed for PR #{pr.pr_id.number}: {e}")
+            logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
         except Exception as e:
-            logger.exception(f"Unexpected error processing PR #{pr.pr_id.number}: {e}")
+            logger.exception("Unexpected error processing PR #%d: %s", pr.pr_id.number, e)

@@ -21,3 +21,6 @@ class NullPullRequestRepository(PullRequestRepository):
 
     def save(self, pr: PullRequest) -> None:
         pass
+
+    def reset(self) -> None:
+        pass

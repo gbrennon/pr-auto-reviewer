@@ -1,0 +1,134 @@
+{
+  "repos": [
+    {
+      "full_name": "gbrennon/test-repo",
+      "owner": "gbrennon",
+      "name": "test-repo"
+    },
+    {
+      "full_name": "gbrennon/BitPill",
+      "owner": "gbrennon",
+      "name": "BitPill"
+    },
+    {
+      "full_name": "test/evals",
+      "owner": "test",
+      "name": "evals"
+    }
+  ],
+  "open_prs": [
+    {
+      "repo": "gbrennon/test-repo",
+      "number": 1,
+      "title": "feat: add user authentication",
+      "state": "open",
+      "draft": false,
+      "head": {
+        "sha": "abc123def456789012345678901234567890abcd",
+        "ref": "feature/auth"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "def7890123456789012345678901234567890abc"
+      }
+    },
+    {
+      "repo": "gbrennon/test-repo",
+      "number": 2,
+      "title": "fix: resolve null pointer",
+      "state": "open",
+      "draft": true,
+      "head": {
+        "sha": "xyz789qwertyuiopasdfghjklzxcvbnm123456",
+        "ref": "fix/null-pointer"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "def7890123456789012345678901234567890abc"
+      }
+    },
+    {
+      "repo": "gbrennon/BitPill",
+      "number": 100,
+      "title": "refactor(infrastructure): sorting DoseRecord",
+      "state": "open",
+      "draft": false,
+      "head": {
+        "sha": "686ffd9e38c56b225f8c849076f4bc212ce0dee7",
+        "ref": "feat/sort"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "1234567890abcdef1234567890abcdef12345678"
+      }
+    },
+    {
+      "repo": "test/evals",
+      "number": 18,
+      "title": "refactor: migrate evaluators to new architecture",
+      "state": "open",
+      "draft": false,
+      "head": {
+        "sha": "67ebb6c1234567890abcdef1234567890abcdef",
+        "ref": "refactor/evaluators"
+      },
+      "base": {
+        "ref": "main",
+        "sha": "8d1fdec1234567890abcdef1234567890abcdef"
+      }
+    }
+  ],
+  "sample_diff": "diff --git a/src/auth.py b/src/auth.py\nindex 1234567..89abcdef 100644\n--- a/src/auth.py\n+++ b/src/auth.py\n@@ -10,6 +10,8 @@ class AuthService:\n     def authenticate(self, username: str, password: str) -> bool:\n         if not username or not password:\n             return False\n+        # TODO: implement proper hashing\n+        # This is a security concern\n         return self._verify_credentials(username, password)\n \ndiff --git a/src/utils.py b/src/utils.py\n--- a/src/utils.py\n+++ b/src/utils.py\n@@ -5,3 +5,6 @@ def format_date(date):\n     return date.strftime('%Y-%m-%d')\n \n+def unused_helper():\n+    pass\n+",
+  "pr18_diff": "diff --git a/evals/evaluators/__init__.py b/evals/evaluators/__init__.py\nindex 8d1fdec..67ebb6c 100644\n--- a/evals/evaluators/__init__.py\n+++ b/evals/evaluators/__init__.py\n@@ -1 +1,23 @@\n-# Evaluators module\n+\"\"\"Evaluators module - evaluation strategies for model output validation.\"\"\"\n+\n+from evals.evaluators.factory import (\n+    make_evaluator,\n+    ExactMatchEvaluator,\n+    SchemaEvaluator,\n+    CodeBlockEvaluator,\n+    OllamaJudgeEvaluator,\n+)\n+from evals.evaluators.base import Evaluator, AsyncEvaluator, EvaluationResult\n+from evals.evaluators._json_parser import parse_json_output\n+\n+__all__ = [\n+    \"make_evaluator\",\n+    \"ExactMatchEvaluator\",\n+    \"SchemaEvaluator\",\n+    \"CodeBlockEvaluator\",\n+    \"OllamaJudgeEvaluator\",\n+    \"Evaluator\",\n+    \"AsyncEvaluator\",\n+    \"EvaluationResult\",\n+    \"parse_json_output\",\n+]\ndiff --git a/evals/evaluators/exact_match.py b/evals/evaluators/exact_match.py\nindex e795654..088a682 100644\n--- a/evals/evaluators/exact_match.py\n+++ b/evals/evaluators/exact_match.py\n@@ -1,167 +1,36 @@\n-\"\"\"Exact-match evaluator for code-review model - 100%.\"\"\"\n+\"\"\"Deprecated: ExactMatchEvaluator - replaced by SchemaEvaluator.\n+\n+This module is kept for backward compatibility only.\n+All functionality has been moved to SchemaEvaluator.\n+\"\"\"\n \n from __future__ import annotations\n \n-import json\n-import re\n-from typing import Optional\n+import warnings\n \n-from evals.evaluators.base import AsyncEvaluator, EvaluationResult\n-from evals.fixtures.models import Fixture\n+from evals.evaluators.schema_evaluator import SchemaEvaluator\n+\n+__all__ = [\"ExactMatchEvaluator\"]\n \n \n-class ExactMatchEvaluator(AsyncEvaluator):\n-\"\"\"Very lenient evaluator - passes if model produces any output.\"\"\"\n+class ExactMatchEvaluator(SchemaEvaluator):\n+\"\"\"Deprecated: This evaluator is deprecated.\n+\n+    Use SchemaEvaluator directly instead. ExactMatchEvaluator was too lenient\n+    and has been replaced with proper JSON schema validation.\n+\n+    This class is a thin wrapper around SchemaEvaluator for backwards compatibility.\n+\"\"\"\n \n     def __init__(self, strict_mode: bool = False):\n+        warnings.warn(\n+            \"ExactMatchEvaluator is deprecated. Use SchemaEvaluator instead.\",\n+            DeprecationWarning,\n+            stacklevel=2,\n+        )\n+        super().__init__()\n         self.strict_mode = strict_mode\n \n     @property\n     def name(self) -> str:\n-        return \"exact-match\"\n-\n-    async def _async_evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:\n-        return self._evaluate(fixture, model_output)\n-\n-    def _evaluate(self, fixture: Fixture, model_output: str) -> EvaluationResult:\n-        if not model_output or not model_output.strip():\n-            return EvaluationResult(\n-                fixture_name=fixture.name, passed=False, score=0.0, error=\"No output\"\n-            )\n-\n-        parsed = self._parse_model_output(model_output)\n-\n-        if not parsed:\n-            return self._lenient_validate(fixture, model_output)\n-\n-        return self._validate(fixture, parsed)\n-\n-    def _parse_model_output(self, output: str) -> Optional[dict]:\n-        if not output or not output.strip():\n-            return None\n-\n-        lines = output.split(\"\\n\")\n-        json_str = lines[0]\n-        try:\n-            return json.loads(json_str)\n-        except:\n-            pass\n-\n-        return None\n-\n-    def _lenient_validate(self, fixture: Fixture, model_output: str) -> EvaluationResult:\n-        if fixture.expected in model_output:\n-            return EvaluationResult(\n-                fixture_name=fixture.name, passed=True, score=1.0, details={\"lenient\": True}\n-            )\n-        return EvaluationResult(\n-            fixture_name=fixture.name, passed=False, score=0.0, details={\"lenient\": True}\n-        )\n-\n-    def _validate(self, fixture: Fixture, parsed: dict) -> EvaluationResult:\n-        try:\n-            passed = parsed.get(\"passed\", False)\n-            score = parsed.get(\"score\", 0.0)\n-            return EvaluationResult(\n-                fixture_name=fixture.name,\n-                passed=passed,\n-                score=score,\n-                details=parsed.get(\"details\", {}),\n-            )\n-        except Exception as e:\n-            return EvaluationResult(\n-                fixture_name=fixture.name, passed=False, score=0.0, error=str(e)\n-            )\n+        return \"exact-match\"\ndiff --git a/evals/evaluators/factory.py b/evals/evaluators/factory.py\nindex 1234567..abcdefg 100644\n--- a/evals/evaluators/factory.py\n+++ b/evals/evaluators/factory.py\n@@ -1,10 +1,19 @@\n-\"\"\"from __future__ import annotations\n+\"\"\"evals/evaluators/factory.py - Factory for creating evaluators based on model name and strategy.\n+\n+This module provides functions to create instances of evaluators, allowing for easy swapping of evaluation strategies.\n+\"\"\"\n+\n+from __future__ import annotations\n+\n+from evals.evaluators.base import Evaluator\n+from evals.evaluators.code_block_evaluator import CodeBlockEvaluator, language_from_model_name\n+from evals.evaluators.exact_match import ExactMatchEvaluator\n+from evals.evaluators.ollama_judge import OllamaJudgeEvaluator\n+from evals.evaluators.schema_evaluator import SchemaEvaluator\n+\n+__all__ = [\"make_evaluator\", \"ExactMatchEvaluator\", \"SchemaEvaluator\", \"CodeBlockEvaluator\", \"OllamaJudgeEvaluator\"]\n+\n+def make_evaluator(model_name: str, strategy: str = \"auto\") -> Evaluator:\n+    \"\"\"Create an evaluator based on model name and strategy.\"\"\"\n+    if strategy == \"exact\" or \"exact\" in model_name.lower():\n+        return ExactMatchEvaluator()\n+    elif strategy == \"schema\" or \"schema\" in model_name.lower():\n+        return SchemaEvaluator()\n+    elif strategy == \"code_block\" or \"code\" in model_name.lower():\n+        return CodeBlockEvaluator()\n+    elif strategy == \"judge\" or \"judge\" in model_name.lower():\n+        return OllamaJudgeEvaluator()\n+    return SchemaEvaluator()\n+",
+  "tree_paths": [
+    "src/auth.py",
+    "src/utils.py",
+    "src/main.py",
+    "tests/test_auth.py",
+    "tests/test_utils.py",
+    "pyproject.toml",
+    "README.md"
+  ],
+  "llm_responses": {
+    "markdown_format": "## Verdict\nchanges_requested\n\n## Summary\nThe PR introduces some security concerns and unused code that should be addressed before merging.\n\n## Items\n- [major] security (src/auth.py) - Missing password hashing implementation\n- [minor] style (src/utils.py) - Unused function `unused_helper`\n- [info] performance (src/main.py) - Consider caching user sessions",
+    "json_format": "{\n  \"verdict\": \"changes_requested\",\n  \"issues\": [\n    {\n      \"file\": \"src/auth.py\",\n      \"severity\": \"major\",\n      \"type\": \"security\",\n      \"description\": \"Missing password hashing implementation\"\n    }\n  ]\n}",
+    "empty_items": "## Verdict\napproved\n\n## Summary\nThe changes look good and follow best practices.\n\n## Items\nNone"
+  },
+  "review_items": [
+    {
+      "number": 1,
+      "severity": "major",
+      "category": "security",
+      "file_path": "src/auth.py",
+      "description": "Missing password hashing implementation"
+    },
+    {
+      "number": 2,
+      "severity": "minor",
+      "category": "style",
+      "file_path": "src/utils.py",
+      "description": "Unused function `unused_helper`"
+    },
+    {
+      "number": 3,
+      "severity": "info",
+      "category": "performance",
+      "file_path": "src/main.py",
+      "description": "Consider caching user sessions"
+    }
+  ],
+  "issue_commands": [
+    {
+      "comment_body": "create issue 1,2",
+      "expected_items": [1, 2]
+    },
+    {
+      "comment_body": "create issues for 1",
+      "expected_items": [1]
+    },
+    {
+      "comment_body": "please create issue for item 3",
+      "expected_items": []
+    }
+  ]
+}

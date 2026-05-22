@@ -1,0 +1,8 @@
+{
+  "owner": "gbrennon",
+  "repo": "pr-auto-reviewer",
+  "full_repo": "gbrennon/pr-auto-reviewer",
+  "pr_number": 8,
+  "head_sha": "fd1e7c6c5696f1e2d3939c44934313c1357c0d43",
+  "title": "feat: create issue from comment"
+}
