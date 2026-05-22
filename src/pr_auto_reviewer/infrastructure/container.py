@@ -46,8 +46,8 @@ from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import 
 from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
     NullPullRequestRepository,
 )
-from pr_auto_reviewer.application.services.compose_review_prompt_service import (
-    ComposeReviewPromptService,
+from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+    ComposeReviewPromptAdapter,
 )
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -180,7 +180,7 @@ class Container:
         self._review_context_factory: ReviewContextFactoryPort = (
             ReviewContextFactory(
                 repository_context=self._repository_context,
-                compose_review_prompt=ComposeReviewPromptService(
+                compose_review_prompt=ComposeReviewPromptAdapter(
                     repository=self._fragment_repository,
                     renderer=self._fragment_renderer,
                     max_tokens=self._fragment_max_tokens,
