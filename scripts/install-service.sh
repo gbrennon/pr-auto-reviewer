@@ -9,14 +9,13 @@ if ! command -v systemctl &>/dev/null; then
     exit 1
 fi
 
-if ! command -v bash &>/dev/null; then
-    echo "ERROR: bash is required to run this script." >&2
+if ! command -v python &>/dev/null; then
+    echo "ERROR: python is required to run pr-auto-reviewer." >&2
     exit 1
 fi
 
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
-SERVICE_FILE="pr-ai-auto-reviewer.service"
-SERVICE_NAME="pr-ai-auto-reviewer.service"
+SERVICE_NAME="pr-auto-reviewer.service"
 CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
 CONFIG_FILE="${CONFIG_DIR}/config"
 
@@ -54,17 +53,17 @@ install_service() {
     echo "Installing $SERVICE_NAME to $SYSTEMD_DIR/"
     mkdir -p "$SYSTEMD_DIR"
 
-    cat > "$SYSTEMD_DIR/$SERVICE_FILE" <<EOF
+    cat > "$SYSTEMD_DIR/$SERVICE_NAME" <<EOF
 [Unit]
-Description=PR AI Auto-Reviewer
+Description=PR Auto Reviewer — AI-powered code review daemon
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=${USER}
 WorkingDirectory=${REPO_ROOT}
-ExecStart=/usr/bin/bash ${REPO_ROOT}/scripts/watch-prs.sh
+EnvironmentFile=${CONFIG_FILE}
+ExecStart=${REPO_ROOT}/.venv/bin/python -m pr_auto_reviewer watch-prs
 Restart=on-failure
 RestartSec=10
 
@@ -83,19 +82,31 @@ EOF
 
     echo ""
     echo "Service installed and started"
-    echo "Check status: systemctl --user status $SERVICE_NAME"
+    echo "Check status:  systemctl --user status $SERVICE_NAME"
+    echo "View logs:     journalctl --user -u $SERVICE_NAME -f"
+    echo "Stop:          systemctl --user stop $SERVICE_NAME"
 }
+
+# ── main ───────────────────────────────────────────────────────────
 
 main() {
     setup_config
-    
-    if [[ -f "$SYSTEMD_DIR/$SERVICE_FILE" ]]; then
+
+    # Stop old service if it exists (migration from pr-ai-auto-reviewer)
+    local old_service="pr-ai-auto-reviewer.service"
+    if [[ -f "$SYSTEMD_DIR/$old_service" ]]; then
+        echo "Removing old service $old_service..."
+        systemctl --user stop "$old_service" 2>/dev/null || true
+        systemctl --user disable "$old_service" 2>/dev/null || true
+        rm -f "$SYSTEMD_DIR/$old_service"
+        systemctl --user daemon-reload
+    fi
+
+    if [[ -f "$SYSTEMD_DIR/$SERVICE_NAME" ]]; then
         echo "Service already installed, updating..."
         systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
-        install_service
-    else
-        install_service
     fi
+    install_service
 }
 
 main "$@"

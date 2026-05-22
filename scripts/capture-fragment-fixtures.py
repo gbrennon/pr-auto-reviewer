@@ -32,8 +32,8 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.infrastructure.config.config import load_config
-from pr_auto_reviewer.application.services.compose_review_prompt_service import (
-    ComposeReviewPromptService,
+from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+    ComposeReviewPromptAdapter,
 )
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 from pr_auto_reviewer.infrastructure.fragments.repositories import (
@@ -92,7 +92,7 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     detector = LanguageDetector()
     language = detector.detect(file_paths)
     context = ReviewContext(language=language, file_paths=file_paths, diff=raw_diff)
-    service = ComposeReviewPromptService(repository=repo, renderer=renderer)
+    service = ComposeReviewPromptAdapter(repository=repo, renderer=renderer)
     composed = service.execute(context)
     prompt = composed.content
     print(f"  Prompt: {len(prompt)} chars (language={language})")

@@ -72,8 +72,8 @@ def build_fragment_prompt() -> str | None:
         FileSystemFragmentRepository,
     )
     from pr_auto_reviewer.infrastructure.fragments.renderers import Jinja2Renderer
-    from pr_auto_reviewer.application.services.compose_review_prompt_service import (
-        ComposeReviewPromptService,
+    from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+        ComposeReviewPromptAdapter,
     )
 
     fragments_dir = Path("fragments")
@@ -83,7 +83,7 @@ def build_fragment_prompt() -> str | None:
 
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
     renderer = Jinja2Renderer()
-    service = ComposeReviewPromptService(
+    service = ComposeReviewPromptAdapter(
         repository=repo, renderer=renderer, max_tokens=4000,
     )
 

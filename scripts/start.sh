@@ -4,5 +4,5 @@
 set -e
 
 echo "Starting service..."
-systemctl --user start pr-ai-auto-reviewer.service
+systemctl --user start pr-auto-reviewer.service
 echo "Service started."

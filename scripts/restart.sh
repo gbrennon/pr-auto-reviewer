@@ -3,5 +3,5 @@
 
 set -e
 
-systemctl --user restart pr-ai-auto-reviewer.service || true
+systemctl --user restart pr-auto-reviewer.service || true
 echo "Service restarted."

@@ -97,4 +97,4 @@ except Exception as e:
     print('Could not parse repo list')
 PY
 
-echo "\nDone. If token returned 401, regenerate token with required scopes and update $CONFIG_FILE, then reload service: systemctl --user restart pr-ai-auto-reviewer.service"
+echo "\nDone. If token returned 401, regenerate token with required scopes and update $CONFIG_FILE, then reload service: systemctl --user restart pr-auto-reviewer.service"
