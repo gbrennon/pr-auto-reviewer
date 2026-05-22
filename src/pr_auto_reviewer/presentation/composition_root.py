@@ -110,6 +110,7 @@ class CompositionRoot:
             review_reader=c.review_reader,
             pr_lister=c.pr_lister,
             review_item_parser=review_item_parser,
+            pr_repository=c.pr_repository,
         )
 
         return ApplicationComponents(

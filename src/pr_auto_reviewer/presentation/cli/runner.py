@@ -18,6 +18,9 @@ from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case 
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
+    PullRequestRepository,
+)
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
@@ -40,12 +43,14 @@ class CliRunner:
         review_reader: ReviewReaderPort,
         pr_lister: PrListerPort,
         review_item_parser: ReviewItemParser,
+        pr_repository: PullRequestRepository | None = None,
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service
         self._review_reader = review_reader
         self._pr_lister = pr_lister
         self._review_item_parser = review_item_parser
+        self._pr_repository = pr_repository
 
     def run(self, argv: list[str]) -> int:
         """Run the CLI with the given arguments."""
@@ -57,6 +62,7 @@ class CliRunner:
             "process-commands", help="Process issue commands for a PR"
         )
         subparsers.add_parser("list-items", help="List review items for a PR")
+        subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
 
         args, _unknown = parser.parse_known_args(argv[1:])
 
@@ -66,6 +72,8 @@ class CliRunner:
             return self._run_process_commands(argv[2:])
         elif args.command == "list-items":
             return self._run_list_items(argv[2:])
+        elif args.command == "clean":
+            return self._run_clean()
         else:
             parser.print_help()
             return 1
@@ -232,6 +240,15 @@ class CliRunner:
                 f"{item.category:<12} | {file_path:<30} | {item.description}"
             )
 
+        return 0
+
+    def _run_clean(self) -> int:
+        """Reset all reviewed-PR tracking state."""
+        if self._pr_repository is None:
+            print("Error: persistence is disabled (terminal mode); nothing to clean")
+            return 1
+        self._pr_repository.reset()
+        print("Review state cleaned. All PRs will be treated as new.")
         return 0
 
 

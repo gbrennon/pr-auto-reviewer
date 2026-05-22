@@ -5,7 +5,6 @@ import os
 import sys
 
 from .presentation.composition_root import bootstrap, run_daemon
-from .clean import clean
 
 
 def main() -> None:
@@ -40,6 +39,12 @@ def main() -> None:
     # clean command
     subparsers.add_parser("clean", help="Clean state files")
 
+    # list-items command
+    list_items_parser = subparsers.add_parser("list-items", help="List review items for a PR")
+    list_items_parser.add_argument("-r", "--repo", required=True, help="Repository in format owner/repo")
+    list_items_parser.add_argument("-p", "--pr", required=True, type=int, help="PR number")
+    list_items_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed error information")
+
     args = parser.parse_args()
 
     if args.command == "watch-prs":
@@ -72,7 +77,14 @@ def main() -> None:
     elif args.command == "bootstrap":
         bootstrap()
     elif args.command == "clean":
-        clean()
+        components = bootstrap()
+        components.cli_runner.run([sys.argv[0], "clean"])
+    elif args.command == "list-items":
+        components = bootstrap()
+        list_argv = [sys.argv[0], "list-items", "--repo", args.repo, "--pr", str(args.pr)]
+        if args.verbose:
+            list_argv.append("--verbose")
+        sys.exit(components.cli_runner.run(list_argv))
 
 
 if __name__ == "__main__":
