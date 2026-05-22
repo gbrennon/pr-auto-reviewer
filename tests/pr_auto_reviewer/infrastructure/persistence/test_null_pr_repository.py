@@ -63,3 +63,12 @@ class TestNullPullRequestRepository:
             head_sha=CommitSha(value="abc"),
         )
         _repo.save(pr)
+
+    def test_reset_is_noop(self, _repo, _pr_id):
+        pr = PullRequest(
+            id=_pr_id, title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        _repo.save(pr)
+        _repo.reset()
+        assert _repo.find(_pr_id) is None

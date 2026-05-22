@@ -254,3 +254,21 @@ class TestJsonFilePullRequestRepository:
         with pytest.raises(OSError):
             repo.save(self._pr())
         assert list(tmp_path.glob("*.tmp*")) == []
+
+    def test_reset_clears_all_reviewed_state(self, tmp_path: Path) -> None:
+        repo = self._repo(tmp_path)
+        repo.save(self._pr())
+        assert repo.find(self._pr().id) is not None
+
+        repo.reset()
+
+        assert repo.find(self._pr().id) is None
+
+    def test_reset_restores_empty_state_file(self, tmp_path: Path) -> None:
+        repo = self._repo(tmp_path)
+        repo.save(self._pr())
+
+        repo.reset()
+
+        raw = json.loads((tmp_path / "state.json").read_text())
+        assert raw == {"reviewed": {}}

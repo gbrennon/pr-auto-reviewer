@@ -58,6 +58,13 @@ class JsonFilePullRequestRepository(PullRequestRepository):
 
         self._save(data)
 
+    def reset(self) -> None:
+        """Clear all persisted state by deleting and recreating the file."""
+        if self._file_path.exists():
+            self._file_path.unlink()
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_path.write_text('{"reviewed":{}}')
+
     # ── private ─────────────────────────────────────────────────────
 
     def _load(self) -> dict:
