@@ -1,4 +1,4 @@
-"""Unit tests for ComposeReviewPromptService — mocked ports."""
+"""Unit tests for ComposeReviewPromptAdapter — mocked ports."""
 
 from unittest.mock import Mock
 
@@ -7,16 +7,16 @@ import pytest
 from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
     FragmentRepositoryPort,
 )
-from pr_auto_reviewer.application.services.compose_review_prompt_service import (
-    ComposeReviewPromptService,
+from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+    ComposeReviewPromptAdapter,
 )
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 
 
-class TestComposeReviewPromptService:
-    """Tests for the application service — all ports mocked."""
+class TestComposeReviewPromptAdapter:
+    """Tests for the infrastructure adapter — all ports mocked."""
 
     @pytest.fixture
     def mock_repository(self) -> Mock:
@@ -26,13 +26,13 @@ class TestComposeReviewPromptService:
     @pytest.fixture
     def service(
         self, mock_repository: Mock,
-    ) -> ComposeReviewPromptService:
-        """Service wired with mocked repository, no renderer."""
-        return ComposeReviewPromptService(repository=mock_repository)
+    ) -> ComposeReviewPromptAdapter:
+        """Adapter wired with mocked repository, no renderer."""
+        return ComposeReviewPromptAdapter(repository=mock_repository)
 
     def test_executes_full_composition_workflow(
         self,
-        service: ComposeReviewPromptService,
+        service: ComposeReviewPromptAdapter,
         mock_repository: Mock,
     ) -> None:
         """Service should orchestrate selection → composition → result."""
@@ -71,7 +71,7 @@ class TestComposeReviewPromptService:
 
     def test_raises_error_when_no_fragments_selected(
         self,
-        service: ComposeReviewPromptService,
+        service: ComposeReviewPromptAdapter,
         mock_repository: Mock,
     ) -> None:
         """Service should raise ValueError when no fragments are available."""
@@ -92,7 +92,7 @@ class TestComposeReviewPromptService:
 
     def test_calls_repository_with_correct_language(
         self,
-        service: ComposeReviewPromptService,
+        service: ComposeReviewPromptAdapter,
         mock_repository: Mock,
     ) -> None:
         """Service should pass language from context to repository."""

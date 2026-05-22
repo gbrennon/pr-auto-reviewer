@@ -2,7 +2,7 @@
 
 import pytest
 
-from pr_auto_reviewer.application.services.token_budget_manager import (
+from pr_auto_reviewer.infrastructure.fragments.token_budget_manager import (
     TokenBudgetManager,
 )
 

@@ -1,10 +1,7 @@
-"""ComposeReviewPromptService — composes a review prompt from fragments."""
+"""ComposeReviewPromptAdapter — infrastructure adapter composing review prompts from fragments."""
 
 from __future__ import annotations
 
-from pr_auto_reviewer.application.services.token_budget_manager import (
-    TokenBudgetManager,
-)
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
 )
@@ -17,12 +14,18 @@ from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
+from pr_auto_reviewer.infrastructure.fragments.token_budget_manager import (
+    TokenBudgetManager,
+)
 
 DEFAULT_SEPARATOR = "\n\n---\n\n"
 
 
-class ComposeReviewPromptService(ComposeReviewPromptPort):
-    """Application service that composes a complete review prompt from fragments.
+class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
+    """Infrastructure adapter that composes a complete review prompt from fragments.
+
+    Implements :class:`ComposeReviewPromptPort`, the outbound port for
+    prompt composition.  Resides in the infrastructure layer as an adapter.
 
     Orchestration flow:
 
@@ -47,16 +50,6 @@ class ComposeReviewPromptService(ComposeReviewPromptPort):
         max_tokens: int | None = None,
         separator: str = DEFAULT_SEPARATOR,
     ) -> None:
-        """Initialise the service.
-
-        Args:
-            repository: Port for loading fragments from storage.
-            renderer: Optional template renderer.  When ``None``, simple
-                string substitution is used instead.
-            max_tokens: Optional token budget limit.  When set, fragments
-                are greedily filtered to stay within budget.
-            separator: String inserted between rendered fragments.
-        """
         self._repository = repository
         self._renderer = renderer
         self._separator = separator
@@ -65,18 +58,7 @@ class ComposeReviewPromptService(ComposeReviewPromptPort):
         )
 
     def execute(self, context: ReviewContext) -> ComposedPrompt:
-        """Execute the use case for *context*.
-
-        Args:
-            context: Review context with language, file paths, and diff.
-
-        Returns:
-            The fully assembled prompt ready for the LLM.
-
-        Raises:
-            ValueError: If no fragments can be selected for the given
-                language (even universal fragments are missing).
-        """
+        """Execute the composition for *context*."""
         fragments = self._select_fragments(context)
 
         if not fragments:
@@ -87,11 +69,7 @@ class ComposeReviewPromptService(ComposeReviewPromptPort):
         return self._compose_prompt(fragments, context)
 
     def _select_fragments(self, context: ReviewContext) -> list[PromptFragment]:
-        """Select fragments relevant to *context*.
-
-        Merges language-specific and universal fragments, sorted by
-        priority descending.  Applies token budget when configured.
-        """
+        """Select language-specific + universal fragments, sorted by priority."""
         language_fragments = self._repository.find_by_language(context.language)
         universal_fragments = self._repository.find_universal()
 
@@ -140,7 +118,6 @@ class ComposeReviewPromptService(ComposeReviewPromptPort):
 
         final_content = self._separator.join(rendered_sections)
 
-        # Append repository context (architecture, Python version, conventions,
         if context.repository_context:
             final_content += self._separator + context.repository_context
 
