@@ -56,6 +56,7 @@ class StubPullRequestRepository(PullRequestRepository):
         self._pr = initial
         self.find_calls: list[PullRequestId] = []
         self.save_calls: list[PullRequest] = []
+        self.reset_calls: int = 0
 
     def find(self, pr_id: PullRequestId) -> PullRequest | None:
         self.find_calls.append(pr_id)
@@ -64,6 +65,10 @@ class StubPullRequestRepository(PullRequestRepository):
     def save(self, pr: PullRequest) -> None:
         self.save_calls.append(pr)
         self._pr = pr
+
+    def reset(self) -> None:
+        self.reset_calls += 1
+        self._pr = None
 
 
 class StubChangesetFetcher(ChangesetFetcherPort):
