@@ -16,10 +16,6 @@ class PythonVersionDetector:
         r'requires-python\s*=\s*["\']>=?\s*(\d+\.\d+)', re.IGNORECASE
     )
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def detect(self, tree_paths: list[str]) -> str | None:
         """Return the minimum Python version (e.g. ``"3.9"``) or ``None``.
 

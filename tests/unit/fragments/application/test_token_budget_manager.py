@@ -10,15 +10,6 @@ from pr_auto_reviewer.application.services.token_budget_manager import (
 class TestTokenBudgetManager:
     """Tests for TokenBudgetManager token counting and budget control."""
 
-    def test_estimates_tokens_from_text(self) -> None:
-        """Should estimate token count from text (4 chars ≈ 1 token)."""
-        manager = TokenBudgetManager(max_tokens=1000)
-        text = "a" * 400
-
-        tokens = manager.estimate_tokens(text)
-
-        assert tokens == 100
-
     def test_checks_if_content_fits_budget(self) -> None:
         """Should check if content fits within remaining budget."""
         manager = TokenBudgetManager(max_tokens=100)

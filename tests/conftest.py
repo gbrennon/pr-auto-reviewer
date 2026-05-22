@@ -354,9 +354,6 @@ def sample_review_items(review_flow_fixtures: dict) -> list[dict]:
     return review_flow_fixtures.get("review_items", [])
 
 
-# ---------------------------------------------------------------------------
-# Ollama adapter test fixtures
-# ---------------------------------------------------------------------------
 
 class _FakeResponse:
     """A minimal fake requests.Response for Ollama adapter tests."""

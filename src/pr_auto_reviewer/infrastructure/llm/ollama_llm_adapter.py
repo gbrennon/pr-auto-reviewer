@@ -27,17 +27,19 @@ _SEP = "=" * 72
 class OllamaLlmAdapter(LlmReviewPort):
     """Call a local Ollama instance to review a pull-request diff."""
 
-    def __init__(self, host: str, model: str, compose_review_prompt: object | None = None, fragment_selector: object | None = None, fragment_composer: object | None = None) -> None:
+    def __init__(self, host: str, model: str, compose_review_prompt: object | None = None, fragment_selector: object | None = None, fragment_composer: object | None = None, max_tokens: int = 0, max_file_chars: int = 3000, max_files: int = 10, max_structure_lines: int = 100, use_compact_template: bool = False) -> None:
         self._host = host.rstrip("/")
         self._model = model
-        self._prompt_builder = PromptBuilder()
+        self._prompt_builder = PromptBuilder(
+            max_tokens=max_tokens,
+            max_file_chars=max_file_chars,
+            max_files=max_files,
+            max_structure_lines=max_structure_lines,
+            use_compact_template=use_compact_template,
+        )
         self._compose_review_prompt = compose_review_prompt
         self._fragment_selector = fragment_selector
         self._fragment_composer = fragment_composer
-
-    # ------------------------------------------------------------------
-    # Public API — LlmReviewPort
-    # ------------------------------------------------------------------
 
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
         """Build prompt from diff+context via PromptBuilder, then call Ollama.
@@ -65,10 +67,6 @@ class OllamaLlmAdapter(LlmReviewPort):
         )
         return self._call_ollama(prompt.content)
 
-    # ------------------------------------------------------------------
-    # Internal — Ollama HTTP call
-    # ------------------------------------------------------------------
-
     def _call_ollama(self, prompt_text: str) -> CodeReview:
         """Send *prompt_text* to Ollama, parse the response into a CodeReview."""
         t0 = time.monotonic()
@@ -84,7 +82,6 @@ class OllamaLlmAdapter(LlmReviewPort):
 
         timeout = int(os.getenv("OLLAMA_TIMEOUT", 120))
         try:
-            # Split first fragment (system prompt) from user prompt
             SEP = "\n\n---\n\n"
             system_text = ""
             user_text = prompt_text

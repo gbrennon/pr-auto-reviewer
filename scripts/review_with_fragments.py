@@ -5,21 +5,19 @@ Uses the same GitPlatformHttpClient as the legacy system — works with
 Codeberg, GitHub, and any Forgejo/Gitea instance configured in .env.
 
 Usage:
-    # From a PR on the configured provider:
     PYTHONPATH=src:. python scripts/review_with_fragments.py \
         --repo gbrennon/pr-auto-reviewer --pr 1 --language python
 
-    # With a local diff file:
     PYTHONPATH=src:. python scripts/review_with_fragments.py \
         --diff-file my.diff --language python --prompt-only
 
-    # Full review with Ollama:
     PYTHONPATH=src:. python scripts/review_with_fragments.py \
         --diff-file my.diff --language python
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -31,7 +29,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 
-# Load .env from project root
 _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
@@ -56,14 +53,12 @@ def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
     """
     client = _build_http_client()
 
-    # Fetch unified diff
     diff_path = f"/repos/{repo}/pulls/{pr_number}.diff"
     diff = client.get_raw(diff_path)
 
     if not diff or len(diff.strip()) < 20:
         sys.exit(f"PR #{pr_number} returned empty or tiny diff ({len(diff)} chars)")
 
-    # Fetch file list
     files_path = f"/repos/{repo}/pulls/{pr_number}/files"
     files_data = client.get(files_path)
     file_paths = [f["filename"] for f in files_data]
@@ -99,7 +94,7 @@ def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
     return composed.content
 
 
-def call_ollama(prompt: str, model: str) -> str:
+def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
     print(f"Calling Ollama at {host} with model {model}...")
     print(f"Prompt: {len(prompt)} chars (~{len(prompt)//4} tokens)\n")
@@ -110,7 +105,8 @@ def call_ollama(prompt: str, model: str) -> str:
         timeout=300,
     )
     resp.raise_for_status()
-    return resp.json().get("response", "")
+    body = resp.json()
+    return body.get("response", ""), body
 
 
 def extract_json(text: str):
@@ -253,7 +249,6 @@ def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> No
 
     client = GitPlatformHttpClient(cfg.platform_api_url, api_token)
 
-    # Request reviewer using owner token
     try:
         client.post(
             f"/repos/{repo}/pulls/{pr_number}/requested_reviewers",
@@ -262,7 +257,6 @@ def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> No
     except Exception:
         pass  # May already be requested
 
-    # Post formal review using reviewer token
     review_client = GitPlatformHttpClient(cfg.platform_api_url, reviewer_token)
     try:
         resp = review_client.post(
@@ -302,7 +296,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Get diff
     if args.diff_file:
         diff = args.diff_file.read_text()
         file_paths = ["unknown"]
@@ -315,45 +308,28 @@ def main() -> None:
     else:
         sys.exit("Need --repo/--pr or --diff-file")
 
-    # Auto-detect language if not explicitly provided
     if args.language is None:
-        if args.full_file:
-            from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
-                OllamaLlmAdapter,
-            )
-            from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
-                PullRequestDiff,
-            )
-            full_content = args.full_file.read_text()
-            fake_diff = PullRequestDiff(
-                pr_id=None,  # type: ignore[arg-type]
-                head_sha=None,  # type: ignore[arg-type]
-                diff_content=diff,
-                file_contents={str(args.full_file): full_content},
-            )
-            args.language = OllamaLlmAdapter._detect_language(fake_diff)
+        from pr_auto_reviewer.infrastructure.git_platform.language_detector import (
+            LanguageDetector,
+        )
+        detector = LanguageDetector()
+        args.language = detector.detect(file_paths)
+        if args.language != "unknown":
             print(f"Auto-detected language: {args.language}")
-        else:
-            # Try detecting from file_paths
-            from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
-                OllamaLlmAdapter,
-            )
-            from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
-                PullRequestDiff,
-            )
-            fake_diff = PullRequestDiff(
-                pr_id=None,  # type: ignore[arg-type]
-                head_sha=None,  # type: ignore[arg-type]
-                diff_content=diff,
-                file_contents={p: "" for p in file_paths},
-            )
-            args.language = OllamaLlmAdapter._detect_language(fake_diff)
-            print(f"Auto-detected language from file paths: {args.language}")
-    
+        elif args.full_file:
+            full_content = args.full_file.read_text()
+            import re
+            if re.search(r"^\s*use\s+", full_content, re.MULTILINE):
+                args.language = "rust"
+            elif re.search(r"^\s*(import|from)\s+", full_content, re.MULTILINE):
+                args.language = "python"
+            elif re.search(r"^\s*package\s+", full_content, re.MULTILINE):
+                args.language = "go"
+            print(f"Content-detected language: {args.language}")
+
     if not args.language or args.language == "unknown":
         sys.exit("Could not detect language. Use --language to specify explicitly.")
 
-    # Compose
     prompt = compose_prompt(args.language, diff, file_paths)
 
     if args.prompt_only:
@@ -363,8 +339,28 @@ def main() -> None:
         print(prompt)
         return
 
-    # Generate review
-    raw_response = call_ollama(prompt, model=args.model)
+    raw_response, ollama_body = call_ollama(prompt, model=args.model)
+
+    prompt_tokens_est = len(prompt) // 4
+    eval_count = ollama_body.get("eval_count", 0)
+    eval_duration = ollama_body.get("eval_duration", 0) / 1e9  # ns → s
+    total_duration = ollama_body.get("total_duration", 0) / 1e9
+    load_duration = ollama_body.get("load_duration", 0) / 1e9
+    prompt_eval_count = ollama_body.get("prompt_eval_count", "?")
+
+    print(f"\n{'─' * 60}")
+    print(f"  Tokens — prompt: ~{prompt_tokens_est} est (Ollama eval: {prompt_eval_count})")
+    print(f"  Tokens — completion: {eval_count}")
+    print(f"  Tokens — total: ~{prompt_tokens_est + eval_count}")
+    input_cost = os.getenv("MODEL_INPUT_COST_PER_1K")
+    output_cost = os.getenv("MODEL_OUTPUT_COST_PER_1K")
+    if input_cost and output_cost:
+        input_c = float(input_cost)
+        output_c = float(output_cost)
+        cost = (prompt_tokens_est / 1000) * input_c + (eval_count / 1000) * output_c
+        print(f"  Cost estimate: ${cost:.6f}")
+    print(f"  Time — eval: {eval_duration:.1f}s, load: {load_duration:.1f}s, total: {total_duration:.1f}s")
+    print(f"{'─' * 60}")
 
     parsed = extract_json(raw_response)
     if parsed is None:

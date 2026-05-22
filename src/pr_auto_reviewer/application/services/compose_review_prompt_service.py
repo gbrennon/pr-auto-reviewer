@@ -141,11 +141,9 @@ class ComposeReviewPromptService(ComposeReviewPromptPort):
         final_content = self._separator.join(rendered_sections)
 
         # Append repository context (architecture, Python version, conventions,
-        # commit messages, etc.) as a final section when available.
         if context.repository_context:
             final_content += self._separator + context.repository_context
 
-        # Closing reminder — the last thing the model reads.
         final_content += (
             self._separator
             + "**REMEMBER:** Output ONLY a raw JSON object. "

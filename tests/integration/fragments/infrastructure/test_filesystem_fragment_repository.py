@@ -26,9 +26,6 @@ class TestFileSystemFragmentRepository:
         """Create repository pointing to real test fixture files."""
         return FileSystemFragmentRepository(base_path=fixtures_dir)
 
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
 
     def test_creates_repository_with_valid_path(
         self, fixtures_dir: Path,
@@ -50,9 +47,6 @@ class TestFileSystemFragmentRepository:
         with pytest.raises(ValueError, match="must be a directory"):
             FileSystemFragmentRepository(base_path=some_file)
 
-    # ------------------------------------------------------------------
-    # find_by_language
-    # ------------------------------------------------------------------
 
     def test_finds_fragments_by_language(
         self, repository: FileSystemFragmentRepository,
@@ -116,9 +110,6 @@ class TestFileSystemFragmentRepository:
         assert fragments[0].priority == 85
         assert "Go Concurrency" in fragments[0].content
 
-    # ------------------------------------------------------------------
-    # find_universal
-    # ------------------------------------------------------------------
 
     def test_finds_universal_fragments(
         self, repository: FileSystemFragmentRepository,
@@ -130,9 +121,6 @@ class TestFileSystemFragmentRepository:
         assert fragments[0].id == "solid-principles"
         assert fragments[0].language is None
 
-    # ------------------------------------------------------------------
-    # find_by_id
-    # ------------------------------------------------------------------
 
     def test_finds_fragment_by_id(
         self, repository: FileSystemFragmentRepository,
@@ -162,9 +150,6 @@ class TestFileSystemFragmentRepository:
 
         assert fragment is None
 
-    # ------------------------------------------------------------------
-    # Error handling — malformed files
-    # ------------------------------------------------------------------
 
     def test_handles_malformed_yaml_gracefully(
         self,
@@ -244,9 +229,6 @@ class TestFileSystemFragmentRepository:
         finally:
             no_yaml.unlink()
 
-    # ------------------------------------------------------------------
-    # Priority ordering
-    # ------------------------------------------------------------------
 
     def test_returns_fragments_sorted_by_priority_descending(
         self,

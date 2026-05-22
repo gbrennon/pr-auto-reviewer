@@ -8,9 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 
-# -------------------------------------------------------------------------
-# Success Responses
-# -------------------------------------------------------------------------
 
 def make_success_response(
     json_data: Any = None,
@@ -111,9 +108,6 @@ def mock_post_issue_response() -> dict[str, Any]:
     }
 
 
-# -------------------------------------------------------------------------
-# Failure Responses
-# -------------------------------------------------------------------------
 
 class MockHTTPError(Exception):
     """Mock HTTP error with response attribute."""
@@ -155,9 +149,6 @@ def mock_500_server_error() -> None:
     raise MockHTTPError(500, "Internal Server Error")
 
 
-# -------------------------------------------------------------------------
-# Fixture Factories
-# -------------------------------------------------------------------------
 
 def create_mock_get(
     success_data: Any = None,

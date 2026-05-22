@@ -135,7 +135,13 @@ class Container:
             GitRepositoryContextAdapter(self._http_client)
         )
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
-            self._config.llm_host, self._config.llm_model or "codellama",
+            self._config.llm_host,
+            self._config.llm_model or "codellama",
+            max_tokens=self._config.max_prompt_tokens,
+            max_file_chars=self._config.max_file_chars,
+            max_files=self._config.max_files,
+            max_structure_lines=self._config.max_structure_lines,
+            use_compact_template=self._config.use_compact_template,
         )
         self._review_publisher: ReviewPublisherPort = (
             TerminalReviewPublisherAdapter()
@@ -250,17 +256,9 @@ class Container:
     def pr_lister(self) -> PrListerPort:
         return self._pr_lister
 
-    # ------------------------------------------------------------------
-    # Review context factory (composite outbound port)
-    # ------------------------------------------------------------------
-
     @property
     def review_context_factory(self) -> ReviewContextFactoryPort:
         return self._review_context_factory
-
-    # ------------------------------------------------------------------
-    # Fragment subsystem
-    # ------------------------------------------------------------------
 
     @property
     def fragment_repository(self) -> FragmentRepositoryPort:

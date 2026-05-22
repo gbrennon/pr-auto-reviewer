@@ -1,5 +1,3 @@
-"""Integration tests for pr_lister_adapter.py — uses live Codeberg API."""
-
 from __future__ import annotations
 
 import pytest
@@ -9,73 +7,77 @@ from pr_auto_reviewer.infrastructure.git_platform.pr_lister_adapter import (
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest
 
+from tests.fakes.http_client import FakeGitPlatformHttpClient
+from tests.fixtures.pr_lister_fixtures import pr_dict, pr_dicts
 
-class TestGitPrListerAdapterIntegration:
-    """Integration tests for GitPrListerAdapter against live API."""
 
-    def test_list_open_public_repo_returns_list(
-        self, pr_lister_adapter: GitPrListerAdapter, public_pr_fixtures: dict
-    ) -> None:
-        """list_open returns a list of OpenPullRequest from a public repo."""
-        result = pr_lister_adapter.list_open(public_pr_fixtures["repo"])
+def _adapter(api_data):
+    return GitPrListerAdapter(FakeGitPlatformHttpClient(api_data))
 
-        assert isinstance(result, list)
+
+class TestGitPrListerAdapter:
+
+    def test_list_open_when_repo_has_prs_then_returns_open_pull_requests(self):
+        adapter = _adapter({"/repos/o/r/pulls": pr_dicts(3)})
+        result = adapter.list_open("o/r")
+        assert len(result) == 3
         assert all(isinstance(pr, OpenPullRequest) for pr in result)
-        assert all(pr.pr_id.repository == public_pr_fixtures["repo"] for pr in result)
-        assert all(isinstance(pr.pr_id.number, int) for pr in result)
-        assert all(pr.pr_id.number > 0 for pr in result)
-        assert all(isinstance(pr.title, str) for pr in result)
+        assert [pr.pr_id.number for pr in result] == [1, 2, 3]
+        assert all(pr.pr_id.repository == "o/r" for pr in result)
         assert all(len(pr.head_sha.value) == 40 for pr in result)
-        assert all(pr.is_draft is False for pr in result)
 
-    def test_list_open_private_repo_returns_list(
-        self, pr_lister_adapter: GitPrListerAdapter, private_pr_fixtures: dict
-    ) -> None:
-        """list_open returns a list from a private repo."""
-        result = pr_lister_adapter.list_open(private_pr_fixtures["repo"])
+    def test_list_open_when_repo_has_drafts_then_filters_them_out(self):
+        prs = [pr_dict(1, draft=False), pr_dict(2, draft=True), pr_dict(3, draft=False)]
+        adapter = _adapter({"/repos/o/r/pulls": prs})
+        result = adapter.list_open("o/r")
+        assert [pr.pr_id.number for pr in result] == [1, 3]
 
-        assert isinstance(result, list)
-        assert all(isinstance(pr, OpenPullRequest) for pr in result)
-        assert all(pr.pr_id.repository == private_pr_fixtures["repo"] for pr in result)
-        assert all(isinstance(pr.pr_id.number, int) for pr in result)
-        assert all(pr.pr_id.number > 0 for pr in result)
-        assert all(isinstance(pr.title, str) for pr in result)
-        assert all(len(pr.head_sha.value) == 40 for pr in result)
-        assert all(pr.is_draft is False for pr in result)
+    def test_list_open_when_response_is_paginated_dict_then_unwraps_data_key(self):
+        adapter = _adapter({"/repos/o/r/pulls": {"data": pr_dicts(2)}})
+        result = adapter.list_open("o/r")
+        assert len(result) == 2
 
-    def test_list_open_result_fields_match_api_response(
-        self, pr_lister_adapter: GitPrListerAdapter, pr_fixtures: dict
-    ) -> None:
-        """OpenPullRequest fields are correctly mapped from API response."""
-        public_pr = pr_fixtures.get("public_pr", {})
-        repo = public_pr.get("repo", "gbrennon/BitPill")
+    def test_list_open_when_api_throws_then_returns_empty_list(self):
+        adapter = _adapter({"/repos/o/r/pulls": ConnectionError("down")})
+        assert adapter.list_open("o/r") == []
 
-        result = pr_lister_adapter.list_open(repo)
+    def test_list_open_when_entries_missing_fields_then_drops_bad_entries(self):
+        prs = [
+            {"number": 1, "title": "OK", "head": {"sha": "a" * 40}},
+            {"title": "No number or sha"},
+            {"number": 3, "title": "Also OK", "head": {"sha": "b" * 40}},
+        ]
+        adapter = _adapter({"/repos/o/r/pulls": prs})
+        result = adapter.list_open("o/r")
+        assert [pr.pr_id.number for pr in result] == [1, 3]
 
-        if result:
-            pr = result[0]
-            assert isinstance(pr.pr_id.number, int)
-            assert isinstance(pr.head_sha.value, str)
-            assert isinstance(pr.title, str)
-            assert pr.is_draft is False
+    def test_get_pr_when_pr_exists_then_returns_open_pull_request(self):
+        adapter = _adapter({"/repos/o/r/pulls/42": pr_dict(42, "The Answer")})
+        result = adapter.get_pr("o/r", 42)
+        assert result is not None
+        assert result.pr_id.number == 42
+        assert result.title == "The Answer"
 
-    def test_list_open_empty_repo_returns_empty_list(
-        self, pr_lister_adapter: GitPrListerAdapter
-    ) -> None:
-        """Non-existent repo returns empty list gracefully."""
-        result = pr_lister_adapter.list_open("nonexistent-org/nonexistent-repo")
-        assert isinstance(result, list)
+    def test_get_pr_when_api_throws_then_returns_none(self):
+        adapter = _adapter({"/repos/o/r/pulls/1": ConnectionError("down")})
+        assert adapter.get_pr("o/r", 1) is None
 
-    def test_list_open_result_objects_are_frozen_and_hashable(
-        self, pr_lister_adapter: GitPrListerAdapter, public_pr_fixtures: dict
-    ) -> None:
-        """OpenPullRequest is a frozen dataclass."""
-        result = pr_lister_adapter.list_open(public_pr_fixtures["repo"])
+    def test_get_pr_when_missing_number_then_returns_none(self):
+        adapter = _adapter({"/repos/o/r/pulls/1": {"head": {"sha": "a" * 40}}})
+        assert adapter.get_pr("o/r", 1) is None
 
-        if result:
-            pr = result[0]
-            d = {pr: 1}
-            assert d[pr] == 1
+    def test_get_pr_when_missing_sha_then_returns_none(self):
+        adapter = _adapter({"/repos/o/r/pulls/1": {"number": 1, "title": "X"}})
+        assert adapter.get_pr("o/r", 1) is None
 
-            with pytest.raises(Exception):
-                pr.title = "mutated"  # type: ignore[misc]
+    def test_get_pr_when_nonexistent_path_then_returns_none(self):
+        adapter = _adapter({})
+        assert adapter.get_pr("o/r", 999) is None
+
+    def test_result_when_frozen_dataclass_then_is_hashable_and_immutable(self):
+        adapter = _adapter({"/repos/o/r/pulls": pr_dicts(1)})
+        pr = adapter.list_open("o/r")[0]
+        d = {pr: 1}
+        assert d[pr] == 1
+        with pytest.raises(Exception):
+            pr.title = "mutated"  # type: ignore[misc]

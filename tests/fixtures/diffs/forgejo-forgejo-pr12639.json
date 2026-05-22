@@ -1,0 +1,8 @@
+{
+  "owner": "forgejo",
+  "repo": "forgejo",
+  "full_repo": "forgejo/forgejo",
+  "pr_number": 12639,
+  "head_sha": "b82058aeb9265ab220f5b2a4a2a005c3744ed9b9",
+  "title": "chore: upgrade to https://code.forgejo.org/xorm/xorm v1.4.0"
+}

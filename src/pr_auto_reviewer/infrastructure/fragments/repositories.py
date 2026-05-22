@@ -53,10 +53,6 @@ class FileSystemFragmentRepository:
 
         self.base_path = base_path
 
-    # ------------------------------------------------------------------
-    # Public API — FragmentRepository protocol
-    # ------------------------------------------------------------------
-
     def find_by_language(self, language: str) -> list[PromptFragment]:
         """Return all fragments for *language*, sorted by priority descending.
 
@@ -107,10 +103,6 @@ class FileSystemFragmentRepository:
                     return fragment
 
         return None
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _load_fragment(file_path: Path) -> PromptFragment | None:

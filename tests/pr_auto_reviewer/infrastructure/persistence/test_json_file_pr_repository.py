@@ -86,9 +86,6 @@ class TestJsonFilePullRequestRepository:
             description=description,
         )
 
-    # ------------------------------------------------------------------
-    # find — missing file / missing key
-    # ------------------------------------------------------------------
     def test_find_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         result = repo.find(PullRequestId(repository="owner/repo", number=1))
@@ -100,9 +97,6 @@ class TestJsonFilePullRequestRepository:
         result = repo.find(PullRequestId(repository="owner/repo", number=99))
         assert result is None
 
-    # ------------------------------------------------------------------
-    # save + find round-trip — minimal aggregate
-    # ------------------------------------------------------------------
     def test_save_and_find_minimal_pr(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         pr = self._pr()
@@ -116,9 +110,6 @@ class TestJsonFilePullRequestRepository:
         assert found.reviews == ()
         assert found.processed_comment_ids == frozenset()
 
-    # ------------------------------------------------------------------
-    # save + find round-trip — full aggregate with reviews & comments
-    # ------------------------------------------------------------------
     def test_save_and_find_full_aggregate(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         review = self._review(
@@ -157,9 +148,6 @@ class TestJsonFilePullRequestRepository:
             {CommentId("101"), CommentId("204")}
         )
 
-    # ------------------------------------------------------------------
-    # Atomic write — no partial files left behind
-    # ------------------------------------------------------------------
     def test_atomic_write_leaves_no_tmp_files(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         repo.save(self._pr())
@@ -177,9 +165,6 @@ class TestJsonFilePullRequestRepository:
         data = json.loads((tmp_path / "state.json").read_text())
         assert len(data["reviewed"]) == 2
 
-    # ------------------------------------------------------------------
-    # RepositoryCorruptedError on malformed JSON
-    # ------------------------------------------------------------------
     def test_find_raises_on_malformed_json(self, tmp_path: Path) -> None:
         state_file = tmp_path / "state.json"
         state_file.write_text("not json at all {{{", encoding="utf-8")
@@ -194,9 +179,6 @@ class TestJsonFilePullRequestRepository:
         with pytest.raises(RepositoryCorruptedError):
             repo.find(PullRequestId(repository="owner/repo", number=1))
 
-    # ------------------------------------------------------------------
-    # Multiple PRs isolation
-    # ------------------------------------------------------------------
     def test_multiple_prs_do_not_clobber_each_other(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         pr_a = self._pr(repo="owner/a", number=1, title="A")
@@ -208,9 +190,7 @@ class TestJsonFilePullRequestRepository:
         assert found_a is not None and found_a.title == "A"
         assert found_b is not None and found_b.title == "B"
 
-    # ------------------------------------------------------------------
     # Update existing PR (immutable aggregate — new version saved)
-    # ------------------------------------------------------------------
     def test_update_existing_pr_overwrites_previous(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         pr = self._pr(number=1, title="Old", sha="s1")
@@ -225,9 +205,7 @@ class TestJsonFilePullRequestRepository:
         assert found.head_sha == CommitSha(value="s2")
         assert len(found.reviews) == 1
 
-    # ------------------------------------------------------------------
     # File schema validation (internal structure)
-    # ------------------------------------------------------------------
     def test_file_schema_matches_spec(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         review = self._review(
@@ -248,9 +226,6 @@ class TestJsonFilePullRequestRepository:
         assert entry["reviews"][0]["items"][0]["severity"] == "major"
         assert entry["processed_comment_ids"] == ["42"]
 
-    # ------------------------------------------------------------------
-    # OSError during read → RepositoryCorruptedError
-    # ------------------------------------------------------------------
     def test_find_raises_on_os_error(self, tmp_path: Path, monkeypatch) -> None:
         state_file = tmp_path / "state.json"
         state_file.write_text('{"reviewed": {}}', encoding="utf-8")
@@ -263,9 +238,6 @@ class TestJsonFilePullRequestRepository:
         with pytest.raises(RepositoryCorruptedError):
             repo.find(PullRequestId(repository="owner/repo", number=1))
 
-    # ------------------------------------------------------------------
-    # OSError during write propagates and cleans up tmp file
-    # ------------------------------------------------------------------
     def test_save_cleans_up_tmp_on_write_failure(self, tmp_path: Path, monkeypatch) -> None:
         repo = self._repo(tmp_path)
         call_count = {"n": 0}
@@ -281,5 +253,4 @@ class TestJsonFilePullRequestRepository:
         monkeypatch.setattr(os, "fdopen", _failing_fdopen)
         with pytest.raises(OSError):
             repo.save(self._pr())
-        # tmp file should have been removed
         assert list(tmp_path.glob("*.tmp*")) == []

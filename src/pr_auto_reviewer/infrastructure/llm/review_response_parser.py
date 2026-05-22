@@ -31,7 +31,6 @@ class ReviewResponseParser:
     def parse(raw_text: str, model_used: str) -> CodeReview:
         json_text = raw_text.strip()
 
-        # 1. Try markdown code blocks first (```json ... ``` or ``` ... ```)
         code_block_match = re.search(
             r"```(?:json)?\s*\n?(.*?)```",
             json_text,
@@ -42,7 +41,6 @@ class ReviewResponseParser:
             json_text = ReviewResponseParser._extract_outermost_json(inner) or json_text
             logger.debug("Extracted JSON from code block (%d chars)", len(json_text))
 
-        # 2. Try to parse as JSON
         try:
             data = json.loads(json_text)
             if isinstance(data, dict):
@@ -51,7 +49,6 @@ class ReviewResponseParser:
         except json.JSONDecodeError:
             logger.debug("Pure JSON parse failed, trying extraction from text...")
 
-        # 3. Raw text wasn't pure JSON — try extracting a JSON object from it
         extracted = ReviewResponseParser._extract_outermost_json(json_text)
         if extracted is not None:
             try:
@@ -63,7 +60,6 @@ class ReviewResponseParser:
             except json.JSONDecodeError:
                 logger.debug("Extracted text was not valid JSON")
 
-        # 4. Fall back to markdown parsing (old format)
         logger.warning(
             "Falling back to markdown parser — dumping raw text to "
             "/tmp/ollama_raw_response.txt"
@@ -77,14 +73,11 @@ class ReviewResponseParser:
         summary = ReviewResponseParser._extract_summary_md(raw_text)
         items = ReviewResponseParser._extract_items_md(raw_text)
 
-        # If the markdown parser also found nothing structured, extract
         # the first meaningful paragraph as summary (before any ## heading)
-        # instead of dumping the entire raw response.
         if not summary and not items:
             first_para = ReviewResponseParser._extract_first_paragraph(raw_text)
             summary = first_para if first_para else raw_text.strip()[:500]
 
-        # If verdict COMMENTED but text doesn't say "comment", default APPROVED
         if verdict == ReviewVerdict.COMMENTED:
             if "commented" not in raw_text[:500].lower():
                 verdict = ReviewVerdict.APPROVED
@@ -120,8 +113,6 @@ class ReviewResponseParser:
     @staticmethod
     def _parse_json(data: dict, model_used: str) -> CodeReview:
         """Parse JSON format response."""
-        # Determine verdict — prefer explicit verdict from LLM, fall back to
-        # deriving from issue severities.
         issues = data.get("issues", [])
         suggestions = data.get("suggestions", [])
         praise = data.get("praise", [])
@@ -132,7 +123,6 @@ class ReviewResponseParser:
             data.get("verdict"), issues,
         )
 
-        # Map severity strings to ItemSeverity enum
         _SEVERITY_MAP = {
             "critical": ItemSeverity.CRITICAL,
             "high": ItemSeverity.MAJOR,
@@ -143,7 +133,6 @@ class ReviewResponseParser:
             "info": ItemSeverity.INFO,
         }
 
-        # Convert JSON items to ReviewItem objects
         items = []
         for idx, issue in enumerate(issues, 1):
             severity_str = issue.get("severity", "info").lower()
@@ -162,7 +151,6 @@ class ReviewResponseParser:
                 )
             )
 
-        # Enrich suggestions with current/suggested code
         enriched_suggestions = []
         for s in suggestions:
             enriched_suggestions.append({
@@ -212,7 +200,6 @@ class ReviewResponseParser:
     @staticmethod
     def _extract_verdict_md(raw_text: str) -> ReviewVerdict:
         """Fallback: extract verdict from markdown format."""
-        # Try ## Verdict\nvalue
         match = re.search(
             r"##\s*Verdict\s*\n\s*(.+)", raw_text, re.IGNORECASE
         )
@@ -236,7 +223,6 @@ class ReviewResponseParser:
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
 
-        # Try plain "Verdict: value"
         match = re.search(r"Verdict:\s*(.+)", raw_text, re.IGNORECASE)
         if match:
             value = match.group(1).strip().lower()
@@ -253,7 +239,6 @@ class ReviewResponseParser:
         match = re.search(r"^(.+?)\n##\s", raw_text, re.DOTALL)
         if match:
             para = match.group(1).strip()
-            # Skip if it's just a verdict line
             if para.lower().startswith("verdict") or para.lower().startswith("**verdict"):
                 return None
             return para if len(para) > 20 else None

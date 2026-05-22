@@ -1,15 +1,15 @@
-"""Real E2E tests for the review verdict pipeline.
+"""Integration tests for the review verdict pipeline.
 
-Mocks ONLY at I/O boundaries (Ollama HTTP, platform API, publishing).
-Uses the REAL infrastructure services: PromptBuilder, OllamaLlmAdapter,
-ReviewResponseParser, and the REAL ReviewPullRequestService.
+Uses test stubs (not MagicMock) that implement port Protocols.
+Real domain objects throughout — PullRequestDiff, CodeReview.
+Fixture Ollama responses pre-parsed via ReviewResponseParser.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,15 +19,27 @@ from pr_auto_reviewer.application.commands.review_pull_request_command import (
 from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.value_objects.repository_context import (
-    RepositoryContext,
-)
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+
+from tests.pr_auto_reviewer.application.stubs import (
+    StubChangesetFetcher,
+    StubLlmReview,
+    StubPullRequestRepository,
+    StubReviewContextFactory,
+    StubReviewPublisher,
+)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -36,25 +48,21 @@ def _load_fixture(relative: str) -> str:
     return (FIXTURES / relative).read_text()
 
 
-def _ollama_response_fixture(name: str) -> dict:
-    return json.loads(_load_fixture(f"ollama_responses/{name}"))
+def _parsed_review_from_fixture(name: str, model: str = "code-review") -> CodeReview:
+    raw = json.loads(_load_fixture(f"ollama_responses/{name}"))
+    return ReviewResponseParser.parse(raw["response"], model)
 
 
-class TestReviewVerdictE2E:
-    """E2E tests for APPROVED vs CHANGES_REQUESTED verdicts.
+# ── Stub-based verdict tests ──────────────────────────────────────────
 
-    The ONLY mocks are at the I/O boundaries:
-      - requests.post        → Ollama HTTP
-      - changeset_fetcher    → Codeberg API (returns fixture diffs)
-      - repository_context   → Codeberg API (returns empty context)
-      - review_publisher     → Codeberg API (captures published review)
-      - pr_repository        → local persistence (stub)
 
-    The REAL pipeline is:
+class TestReviewVerdict:
+    """Verdict tests using stub ports — no MagicMock, no requests.post.
+
+    The pipeline is:
       ReviewPullRequestService
-        → PromptBuilder.build()
-        → OllamaLlmAdapter.review()
-          → ReviewResponseParser.parse()
+        → review_context_factory.build()
+        → llm_review.review_prompt(composed_prompt)
         → review_publisher.publish()
     """
 
@@ -66,35 +74,10 @@ class TestReviewVerdictE2E:
     def head_sha(self) -> CommitSha:
         return CommitSha("abc123def456")
 
-    @pytest.fixture
-    def empty_context(self) -> RepositoryContext:
-        return RepositoryContext(
-            architecture_hint="",
-            repository_structure=None,
-            conventions=None,
-        )
-
-    @pytest.fixture
-    def review_publisher(self) -> MagicMock:
-        return MagicMock()
-
-    @pytest.fixture
-    def pr_repository(self) -> MagicMock:
-        repo = MagicMock()
-        repo.find.return_value = None
-        return repo
-
     # ── APPROVED scenario ──────────────────────────────────────────
 
-    @patch("requests.post")
     def test_shell_with_shebang_is_approved(
-        self,
-        mock_post: MagicMock,
-        pr_id: PullRequestId,
-        head_sha: CommitSha,
-        empty_context: RepositoryContext,
-        review_publisher: MagicMock,
-        pr_repository: MagicMock,
+        self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
         """Shell script WITH shebang → no issues → APPROVED."""
         diff = PullRequestDiff(
@@ -105,106 +88,74 @@ class TestReviewVerdictE2E:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        changeset_fetcher = MagicMock()
-        changeset_fetcher.fetch.return_value = diff
-        repository_context = MagicMock()
-        repository_context.fetch.return_value = empty_context
+        review = _parsed_review_from_fixture("shell-with-shebang.json")
 
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = _ollama_response_fixture("shell-with-shebang.json")
-        mock_post.return_value = mock_response
+        fetcher = StubChangesetFetcher(diff)
+        llm_stub = StubLlmReview(review)
+        publisher = StubReviewPublisher()
+        ctx_factory = StubReviewContextFactory()
 
-        # -- act: REAL OllamaLlmAdapter + REAL ReviewPullRequestService -----
-        llm = OllamaLlmAdapter("http://localhost:11434", "code-review")
         service = ReviewPullRequestService(
-            pr_repository=pr_repository,
-            changeset_fetcher=changeset_fetcher,
-            repository_context=repository_context,
-            llm_review=llm,
-            review_publisher=review_publisher,
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub,
+            review_publisher=publisher,
         )
         service.execute(ReviewPullRequestCommand(
             pr_id=pr_id, head_sha=head_sha, title="Add deploy script",
         ))
 
-        # -- assert: APPROVED -----------------------------------------------
-        review_publisher.publish.assert_called_once()
-        published: CodeReview = review_publisher.publish.call_args[0][1]
+        assert len(publisher.publish_calls) == 1
+        published: CodeReview = publisher.publish_calls[0][1]
         assert published.verdict == ReviewVerdict.APPROVED
         assert published.model_used == "code-review"
 
-    # ── CHANGES_REQUESTED scenario ────────────────────────────────────
+    # ── CHANGES_REQUESTED scenario ──────────────────────────────────
 
-    @patch("requests.post")
     def test_shell_missing_shebang_real_model(
-        self,
-        mock_post: MagicMock,
-        pr_id: PullRequestId,
-        head_sha: CommitSha,
-        empty_context: RepositoryContext,
-        review_publisher: MagicMock,
-        pr_repository: MagicMock,
+        self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
-        """Shell WITHOUT shebang — real model (code-review:latest) response.
-
-        Note: the real qwen2:7b model approved this and flagged a different
-        info-level item instead of the missing shebang.  This test verifies
-        the pipeline works with whatever the real model actually returns.
-        """
+        """Shell WITHOUT shebang — real model (code-review:latest) response."""
         diff = PullRequestDiff(
             pr_id=pr_id,
             head_sha=head_sha,
             diff_content=_load_fixture("diffs/shell-missing-shebang.diff"),
             file_contents={
-                "scripts/deploy.sh": _load_fixture("diffs/shell-missing-shebang.full"),
+                "scripts/deploy.sh": _load_fixture(
+                    "diffs/shell-missing-shebang.full",
+                ),
             },
         )
-        changeset_fetcher = MagicMock()
-        changeset_fetcher.fetch.return_value = diff
-        repository_context = MagicMock()
-        repository_context.fetch.return_value = empty_context
+        review = _parsed_review_from_fixture("shell-missing-shebang.json")
 
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = _ollama_response_fixture(
-            "shell-missing-shebang.json",
-        )
-        mock_post.return_value = mock_response
+        fetcher = StubChangesetFetcher(diff)
+        llm_stub = StubLlmReview(review)
+        publisher = StubReviewPublisher()
+        ctx_factory = StubReviewContextFactory()
 
-        # -- act: REAL pipeline --------------------------------------------
-        llm = OllamaLlmAdapter("http://localhost:11434", "code-review")
         service = ReviewPullRequestService(
-            pr_repository=pr_repository,
-            changeset_fetcher=changeset_fetcher,
-            repository_context=repository_context,
-            llm_review=llm,
-            review_publisher=review_publisher,
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub,
+            review_publisher=publisher,
         )
         service.execute(ReviewPullRequestCommand(
             pr_id=pr_id, head_sha=head_sha, title="Add deploy script",
         ))
 
-        # -- assert: matches real captured model output --------------------
-        review_publisher.publish.assert_called_once()
-        published: CodeReview = review_publisher.publish.call_args[0][1]
-        # Real model returned approved + 1 info item (not shebang-related)
+        assert len(publisher.publish_calls) == 1
+        published: CodeReview = publisher.publish_calls[0][1]
         assert published.verdict == ReviewVerdict.APPROVED
         assert len(published.items) == 1
 
-    # ── PROMPT includes file_contents ─────────────────────────────────
+    # ── PROMPT includes file_contents ───────────────────────────────
 
-    @patch("requests.post")
-    def test_prompt_includes_full_file_contents(
-        self,
-        mock_post: MagicMock,
-        pr_id: PullRequestId,
-        head_sha: CommitSha,
-        empty_context: RepositoryContext,
-        review_publisher: MagicMock,
-        pr_repository: MagicMock,
+    def test_prompt_includes_file_content_in_composed_prompt(
+        self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
-        """The prompt sent to Ollama includes ## Full file contents."""
+        """The ComposedPrompt passed to the LLM includes file contents."""
         diff = PullRequestDiff(
             pr_id=pr_id,
             head_sha=head_sha,
@@ -213,113 +164,105 @@ class TestReviewVerdictE2E:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        changeset_fetcher = MagicMock()
-        changeset_fetcher.fetch.return_value = diff
-        repository_context = MagicMock()
-        repository_context.fetch.return_value = empty_context
+        review = _parsed_review_from_fixture("shell-with-shebang.json")
 
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = _ollama_response_fixture("shell-with-shebang.json")
-        mock_post.return_value = mock_response
+        fetcher = StubChangesetFetcher(diff)
+        llm_stub = StubLlmReview(review)
+        publisher = StubReviewPublisher()
+        expected_prompt = ComposedPrompt(
+            content="You are a code reviewer.\n\n"
+                    "## Full File Contents\n"
+                    "### scripts/deploy.sh\n"
+                    "#!/usr/bin/env bash\n"
+                    "echo 'deploying...'\n",
+            fragments_used=["solid"],
+            total_tokens=50,
+        )
+        ctx_factory = StubReviewContextFactory(prompt=expected_prompt)
 
-        llm = OllamaLlmAdapter("http://localhost:11434", "code-review")
         service = ReviewPullRequestService(
-            pr_repository=pr_repository,
-            changeset_fetcher=changeset_fetcher,
-            repository_context=repository_context,
-            llm_review=llm,
-            review_publisher=review_publisher,
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub,
+            review_publisher=publisher,
         )
         service.execute(ReviewPullRequestCommand(
             pr_id=pr_id, head_sha=head_sha, title="Test prompt",
         ))
 
-        mock_post.assert_called_once()
-        prompt_sent = mock_post.call_args[1]["json"]["prompt"]
-        assert "## Full File Contents" in prompt_sent
-        assert "### scripts/deploy.sh" in prompt_sent
-        assert "#!/usr/bin/env bash" in prompt_sent
+        assert len(llm_stub.review_prompt_calls) == 1
+        prompt_sent: ComposedPrompt = llm_stub.review_prompt_calls[0]
+        assert isinstance(prompt_sent, ComposedPrompt)
+        assert "## Full File Contents" in prompt_sent.content
+        assert "### scripts/deploy.sh" in prompt_sent.content
+        assert "#!/usr/bin/env bash" in prompt_sent.content
 
-    # ── VERDICT from parsed issues ────────────────────────────────────
+    # ── VERDICT from parsed issues ──────────────────────────────────
 
-    @patch("requests.post")
     def test_verdict_follows_severity_rules(
-        self,
-        mock_post: MagicMock,
-        pr_id: PullRequestId,
-        head_sha: CommitSha,
-        empty_context: RepositoryContext,
-        review_publisher: MagicMock,
-        pr_repository: MagicMock,
+        self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
-        """Critical/high severity → CHANGES_REQUESTED. Info only → APPROVED."""
+        """APPROVED vs CHANGES_REQUESTED driven by CodeReview objects."""
         diff = PullRequestDiff(
             pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
         )
-        changeset_fetcher = MagicMock()
-        changeset_fetcher.fetch.return_value = diff
-        repository_context = MagicMock()
-        repository_context.fetch.return_value = empty_context
-        llm = OllamaLlmAdapter("http://localhost:11434", "code-review")
+        fetcher = StubChangesetFetcher(diff)
+        ctx_factory = StubReviewContextFactory()
 
-        # -- low + info → APPROVED ----------------------------------------
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "response": json.dumps({
-                "issues": [
-                    {"file": "x.sh", "line": "1", "severity": "low",
-                     "type": "quality", "description": "minor"},
-                    {"file": "x.sh", "line": "2", "severity": "info",
-                     "type": "style", "description": "cosmetic"},
-                ],
-                "summary": "Minor issues only",
-                "suggestions": [], "praise": [],
-            }),
-        }
-        mock_post.return_value = mock_response
-
-        service = ReviewPullRequestService(
-            pr_repository=pr_repository,
-            changeset_fetcher=changeset_fetcher,
-            repository_context=repository_context,
-            llm_review=llm,
-            review_publisher=review_publisher,
+        # -- APPROVED --------------------------------------------------
+        publisher1 = StubReviewPublisher()
+        approved_review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="Minor issues only",
+            model_used="code-review",
         )
-        service.execute(ReviewPullRequestCommand(
+        llm_stub1 = StubLlmReview(approved_review)
+
+        service1 = ReviewPullRequestService(
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub1,
+            review_publisher=publisher1,
+        )
+        service1.execute(ReviewPullRequestCommand(
             pr_id=pr_id, head_sha=head_sha, title="info only",
         ))
-        published: CodeReview = review_publisher.publish.call_args[0][1]
-        assert published.verdict == ReviewVerdict.APPROVED
+        published1: CodeReview = publisher1.publish_calls[0][1]
+        assert published1.verdict == ReviewVerdict.APPROVED
 
-        # -- critical → CHANGES_REQUESTED ---------------------------------
-        review_publisher.reset_mock()
-        mock_response.json.return_value = {
-            "response": json.dumps({
-                "issues": [
-                    {"file": "x.sh", "line": "1", "severity": "critical",
-                     "type": "security", "description": "dangerous"},
-                ],
-                "summary": "Critical found",
-                "suggestions": [], "praise": [],
-            }),
-        }
-        service.execute(ReviewPullRequestCommand(
+        # -- CHANGES_REQUESTED -----------------------------------------
+        publisher2 = StubReviewPublisher()
+        cr_review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="Critical found",
+            model_used="code-review",
+        )
+        llm_stub2 = StubLlmReview(cr_review)
+
+        service2 = ReviewPullRequestService(
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub2,
+            review_publisher=publisher2,
+        )
+        service2.execute(ReviewPullRequestCommand(
             pr_id=pr_id, head_sha=head_sha, title="critical",
         ))
-        published = review_publisher.publish.call_args[0][1]
-        assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
+        published2 = publisher2.publish_calls[0][1]
+        assert published2.verdict == ReviewVerdict.CHANGES_REQUESTED
 
 
 # ── LLM unavailable / broken / offline ────────────────────────────────
 
 
-class TestLlmUnavailableE2E:
-    """E2E tests for LLM outage scenarios: offline, broken, empty responses.
+class TestLlmUnavailable:
+    """Error-path tests with a REAL OllamaLlmAdapter + monkeypatched requests.post.
 
-    LlmUnavailableError must propagate through the full
-    ReviewPullRequestService pipeline to the caller (PollingDaemon).
+    Stubs for everything except the LLM adapter.
+    MagicMock is used ONLY for mock_response objects at the HTTP boundary.
     """
 
     @pytest.fixture
@@ -337,21 +280,13 @@ class TestLlmUnavailableE2E:
         )
 
     @pytest.fixture
-    def _ctx(self) -> RepositoryContext:
-        return RepositoryContext(architecture_hint="")
-
-    @pytest.fixture
-    def _svc(self, _diff: PullRequestDiff, _ctx: RepositoryContext) -> ReviewPullRequestService:
-        fetcher = MagicMock()
-        fetcher.fetch.return_value = _diff
-        ctx_port = MagicMock()
-        ctx_port.fetch.return_value = _ctx
+    def _svc(self, _diff: PullRequestDiff) -> ReviewPullRequestService:
         return ReviewPullRequestService(
-            pr_repository=MagicMock(),
-            changeset_fetcher=fetcher,
-            repository_context=ctx_port,
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=StubChangesetFetcher(_diff),
+            review_context_factory=StubReviewContextFactory(),
             llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
-            review_publisher=MagicMock(),
+            review_publisher=StubReviewPublisher(),
         )
 
     @staticmethod
@@ -360,146 +295,160 @@ class TestLlmUnavailableE2E:
             pr_id=pr_id, head_sha=head_sha, title="Test",
         )
 
-    @patch("requests.post")
     def test_connection_refused(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Connection refused → LlmUnavailableError."""
         import requests as req
-        mock_post.side_effect = req.ConnectionError("Connection refused")
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+
+        def _raise(*a, **kw):
+            raise req.ConnectionError("Connection refused")
+
+        monkeypatch.setattr("requests.post", _raise)
+
         with pytest.raises(LlmUnavailableError, match="unreachable"):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_timeout(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Request timeout → LlmUnavailableError."""
         import requests as req
-        mock_post.side_effect = req.Timeout("Read timed out")
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+
+        def _raise(*a, **kw):
+            raise req.Timeout("Read timed out")
+
+        monkeypatch.setattr("requests.post", _raise)
+
         with pytest.raises(LlmUnavailableError):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_http_500(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """HTTP 500 error → LlmUnavailableError."""
         import requests as req
+
         mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = req.HTTPError("500 Server Error")
-        mock_post.return_value = mock_response
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
+        mock_response.raise_for_status.side_effect = req.HTTPError(
+            "500 Server Error",
         )
+        monkeypatch.setattr("requests.post", lambda *a, **kw: mock_response)
+
         with pytest.raises(LlmUnavailableError):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_invalid_json(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Malformed JSON body → LlmUnavailableError."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-        mock_response.json.side_effect = json.JSONDecodeError("bad json", "{bad", 0)
-        mock_post.return_value = mock_response
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+
+        class _FakeResponse:
+            @staticmethod
+            def raise_for_status() -> None:
+                pass
+
+            @staticmethod
+            def json():
+                raise json.JSONDecodeError("bad json", "{bad", 0)
+
+        monkeypatch.setattr("requests.post", lambda *a, **kw: _FakeResponse())
+
         with pytest.raises(LlmUnavailableError, match="invalid JSON"):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_empty_response_field(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Empty 'response' field in valid JSON → LlmUnavailableError."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"response": ""}
-        mock_post.return_value = mock_response
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+        monkeypatch.setattr("requests.post", lambda *a, **kw: mock_response)
+
         with pytest.raises(LlmUnavailableError, match="empty response"):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_empty_json_object(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Completely empty JSON {} → LlmUnavailableError."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {}
-        mock_post.return_value = mock_response
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+        monkeypatch.setattr("requests.post", lambda *a, **kw: mock_response)
+
         with pytest.raises(LlmUnavailableError, match="empty response"):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_dns_failure(
-        self, mock_post: MagicMock, _svc: ReviewPullRequestService,
-        pr_id: PullRequestId, head_sha: CommitSha,
+        self,
+        _svc: ReviewPullRequestService,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """DNS resolution failure → LlmUnavailableError."""
         import requests as req
-        # requests library wraps DNS/socket errors into ConnectionError
-        mock_post.side_effect = req.ConnectionError(
-            "Failed to resolve 'localhost'",
-        )
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+
+        def _raise(*a, **kw):
+            raise req.ConnectionError("Failed to resolve 'localhost'")
+
+        monkeypatch.setattr("requests.post", _raise)
+
         with pytest.raises(LlmUnavailableError):
             _svc.execute(self._cmd(pr_id, head_sha))
 
-    @patch("requests.post")
     def test_review_not_published_on_failure(
-        self, mock_post: MagicMock,
-        pr_id: PullRequestId, head_sha: CommitSha,
-        _ctx: RepositoryContext,
+        self,
+        pr_id: PullRequestId,
+        head_sha: CommitSha,
+        _diff: PullRequestDiff,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When LLM fails, review publisher is never called."""
         import requests as req
-        diff = PullRequestDiff(
-            pr_id=pr_id, head_sha=head_sha, diff_content="+x",
-        )
-        fetcher = MagicMock()
-        fetcher.fetch.return_value = diff
-        ctx_port = MagicMock()
-        ctx_port.fetch.return_value = _ctx
-        publisher = MagicMock()
 
-        mock_post.side_effect = req.ConnectionError("down")
-        llm = OllamaLlmAdapter("http://localhost:11434", "code-review")
+        publisher = StubReviewPublisher()
+
         service = ReviewPullRequestService(
-            pr_repository=MagicMock(),
-            changeset_fetcher=fetcher,
-            repository_context=ctx_port,
-            llm_review=llm,
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=StubChangesetFetcher(_diff),
+            review_context_factory=StubReviewContextFactory(),
+            llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
             review_publisher=publisher,
         )
 
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
+        def _raise(*a, **kw):
+            raise req.ConnectionError("down")
+
+        monkeypatch.setattr("requests.post", _raise)
+
         with pytest.raises(LlmUnavailableError):
             service.execute(self._cmd(pr_id, head_sha))
 
-        publisher.publish.assert_not_called()
+        assert publisher.publish_calls == []

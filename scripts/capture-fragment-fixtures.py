@@ -32,8 +32,6 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.infrastructure.config.config import load_config
-from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
-from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.application.services.compose_review_prompt_service import (
     ComposeReviewPromptService,
 )
@@ -87,16 +85,12 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
     renderer = Jinja2Renderer()
     # Auto-detect language from file paths
-    from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
-        OllamaLlmAdapter,
+    from pr_auto_reviewer.infrastructure.git_platform.language_detector import (
+        LanguageDetector,
     )
-    fake_diff = PullRequestDiff(
-        pr_id=None, head_sha=None,
-        diff_content=raw_diff,
-        file_contents=file_contents,
-    )
-    language = OllamaLlmAdapter._detect_language(fake_diff)
     file_paths = list(file_contents.keys())
+    detector = LanguageDetector()
+    language = detector.detect(file_paths)
     context = ReviewContext(language=language, file_paths=file_paths, diff=raw_diff)
     service = ComposeReviewPromptService(repository=repo, renderer=renderer)
     composed = service.execute(context)

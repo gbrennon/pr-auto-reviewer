@@ -1,70 +1,48 @@
-"""Integration tests for repo_lister_adapter.py — uses live Codeberg API.
-
-All tests share a session-scoped ``repo_list`` fixture so the live API
-is only called once across the entire test session.  See the project
-root PERFORMANCE_NOTES.md for rationale.
-"""
-
 from __future__ import annotations
 
 from pr_auto_reviewer.infrastructure.git_platform.repo_lister_adapter import (
     GitRepoListerAdapter,
 )
 
+from tests.fakes.http_client import FakeGitPlatformHttpClient
+from tests.fixtures.repo_lister_fixtures import user_dict, repo_dicts
 
-class TestGitRepoListerAdapterIntegration:
-    """Integration tests for GitRepoListerAdapter against live API."""
 
-    def test_list_repos_returns_non_empty_list(
-        self, repo_list: list[str], user_fixtures: dict
-    ) -> None:
-        """Returned list is non-empty and every entry is owner/repo."""
-        assert isinstance(repo_list, list)
-        assert len(repo_list) > 0, (
-            "Expected at least one repo owned by authenticated user"
-        )
+class TestGitRepoListerAdapter:
 
-        assert all(isinstance(r, str) for r in repo_list)
-        assert all("/" in r for r in repo_list), (
-            "all repos should be owner/repo format"
-        )
+    def test_list_repos_when_user_owns_repos_then_returns_owned_names(self):
+        client = FakeGitPlatformHttpClient({"/user": user_dict(), "/user/repos": repo_dicts()})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == ["testuser/repo-a", "testuser/repo-b"]
 
-    def test_list_repos_all_owned_by_authenticated_user(
-        self, repo_list: list[str], user_fixtures: dict
-    ) -> None:
-        """All returned repos are owned by the authenticated user."""
-        username = (
-            user_fixtures.get("login")
-            or user_fixtures.get("username")
-        )
+    def test_list_repos_when_filter_set_then_short_circuits_without_api_call(self):
+        client = FakeGitPlatformHttpClient({})
+        adapter = GitRepoListerAdapter(client, repos_filter="owner/my-repo")
+        assert adapter.list_repos() == ["owner/my-repo"]
 
-        if username:
-            assert all(r.split("/")[0] == username for r in repo_list), (
-                f"all repos must be owned by {username}"
-            )
+    def test_list_repos_when_owner_field_is_username_then_filters_by_owner(self):
+        repos = [{"full_name": "x/filtered", "owner": {"username": "x"}}]
+        client = FakeGitPlatformHttpClient({"/user": {"login": "x"}, "/user/repos": repos})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == ["x/filtered"]
 
-    def test_list_repos_with_filter_short_circuits(
-        self, repo_lister_adapter: GitRepoListerAdapter, user_fixtures: dict
-    ) -> None:
-        """When repos_filter is set, only that repo is returned (no API call)."""
-        username = (
-            user_fixtures.get("login")
-            or user_fixtures.get("username")
-            or "gbrennon"
-        )
+    def test_list_repos_when_response_is_paginated_dict_then_unwraps_data_key(self):
+        repos = [{"full_name": "u/r1", "owner": {"login": "u"}}]
+        client = FakeGitPlatformHttpClient({"/user": user_dict("u"), "/user/repos": {"data": repos}})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == ["u/r1"]
 
-        filtered = GitRepoListerAdapter(
-            client=repo_lister_adapter._client,
-            repos_filter=f"{username}/BitPill",
-        )
+    def test_list_repos_when_user_api_throws_then_returns_empty_list(self):
+        client = FakeGitPlatformHttpClient({"/user": ConnectionError("down")})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == []
 
-        result = filtered.list_repos()
-        assert len(result) == 1
-        assert result[0] == f"{username}/BitPill"
+    def test_list_repos_when_user_has_no_username_then_returns_empty_list(self):
+        client = FakeGitPlatformHttpClient({"/user": {"no": "username"}})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == []
 
-    def test_list_repos_returns_consistent_type(
-        self, repo_list: list[str]
-    ) -> None:
-        """The cached result is a plain list."""
-        assert isinstance(repo_list, list)
-        assert isinstance(repo_list, list)
+    def test_list_repos_when_repos_api_throws_then_returns_empty_list(self):
+        client = FakeGitPlatformHttpClient({"/user": user_dict(), "/user/repos": ConnectionError("gone")})
+        adapter = GitRepoListerAdapter(client)
+        assert adapter.list_repos() == []

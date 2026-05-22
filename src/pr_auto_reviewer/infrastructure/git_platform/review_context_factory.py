@@ -45,7 +45,6 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         pr_title: str | None = None,
         pr_description: str | None = None,
     ) -> ComposedPrompt:
-        # 1. Fetch repository context
         repo_context = self._repository_context.fetch(pr_id)
         repo_context = replace(
             repo_context,
@@ -53,7 +52,6 @@ class ReviewContextFactory(ReviewContextFactoryPort):
             pr_description=pr_description,
         )
 
-        # 2. Build ReviewContext (language detection + serialisation)
         file_paths = sorted(diff.file_contents.keys())
         language, serialized = self._repository_context.build_fragment_context(
             repo_context, file_paths, diff.commit_messages or None,
@@ -75,5 +73,4 @@ class ReviewContextFactory(ReviewContextFactoryPort):
             serialized is not None,
         )
 
-        # 3. Compose fragments
         return self._compose_review_prompt.execute(review_context)

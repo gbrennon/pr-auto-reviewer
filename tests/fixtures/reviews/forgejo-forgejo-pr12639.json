@@ -1,0 +1,11 @@
+{
+  "verdict": "approved",
+  "summary": "The PR updates the import paths for `xorm.io/xorm` and adds a new version to `go.mod`. The changes are well-intentioned and improve the codebase.",
+  "model_used": "code-review",
+  "items": [],
+  "owner": "forgejo",
+  "repo": "forgejo",
+  "full_repo": "forgejo/forgejo",
+  "pr_number": 12639,
+  "head_sha": "b82058aeb9265ab220f5b2a4a2a005c3744ed9b9"
+}

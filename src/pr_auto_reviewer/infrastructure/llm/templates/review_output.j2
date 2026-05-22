@@ -1,72 +1,64 @@
 ## AI Code Review
 
+**Verdict:** {{ verdict_text }}
 {% if review.reason %}
-**Verdict:** {{ verdict_text }}
 **Reason:** {{ review.reason }}
-{% else %}
-**Verdict:** {{ verdict_text }}
 {% endif %}
 
 {% if review.summary %}
 {{ review.summary }}
-
 {% endif %}
-### Issues
 
+### Issues
 {% if review.items %}
 {% for item in review.items %}
 {{ item.number }}. [{{ item.severity.value.upper() }}] [{{ item.category }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
 
-   {{ item.description }}
+{{ item.description }}
 {% if item.current_code %}
-   Current:
-
-   ```
-   {{ item.current_code }}
-   ```
-
+#### Current:
+```
+{{ item.current_code }}
+```
 {% endif %}
 {% if item.suggested_fix %}
-   Suggested:
-
-   ```
-   {{ item.suggested_fix }}
-   ```
-
+#### Suggested:
+```
+{{ item.suggested_fix }}
+```
 {% endif %}
 {% endfor %}
+{% else %}
+No issues found.
 {% endif %}
 ### Suggestions
-
 {% if suggestions %}
 {% for s in suggestions %}
 {{ s.number }}.{% if s.file %} {{ s.file }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
-
-   {{ s.description }}
+ {{ s.description }}
 {% if s.current_code %}
-   Current:
-
-   ```
-   {{ s.current_code }}
-   ```
-
+Current:
+```
+{{ s.current_code }}
+```
 {% endif %}
 {% if s.suggested_code %}
-   Suggested:
-
-   ```
-   {{ s.suggested_code }}
-   ```
-
+Suggested:
+```
+ {{ s.suggested_code }}
+```
 {% endif %}
 {% endfor %}
+{% else %}
+No suggestions.
 {% endif %}
 ### Praise
-
 {% if review.praise %}
 {% for p in review.praise %}
 -{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
 {% endfor %}
+{% else %}
+No notable patterns or practices to highlight.
 {% endif %}
 
 {% if review.model_used %}

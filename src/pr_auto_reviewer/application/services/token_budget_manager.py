@@ -15,42 +15,21 @@ class TokenBudgetManager:
     """
 
     def __init__(self, max_tokens: int) -> None:
-        """Initialise with a maximum token budget.
-
-        Args:
-            max_tokens: Hard limit on total tokens consumed.
-        """
         self._max_tokens = max_tokens
-        self._consumed = 0
+        self._consumed_tokens = 0
 
-    # ------------------------------------------------------------------
-    # Token estimation
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def estimate_tokens(text: str) -> int:
-        """Return an estimated token count for *text*.
-
-        Uses the rough heuristic ``len(text) // 4``.
-        """
+    def _estimate_tokens(self, text: str) -> int:
+        """Return an estimated token count for *text* (``len(text) // 4``)."""
         return len(text) // 4
-
-    # ------------------------------------------------------------------
-    # Budget queries
-    # ------------------------------------------------------------------
 
     def fits_budget(self, text: str) -> bool:
         """Return ``True`` if *text* fits within the remaining budget."""
-        tokens = self.estimate_tokens(text)
-        return self._consumed + tokens <= self._max_tokens
+        tokens = self._estimate_tokens(text)
+        return self._consumed_tokens + tokens <= self._max_tokens
 
     def remaining(self) -> int:
         """Return the number of tokens still available."""
-        return self._max_tokens - self._consumed
-
-    # ------------------------------------------------------------------
-    # Budget consumption
-    # ------------------------------------------------------------------
+        return self._max_tokens - self._consumed_tokens
 
     def consume(self, text: str) -> int:
         """Consume budget for *text* and return tokens consumed.
@@ -58,17 +37,17 @@ class TokenBudgetManager:
         Raises:
             ValueError: If *text* would exceed the remaining budget.
         """
-        tokens = self.estimate_tokens(text)
+        tokens = self._estimate_tokens(text)
 
-        if self._consumed + tokens > self._max_tokens:
+        if self._consumed_tokens + tokens > self._max_tokens:
             raise ValueError(
                 f"Text would exceed budget: {tokens} tokens needed, "
                 f"{self.remaining()} remaining",
             )
 
-        self._consumed += tokens
+        self._consumed_tokens += tokens
         return tokens
 
     def reset(self) -> None:
         """Reset consumed tokens to zero (start a new budget cycle)."""
-        self._consumed = 0
+        self._consumed_tokens = 0
