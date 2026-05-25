@@ -7,6 +7,7 @@ Diff fixtures come from tests/fixtures/diffs/.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from pr_auto_reviewer.domain import (
     CodeReview, CommitSha, EmptyDiffError, PullRequest, PullRequestDiff,
     PullRequestId, RepositoryContext, ReviewVerdict,
 )
+from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 
 from tests.pr_auto_reviewer.application.stubs import (
     StubPullRequestRepository,
@@ -155,3 +157,161 @@ class TestReviewPullRequestService:
         assert len(factory.build_calls) == 1
         assert len(llm.review_prompt_calls) == 1
         assert len(publisher.publish_calls) == 1
+
+    def test_debug_logs_review_complete_summary(self, caplog):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review(ReviewVerdict.CHANGES_REQUESTED))
+        publisher = StubReviewPublisher()
+
+        caplog.set_level(logging.DEBUG)
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        summaries = [
+            r.message for r in caplog.records
+            if "REVIEW COMPLETE" in r.message
+        ]
+        assert len(summaries) == 1
+        assert "verdict=changes_requested" in summaries[0]
+        assert "items=0" in summaries[0]
+        assert "summary='Looks good'" in summaries[0]
+
+    def test_review_complete_summary_not_logged_at_info(self, caplog):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        caplog.set_level(logging.INFO)
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        summaries = [
+            r.message for r in caplog.records
+            if "REVIEW COMPLETE" in r.message
+        ]
+        assert len(summaries) == 0
+
+    def test_review_complete_summary_not_logged_when_skipped(self, caplog):
+        cmd = _cmd()
+        existing = _pr(cmd.pr_id, cmd.head_sha)
+        existing = existing.add_review(_review(), cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(_diff_fixture(cmd.pr_id, cmd.head_sha))
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        caplog.set_level(logging.DEBUG)
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        summaries = [
+            r.message for r in caplog.records
+            if "REVIEW COMPLETE" in r.message
+        ]
+        assert len(summaries) == 0
+
+
+    def test_prompt_contains_diff_content(self):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
+        prompt = llm.review_prompt_calls[0]
+        assert isinstance(prompt, ComposedPrompt)
+        assert len(prompt.content) > 50
+        assert "diff --git" in prompt.content
+
+    def test_prompt_contains_reviewer_instructions(self):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        prompt = llm.review_prompt_calls[0]
+        assert "Senior Principal Software Engineer" in prompt.content
+        assert "Code Reviewer" in prompt.content
+        assert "report issues as JSON" in prompt.content
+
+    def test_prompt_is_not_empty_json_template(self):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        prompt = llm.review_prompt_calls[0]
+        assert len(prompt.content) > 200
+        assert prompt.content.strip() != ""
+        assert prompt.total_tokens > 10
+
+    def test_prompt_includes_pr_title_when_present(self):
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(), head_sha=_sha(),
+            title="Fix SQL injection in login handler",
+        )
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        prompt = llm.review_prompt_calls[0]
+        assert "Fix SQL injection in login handler" in prompt.content
+
+    def test_factory_receives_diff_in_build_call(self):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(factory.build_calls) == 1
+        _pr_id_arg, build_diff, _title, _desc = factory.build_calls[0]
+        assert build_diff is diff
+        assert "diff --git" in build_diff.diff_content

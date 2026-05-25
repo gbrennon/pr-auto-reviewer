@@ -62,6 +62,15 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         pr = self._record_review(pr, review, command.head_sha)
         self._persist(pr)
 
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "REVIEW COMPLETE | pr=%s verdict=%s items=%d summary='%s'",
+                command.pr_id,
+                review.verdict.value,
+                len(review.items),
+                (review.summary or "")[:80],
+            )
+
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
