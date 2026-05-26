@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
 )
@@ -17,6 +19,8 @@ from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewCont
 from pr_auto_reviewer.infrastructure.fragments.token_budget_manager import (
     TokenBudgetManager,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SEPARATOR = "\n\n---\n\n"
 
@@ -59,6 +63,10 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
 
     def execute(self, context: ReviewContext) -> ComposedPrompt:
         """Execute the composition for *context*."""
+        logger.info(
+            "ComposeReviewPromptAdapter.execute(language=%s, files=%d, diff=%d chars)",
+            context.language, len(context.file_paths), len(context.diff),
+        )
         fragments = self._select_fragments(context)
 
         if not fragments:
@@ -130,11 +138,25 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
 
         estimated_tokens = len(final_content) // 4
 
-        return ComposedPrompt(
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Composed prompt: chars=%d tokens=%d fragments=%d diff_chars=%d",
+                len(final_content),
+                estimated_tokens,
+                len(fragment_ids),
+                len(context.diff),
+            )
+
+        result = ComposedPrompt(
             content=final_content,
             fragments_used=fragment_ids,
             total_tokens=estimated_tokens,
         )
+        logger.info(
+            "ComposeReviewPromptAdapter return: chars=%d tokens=%d fragments=%s",
+            len(result.content), result.total_tokens, result.fragments_used,
+        )
+        return result
 
     def _render_fragment(
         self,
@@ -157,6 +179,7 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         content = content.replace("{{ code }}", context.diff)
         content = content.replace("{{ diff }}", context.diff)
         content = content.replace("{{ language }}", context.language)
+        content = content.replace("{{ file_paths }}", variables["file_paths"])
         content = content.replace(
             "{{ repository_context }}", context.repository_context or "",
         )
