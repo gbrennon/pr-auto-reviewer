@@ -101,3 +101,20 @@ class TestLoadConfig:
 
         config = load_config()
         assert config.env == "production"
+
+    def test_max_prompt_tokens_defaults_to_9999(self, tmp_path: Path, monkeypatch) -> None:
+        """max_prompt_tokens defaults to 9999 when not set in env."""
+        monkeypatch.setattr(config_module, "Path", _FakePath(tmp_path))
+        for key in list(os.environ):
+            monkeypatch.delenv(key, raising=False)
+
+        config = load_config()
+        assert config.max_prompt_tokens == 9999
+
+    def test_max_prompt_tokens_from_env(self, tmp_path: Path, monkeypatch) -> None:
+        """max_prompt_tokens reads from MAX_PROMPT_TOKENS env var."""
+        monkeypatch.setattr(config_module, "Path", _FakePath(tmp_path))
+        monkeypatch.setenv("MAX_PROMPT_TOKENS", "4000")
+
+        config = load_config()
+        assert config.max_prompt_tokens == 4000

@@ -21,7 +21,7 @@ class Config:
     debug: bool = False
     output_mode: str = "codeberg"
     fragments_dir: str = "fragments"
-    max_prompt_tokens: int = 0
+    max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
     max_files: int = 10
     max_structure_lines: int = 100
@@ -106,7 +106,7 @@ def load_config() -> Config:
     ).strip() or None
 
     output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
-    max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "0"))
+    max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "9999"))
     max_file_chars = int(os.environ.get("MAX_FILE_CHARS", "3000"))
     max_files = int(os.environ.get("MAX_FILES", "10"))
     max_structure_lines = int(os.environ.get("MAX_STRUCTURE_LINES", "100"))
