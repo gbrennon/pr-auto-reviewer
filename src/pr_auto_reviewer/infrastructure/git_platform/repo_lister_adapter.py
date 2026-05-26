@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.presentation.ports import RepoListerPort
+
+logger = logging.getLogger(__name__)
 
 
 class GitRepoListerAdapter(RepoListerPort):
@@ -18,11 +22,14 @@ class GitRepoListerAdapter(RepoListerPort):
     def list_repos(self) -> list[str]:
         """List all repositories owned by the authenticated user."""
         if self._repos_filter:
+            logger.debug("Using REPOS_FILTER=%s, returning singleton", self._repos_filter)
             return [self._repos_filter]
         try:
+            logger.debug("Fetching user info to list repos")
             user_data = self._client.get("/user")
             username = user_data.get("login") or user_data.get("username")
             if not username:
+                logger.warning("Could not determine username from /user response")
                 return []
 
             data = self._client.get("/user/repos", limit=50)
@@ -46,7 +53,11 @@ class GitRepoListerAdapter(RepoListerPort):
             if self._repos_filter:
                 result = [r for r in result if self._repos_filter in r]
 
+            logger.debug("Found %d owned repos%s", len(result),
+                         f" (filtered by '{self._repos_filter}')" if self._repos_filter else "")
+            logger.info("GitRepoListerAdapter.list_repos return: %s", result)
             return result
 
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to list repos: %s", exc)
             return []

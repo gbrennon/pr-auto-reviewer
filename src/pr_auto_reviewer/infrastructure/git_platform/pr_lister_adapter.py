@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
@@ -10,6 +11,8 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
+
+logger = logging.getLogger(__name__)
 
 
 class GitPrListerAdapter(PrListerPort):
@@ -20,6 +23,7 @@ class GitPrListerAdapter(PrListerPort):
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         """List all open PRs in the given repository."""
+        logger.info("Listing open PRs for %s", repository)
         try:
             data = self._client.get(
                 f"/repos/{repository}/pulls",
@@ -50,13 +54,18 @@ class GitPrListerAdapter(PrListerPort):
                         )
                     )
 
+            logger.debug("Found %d open PRs in %s", len(result), repository)
+            pr_summaries = [(p.pr_id.number, p.title[:40], p.head_sha.value[:7]) for p in result]
+            logger.info("GitPrListerAdapter.list_open return: %s", pr_summaries)
             return result
 
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to list PRs for %s: %s", repository, exc)
             return []
 
     def get_pr(self, repository: str, pr_number: int) -> Optional[OpenPullRequest]:
         """Fetch a single PR by number, regardless of state."""
+        logger.info("Fetching PR %s #%d", repository, pr_number)
         try:
             pr = self._client.get(
                 f"/repos/{repository}/pulls/{pr_number}",
@@ -68,15 +77,20 @@ class GitPrListerAdapter(PrListerPort):
             description = pr.get("body", "")
 
             if not number or not sha:
+                logger.warning("PR %s #%d has no number or sha", repository, pr_number)
                 return None
 
-            return OpenPullRequest(
+            logger.debug("Fetched PR %s #%d: '%s'", repository, pr_number, title[:60])
+            result = OpenPullRequest(
                 pr_id=PullRequestId(repository=repository, number=int(number)),
                 head_sha=CommitSha(sha),
                 title=title,
                 description=description,
                 is_draft=pr.get("draft", False),
             )
+            logger.info("GitPrListerAdapter.get_pr return: title='%s' sha=%s", title[:60], sha[:7])
+            return result
 
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to fetch PR %s #%d: %s", repository, pr_number, exc)
             return None

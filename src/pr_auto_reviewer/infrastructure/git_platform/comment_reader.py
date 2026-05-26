@@ -30,6 +30,7 @@ class GitCommentReaderAdapter(CommentReaderPort):
 
         # -- [http] GET comments ---------------------------------------------
         path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
+        logger.info("Fetching comments for %s", pr_id)
         raw_comments = self._client.get(path, limit=50)
 
         # Normalise to list — some platforms wrap in a dict under "data".
@@ -44,6 +45,7 @@ class GitCommentReaderAdapter(CommentReaderPort):
 
         # -- [map] build PrComment objects -----------------------------------
         comments: list[PrComment] = []
+        logger.debug("Found %d raw comment entries for %s", len(entries), pr_id)
         for entry in entries:
             body = entry.get("body", "")
             created_str = entry.get("created_at", "")
@@ -64,4 +66,6 @@ class GitCommentReaderAdapter(CommentReaderPort):
 
         # -- [map] sort by created_at ascending, return ----------------------
         comments.sort(key=lambda c: c.created_at)
+        logger.debug("Returning %d comments for %s", len(comments), pr_id)
+        logger.info("GitCommentReaderAdapter return: %d comments for %s", len(comments), pr_id)
         return comments
