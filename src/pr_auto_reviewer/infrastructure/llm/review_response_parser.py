@@ -72,6 +72,8 @@ class ReviewResponseParser:
         verdict = ReviewResponseParser._extract_verdict_md(raw_text)
         summary = ReviewResponseParser._extract_summary_md(raw_text)
         items = ReviewResponseParser._extract_items_md(raw_text)
+        suggestions = ReviewResponseParser._extract_suggestions_md(raw_text)
+        praise = ReviewResponseParser._extract_praise_md(raw_text)
 
         # the first meaningful paragraph as summary (before any ## heading)
         if not summary and not items:
@@ -86,29 +88,49 @@ class ReviewResponseParser:
             verdict=verdict,
             summary=summary,
             items=items,
+            suggestions=suggestions,
+            praise=praise,
             model_used=model_used,
         )
 
     @staticmethod
     def _extract_outermost_json(text: str) -> str | None:
-        """Find the outermost balanced JSON object via brace counting.
+        """Find the last valid outermost balanced JSON object via brace counting.
 
-        Avoids the ``\\{.*?\\}`` trap where a non-greedy regex stops at the
-        first ``}`` inside a nested object (e.g. an issue dict inside the
-        ``"issues"`` array).
+        Iterates through each ``{}`` pair in *text* in order and returns the
+        **last** one that parses successfully with ``json.loads()``.
+
+        This handles the common case where a base model echoes the prompt
+        (which may contain a non-valid JSON template with ``...`` in arrays)
+        before generating its actual JSON response — the echoed template is
+        skipped and the model's response is returned instead.
+
+        When the model returns a single valid JSON object the behaviour is
+        unchanged from the original first-``{}``-wins strategy.
         """
-        start = text.find("{")
-        if start == -1:
-            return None
-        depth = 0
-        for i in range(start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start : i + 1]
-        return None
+        last_valid: str | None = None
+        pos = 0
+        while True:
+            start = text.find("{", pos)
+            if start == -1:
+                return last_valid
+            depth = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            json.loads(candidate)
+                            last_valid = candidate
+                            pos = i + 1
+                        except json.JSONDecodeError:
+                            pos = i + 1
+                        break
+            else:
+                return last_valid
 
     @staticmethod
     def _parse_json(data: dict, model_used: str) -> CodeReview:
@@ -117,7 +139,13 @@ class ReviewResponseParser:
         suggestions = data.get("suggestions", [])
         praise = data.get("praise", [])
         summary = data.get("summary", "")
-        reason = data.get("reason", "")
+        reason = data.get("reason") or ""
+        if not reason:
+            reasons = data.get("reasons")
+            if isinstance(reasons, list):
+                reason = " ".join(r for r in reasons if isinstance(r, str))
+            elif isinstance(reasons, str):
+                reason = reasons
 
         verdict = ReviewResponseParser._resolve_verdict(
             data.get("verdict"), issues,
@@ -135,14 +163,25 @@ class ReviewResponseParser:
 
         items = []
         for idx, issue in enumerate(issues, 1):
-            severity_str = issue.get("severity", "info").lower()
-            severity = _SEVERITY_MAP.get(severity_str, ItemSeverity.INFO)
+            severity_str = issue.get("severity", "").strip().lower()
+            if severity_str and severity_str in _SEVERITY_MAP:
+                severity = _SEVERITY_MAP[severity_str]
+            else:
+                severity, severity_str = ReviewResponseParser._infer_severity(
+                    issue.get("description", "")
+                )
+
+            category = (issue.get("type") or "").strip()
+            if not category:
+                category = ReviewResponseParser._infer_type(
+                    issue.get("description", ""), severity_str
+                )
 
             items.append(
                 ReviewItem(
                     number=idx,
                     severity=severity,
-                    category=issue.get("type", ""),
+                    category=category,
                     file_path=issue.get("file"),
                     line=issue.get("line", ""),
                     description=issue.get("description", ""),
@@ -171,6 +210,81 @@ class ReviewResponseParser:
             model_used=model_used,
         )
 
+    @staticmethod
+    def _infer_severity(description: str) -> tuple[ItemSeverity, str]:
+        """Infer severity from issue description keywords.
+
+        Returns (ItemSeverity, severity_str) so callers can use the string
+        for further inference (e.g., type).
+        """
+        desc = description.lower()
+        # Critical keywords
+        if any(kw in desc for kw in (
+            "security", "injection", "leak", "vulnerability",
+            "exploit", "secret", "credential", "xss", "csrf",
+            "auth bypass", "hardcoded",
+        )):
+            return ItemSeverity.CRITICAL, "critical"
+        # High keywords
+        if any(kw in desc for kw in (
+            "crash", "race", "deadlock", "null pointer", "undefined",
+            "exception", "unhandled error", "logic bug", "wrong result",
+            "data loss", "corruption",
+        )):
+            return ItemSeverity.MAJOR, "high"
+        # Low keywords — docs, style, cosmetic
+        if any(kw in desc for kw in (
+            "naming", "rename", "typo", "style", "todo",
+            "unused", "dead code", "comment", "cosmetic",
+            "readability", "whitespace", "documentation",
+            "update readme", "add doc", "add documentation",
+        )):
+            return ItemSeverity.INFO, "low"
+        # Default to medium
+        return ItemSeverity.MINOR, "medium"
+
+    @staticmethod
+    def _infer_type(description: str, severity_str: str) -> str:
+        """Infer issue type from description keywords."""
+        desc = description.lower()
+        if any(kw in desc for kw in (
+            "security", "injection", "secret", "leak", "vulnerability",
+            "exploit", "credential", "xss", "csrf", "auth bypass",
+            "hardcoded",
+        )):
+            return "security"
+        if any(kw in desc for kw in (
+            "architecture", "layer", "boundary", "god object",
+            "tight coupling", "violation", "adapter", "port",
+            "hexagonal",
+        )):
+            return "architecture"
+        if any(kw in desc for kw in (
+            "solid", "srp", "single responsib", "open/closed",
+            "liskov", "interface seg", "dependency inversion",
+        )):
+            return "solid"
+        if any(kw in desc for kw in (
+            "test", "assert", "coverage", "mock", "stub",
+            "fixture", "edge case", "boundary",
+        )):
+            return "test"
+        if any(kw in desc for kw in (
+            "convention", "style", "formatting", "naming",
+            "typo", "rename",
+        )):
+            return "convention"
+        if any(kw in desc for kw in (
+            "magic number", "nesting", "duplicate", "duplication",
+            "dead code", "unused",
+        )):
+            return "quality"
+        # Default by severity
+        if severity_str in ("critical", "high"):
+            return "architecture"
+        return "quality"
+
+
 
     @staticmethod
     def _resolve_verdict(
@@ -182,7 +296,7 @@ class ReviewResponseParser:
             value = explicit.strip().lower()
             if "changes" in value or "request" in value:
                 return ReviewVerdict.CHANGES_REQUESTED
-            if "approved" in value:
+            if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
@@ -218,7 +332,7 @@ class ReviewResponseParser:
             value = match.group(1).strip().lower()
             if "changes" in value or "request" in value:
                 return ReviewVerdict.CHANGES_REQUESTED
-            if "approved" in value:
+            if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
@@ -228,7 +342,7 @@ class ReviewResponseParser:
             value = match.group(1).strip().lower()
             if "changes" in value or "request" in value:
                 return ReviewVerdict.CHANGES_REQUESTED
-            if "approved" in value:
+            if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
 
         return ReviewVerdict.COMMENTED
@@ -286,20 +400,85 @@ class ReviewResponseParser:
         return items
 
     @staticmethod
-    def _isolate_items_section(raw_text: str) -> str | None:
-        """Return the portion between ## Items and the next ## heading."""
-        match = re.search(
-            r"##\s*Items\s*\n(.*?)(?=\n##\s|\Z)",
-            raw_text,
-            re.IGNORECASE | re.DOTALL,
-        )
+    def _isolate_section(raw_text: str, heading: str) -> str | None:
+        """Return the portion between ``## <heading>`` and the next ``##`` heading."""
+        pattern = rf"##\s*{re.escape(heading)}\s*\n(.*?)(?=\n##\s|\Z)"
+        match = re.search(pattern, raw_text, re.IGNORECASE | re.DOTALL)
         if not match:
             return None
-
         body = match.group(1).strip()
-        if not body or body.lower() in ("none", "n/a", "no items"):
+        if not body or body.lower() in ("none", "n/a", f"no {heading.lower()}"):
             return None
         return body
+
+    @staticmethod
+    def _isolate_items_section(raw_text: str) -> str | None:
+        """Return the portion between ## Items and the next ## heading."""
+        return ReviewResponseParser._isolate_section(raw_text, "Items")
+
+    @staticmethod
+    def _extract_suggestions_md(raw_text: str) -> list[dict]:
+        """Fallback: extract suggestions from markdown format.
+        
+        Expects lines under ``## Suggestions`` or ``### Suggestions``.
+        """
+        section = ReviewResponseParser._isolate_section(raw_text, "Suggestions")
+        if not section:
+            return []
+        suggestions: list[dict] = []
+        for line in section.split("\n"):
+            line = line.strip()
+            if not line or line.lower().startswith("no suggestion"):
+                continue
+            entry: dict = {}
+            # Numbered: "1. file.py:line description"
+            m = re.match(r"^\d+\.\s*(\S+)?:?\s*(\d+\s+)?(.*)", line)
+            if m:
+                if m.group(1) and ":" in line.split(". ", 1)[1][:5]:
+                    entry["file"] = m.group(1)
+                    rest = line.split(". ", 1)[1]
+                    rest = rest[len(m.group(1)) + 1:].strip()
+                    line_m = re.match(r"^(\d+)\s+(.*)", rest)
+                    if line_m:
+                        entry["line"] = line_m.group(1)
+                        entry["description"] = line_m.group(2)
+                    else:
+                        entry["description"] = rest
+                else:
+                    entry["description"] = (m.group(3) or line).strip()
+            elif line.startswith("- "):
+                entry["description"] = line[2:]
+            elif line.startswith("* "):
+                entry["description"] = line[2:]
+            if entry.get("description"):
+                suggestions.append(entry)
+        return suggestions
+
+    @staticmethod
+    def _extract_praise_md(raw_text: str) -> list[dict]:
+        """Fallback: extract praise items from markdown format.
+        
+        Expects lines under ``## Praise`` or ``### Praise``.
+        """
+        section = ReviewResponseParser._isolate_section(raw_text, "Praise")
+        if not section:
+            return []
+        praise: list[dict] = []
+        for line in section.split("\n"):
+            line = line.strip()
+            if not line or line.lower().startswith("no notable"):
+                continue
+            if line.startswith("- ") or line.startswith("* "):
+                content = line[2:]
+                if ":" in content and not content.startswith("http"):
+                    file_part, _, desc = content.partition(":")
+                    praise.append({
+                        "file": file_part.strip(),
+                        "description": desc.strip(),
+                    })
+                else:
+                    praise.append({"description": content})
+        return praise
 
     _ITEM_RE_MD = re.compile(
         r"^\s*[-*]\s*\[(?P<severity>critical|major|minor|info)\]\s*"

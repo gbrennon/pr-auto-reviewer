@@ -27,7 +27,20 @@ _SEP = "=" * 72
 class OllamaLlmAdapter(LlmReviewPort):
     """Call a local Ollama instance to review a pull-request diff."""
 
-    def __init__(self, host: str, model: str, compose_review_prompt: object | None = None, fragment_selector: object | None = None, fragment_composer: object | None = None, max_tokens: int = 0, max_file_chars: int = 3000, max_files: int = 10, max_structure_lines: int = 100, use_compact_template: bool = False) -> None:
+    def __init__(
+        self,
+        host: str,
+        model: str,
+        compose_review_prompt: object | None = None,
+        fragment_selector: object | None = None,
+        fragment_composer: object | None = None,
+        max_tokens: int = 9999,
+        max_file_chars: int = 3000,
+        max_files: int = 10,
+        max_structure_lines: int = 100,
+        use_compact_template: bool = False
+    ) -> None:
+
         self._host = host.rstrip("/")
         self._model = model
         self._prompt_builder = PromptBuilder(
@@ -75,13 +88,13 @@ class OllamaLlmAdapter(LlmReviewPort):
         prompt_chars = len(prompt_text)
         logger.info("Prompt built: %d chars", prompt_chars)
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(_SEP)
-            logger.debug("FULL PROMPT (%d chars):\n%s", prompt_chars, prompt_text)
-            logger.debug(_SEP)
-
         timeout = int(os.getenv("OLLAMA_TIMEOUT", 120))
         try:
+            # Split on the fragment separator to extract the system prompt.
+            # The first fragment (reviewer-system-prompt, priority 1000) is sent
+            # as the "system" parameter, overriding the Modelfile's baked-in
+            # system prompt. This avoids context overflow from duplicate
+            # instructions and ensures consistent review behaviour.
             SEP = "\n\n---\n\n"
             system_text = ""
             user_text = prompt_text
@@ -93,6 +106,17 @@ class OllamaLlmAdapter(LlmReviewPort):
             req: dict = {"model": self._model, "prompt": user_text, "stream": False}
             if system_text:
                 req["system"] = system_text
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Ollama request payload: model=%s prompt_chars=%d system_chars=%d",
+                    self._model, len(user_text), len(system_text),
+                )
+                logger.debug(_SEP)
+                logger.debug("SYSTEM PROMPT (%d chars):\n%s", len(system_text), system_text[:500])
+                logger.debug(_SEP)
+                logger.debug("USER PROMPT (%d chars):\n%s", len(user_text), user_text[:1000])
+                logger.debug(_SEP)
 
             response = requests.post(
                 f"{self._host}/api/generate",
@@ -131,18 +155,16 @@ class OllamaLlmAdapter(LlmReviewPort):
                     "Ollama returned an empty response — model may have failed silently."
                 )
 
-        # Ollama metrics (always useful even at INFO level).
         eval_count = body.get("eval_count", "?")
-        eval_duration = body.get("eval_duration", 0) / 1e9  # ns → s
+        eval_duration = body.get("eval_duration", 0) / 1e9
         logger.info(
             "Ollama response: %d chars, %s tokens, %.1fs eval, %.0fms wall",
             len(raw_text), eval_count, eval_duration, response_ms,
         )
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(_SEP)
-            logger.debug("FULL OLLAMA RESPONSE (%d chars):\n%s", len(raw_text), raw_text)
-            logger.debug(_SEP)
+        logger.info(_SEP)
+        logger.info("FULL OLLAMA RESPONSE (%d chars):\n%s", len(raw_text), raw_text)
+        logger.info(_SEP)
 
         review = ReviewResponseParser.parse(raw_text, self._model)
         logger.info(
@@ -159,5 +181,20 @@ class OllamaLlmAdapter(LlmReviewPort):
                     item.severity.value.upper(), item.file_path or "(no file)",
                     item.category, item.description,
                 )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(_SEP)
+            logger.debug(
+                "OLLAMA REVIEW SUMMARY | host=%s model=%s | "
+                "prompt=%d chars (~%d tokens) | "
+                "response=%d chars %s eval_tokens %.1fs eval %.0fms wall | "
+                "verdict=%s items=%d summary='%s'",
+                self._host, self._model,
+                prompt_chars, prompt_chars // 4,
+                len(raw_text), eval_count, eval_duration, response_ms,
+                review.verdict.value, len(review.items),
+                (review.summary or "")[:80],
+            )
+            logger.debug(_SEP)
 
         return review

@@ -25,6 +25,7 @@ import jinja2
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
+# -- Regex patterns -----------------------------------------------------------
 
 _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
 _DIFF_FILE_PATH_RE = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE)
@@ -37,6 +38,7 @@ _DEVNULL_DST_RE = re.compile(r"^\+\+\+ /dev/null$", re.MULTILINE)
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
+# -- Token budget management --------------------------------------------------
 
 
 @dataclass
@@ -77,6 +79,7 @@ class PromptBudget:
         return False
 
 
+# -- Diff hunk parser ---------------------------------------------------------
 
 
 def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
@@ -219,6 +222,7 @@ def _annotate_diff(raw_diff: str) -> str:
     return "\n".join(annotated)
 
 
+# -- Truncation helpers -------------------------------------------------------
 
 
 def _trim_diff(raw_diff: str, max_tokens: int) -> str:
@@ -304,6 +308,7 @@ def _trim_repo_structure(structure: str, max_lines: int = 100) -> str:
     )
 
 
+# -- Main builder -------------------------------------------------------------
 
 
 class PromptBuilder:
@@ -380,13 +385,16 @@ class PromptBuilder:
                 ),
             )
 
+        # --- budget-aware mode ----------------------------------------------
         budget = PromptBudget(max_tokens=self._max_tokens)
 
+        # Priority 1: PR context (tiny — always fits)
         budget.consume(context.pr_title or "")
         budget.consume(context.pr_description or "")
         for msg in (diff.commit_messages or []):
             budget.consume(msg)
 
+        # Priority 2: Diff (truncated if needed)
         if budget.would_fit(annotated_diff):
             budget.consume(annotated_diff)
         else:
@@ -412,9 +420,11 @@ class PromptBuilder:
                 file_contents = trimmed_fc
                 budget.consume(str(trimmed_fc))
 
+        # Priority 4: Conventions
         if conventions and budget.remaining_tokens > 200:
             budget.consume(conventions)
 
+        # Priority 5: Architecture hint
         if context.architecture_hint and budget.remaining_tokens > 100:
             budget.consume(context.architecture_hint)
 

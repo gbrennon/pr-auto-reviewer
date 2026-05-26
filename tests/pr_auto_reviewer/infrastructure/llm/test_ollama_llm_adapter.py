@@ -1,6 +1,7 @@
 """Tests for OllamaLlmAdapter."""
 
 import json
+import logging
 import re
 
 import pytest
@@ -96,6 +97,68 @@ class TestOllamaLlmAdapter:
 
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)
+
+    def test_debug_logs_request_payload_when_debug_enabled(
+        self, monkeypatch, adapter: OllamaLlmAdapter,
+        sample_diff: PullRequestDiff, sample_context: RepositoryContext,
+        ollama_fake_post, caplog,
+    ) -> None:
+        import requests as _requests
+        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+
+        caplog.set_level(logging.DEBUG)
+        adapter.review(sample_diff, sample_context)
+
+        request_logs = [
+            r.message for r in caplog.records
+            if "Ollama request payload" in r.message
+        ]
+        assert len(request_logs) == 1
+        assert "model=code-review" in request_logs[0]
+        assert "prompt_chars=" in request_logs[0]
+
+    def test_debug_logs_review_summary_when_debug_enabled(
+        self, monkeypatch, adapter: OllamaLlmAdapter,
+        sample_diff: PullRequestDiff, sample_context: RepositoryContext,
+        ollama_fake_post, caplog,
+    ) -> None:
+        import requests as _requests
+        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+
+        caplog.set_level(logging.DEBUG)
+        adapter.review(sample_diff, sample_context)
+
+        summary_logs = [
+            r.message for r in caplog.records
+            if "OLLAMA REVIEW SUMMARY" in r.message
+        ]
+        assert len(summary_logs) == 1
+        summary = summary_logs[0]
+        assert "host=" in summary
+        assert "model=" in summary
+        assert "prompt=" in summary
+        assert "response=" in summary
+        assert "eval_tokens" in summary
+        assert "verdict=" in summary
+        assert "items=" in summary
+        assert "summary=" in summary
+
+    def test_review_summary_not_logged_at_info_level(
+        self, monkeypatch, adapter: OllamaLlmAdapter,
+        sample_diff: PullRequestDiff, sample_context: RepositoryContext,
+        ollama_fake_post, caplog,
+    ) -> None:
+        import requests as _requests
+        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+
+        caplog.set_level(logging.INFO)
+        adapter.review(sample_diff, sample_context)
+
+        summary_logs = [
+            r.message for r in caplog.records
+            if "OLLAMA REVIEW SUMMARY" in r.message
+        ]
+        assert len(summary_logs) == 0
 
     def test_review_raises_on_invalid_json(
         self, monkeypatch, adapter: OllamaLlmAdapter,

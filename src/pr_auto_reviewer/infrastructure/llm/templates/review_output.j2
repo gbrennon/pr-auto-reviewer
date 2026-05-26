@@ -12,7 +12,7 @@
 ### Issues
 {% if review.items %}
 {% for item in review.items %}
-{{ item.number }}. [{{ item.severity.value.upper() }}] [{{ item.category }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
+{{ item.number }}.{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
 
 {{ item.description }}
 {% if item.current_code %}
