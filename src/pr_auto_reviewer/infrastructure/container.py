@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -112,6 +115,13 @@ class Container:
     def __init__(self, config: Config | None = None) -> None:
         self._config = config or load_config()
 
+        logger.debug(
+            "Container config: output_mode=%s, llm=%s:%s, api=%s",
+            self._config.output_mode,
+            self._config.llm_host, self._config.llm_model,
+            self._config.platform_api_url,
+        )
+
         self._http_client = GitPlatformHttpClient(
             self._config.platform_api_url, self._config.platform_token,
         )
@@ -122,11 +132,13 @@ class Container:
             self._config.platform_api_url, reviewer_token,
         )
 
+        is_terminal = self._config.output_mode == "terminal"
         self._pr_repository: PullRequestRepository = (
             NullPullRequestRepository()
-            if self._config.output_mode == "terminal"
+            if is_terminal
             else JsonFilePullRequestRepository(_state_file_path())
         )
+        logger.debug("PullRequestRepository -> %s", type(self._pr_repository).__name__)
 
         self._changeset_fetcher: ChangesetFetcherPort = (
             GitChangesetFetcherAdapter(self._http_client)
@@ -136,7 +148,7 @@ class Container:
         )
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
             self._config.llm_host,
-            self._config.llm_model or "codellama",
+            self._config.llm_model or "qwen2.5-coder:14b",
             max_tokens=self._config.max_prompt_tokens,
             max_file_chars=self._config.max_file_chars,
             max_files=self._config.max_files,
@@ -145,13 +157,15 @@ class Container:
         )
         self._review_publisher: ReviewPublisherPort = (
             TerminalReviewPublisherAdapter()
-            if self._config.output_mode == "terminal"
+            if is_terminal
             else GitReviewPublisherAdapter(
                 self._reviewer_client,
                 reviewer_token,
                 self._config.reviewer_username,
             )
         )
+        logger.debug("ReviewPublisher -> %s", type(self._review_publisher).__name__)
+
         self._review_reader: ReviewReaderPort = GitReviewReaderAdapter(
             self._http_client,
         )

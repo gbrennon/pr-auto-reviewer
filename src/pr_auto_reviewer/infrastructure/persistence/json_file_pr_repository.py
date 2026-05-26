@@ -7,9 +7,12 @@ with atomic writes and structured deserialization.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -45,11 +48,19 @@ class JsonFilePullRequestRepository(PullRequestRepository):
         key = _make_key(pr_id)
         raw = reviewed.get(key)
         if raw is None:
+            logger.debug("No persisted state for %s", pr_id)
             return None
 
-        return self._deserialize(pr_id, raw)
+        logger.debug("Found persisted state for %s", pr_id)
+        pr = self._deserialize(pr_id, raw)
+        logger.info(
+            "JsonFilePullRequestRepository.find return: title='%s' sha=%s reviews=%d",
+            pr.title, pr.head_sha.value[:7], len(pr.reviews),
+        )
+        return pr
 
     def save(self, pr: PullRequest) -> None:
+        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
         data = self._load()
         reviewed = data.setdefault("reviewed", {})
 
@@ -60,6 +71,7 @@ class JsonFilePullRequestRepository(PullRequestRepository):
 
     def reset(self) -> None:
         """Clear all persisted state by deleting and recreating the file."""
+        logger.info("Resetting state file %s", self._file_path)
         if self._file_path.exists():
             self._file_path.unlink()
         self._file_path.parent.mkdir(parents=True, exist_ok=True)

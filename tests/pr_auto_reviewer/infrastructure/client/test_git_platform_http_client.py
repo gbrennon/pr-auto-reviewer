@@ -58,3 +58,33 @@ class TestGitPlatformHttpClient:
         client = GitPlatformHttpClient("https://x", "t")
         result = client.get("/users/search", q="gbrennon", limit=1)
         assert isinstance(result, dict)
+
+    def test_get_raw_returns_text(self, monkeypatch):
+        """GET_RAW returns the response text content."""
+        class FakeResponse:
+            status_code = 200
+            text = "diff --git a/file.py b/file.py\n+new line\n"
+            def raise_for_status(self):
+                pass
+        monkeypatch.setattr(requests_lib, "get", lambda *a, **kw: FakeResponse())
+        client = GitPlatformHttpClient("https://x", "t")
+        result = client.get_raw("/repos/test/pulls/1.diff")
+        assert isinstance(result, str)
+        assert result.startswith("diff --git")
+
+    def test_get_raw_uses_auth_header(self, monkeypatch):
+        """GET_RAW passes Authorization header correctly."""
+        captured_kwargs = {}
+        class FakeResponse:
+            status_code = 200
+            text = "ok"
+            def raise_for_status(self):
+                pass
+        def fake_get(url, **kwargs):
+            captured_kwargs.update(kwargs)
+            return FakeResponse()
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient("https://x", "t")
+        client.get_raw("/repos/test/pulls/1.diff")
+        assert "headers" in captured_kwargs
+        assert captured_kwargs["headers"]["Authorization"] == "token t"
