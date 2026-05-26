@@ -1,5 +1,7 @@
 """Tests for GitChangesetFetcherAdapter using fixture data."""
 
+import logging
+
 import pytest
 
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
@@ -77,3 +79,25 @@ class TestGitChangesetFetcherAdapter:
         diff = adapter.fetch(pr_id, sha)
         assert "a.py" not in diff.file_contents
         assert "b.py" in diff.file_contents
+
+    def test_fetch_logs_entry_and_return(self, patched_client, caplog):
+        """Entry and return are logged at INFO level."""
+        caplog.set_level(logging.INFO)
+        adapter = GitChangesetFetcherAdapter(patched_client)
+        pr_id = PullRequestId(repository="o/r", number=1)
+        sha = CommitSha("abc123")
+
+        adapter.fetch(pr_id, sha)
+
+        entry = [r.message for r in caplog.records if "ChangesetFetcher.fetch(" in r.message]
+        ret = [r.message for r in caplog.records if "ChangesetFetcher return" in r.message]
+
+        assert len(entry) == 1
+        assert "pr_id=o/r#1" in entry[0]
+        assert "sha=abc123" in entry[0]
+
+        assert len(ret) == 1
+        assert "pr=o/r#1" in ret[0]
+        assert "sha=abc123" in ret[0]
+        assert "diff=" in ret[0]
+        assert "files=" in ret[0]
