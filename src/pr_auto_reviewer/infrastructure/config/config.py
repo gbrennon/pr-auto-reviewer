@@ -26,6 +26,7 @@ class Config:
     max_files: int = 10
     max_structure_lines: int = 100
     use_compact_template: bool = False
+    use_monolithic_prompt: bool = True
 
 
 def _get_repo_root() -> Path:
@@ -113,6 +114,9 @@ def load_config() -> Config:
     use_compact_template = (
         os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
     )
+    use_monolithic_prompt = (
+        os.environ.get("USE_MONOLITHIC_PROMPT", "true").lower() == "true"
+    )
 
     return Config(
         env=env,
@@ -131,6 +135,7 @@ def load_config() -> Config:
         max_files=max_files,
         max_structure_lines=max_structure_lines,
         use_compact_template=use_compact_template,
+        use_monolithic_prompt=use_monolithic_prompt,
     )
 
 

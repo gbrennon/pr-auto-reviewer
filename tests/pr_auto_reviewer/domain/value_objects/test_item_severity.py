@@ -34,6 +34,11 @@ class TestItemSeverity:
         assert ItemSeverity("critical") == ItemSeverity.CRITICAL
         assert ItemSeverity("major") == ItemSeverity.MAJOR
 
+    def test_from_value_accepts_prompt_aliases(self) -> None:
+        assert ItemSeverity.from_value("high") == ItemSeverity.MAJOR
+        assert ItemSeverity.from_value("medium") == ItemSeverity.MINOR
+        assert ItemSeverity.from_value("low") == ItemSeverity.INFO
+
     def test_invalid_value_raises(self) -> None:
         with pytest.raises(ValueError):
             ItemSeverity("unknown")

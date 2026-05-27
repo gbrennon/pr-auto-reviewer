@@ -20,6 +20,7 @@ from pr_auto_reviewer.domain import (
     CodeReview, CommitSha, EmptyDiffError, PullRequest, PullRequestDiff,
     PullRequestId, RepositoryContext, ReviewVerdict,
 )
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 
 from tests.pr_auto_reviewer.application.stubs import (
@@ -315,3 +316,77 @@ class TestReviewPullRequestService:
         _pr_id_arg, build_diff, _title, _desc = factory.build_calls[0]
         assert build_diff is diff
         assert "diff --git" in build_diff.diff_content
+
+    def test_adds_concrete_finding_for_noisy_info_log_when_llm_misses_it(self):
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/client.py b/src/client.py\n"
+                "+++ b/src/client.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                "+        logger.info(\"GET %s params=%s\", url, params)\n"
+            ),
+        )
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        _pr_id_arg, review = publisher.publish_calls[0]
+        assert len(review.items) == 1
+        assert review.items[0].file_path == "src/client.py"
+        assert review.items[0].current_code == (
+            '        logger.info("GET %s params=%s", url, params)'
+        )
+        assert review.items[0].suggested_fix == (
+            '        logger.debug("GET %s params=%s", url, params)'
+        )
+
+    def test_adds_noisy_log_findings_before_llm_findings(self):
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/client.py b/src/client.py\n"
+                "+++ b/src/client.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                "+        logger.info(\"GET %s params=%s\", url, params)\n"
+            ),
+        )
+        llm_review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="LLM finding",
+            items=[
+                ReviewItem(
+                    number=1,
+                    severity="minor",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="existing",
+                    current_code="x = 1",
+                    suggested_fix="x = 2",
+                )
+            ],
+        )
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            StubPullRequestRepository(initial=None),
+            StubChangesetFetcher(diff),
+            StubReviewContextFactory(),
+            StubLlmReview(llm_review),
+            publisher,
+        ).execute(cmd)
+
+        _pr_id_arg, review = publisher.publish_calls[0]
+        assert len(review.items) == 2
+        assert review.items[0].file_path == "src/client.py"
+        assert review.items[1].file_path == "src/other.py"

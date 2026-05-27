@@ -31,27 +31,6 @@
 {% else %}
 No issues found.
 {% endif %}
-### Suggestions
-{% if suggestions %}
-{% for s in suggestions %}
-{{ s.number }}.{% if s.file %} {{ s.file }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
- {{ s.description }}
-{% if s.current_code %}
-Current:
-```
-{{ s.current_code }}
-```
-{% endif %}
-{% if s.suggested_code %}
-Suggested:
-```
- {{ s.suggested_code }}
-```
-{% endif %}
-{% endfor %}
-{% else %}
-No suggestions.
-{% endif %}
 ### Praise
 {% if review.praise %}
 {% for p in review.praise %}

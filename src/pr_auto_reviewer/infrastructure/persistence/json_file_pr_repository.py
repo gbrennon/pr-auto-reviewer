@@ -21,6 +21,7 @@ from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.review_verdict import ReviewVerdict
 from ...domain.value_objects.item_severity import ItemSeverity
+from ...domain.value_objects.issue_category import IssueCategory
 from ...domain.value_objects.comment_id import CommentId
 from ...application.ports.outbound.pull_request_repository import (
     PullRequestRepository,
@@ -123,7 +124,7 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                         {
                             "number": i.number,
                             "severity": i.severity.value,
-                            "category": i.category,
+                            "category": i.category.value,
                             "file_path": i.file_path,
                             "description": i.description,
                         }
@@ -147,8 +148,8 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                 items=[
                     ReviewItem(
                         number=i["number"],
-                        severity=ItemSeverity(i["severity"]),
-                        category=i.get("category", ""),
+                        severity=ItemSeverity.from_value(i.get("severity")),
+                        category=IssueCategory.from_value(i.get("category")),
                         file_path=i.get("file_path"),
                         description=i.get("description", ""),
                     )

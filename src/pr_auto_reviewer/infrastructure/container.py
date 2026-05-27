@@ -52,6 +52,9 @@ from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
+from pr_auto_reviewer.infrastructure.fragments.monolithic_review_prompt_adapter import (
+    MonolithicReviewPromptAdapter,
+)
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -76,6 +79,9 @@ from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
     IssueTrackerPort,
+)
+from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
+    ComposeReviewPromptPort,
 )
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
@@ -148,7 +154,7 @@ class Container:
         )
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
             self._config.llm_host,
-            self._config.llm_model or "qwen2.5-coder:14b",
+            self._config.llm_model or "code-review:latest",
             max_tokens=self._config.max_prompt_tokens,
             max_file_chars=self._config.max_file_chars,
             max_files=self._config.max_files,
@@ -191,14 +197,25 @@ class Container:
         )
 
         # Composite port — eliminates data clump in ReviewPullRequestService
+        if self._config.use_monolithic_prompt:
+            prompt_adapter: ComposeReviewPromptPort = MonolithicReviewPromptAdapter(
+                max_total_chars=self._config.max_prompt_tokens * 4
+                if self._config.max_prompt_tokens > 0
+                else 60_000,
+            )
+        else:
+            prompt_adapter = ComposeReviewPromptAdapter(
+                repository=self._fragment_repository,
+                renderer=self._fragment_renderer,
+                max_tokens=self._fragment_max_tokens,
+                max_total_chars=self._config.max_prompt_tokens * 4
+                if self._config.max_prompt_tokens > 0
+                else 60_000,
+            )
         self._review_context_factory: ReviewContextFactoryPort = (
             ReviewContextFactory(
                 repository_context=self._repository_context,
-                compose_review_prompt=ComposeReviewPromptAdapter(
-                    repository=self._fragment_repository,
-                    renderer=self._fragment_renderer,
-                    max_tokens=self._fragment_max_tokens,
-                ),
+                compose_review_prompt=prompt_adapter,
             )
         )
 

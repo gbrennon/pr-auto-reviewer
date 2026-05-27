@@ -1,7 +1,7 @@
 {
   "model": "code-review",
   "created_at": "2026-05-10T20:27:39.126897804Z",
-  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"scripts/deploy.sh\",\n      \"line\": 27,\n      \"severity\": \"low\",\n      \"type\": \"quality\",\n      \"description\": \"Redundant call to main function at the end of the script. The function is already called in the last line.\"\n    }\n  ],\n  \"suggestions\": [\n    {\n      \"file\": \"scripts/deploy.sh\",\n      \"line\": 27,\n      \"description\": \"Remove redundant call to main function\"\n    }\n  ],\n  \"praise\": [],\n  \"summary\": \"The script is functional but contains a redundant call at the end. A minor cleanup is suggested.\"\n}\n```",
+  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"scripts/deploy.sh\",\n      \"line\": 1,\n      \"severity\": \"low\",\n      \"type\": \"quality\",\n      \"description\": \"Missing shebang line at the top of the script. Add '#!/usr/bin/env bash' as the first line so the script can be executed directly.\",\n      \"current_code\": \"set -euo pipefail\",\n      \"suggested_fix\": \"#!/usr/bin/env bash\\nset -euo pipefail\"\n    }\n  ],\n  \"suggestions\": [],\n  \"praise\": [],\n  \"summary\": \"The script is functional but is missing a shebang. A minor cleanup is suggested.\"\n}\n```",
   "done": true,
   "done_reason": "stop",
   "context": [

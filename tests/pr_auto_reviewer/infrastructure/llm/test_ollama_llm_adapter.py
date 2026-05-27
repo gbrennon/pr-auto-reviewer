@@ -2,7 +2,9 @@
 
 import json
 import logging
+from pathlib import Path
 import re
+import requests as _requests
 
 import pytest
 
@@ -35,7 +37,6 @@ def prompt_builder() -> PromptBuilder:
 @pytest.fixture
 def sample_diff() -> PullRequestDiff:
     """Create a sample diff from real PR fixture."""
-    from pathlib import Path
     fixture_path = Path(__file__).parents[3] / "fixtures" / "diffs" / "sample-ollama.diff"
     return PullRequestDiff(
         pr_id=None,
@@ -63,7 +64,6 @@ class TestOllamaLlmAdapter:
         ollama_fake_post,
     ) -> None:
         """Sends POST request to Ollama with correct payload."""
-        import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post)
 
         result = adapter.review(sample_diff, sample_context)
@@ -241,7 +241,7 @@ class TestPromptBuilder:
         prompt = prompt_builder.build(sample_diff, sample_context)
         assert '"issues"' in prompt
         assert '"severity"' in prompt
-        assert '"type"' in prompt
+        assert '"category"' in prompt
 
 
 class TestReviewResponseParser:
@@ -252,7 +252,9 @@ class TestReviewResponseParser:
         raw_text = json.dumps({
             "issues": [
                 {"file": "foo.py", "line": "3", "severity": "high",
-                 "type": "security", "description": "test issue"}
+                 "type": "security", "description": "test issue",
+                 "current_code": "+ password = request.args['password']",
+                 "suggested_fix": "password = request.form['password']"}
             ],
             "summary": "Test summary",
             "suggestions": [],
@@ -273,7 +275,9 @@ class TestReviewResponseParser:
         raw_text = json.dumps({
             "issues": [
                 {"file": "foo.py", "line": "3", "severity": "low",
-                 "type": "quality", "description": "minor issue"}
+                 "type": "quality", "description": "minor issue",
+                 "current_code": "+ x = 1",
+                 "suggested_fix": "x = DEFAULT_VALUE"}
             ],
             "summary": "Looks good",
             "suggestions": [],
@@ -306,9 +310,13 @@ None
         raw_text = json.dumps({
             "issues": [
                 {"file": "foo.py", "line": "3", "severity": "critical",
-                 "type": "security", "description": "buffer overflow"},
+                 "type": "security", "description": "buffer overflow",
+                 "current_code": "+ strcpy(dst, src)",
+                 "suggested_fix": "strncpy(dst, src, sizeof(dst) - 1)"},
                 {"file": "bar.py", "line": "10", "severity": "major",
-                 "type": "architecture", "description": "god object"}
+                 "type": "architecture", "description": "god object",
+                 "current_code": "+ class GodObject:",
+                 "suggested_fix": "class FocusedService:"}
             ],
             "summary": "Has issues",
             "suggestions": [],
@@ -348,7 +356,9 @@ None
 {{
   "issues": [
     {{"file": "foo.py", "line": "10", "severity": "{severity}",
-     "type": "security", "description": "test issue"}}
+     "type": "security", "description": "test issue",
+     "current_code": "+ password = request.args['password']",
+     "suggested_fix": "password = request.form['password']"}}
   ],
   "summary": "Test summary",
   "suggestions": [],
@@ -366,7 +376,9 @@ None
 {
   "issues": [
     {"file": "foo.py", "line": "10", "severity": "high",
-     "type": "security", "description": "critical issue"}
+     "type": "security", "description": "critical issue",
+     "current_code": "+ password = request.args['password']",
+     "suggested_fix": "password = request.form['password']"}
   ],
   "summary": "Fix required",
   "suggestions": [],
@@ -385,9 +397,13 @@ None
 {
   "issues": [
     {"file": "auth.rs", "line": "42", "severity": "high",
-     "type": "security", "description": "SQL injection risk"},
+     "type": "security", "description": "SQL injection risk",
+     "current_code": "+ query(user_input);",
+     "suggested_fix": "query_with_params(user_input);"},
     {"file": "utils.rs", "line": "15", "severity": "low",
-     "type": "quality", "description": "unused import"}
+     "type": "quality", "description": "unused import",
+     "current_code": "+ use crate::unused;",
+     "suggested_fix": "use crate::used;"}
   ],
   "summary": "One critical issue found",
   "suggestions": [],
@@ -406,7 +422,9 @@ None
         raw_text = json.dumps({
             "issues": [
                 {"file": "main.py", "line": "5", "severity": "high",
-                 "type": "architecture", "description": "needs refactor"}
+                 "type": "architecture", "description": "needs refactor",
+                 "current_code": "+ class GodObject:",
+                 "suggested_fix": "class FocusedService:"}
             ],
             "summary": "Needs changes",
             "suggestions": [],

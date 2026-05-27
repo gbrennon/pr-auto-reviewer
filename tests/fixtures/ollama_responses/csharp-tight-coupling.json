@@ -1,7 +1,7 @@
 {
   "model": "code-review",
   "created_at": "2026-05-10T20:27:33.936054147Z",
-  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"Services/ReportGenerator.cs\",\n      \"line\": \"14\",\n      \"severity\": \"high\",\n      \"type\": \"security\",\n      \"description\": \"SQL injection vulnerability - use parameterized queries to prevent SQL injection attacks\"\n    }\n  ],\n  \"suggestions\": [],\n  \"praise\": [],\n  \"summary\": \"The PR introduces a new class but contains a security vulnerability. The connection string and query should be refactored to use parameterized queries.\"\n}\n```",
+  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"Services/ReportGenerator.cs\",\n      \"line\": \"14\",\n      \"severity\": \"high\",\n      \"type\": \"security\",\n      \"description\": \"SQL injection vulnerability - use parameterized queries to prevent SQL injection attacks\",\n      \"current_code\": \"var cmd = new SqlCommand(\\n            $\\\"SELECT * FROM orders WHERE MONTH(created_at)={month} AND YEAR(created_at)={year}\\\",\\n            connection);\",\n      \"suggested_fix\": \"var cmd = new SqlCommand(\\n            \\\"SELECT * FROM orders WHERE MONTH(created_at)=@month AND YEAR(created_at)=@year\\\",\\n            connection);\\ncmd.Parameters.AddWithValue(\\\"@month\\\", month);\\ncmd.Parameters.AddWithValue(\\\"@year\\\", year);\"\n    }\n  ],\n  \"suggestions\": [],\n  \"praise\": [],\n  \"summary\": \"The PR introduces a new class but contains a security vulnerability. The connection string and query should be refactored to use parameterized queries.\"\n}\n```",
   "done": true,
   "done_reason": "stop",
   "context": [

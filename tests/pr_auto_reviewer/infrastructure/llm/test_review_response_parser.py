@@ -65,7 +65,9 @@ class TestReviewResponseParser:
             "issues": [
                 {"file": "x.py", "line": "1",
                  "severity": "critical", "type": "security",
-                 "description": "bad"},
+                 "description": "bad",
+                 "current_code": "+ password = request.args['password']",
+                 "suggested_fix": "password = request.form['password']"},
             ],
             "summary": "x",
         }
@@ -91,6 +93,44 @@ class TestReviewResponseParser:
         raw = json.dumps(data)
         result = ReviewResponseParser.parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
+
+    def test_parse_json_drops_issue_without_concrete_code(self):
+        data = {
+            "issues": [
+                {"file": "x.py", "line": "1",
+                 "severity": "medium", "type": "quality",
+                 "description": "abstract issue"},
+            ],
+            "summary": "ok",
+        }
+        raw = json.dumps(data)
+        result = ReviewResponseParser.parse(raw, "m")
+        assert result.items == []
+
+    def test_parse_json_drops_issue_without_file_path(self):
+        data = {
+            "issues": [
+                {"line": "1", "severity": "medium", "type": "quality",
+                 "description": "missing file",
+                 "current_code": "x = 1",
+                 "suggested_fix": "x = 2"},
+            ],
+            "summary": "ok",
+        }
+        raw = json.dumps(data)
+        result = ReviewResponseParser.parse(raw, "m")
+        assert result.items == []
+
+    def test_parse_json_ignores_file_summary_changes_key(self):
+        data = {
+            "changes": [
+                {"file": "x.py", "description": "Added logging"},
+            ],
+            "summary": "ok",
+        }
+        raw = json.dumps(data)
+        result = ReviewResponseParser.parse(raw, "m")
+        assert result.items == []
 
     def test_parse_markdown_format_extracts_verdict(self):
         raw = (
@@ -137,7 +177,9 @@ class TestReviewResponseParser:
             "issues": [
                 {"file": "a.py", "line": "1",
                  "severity": "medium", "type": "bug",
-                 "description": "bug"},
+                 "description": "bug",
+                 "current_code": "+ value = data['value']",
+                 "suggested_fix": "value = data.get('value')"},
             ],
             "suggestions": [
                 {"file": "b.py", "line": "2",
@@ -306,25 +348,25 @@ class TestReviewResponseParser:
         t = ReviewResponseParser._infer_type(
             "Architecture violation: tight coupling between layers", "high"
         )
-        assert t == "architecture"
+        assert t == "design"
 
     def test_infer_type_architecture_from_hexagonal(self):
         t = ReviewResponseParser._infer_type(
             "Hexagonal port not properly implemented", "high"
         )
-        assert t == "architecture"
+        assert t == "design"
 
     def test_infer_type_solid_from_srp(self):
         t = ReviewResponseParser._infer_type(
             "Single responsibility principle violated", "major"
         )
-        assert t == "solid"
+        assert t == "design"
 
     def test_infer_type_solid_from_dependency_inversion(self):
         t = ReviewResponseParser._infer_type(
             "Dependency inversion not followed", "major"
         )
-        assert t == "solid"
+        assert t == "design"
 
     def test_infer_type_test_from_coverage(self):
         t = ReviewResponseParser._infer_type(
@@ -336,31 +378,31 @@ class TestReviewResponseParser:
         t = ReviewResponseParser._infer_type(
             "Formatting convention not followed", "low"
         )
-        assert t == "convention"
+        assert t == "maintainability"
 
     def test_infer_type_quality_from_magic_number(self):
         t = ReviewResponseParser._infer_type(
             "Magic number used without constant", "minor"
         )
-        assert t == "quality"
+        assert t == "maintainability"
 
     def test_infer_type_quality_from_duplication(self):
         t = ReviewResponseParser._infer_type(
             "Code duplication between modules", "minor"
         )
-        assert t == "quality"
+        assert t == "maintainability"
 
-    def test_infer_type_default_critical_severity_returns_architecture(self):
+    def test_infer_type_default_critical_severity_returns_bug(self):
         t = ReviewResponseParser._infer_type(
             "Some issue description", "critical"
         )
-        assert t == "architecture"
+        assert t == "bug"
 
-    def test_infer_type_default_high_severity_returns_architecture(self):
+    def test_infer_type_default_high_severity_returns_bug(self):
         t = ReviewResponseParser._infer_type(
             "Some issue description", "high"
         )
-        assert t == "architecture"
+        assert t == "bug"
 
     def test_infer_type_default_low_severity_returns_quality(self):
         t = ReviewResponseParser._infer_type(
@@ -512,7 +554,9 @@ class TestReviewResponseParser:
                 {"file": "x.py", "line": "1",
                  "severity": "unknown-bogus",
                  "type": "quality",
-                 "description": "security vulnerability in auth flow"},
+                 "description": "security vulnerability in auth flow",
+                 "current_code": "+ password = request.args['password']",
+                 "suggested_fix": "password = request.form['password']"},
             ],
             "summary": "ok",
         }
@@ -529,7 +573,9 @@ class TestReviewResponseParser:
                 {"file": "x.py", "line": "1",
                  "severity": "medium",
                  "type": "",
-                 "description": "security vulnerability in auth flow"},
+                 "description": "security vulnerability in auth flow",
+                 "current_code": "+ password = request.args['password']",
+                 "suggested_fix": "password = request.form['password']"},
             ],
             "summary": "ok",
         }
@@ -542,13 +588,14 @@ class TestReviewResponseParser:
             "issues": [
                 {"file": "x.py", "line": "1",
                  "severity": "medium",
-                 "description": "Naming issue with variable names"},
+                 "description": "Naming issue with variable names",
+                 "current_code": "+ x = get_value()",
+                 "suggested_fix": "value = get_value()"},
             ],
             "summary": "ok",
         }
         raw = json.dumps(data)
         result = ReviewResponseParser.parse(raw, "m")
-        assert result.items[0].category == "convention"
+        assert result.items[0].category == "maintainability"
 
     # --- _extract_items_md: invalid severity falls back to INFO ---------------
-

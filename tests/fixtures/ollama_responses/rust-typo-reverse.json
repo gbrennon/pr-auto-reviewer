@@ -1,7 +1,7 @@
 {
   "model": "code-review",
   "created_at": "2026-05-10T22:21:38.856732735Z",
-  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"src/infrastructure/persistence/json_dose_record_repository.rs\",\n      \"line\": 91,\n      \"severity\": \"high\",\n      \"type\": \"architecture\",\n      \"description\": \"Sorting by display order is a use case concern, not a storage concern. The repository must return records in storage order and let the caller decide ordering.\",\n      \"suggested_fix\": \"let mut records = self.records.lock().unwrap();\\nrecords.sort_by(|a, b| b.recorded_at().cmp(a.recorded_at()));\\nOk(records)\"\n    }\n  ],\n  \"summary\": \"The repository should not sort records by display order. Sorting logic belongs in the application layer.\"\n}\n```",
+  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"src/infrastructure/persistence/json_dose_record_repository.rs\",\n      \"line\": 91,\n      \"severity\": \"high\",\n      \"type\": \"architecture\",\n      \"description\": \"Sorting by display order is a use case concern, not a storage concern. The repository must return records in storage order and let the caller decide ordering.\",\n      \"current_code\": \"// This will list DoseReord in the inverse order\\n            .rev()\",\n      \"suggested_fix\": \"// This will list DoseRecord in storage order\"\n    }\n  ],\n  \"summary\": \"The repository should not sort records by display order. Sorting logic belongs in the application layer.\"\n}\n```",
   "done": true,
   "done_reason": "stop",
   "context": [

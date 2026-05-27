@@ -1,7 +1,7 @@
 {
   "model": "code-review",
   "created_at": "2026-05-10T20:27:24.454581041Z",
-  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"app/repository.py\",\n      \"line\": 6,\n      \"severity\": \"high\",\n      \"type\": \"security\",\n      \"description\": \"SQL injection vulnerability: user input is directly included in the query string. Use parameterized queries instead.\",\n      \"suggested_fix\": \"query = 'SELECT * FROM users WHERE name = ?'\\ncursor = self._conn.execute(query, (name,))\"\n    }\n  ],\n  \"summary\": \"The repository uses a vulnerable SQL query that could lead to SQL injection.\"\n}\n```",
+  "response": "```json\n{\n  \"issues\": [\n    {\n      \"file\": \"app/repository.py\",\n      \"line\": 6,\n      \"severity\": \"high\",\n      \"type\": \"security\",\n      \"description\": \"SQL injection vulnerability: user input is directly included in the query string. Use parameterized queries instead.\",\n      \"current_code\": \"query = f\\\"SELECT * FROM users WHERE name = '{name}'\\\"\\ncursor = self._conn.execute(query)\",\n      \"suggested_fix\": \"query = 'SELECT * FROM users WHERE name = ?'\\ncursor = self._conn.execute(query, (name,))\"\n    }\n  ],\n  \"summary\": \"The repository uses a vulnerable SQL query that could lead to SQL injection.\"\n}\n```",
   "done": true,
   "done_reason": "stop",
   "context": [

@@ -99,9 +99,24 @@ def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     print(f"Calling Ollama at {host} with model {model}...")
     print(f"Prompt: {len(prompt)} chars (~{len(prompt)//4} tokens)\n")
 
+    # Split on the fragment separator to extract the system prompt
+    # (reviewer-system-prompt, priority 1000) and send it as "system"
+    # to override the Modelfile's baked-in system prompt.
+    SEP = "\n\n---\n\n"
+    system_text = ""
+    user_text = prompt
+    if SEP in prompt:
+        parts = prompt.split(SEP, 1)
+        system_text = parts[0]
+        user_text = parts[1]
+
+    payload: dict = {"model": model, "prompt": user_text, "stream": False}
+    if system_text:
+        payload["system"] = system_text
+
     resp = requests.post(
         f"{host}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False},
+        json=payload,
         timeout=300,
     )
     resp.raise_for_status()

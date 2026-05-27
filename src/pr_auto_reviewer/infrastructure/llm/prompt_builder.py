@@ -24,6 +24,8 @@ import jinja2
 
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
 # -- Regex patterns -----------------------------------------------------------
 
@@ -383,6 +385,8 @@ class PromptBuilder:
                 commit_messages=(
                     diff.commit_messages if diff.commit_messages else None
                 ),
+                issue_category_values=IssueCategory.prompt_values(),
+                issue_severity_values=ItemSeverity.prompt_values(),
             )
 
         # --- budget-aware mode ----------------------------------------------
@@ -454,4 +458,6 @@ class PromptBuilder:
             commit_messages=(
                 diff.commit_messages if diff.commit_messages else None
             ),
+            issue_category_values=IssueCategory.prompt_values(),
+            issue_severity_values=ItemSeverity.prompt_values(),
         )

@@ -8,6 +8,7 @@ import re
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
@@ -38,7 +39,7 @@ class ReviewResponseParser:
         )
         if code_block_match:
             inner = code_block_match.group(1).strip()
-            json_text = ReviewResponseParser._extract_outermost_json(inner) or json_text
+            json_text = inner
             logger.debug("Extracted JSON from code block (%d chars)", len(json_text))
 
         try:
@@ -60,7 +61,7 @@ class ReviewResponseParser:
             except json.JSONDecodeError:
                 logger.debug("Extracted text was not valid JSON")
 
-        logger.warning(
+        logger.debug(
             "Falling back to markdown parser — dumping raw text to "
             "/tmp/ollama_raw_response.txt"
         )
@@ -135,7 +136,9 @@ class ReviewResponseParser:
     @staticmethod
     def _parse_json(data: dict, model_used: str) -> CodeReview:
         """Parse JSON format response."""
-        issues = data.get("issues", [])
+        issues = data.get("issues") or []
+        if not issues:
+            issues = ReviewResponseParser._find_items_in_dict(data)
         suggestions = data.get("suggestions", [])
         praise = data.get("praise", [])
         summary = data.get("summary", "")
@@ -147,46 +150,57 @@ class ReviewResponseParser:
             elif isinstance(reasons, str):
                 reason = reasons
 
-        verdict = ReviewResponseParser._resolve_verdict(
-            data.get("verdict"), issues,
-        )
-
-        _SEVERITY_MAP = {
-            "critical": ItemSeverity.CRITICAL,
-            "high": ItemSeverity.MAJOR,
-            "major": ItemSeverity.MAJOR,
-            "medium": ItemSeverity.MINOR,
-            "minor": ItemSeverity.MINOR,
-            "low": ItemSeverity.INFO,
-            "info": ItemSeverity.INFO,
-        }
-
         items = []
         for idx, issue in enumerate(issues, 1):
+            file_path = (issue.get("file") or "").strip()
+            if not file_path:
+                logger.debug(
+                    "Dropping non-actionable issue without file path: %r",
+                    issue,
+                )
+                continue
+
+            description = issue.get("description") or issue.get("details") or ""
+
             severity_str = issue.get("severity", "").strip().lower()
-            if severity_str and severity_str in _SEVERITY_MAP:
-                severity = _SEVERITY_MAP[severity_str]
+            if ItemSeverity.accepts(severity_str):
+                severity = ItemSeverity.from_value(severity_str)
             else:
                 severity, severity_str = ReviewResponseParser._infer_severity(
-                    issue.get("description", "")
+                    description
                 )
 
-            category = (issue.get("type") or "").strip()
-            if not category:
-                category = ReviewResponseParser._infer_type(
-                    issue.get("description", ""), severity_str
+            category_str = (issue.get("category") or issue.get("type") or "").strip()
+            if not category_str:
+                category_str = ReviewResponseParser._infer_type(
+                    description, severity_str
                 )
+            category = IssueCategory.from_value(category_str)
+            if not description:
+                description = ReviewResponseParser._describe_change(
+                    category.value, issue.get("file", "")
+                )
+
+            current_code = issue.get("current_code") or ""
+            suggested_fix = issue.get("suggested_fix") or ""
+            if not current_code.strip() or not suggested_fix.strip():
+                logger.debug(
+                    "Dropping non-actionable issue without concrete code: file=%s description=%r",
+                    issue.get("file"),
+                    description[:120],
+                )
+                continue
 
             items.append(
                 ReviewItem(
-                    number=idx,
+                    number=len(items) + 1,
                     severity=severity,
                     category=category,
-                    file_path=issue.get("file"),
+                    file_path=file_path,
                     line=issue.get("line", ""),
-                    description=issue.get("description", ""),
-                    current_code=issue.get("current_code", ""),
-                    suggested_fix=issue.get("suggested_fix", ""),
+                    description=description,
+                    current_code=current_code,
+                    suggested_fix=suggested_fix,
                 )
             )
 
@@ -200,6 +214,13 @@ class ReviewResponseParser:
                 "suggested_code": s.get("suggested_code", ""),
             })
 
+        verdict = ReviewResponseParser._resolve_verdict(
+            data.get("verdict"), items,
+        )
+
+        if not praise:
+            praise = ReviewResponseParser._ensure_praise(summary, data)
+
         return CodeReview(
             verdict=verdict,
             reason=reason,
@@ -209,6 +230,192 @@ class ReviewResponseParser:
             praise=praise,
             model_used=model_used,
         )
+
+    @staticmethod
+    def _find_items_in_dict(data: dict) -> list[dict]:
+        """Scan all values for any list of dicts that look like review items.
+
+        Excludes known non-issue keys (suggestions, praise) since those
+        are handled separately.  Looks for keys containing "issue" or
+        "change" first; falls back to any remaining list with item-like
+        dicts.
+        """
+        _ITEM_KEYS = {"file", "description", "details", "type", "severity", "line", "current_code"}
+        _EXCLUDED_KEYS = {"suggestions", "praise", "summary", "reason", "reasons"}
+
+        candidates: list[list[dict]] = []
+        for key, val in data.items():
+            if key in _EXCLUDED_KEYS:
+                continue
+            if isinstance(val, list) and len(val) > 0:
+                if all(isinstance(v, dict) for v in val):
+                    merged = set()
+                    for v in val:
+                        merged.update(v.keys())
+                    if merged & _ITEM_KEYS:
+                        candidates.append(val)
+
+        if candidates:
+            merged: list[dict] = []
+            for c in candidates:
+                for item in c:
+                    merged.append(item)
+            return merged
+        return []
+
+    @staticmethod
+    def _parse_per_file_format(data: dict) -> list[dict]:
+        """Convert model's per-file analysis output into issue-like dicts.
+
+        Handles formats produced by qwen3:14b when it deviates from the
+        expected schema:
+
+            Format A — list of strings per file (paths as keys):
+              {
+                "path/to/file.py": ["code line 1", "code line 2", ...]
+              }
+
+            Format B — list of item dicts per file (paths as keys):
+              {
+                "path/to/file.py": [
+                  {"type": "add", "content": "description", ...}
+                ]
+              }
+
+            Format C — ``files`` array with ``path``/``changes`` keys:
+              {
+                "files": [
+                  {"path": "file.py", "changes": ["line1", ...]},
+                  {"path": "file2.py", "changes": []}
+                ]
+              }
+        """
+        _KNOWN_KEYS = {
+            "deleted", "issues", "praise", "suggestions", "summary",
+            "reason", "reasons", "verdict", "verdicts", "changes",
+            "file_paths", "file", "line",
+        }
+        _INNER_MAP = {"content": "description", "change": "description",
+                       "location": "line"}
+        issues: list[dict] = []
+
+        # Format C: "files" array with path/changes
+        files_val = data.get("files")
+        if isinstance(files_val, list):
+            for entry in files_val:
+                if not isinstance(entry, dict):
+                    continue
+                file_path = entry.get("path", "")
+                changes = entry.get("changes")
+                if isinstance(changes, list):
+                    code_lines = [c for c in changes if isinstance(c, str)]
+                    if code_lines:
+                        issues.append({
+                            "file": file_path,
+                            "description": f"Changes in {file_path}",
+                            "current_code": "\n".join(code_lines),
+                        })
+
+        for key, val in data.items():
+            if key in _KNOWN_KEYS or key == "files":
+                continue
+            if isinstance(val, dict):
+                # Format D: {"file.py": {"changes": ["desc1", "desc2"]}}
+                changes = val.get("changes")
+                if isinstance(changes, list):
+                    desc_lines = [c for c in changes if isinstance(c, str)]
+                    if desc_lines:
+                        desc = "Changes in " + key + ": " + "; ".join(desc_lines)
+                        issues.append({
+                            "file": key,
+                            "description": desc,
+                        })
+                continue
+            if not isinstance(val, list) or len(val) == 0:
+                continue
+            if all(isinstance(v, str) for v in val):
+                # Format A: plain strings per file
+                code_lines = "\n".join(val)
+                issues.append({
+                    "file": key,
+                    "description": f"Changes in {key}",
+                    "current_code": code_lines,
+                })
+            elif all(isinstance(v, dict) for v in val):
+                # Format B: item dicts per file
+                for item in val:
+                    mapped: dict[str, str] = {"file": key}
+                    for k, v in item.items():
+                        if isinstance(v, str):
+                            mapped[_INNER_MAP.get(k, k)] = v
+                    issues.append(mapped)
+        return issues
+
+    @staticmethod
+    def _describe_change(change_type: str, file_path: str) -> str:
+        """Generate a human-readable description from a change item's type and file."""
+        _type_descriptions = {
+            "added": "Added",
+            "modified": "Modified",
+            "changed": "Changed",
+            "log_addition": "Added logging",
+            "logging": "Added logging",
+            "config_adjustment": "Adjusted configuration",
+            "config": "Adjusted configuration",
+            "refactor": "Refactored",
+            "rename": "Renamed",
+            "test_addition": "Added tests",
+            "test": "Added tests",
+            "documentation": "Updated documentation",
+            "doc": "Updated documentation",
+            "bugfix": "Fixed a bug",
+            "bug_fix": "Fixed a bug",
+            "bug": "Fixed a bug",
+            "performance": "Improved performance",
+            "dependency": "Updated dependency",
+            "style": "Applied style change",
+            "formatting": "Applied formatting change",
+            "cleanup": "Cleaned up code",
+            "dead_code_removal": "Removed dead code",
+            "type_hint": "Added type hint",
+            "type_hints": "Added type hints",
+            "error_handling": "Improved error handling",
+            "quality": "Improved code quality",
+            "maintainability": "Improved maintainability",
+        }
+        base = _type_descriptions.get(change_type) or change_type.replace("_", " ").title()
+        if file_path:
+            return f"{base} in {file_path}"
+        return base
+
+    @staticmethod
+    def _describe_code(change_type: str, file_path: str, description: str) -> tuple[str, str]:
+        """Fallback current_code/suggested_fix — always empty.
+
+        Only real code from the model is meaningful. Placeholder text
+        like '# Change:' or 'logger.<level>(<message>)' is worse than
+        showing nothing, so we return empty strings and the template
+        suppresses the code block via its {% if %} guards.
+        """
+        return "", ""
+
+    @staticmethod
+    def _ensure_praise(summary: str, data: dict) -> list[dict]:
+        """Generate fallback praise when the model provides none."""
+        if summary:
+            sentences = summary.replace("! ", ". ").replace("? ", ". ").split(". ")
+            positive_markers = ("well", "good", "clean", "proper", "correct", "nice",
+                                "solid", "great", "excellent", "improved", "clear",
+                                "structured", "organized", "follows", "consistent")
+            for sentence in sentences:
+                lower = sentence.lower().strip()
+                for marker in positive_markers:
+                    if marker in lower and len(sentence) > 15:
+                        return [{"description": sentence.strip() + "."}]
+        file_count = len(data.get("file_paths", []))
+        if data.get("issues") and len(data["issues"]) == 0:
+            return [{"description": "The codebase changes follow project conventions and appear well-structured."}]
+        return [{"description": "The changes are well-organized and maintain consistency with the existing codebase."}]
 
     @staticmethod
     def _infer_severity(description: str) -> tuple[ItemSeverity, str]:
@@ -229,22 +436,33 @@ class ReviewResponseParser:
         if any(kw in desc for kw in (
             "crash", "race", "deadlock", "null pointer", "undefined",
             "exception", "unhandled error", "logic bug", "wrong result",
-            "data loss", "corruption",
+            "data loss", "corruption", "resource leak", "memory leak",
+            "file handle", "connection pool", "sql injection",
+            "improper", "broken", "missing validation",
         )):
             return ItemSeverity.MAJOR, "high"
+        # Medium keywords
+        if any(kw in desc for kw in (
+            "error handling", "try except", "exception handling",
+            "edge case", "boundary condition", "performance",
+            "inefficient", "duplicate", "duplication", "redundant",
+            "import", "circular", "mutable default", "side effect",
+        )):
+            return ItemSeverity.MINOR, "medium"
         # Low keywords — docs, style, cosmetic
         if any(kw in desc for kw in (
             "naming", "rename", "typo", "style", "todo",
             "unused", "dead code", "comment", "cosmetic",
             "readability", "whitespace", "documentation",
             "update readme", "add doc", "add documentation",
+            "formatting", "convention",
         )):
             return ItemSeverity.INFO, "low"
         # Default to medium
         return ItemSeverity.MINOR, "medium"
 
     @staticmethod
-    def _infer_type(description: str, severity_str: str) -> str:
+    def _infer_type(description: str, severity_str: str) -> IssueCategory:
         """Infer issue type from description keywords."""
         desc = description.lower()
         if any(kw in desc for kw in (
@@ -252,46 +470,68 @@ class ReviewResponseParser:
             "exploit", "credential", "xss", "csrf", "auth bypass",
             "hardcoded",
         )):
-            return "security"
+            return IssueCategory.SECURITY
         if any(kw in desc for kw in (
-            "architecture", "layer", "boundary", "god object",
+            "bug", "error", "exception", "try", "except", "raise",
+            "error handling", "crash", "race", "deadlock", "null pointer",
+            "undefined", "unhandled", "logic bug", "wrong result",
+            "data loss", "corruption", "resource leak", "memory leak",
+            "file handle", "connection pool", "sql injection",
+            "improper", "broken", "missing validation",
+        )):
+            return IssueCategory.BUG
+        if any(kw in desc for kw in (
+            "architecture", "design", "layer", "boundary", "god object",
             "tight coupling", "violation", "adapter", "port",
-            "hexagonal",
+            "hexagonal", "solid", "srp", "single responsib",
+            "open/closed", "liskov", "interface seg",
+            "dependency inversion",
         )):
-            return "architecture"
+            return IssueCategory.DESIGN
         if any(kw in desc for kw in (
-            "solid", "srp", "single responsib", "open/closed",
-            "liskov", "interface seg", "dependency inversion",
+            "performance", "slow", "inefficient", "n+1", "query",
+            "cache", "timeout",
         )):
-            return "solid"
+            return IssueCategory.PERFORMANCE
         if any(kw in desc for kw in (
-            "test", "assert", "coverage", "mock", "stub",
-            "fixture", "edge case", "boundary",
+            "testability", "untestable", "hard to test",
+            "difficult to test", "mock", "stub", "fixture",
         )):
-            return "test"
+            return IssueCategory.TESTABILITY
         if any(kw in desc for kw in (
-            "convention", "style", "formatting", "naming",
-            "typo", "rename",
+            "documentation", "docstring", "comment", "readme",
+            "doc", "docs",
         )):
-            return "convention"
+            return IssueCategory.DOCUMENTATION
         if any(kw in desc for kw in (
+            "test", "assert", "coverage", "edge case", "boundary",
+        )):
+            return IssueCategory.TEST
+        if any(kw in desc for kw in (
+            "typo", "spelling", "misspelling", "typo",
+        )):
+            return IssueCategory.TYPO
+        if any(kw in desc for kw in (
+            "maintainability", "complexity", "readability",
             "magic number", "nesting", "duplicate", "duplication",
-            "dead code", "unused",
+            "dead code", "unused", "convention", "style",
+            "formatting", "naming", "rename", "log", "logging",
+            "debug", "config", "configuration", "setting", "env",
         )):
-            return "quality"
+            return IssueCategory.MAINTAINABILITY
         # Default by severity
         if severity_str in ("critical", "high"):
-            return "architecture"
-        return "quality"
+            return IssueCategory.BUG
+        return IssueCategory.QUALITY
 
 
 
     @staticmethod
     def _resolve_verdict(
-        explicit: str | None, issues: list,
+        explicit: str | None, items: list[ReviewItem],
     ) -> ReviewVerdict:
         """Resolve verdict — prefer explicit JSON field, fall back to
-        deriving from issue severities."""
+        deriving from parsed item severities."""
         if explicit:
             value = explicit.strip().lower()
             if "changes" in value or "request" in value:
@@ -300,14 +540,13 @@ class ReviewResponseParser:
                 return ReviewVerdict.APPROVED
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
-        return ReviewResponseParser._determine_verdict(issues)
+        return ReviewResponseParser._determine_verdict(items)
 
     @staticmethod
-    def _determine_verdict(issues: list) -> ReviewVerdict:
-        """Determine verdict based on issue severities."""
-        for issue in issues:
-            severity = issue.get("severity", "").lower()
-            if severity in ("critical", "high"):
+    def _determine_verdict(items: list[ReviewItem]) -> ReviewVerdict:
+        """Determine verdict based on parsed item severities."""
+        for item in items:
+            if item.severity in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR):
                 return ReviewVerdict.CHANGES_REQUESTED
         return ReviewVerdict.APPROVED
 
@@ -379,19 +618,13 @@ class ReviewResponseParser:
             ReviewResponseParser._ITEM_RE_MD.finditer(items_section),
             start=1,
         ):
-            severity_str = match.group("severity").lower()
-            try:
-                severity = ItemSeverity(severity_str)
-            except ValueError:
-                severity = ItemSeverity.INFO
-
             file_path = match.group("file_path").strip() or None
 
             items.append(
                 ReviewItem(
                     number=idx,
-                    severity=severity,
-                    category=match.group("category").strip(),
+                    severity=ItemSeverity.from_value(match.group("severity")),
+                    category=IssueCategory.from_value(match.group("category")),
                     file_path=file_path,
                     description=match.group("description").strip(),
                 )

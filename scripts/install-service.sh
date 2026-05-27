@@ -4,13 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if ! command -v systemctl &>/dev/null; then
-    echo "ERROR: systemd is required. This script uses systemd user services." >&2
-    exit 1
-fi
+CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
+CONFIG_FILE="${CONFIG_DIR}/config"
 
-if ! command -v python &>/dev/null; then
-    echo "ERROR: python is required to run pr-auto-reviewer." >&2
+# Check if application is already installed
+if [ -d "$CONFIG_DIR" ] || [ -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Application is already installed at $CONFIG_DIR. Use 'make update' to upgrade." >&2
     exit 1
 fi
 
@@ -70,6 +69,9 @@ RestartSec=10
 [Install]
 WantedBy=default.target
 EOF
+
+    echo "Installing Python dependencies..."
+    (cd "$REPO_ROOT" && uv sync)
 
     echo "Reloading systemd user daemon..."
     systemctl --user daemon-reload
