@@ -56,6 +56,7 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         max_tokens: int | None = None,
         separator: str = DEFAULT_SEPARATOR,
         max_total_chars: int = 60_000,
+        use_strict_selection: bool = False,
     ) -> None:
         self._repository = repository
         self._renderer = renderer
@@ -64,6 +65,7 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
             TokenBudgetManager(max_tokens) if max_tokens else None
         )
         self._max_total_chars = max_total_chars
+        self._strict_selection = bool(use_strict_selection)
 
     def execute(self, context: ReviewContext) -> ComposedPrompt:
         """Execute the composition for *context*."""
@@ -81,17 +83,124 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         return self._compose_prompt(fragments, context)
 
     def _select_fragments(self, context: ReviewContext) -> list[PromptFragment]:
-        """Select language-specific + universal fragments, sorted by priority."""
+        """Select language-specific + universal fragments, sorted by priority.
+
+        To avoid sending an overly-large prompt at start, perform a lightweight
+        relevance filter that keeps only fragments that are likely applicable to
+        the change set. Always preserve very high-priority/system fragments.
+        """
         language_fragments = self._repository.find_by_language(context.language)
         universal_fragments = self._repository.find_universal()
 
-        all_fragments = language_fragments + universal_fragments
+        # If strict selection is disabled, preserve the original behaviour:
+        # include all language-specific and universal fragments (sorted by
+        # priority). When strict selection is enabled, apply heuristics to
+        # restrict universal fragments to those that appear relevant to the
+        # change set.
+        if not getattr(self, "_strict_selection", False):
+            all_fragments = language_fragments + universal_fragments
+            sorted_fragments = sorted(
+                all_fragments, key=lambda f: f.priority, reverse=True,
+            )
+            if self._budget_manager is not None:
+                return self._apply_budget_constraints(sorted_fragments)
+            return sorted_fragments
+
+        # Start with language-specific fragments (they are assumed relevant)
+        candidates: list[PromptFragment] = list(language_fragments)
+        # Add universal fragments but filter them by simple heuristics below
+        universal_candidates: list[PromptFragment] = list(universal_fragments)
+
+        diff_text = (context.diff or "").lower()
+        file_list_text = " ".join(context.file_paths or []).lower()
+
+        def fragment_explicit_match(fragment: PromptFragment) -> bool:
+            """Support explicit matching via fragment metadata keys like
+            'match_files' or 'match_paths' (comma-separated patterns), or
+            'keywords' list. This allows fragment authors to opt-in to
+            stricter selection."""
+            meta = fragment.metadata or {}
+            # keywords may be a list or comma-separated string
+            kws = meta.get("keywords") or meta.get("keyword") or ""
+            if isinstance(kws, str):
+                kws_list = [k.strip().lower() for k in kws.split(",") if k.strip()]
+            elif isinstance(kws, (list, tuple)):
+                kws_list = [str(k).strip().lower() for k in kws]
+            else:
+                kws_list = []
+
+            for kw in kws_list:
+                if kw and (kw in diff_text or kw in file_list_text):
+                    return True
+
+            patterns = meta.get("match_files") or meta.get("match_paths") or ""
+            if isinstance(patterns, str):
+                pats = [p.strip().lower() for p in patterns.split(",") if p.strip()]
+            elif isinstance(patterns, (list, tuple)):
+                pats = [str(p).strip().lower() for p in patterns]
+            else:
+                pats = []
+
+            for p in pats:
+                for fp in context.file_paths or []:
+                    if p and p in fp.lower():
+                        return True
+
+            return False
+
+        def fragment_content_matches(fragment: PromptFragment) -> bool:
+            """Heuristic: does the fragment text contain any keyword found in the
+            diff or file paths? Use longer words (>=4 chars) to reduce false
+            positives. Limit to a few keywords for speed."""
+            text = (fragment.content or "").lower()
+            # Always include explicit system fragments or very high-priority
+            if fragment.category == "system" or (getattr(fragment, "priority", 0) or 0) >= 900:
+                return True
+
+            # If author provided explicit matchers, respect them
+            if fragment_explicit_match(fragment):
+                return True
+
+            # Extract candidate keywords from fragment content
+            import re
+
+            words = re.findall(r"\b[a-z]{4,}\b", text)
+            # de-duplicate while preserving order
+            seen: set[str] = set()
+            keywords: list[str] = []
+            for w in words:
+                if w not in seen:
+                    seen.add(w)
+                    keywords.append(w)
+                if len(keywords) >= 15:
+                    break
+
+            # Check keywords in diff and filenames
+            for kw in keywords:
+                if kw in diff_text or kw in file_list_text:
+                    return True
+
+            return False
+
+        # Filter universal fragments by heuristics
+        for frag in universal_candidates:
+            if fragment_content_matches(frag):
+                candidates.append(frag)
+
+        # Ensure deterministic ordering by priority (desc)
         sorted_fragments = sorted(
-            all_fragments, key=lambda f: f.priority, reverse=True,
+            candidates, key=lambda f: f.priority, reverse=True,
         )
 
+        # If there is a token budget, apply it to the already-filtered list
         if self._budget_manager is not None:
             return self._apply_budget_constraints(sorted_fragments)
+
+        # As a safe fallback, if filtering removed everything, return the
+        # original broad set so behavior remains predictable.
+        if not sorted_fragments:
+            all_fragments = language_fragments + universal_fragments
+            return sorted(all_fragments, key=lambda f: f.priority, reverse=True)
 
         return sorted_fragments
 

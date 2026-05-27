@@ -27,6 +27,7 @@ class Config:
     max_structure_lines: int = 100
     use_compact_template: bool = False
     use_monolithic_prompt: bool = True
+    use_strict_fragment_selection: bool = False
 
 
 def _get_repo_root() -> Path:
@@ -117,6 +118,9 @@ def load_config() -> Config:
     use_monolithic_prompt = (
         os.environ.get("USE_MONOLITHIC_PROMPT", "true").lower() == "true"
     )
+    use_strict_fragment_selection = (
+        os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
+    )
 
     return Config(
         env=env,
@@ -136,6 +140,7 @@ def load_config() -> Config:
         max_structure_lines=max_structure_lines,
         use_compact_template=use_compact_template,
         use_monolithic_prompt=use_monolithic_prompt,
+        use_strict_fragment_selection=use_strict_fragment_selection,
     )
 
 

@@ -120,6 +120,8 @@ For EACH issue you're about to report, verify:
 
 ## REVIEW PRIORITY
 
+**CORE RULE: Focus on the implementation.** Review what was actually built or changed. For every implementation change you identify, check whether it has corresponding tests. Untested code is a defect.
+
 1. **Critical Issues** (must fix):
    - Security vulnerabilities
    - Memory leaks or resource leaks
@@ -127,19 +129,21 @@ For EACH issue you're about to report, verify:
    - Unhandled exceptions
    - Null pointer dereferences
 
-2. **Architectural Issues** (should fix):
-   - SOLID violations
-   - Architectural boundary breaches
-   - God objects
-   - Tight coupling without abstraction
-
-3. **Test Coverage Issues** (must fix):
-   - **MANDATORY: Code changes without corresponding test changes**
+2. **Missing Tests** (must fix — same weight as critical):
+   - **MANDATORY: Every implementation change MUST have corresponding test changes.**
+   - If a new function/class/module was added, there must be a test for it.
+   - If existing logic was modified, existing tests must be updated.
    - Missing unit tests for domain/application layer changes
    - Missing integration tests for infrastructure/presentation changes
    - Integration tests that mock instead of testing real interactions
    - Presentation tests that don't validate user flows
    - Tests testing implementation details instead of behavior
+
+3. **Architectural Issues** (should fix):
+   - SOLID violations
+   - Architectural boundary breaches
+   - God objects
+   - Tight coupling without abstraction
 
 4. **Code Quality** (consider fixing):
    - **Non-descriptive or cryptic naming** (variables/constants, methods/functions, classes)
@@ -163,17 +167,21 @@ Output ONLY valid JSON (no markdown, no explanation, no code fences):
     {
       "file": "path/to/file",
       "line": "123",
-      "severity": "critical|high|medium|low",
-      "type": "security|architecture|solid|test|quality",
+      "severity": "high/medium/info",
+      "category": "bug/security/design/performance/testability/quality/documentation/test/typo/maintainability/style/docs/naming/general",
       "description": "specific issue description",
-      "rationale": "why this is a problem and how it impacts the codebase"
+      "rationale": "why this is a problem and how it impacts the codebase",
+      "current_code": "the problematic code from the diff",
+      "suggested_fix": "concrete corrected code showing the fix"
     }
   ],
   "suggestions": [
     {
       "file": "path/to/file",
       "line": "456",
-      "description": "improvement suggestion with concrete recommendation"
+      "description": "improvement suggestion with concrete recommendation",
+      "current_code": "current code that could be improved",
+      "suggested_code": "concrete improved code"
     }
   ],
   "praise": [

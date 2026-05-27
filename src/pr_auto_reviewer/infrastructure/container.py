@@ -211,6 +211,7 @@ class Container:
                 max_total_chars=self._config.max_prompt_tokens * 4
                 if self._config.max_prompt_tokens > 0
                 else 60_000,
+                use_strict_selection=getattr(self._config, "use_strict_fragment_selection", False),
             )
         self._review_context_factory: ReviewContextFactoryPort = (
             ReviewContextFactory(
