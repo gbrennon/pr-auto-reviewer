@@ -40,6 +40,7 @@ class GitRepositoryContextAdapter(RepositoryContextPort):
 
     def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
         """Return RepositoryContext for the given PR's repository."""
+        logger.info("RepositoryContext.fetch(%s)", pr_id)
         architecture_hint = "unknown"
         repository_structure: str | None = None
 
@@ -68,12 +69,20 @@ class GitRepositoryContextAdapter(RepositoryContextPort):
 
         python_version = self._python_version_detector.detect(tree_paths)
 
-        return RepositoryContext(
+        repo_ctx = RepositoryContext(
             architecture_hint=architecture_hint,
             conventions=conventions,
             repository_structure=repository_structure,
             python_version=python_version,
         )
+        logger.info(
+            "RepositoryContext.fetch return: arch=%s conventions=%s structure=%d lines python=%s",
+            architecture_hint,
+            f"{len(conventions)} chars" if conventions else "none",
+            len(tree_paths),
+            python_version or "none",
+        )
+        return repo_ctx
 
     def build_fragment_context(
         self,
@@ -85,6 +94,10 @@ class GitRepositoryContextAdapter(RepositoryContextPort):
 
         Returns ``(language, serialized_context)``.
         """
+        logger.info(
+            "RepositoryContext.build_fragment_context(files=%d, commits=%s)",
+            len(file_paths), len(commit_messages) if commit_messages else 0,
+        )
         language = self._language_detector.detect(file_paths)
 
         # Fallback: if Python but tree fetch failed, default to 3.9+
@@ -95,5 +108,9 @@ class GitRepositoryContextAdapter(RepositoryContextPort):
         serialized = self._context_serializer.serialize(
             repo_context, commit_messages,
             python_version=self._python_version_detector.guidance(version),
+        )
+        logger.info(
+            "build_fragment_context return: language=%s serialized=%s",
+            language, f"{len(serialized)} chars" if serialized else "none",
         )
         return language, serialized

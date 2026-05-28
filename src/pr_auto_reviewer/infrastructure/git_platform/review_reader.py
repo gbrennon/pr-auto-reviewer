@@ -27,6 +27,7 @@ class GitReviewReaderAdapter(ReviewReaderPort):
 
         # -- [http] GET reviews list -----------------------------------------
         path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
+        logger.info("Fetching latest review for %s", pr_id)
         reviews = self._client.get(path, limit=10)
 
         # -- [map] sort by submitted_at descending, pick first ---------------
@@ -38,9 +39,20 @@ class GitReviewReaderAdapter(ReviewReaderPort):
             )
             if sorted_reviews:
                 body: str | None = sorted_reviews[0].get("body")
+                logger.debug(
+                    "Latest review body: %s chars", len(body) if body else 0,
+                )
+                logger.info("GitReviewReaderAdapter return: body=%s chars", len(body))
                 return body
+            logger.debug("No reviews found for %s", pr_id)
         elif isinstance(reviews, dict) and reviews:
             # Some platforms return a single object.
-            return reviews.get("body")
+            body = reviews.get("body")
+            logger.debug(
+                "Single review object, body: %s chars", len(body) if body else 0,
+            )
+            logger.info("GitReviewReaderAdapter return: body=%s chars", len(body) if body else 0)
+            return body
 
+        logger.info("No review available for %s", pr_id)
         return None

@@ -5,7 +5,9 @@
       "line": "3",
       "severity": "high",
       "type": "security",
-      "description": "test issue"
+      "description": "test issue",
+      "current_code": "+ password = request.args['password']",
+      "suggested_fix": "password = request.form['password']"
     }
   ],
   "summary": "Test summary",

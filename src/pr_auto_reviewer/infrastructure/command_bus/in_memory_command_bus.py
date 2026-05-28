@@ -10,10 +10,13 @@ touching application or domain code.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
 from ...application.ports.outbound.command_bus_port import CommandBusPort
+
+logger = logging.getLogger(__name__)
 
 
 Handler = Callable[[Any], None]
@@ -37,6 +40,11 @@ class InMemoryCommandBus(CommandBusPort):
         self._handlers[command_type] = handler
 
     def dispatch(self, command: Any) -> None:
+        cmd_type = type(command).__name__
         handler = self._handlers.get(type(command))
         if handler is not None:
+            handler_name = getattr(handler, "__name__", type(handler).__name__)
+            logger.debug("Dispatching %s to %s", cmd_type, handler_name)
             handler(command)
+        else:
+            logger.debug("No handler registered for %s (fire-and-forget)", cmd_type)

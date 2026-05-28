@@ -31,6 +31,10 @@ class GitIssueTrackerAdapter(IssueTrackerPort):
 
         # -- [http] POST issue -----------------------------------------------
         path = f"/repos/{repository}/issues"
+        logger.debug(
+            "Creating issue in %s: title='%s', body=%d chars",
+            repository, title[:80], len(body),
+        )
         try:
             response = self._client.post(path, {"title": title, "body": body})
         except Exception as exc:
@@ -44,8 +48,10 @@ class GitIssueTrackerAdapter(IssueTrackerPort):
         # -- [map] build Issue domain entity ---------------------------------
         # source_pr_id and source_item_number are set by the application
         # service before persisting; the adapter uses sentinel defaults.
+        issue_number = int(response.get("number", 0))
+        logger.debug("Issue created: %s #%d", repository, issue_number)
         return Issue(
-            id=int(response.get("number", 0)),
+            id=issue_number,
             repository=repository,
             title=title,
             body=body,

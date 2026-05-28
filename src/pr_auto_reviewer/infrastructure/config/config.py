@@ -21,11 +21,13 @@ class Config:
     debug: bool = False
     output_mode: str = "codeberg"
     fragments_dir: str = "fragments"
-    max_prompt_tokens: int = 0
+    max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
     max_files: int = 10
     max_structure_lines: int = 100
     use_compact_template: bool = False
+    use_monolithic_prompt: bool = True
+    use_strict_fragment_selection: bool = False
 
 
 def _get_repo_root() -> Path:
@@ -106,12 +108,18 @@ def load_config() -> Config:
     ).strip() or None
 
     output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
-    max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "0"))
+    max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "9999"))
     max_file_chars = int(os.environ.get("MAX_FILE_CHARS", "3000"))
     max_files = int(os.environ.get("MAX_FILES", "10"))
     max_structure_lines = int(os.environ.get("MAX_STRUCTURE_LINES", "100"))
     use_compact_template = (
         os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
+    )
+    use_monolithic_prompt = (
+        os.environ.get("USE_MONOLITHIC_PROMPT", "true").lower() == "true"
+    )
+    use_strict_fragment_selection = (
+        os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
     )
 
     return Config(
@@ -131,6 +139,8 @@ def load_config() -> Config:
         max_files=max_files,
         max_structure_lines=max_structure_lines,
         use_compact_template=use_compact_template,
+        use_monolithic_prompt=use_monolithic_prompt,
+        use_strict_fragment_selection=use_strict_fragment_selection,
     )
 
 

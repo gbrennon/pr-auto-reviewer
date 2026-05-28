@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
 
 
@@ -17,10 +18,18 @@ class ReviewItem:
 
     number: int
     severity: ItemSeverity
-    category: str
+    category: IssueCategory
     file_path: str | None
     description: str
     line: str = field(default="", compare=False)
     id: str = field(default="", compare=False)
     current_code: str = field(default="", compare=False)
     suggested_fix: str = field(default="", compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "severity", ItemSeverity.from_value(str(self.severity)),
+        )
+        object.__setattr__(
+            self, "category", IssueCategory.from_value(str(self.category)),
+        )

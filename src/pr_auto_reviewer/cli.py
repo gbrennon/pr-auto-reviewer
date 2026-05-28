@@ -61,6 +61,8 @@ def main() -> None:
         components = bootstrap()
         run_daemon(components)
     elif args.command == "review":
+        if args.verbose:
+            os.environ["DEBUG"] = "1"
         components = bootstrap()
         review_argv = [sys.argv[0], "review", "--repo", args.repo, "--pr", str(args.pr)]
         if args.force:
@@ -69,6 +71,8 @@ def main() -> None:
             review_argv.append("--verbose")
         sys.exit(components.cli_runner.run(review_argv))
     elif args.command == "process-commands":
+        if args.verbose:
+            os.environ["DEBUG"] = "1"
         components = bootstrap()
         process_argv = [sys.argv[0], "process-commands", "--repo", args.repo, "--pr", str(args.pr)]
         if args.verbose:
@@ -80,6 +84,8 @@ def main() -> None:
         components = bootstrap()
         components.cli_runner.run([sys.argv[0], "clean"])
     elif args.command == "list-items":
+        if args.verbose:
+            os.environ["DEBUG"] = "1"
         components = bootstrap()
         list_argv = [sys.argv[0], "list-items", "--repo", args.repo, "--pr", str(args.pr)]
         if args.verbose:

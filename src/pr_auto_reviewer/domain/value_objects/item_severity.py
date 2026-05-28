@@ -10,3 +10,34 @@ class ItemSeverity(StrEnum):
     MAJOR = "major"
     MINOR = "minor"
     INFO = "info"
+
+    @classmethod
+    def from_value(cls, value: str | None) -> "ItemSeverity":
+        """Return the severity for *value*, accepting prompt aliases."""
+        normalized = (value or "").strip().lower()
+        if normalized in _PROMPT_ALIASES:
+            normalized = _PROMPT_ALIASES[normalized]
+        try:
+            return cls(normalized)
+        except ValueError:
+            return cls.INFO
+
+    @classmethod
+    def accepts(cls, value: str | None) -> bool:
+        """Return True when *value* is a known severity or prompt alias."""
+        normalized = (value or "").strip().lower()
+        return normalized in _PROMPT_ALIASES or normalized in {
+            item.value for item in cls
+        }
+
+    @classmethod
+    def prompt_values(cls) -> str:
+        """Return the canonical prompt-facing severity list."""
+        return "high/medium/info"
+
+
+_PROMPT_ALIASES = {
+    "high": "major",
+    "medium": "minor",
+    "low": "info",
+}

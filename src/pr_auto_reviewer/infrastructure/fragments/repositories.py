@@ -139,6 +139,7 @@ class FileSystemFragmentRepository:
             return None
 
         fragment_id = front_matter.get("id")
+
         if not fragment_id or not str(fragment_id).strip():
             logger.warning("Fragment missing 'id' field: %s", file_path)
             return None

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -49,6 +52,9 @@ from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
+from pr_auto_reviewer.infrastructure.fragments.monolithic_review_prompt_adapter import (
+    MonolithicReviewPromptAdapter,
+)
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -73,6 +79,9 @@ from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
     IssueTrackerPort,
+)
+from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
+    ComposeReviewPromptPort,
 )
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
@@ -112,6 +121,13 @@ class Container:
     def __init__(self, config: Config | None = None) -> None:
         self._config = config or load_config()
 
+        logger.debug(
+            "Container config: output_mode=%s, llm=%s:%s, api=%s",
+            self._config.output_mode,
+            self._config.llm_host, self._config.llm_model,
+            self._config.platform_api_url,
+        )
+
         self._http_client = GitPlatformHttpClient(
             self._config.platform_api_url, self._config.platform_token,
         )
@@ -122,11 +138,13 @@ class Container:
             self._config.platform_api_url, reviewer_token,
         )
 
+        is_terminal = self._config.output_mode == "terminal"
         self._pr_repository: PullRequestRepository = (
             NullPullRequestRepository()
-            if self._config.output_mode == "terminal"
+            if is_terminal
             else JsonFilePullRequestRepository(_state_file_path())
         )
+        logger.debug("PullRequestRepository -> %s", type(self._pr_repository).__name__)
 
         self._changeset_fetcher: ChangesetFetcherPort = (
             GitChangesetFetcherAdapter(self._http_client)
@@ -136,7 +154,7 @@ class Container:
         )
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
             self._config.llm_host,
-            self._config.llm_model or "codellama",
+            self._config.llm_model or "code-review:latest",
             max_tokens=self._config.max_prompt_tokens,
             max_file_chars=self._config.max_file_chars,
             max_files=self._config.max_files,
@@ -145,13 +163,15 @@ class Container:
         )
         self._review_publisher: ReviewPublisherPort = (
             TerminalReviewPublisherAdapter()
-            if self._config.output_mode == "terminal"
+            if is_terminal
             else GitReviewPublisherAdapter(
                 self._reviewer_client,
                 reviewer_token,
                 self._config.reviewer_username,
             )
         )
+        logger.debug("ReviewPublisher -> %s", type(self._review_publisher).__name__)
+
         self._review_reader: ReviewReaderPort = GitReviewReaderAdapter(
             self._http_client,
         )
@@ -177,14 +197,26 @@ class Container:
         )
 
         # Composite port — eliminates data clump in ReviewPullRequestService
+        if self._config.use_monolithic_prompt:
+            prompt_adapter: ComposeReviewPromptPort = MonolithicReviewPromptAdapter(
+                max_total_chars=self._config.max_prompt_tokens * 4
+                if self._config.max_prompt_tokens > 0
+                else 60_000,
+            )
+        else:
+            prompt_adapter = ComposeReviewPromptAdapter(
+                repository=self._fragment_repository,
+                renderer=self._fragment_renderer,
+                max_tokens=self._fragment_max_tokens,
+                max_total_chars=self._config.max_prompt_tokens * 4
+                if self._config.max_prompt_tokens > 0
+                else 60_000,
+                use_strict_selection=getattr(self._config, "use_strict_fragment_selection", False),
+            )
         self._review_context_factory: ReviewContextFactoryPort = (
             ReviewContextFactory(
                 repository_context=self._repository_context,
-                compose_review_prompt=ComposeReviewPromptAdapter(
-                    repository=self._fragment_repository,
-                    renderer=self._fragment_renderer,
-                    max_tokens=self._fragment_max_tokens,
-                ),
+                compose_review_prompt=prompt_adapter,
             )
         )
 

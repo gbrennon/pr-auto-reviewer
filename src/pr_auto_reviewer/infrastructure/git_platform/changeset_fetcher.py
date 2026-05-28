@@ -57,6 +57,7 @@ class GitChangesetFetcherAdapter(ChangesetFetcherPort):
 
     def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
         """Return the diff and per-file contents for *pr_id* at *sha*."""
+        logger.info("ChangesetFetcher.fetch(pr_id=%s, sha=%s)", pr_id, sha.value[:7])
         # -- [http] fetch unified diff ---------------------------------------
         diff_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff"
         raw_diff = self._client.get_raw(diff_path)
@@ -101,10 +102,16 @@ class GitChangesetFetcherAdapter(ChangesetFetcherPort):
         commit_messages = self._fetch_commit_messages(pr_id)
 
         # -- [map] build domain value-object ---------------------------------
-        return PullRequestDiff(
+        diff = PullRequestDiff(
             pr_id=pr_id,
             head_sha=sha,
             diff_content=raw_diff,
             file_contents=file_contents,
             commit_messages=commit_messages,
         )
+        logger.info(
+            "ChangesetFetcher return: pr=%s sha=%s diff=%d chars files=%d commits=%d",
+            pr_id, sha.value[:7],
+            len(raw_diff), len(file_contents), len(commit_messages),
+        )
+        return diff

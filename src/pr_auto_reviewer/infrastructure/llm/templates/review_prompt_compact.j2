@@ -39,8 +39,8 @@ Output ONLY valid JSON:
     {
       "file": "path/to/file",
       "line": "123",
-      "severity": "critical|high|medium|low",
-      "type": "security|architecture|solid|test|quality",
+      "severity": "{{ issue_severity_values }}",
+      "category": "{{ issue_category_values }}",
       "description": "specific issue description",
       "rationale": "why this is a problem"
     }

@@ -59,40 +59,39 @@ Flagging `-` lines as problems when the commit message explicitly says "remove u
 
 ## RESPONSE FORMAT
 
-You MUST output ONLY a raw JSON object. No markdown. No code fences. No explanation before or after. Start with `{` and end with `}`.
+Output ONLY a raw JSON object. No markdown, no code fences, no extra text.
 
+```json
 {
-  "verdict": "approved|changes_requested|commented",
-  "reason": "why this verdict was reached — cite the most critical issue if any, or explain why the PR is good",
   "issues": [
     {
-      "file": "path/to/file",
-      "line": "123",
-      "severity": "critical|high|medium|low",
-      "type": "security|architecture|solid|test|quality",
-      "description": "specific issue description",
-      "rationale": "why this is a problem and how it impacts the codebase",
-      "current_code": "the ACTUAL code from the diff that has the problem",
-      "suggested_fix": "how the code SHOULD be written to fix the issue"
-    }
-  ],
-  "suggestions": [
-    {
-      "file": "path/to/file",
-      "line": "456",
-      "description": "improvement suggestion with concrete recommendation",
-      "current_code": "the current code that could be improved",
-      "suggested_code": "how the code could be improved"
+      "file": "path/to/file.py",
+      "category": "{{ issue_category_values }}",
+      "severity": "{{ issue_severity_values }}",
+      "description": "Describe what changed and your observation",
+      "current_code": "copy the exact + lines from the diff that should be changed",
+      "suggested_fix": "the corrected code — concrete, real code, not abstract text"
     }
   ],
   "praise": [
-    {
-      "file": "path/to/file",
-      "description": "what was done well (include renames, refactors, good patterns)"
-    }
+    {"file": "path/to/file.py", "description": "What was done well"}
   ],
   "summary": "2-3 sentence overall assessment of the PR"
 }
+```
+
+**MANDATORY RULES (obey all of them):**
+
+1. `issues` — MUST contain EVERY change worth noting. Each entry MUST have `file`, `category`, `severity`, `description`, `current_code`, and `suggested_fix`.
+2. category: {{ issue_category_values | replace("/", ", ") }}.
+3. severity: high = must fix, medium = should fix, info = suggestion.
+4. `current_code`: Copy the actual `+` lines from the diff verbatim. Never use placeholders.
+5. `suggested_fix`: Concrete, real code. Never abstract text or descriptions.
+6. Do NOT suggest removing code. Suggest changing it (current_code → suggested_fix).
+7. `praise` — MUST always have at least 1-2 praise items. Find genuinely good things to say about the changes (good patterns, clean structure, proper conventions).
+8. `summary` — always include 2-3 sentences.
+9. NEVER use a key called `changes` or `files`. Put everything in `issues`, `praise`, or `summary`.
+10. Do NOT flag `-` lines as problems — they're already deleted.
 
 ## REVIEW GUIDELINES
 
@@ -124,5 +123,4 @@ You MUST output ONLY a raw JSON object. No markdown. No code fences. No explanat
 - Provide specific, actionable guidance
 - TRUST commit messages and PR description — they explain the author's intent
 - Praise cleanup/removal PRs for keeping the codebase minimal
-
 

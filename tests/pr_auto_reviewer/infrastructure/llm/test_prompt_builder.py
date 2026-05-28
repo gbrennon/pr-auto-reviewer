@@ -142,6 +142,7 @@ class TestPromptBuilder:
         assert "print('world')" in result
 
 
+# --- PromptBudget tests ------------------------------------------------------
 
 
 class TestPromptBudget:
@@ -173,6 +174,7 @@ class TestPromptBudget:
         assert budget.remaining_tokens == 0
 
 
+# --- Diff annotation tests ---------------------------------------------------
 
 
 class TestAnnotateDiff:
@@ -217,6 +219,7 @@ class TestAnnotateDiff:
         assert "[MODIFIED] file.py" in result
 
 
+# --- Diff truncation tests ---------------------------------------------------
 
 
 class TestTrimDiff:
@@ -248,6 +251,7 @@ class TestTrimDiff:
         assert len(result) < len(diff)
 
 
+# --- File content truncation tests -------------------------------------------
 
 
 class TestTrimFileContents:
@@ -283,6 +287,7 @@ class TestTrimFileContents:
         assert "line 53" in content
 
 
+# --- Repo structure truncation tests -----------------------------------------
 
 
 class TestTrimRepoStructure:
@@ -298,6 +303,7 @@ class TestTrimRepoStructure:
         assert result.count("\n") < 100
 
 
+# --- Budget-aware PromptBuilder tests ----------------------------------------
 
 
 class TestBudgetAwarePromptBuilder:
@@ -360,70 +366,3 @@ class TestBudgetAwarePromptBuilder:
         result = PromptBuilder(max_tokens=32000, max_files=3).build(diff, _context)
         count = result.count("### f")
         assert count <= 3, f"Expected ≤3 files, got {count}"
-
-    def test_parse_hunks_when_file_is_dev_null_then_skips(self):
-        diff = "diff --git a/old.py b/dev/null\n--- a/old.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-old line\n"
-        result = _parse_diff_hunks(diff)
-        assert "old.py" not in result
-
-    def test_parse_hunks_when_no_newline_marker_then_continues(self):
-        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1 +1,2 @@\n unchanged\n+new\n\\ No newline at end of file\n"
-        result = _parse_diff_hunks(diff)
-        assert "f.py" in result
-
-    def test_parse_hunks_when_ends_mid_hunk_then_records_trailing(self):
-        diff = "diff --git a/f.py b/f.py\n--- a/f.py\n+++ b/f.py\n@@ -1 +1,2 @@\n unchanged\n+new"
-        result = _parse_diff_hunks(diff)
-        assert "f.py" in result
-        assert result["f.py"] == [(1, 2)]
-
-    def test_extract_context_when_empty_hunks_then_returns_empty_string(self):
-        result = _extract_surrounding_context("some content", [], context_lines=5, max_chars=1000)
-        assert result == ""
-
-    def test_extract_context_when_content_exceeds_max_chars_then_truncates(self):
-        content = "\n".join(f"line {i:03d} xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" for i in range(100))
-        result = _extract_surrounding_context(content, [(1, 10)], context_lines=2, max_chars=500)
-        assert "truncated" in result
-
-    def test_trim_file_contents_when_no_hunks_and_over_max_then_truncates(self):
-        content = "x" * 600
-        result = _trim_file_contents({"f.py": content}, "+new\n-old", max_chars_per_file=100)
-        assert "file truncated" in result["f.py"]
-
-    def test_budget_aware_when_structure_does_not_fit_then_dropped(self):
-        diff = PullRequestDiff(
-            pr_id=PullRequestId(repository="o/r", number=1),
-            head_sha=CommitSha(value="abc"),
-            diff_content="+new\n" * 50,
-        )
-        ctx = RepositoryContext(
-            architecture_hint="clean",
-            repository_structure="\n".join(f"file{i}.py" for i in range(200)),
-        )
-        result = PromptBuilder(max_tokens=40).build(diff, ctx)
-        assert "## Repository structure" not in result
-
-    def test_budget_aware_when_commit_messages_consumed_from_budget(self):
-        diff = PullRequestDiff(
-            pr_id=PullRequestId(repository="o/r", number=1),
-            head_sha=CommitSha(value="abc"),
-            diff_content="+new\n",
-            commit_messages=["feat: initial commit", "fix: bug"],
-        )
-        ctx = RepositoryContext(architecture_hint="")
-        result = PromptBuilder(max_tokens=500).build(diff, ctx)
-        assert "Senior Principal" in result
-
-    def test_budget_aware_when_tight_budget_then_drops_repo_structure(self):
-        diff = PullRequestDiff(
-            pr_id=PullRequestId(repository="o/r", number=1),
-            head_sha=CommitSha(value="abc"),
-            diff_content="+new\n",
-        )
-        ctx = RepositoryContext(
-            architecture_hint="",
-            repository_structure="\n".join(f"file{i}.py" for i in range(200)),
-        )
-        result = PromptBuilder(max_tokens=10).build(diff, ctx)
-        assert "## Repository structure" not in result

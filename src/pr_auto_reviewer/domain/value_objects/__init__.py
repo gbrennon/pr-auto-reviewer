@@ -3,6 +3,7 @@ from .commit_sha import CommitSha
 from .pull_request_diff import PullRequestDiff
 from .review_verdict import ReviewVerdict
 from .item_severity import ItemSeverity
+from .issue_category import IssueCategory
 from .code_review import CodeReview
 from .repository_context import RepositoryContext
 from .issue_command import IssueCommand
@@ -15,6 +16,7 @@ __all__ = [
     "PullRequestDiff",
     "ReviewVerdict",
     "ItemSeverity",
+    "IssueCategory",
     "CodeReview",
     "RepositoryContext",
     "IssueCommand",
