@@ -49,4 +49,11 @@ FORGEJO_REVIEWER_USERNAME=code-reviewer
 OLLAMA_MODEL=code-review
 OLLAMA_HOST=http://localhost:11434
 POLL_INTERVAL=60
+USE_MONOLITHIC_PROMPT=true
+USE_STRICT_FRAGMENT_SELECTION=false
 ```
+
+### Feature flags
+
+- `PROMPT_MODE` (required if you want to change behavior) — Set to `monolithic` or `fragments`. When set, controls which prompt composition approach is used. Example: `PROMPT_MODE=fragments`.
+- `USE_STRICT_FRAGMENT_SELECTION` (default: `false`) — When using fragment-based prompts, set to `true` to only include fragments strictly related to files changed in the PR.

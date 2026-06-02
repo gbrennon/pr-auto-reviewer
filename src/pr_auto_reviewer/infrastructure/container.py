@@ -67,6 +67,7 @@ from pr_auto_reviewer.infrastructure.git_platform.review_context_factory import 
 from pr_auto_reviewer.infrastructure.fragments.renderers import (
     Jinja2Renderer,
 )
+from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
@@ -197,7 +198,7 @@ class Container:
         )
 
         # Composite port — eliminates data clump in ReviewPullRequestService
-        if self._config.use_monolithic_prompt:
+        if self._config.prompt_mode == PromptMode.MONOLITHIC:
             prompt_adapter: ComposeReviewPromptPort = MonolithicReviewPromptAdapter(
                 max_total_chars=self._config.max_prompt_tokens * 4
                 if self._config.max_prompt_tokens > 0
