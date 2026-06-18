@@ -1,6 +1,6 @@
 # PR Auto Reviewer
 
-AI-powered code review for Forgejo/Codeberg using local Ollama models.
+AI-powered code review for **GitHub**, **Codeberg**, any **Forgejo**-compatible platform, or **both at the same time** — using local Ollama models.
 
 ## Getting Started
 
