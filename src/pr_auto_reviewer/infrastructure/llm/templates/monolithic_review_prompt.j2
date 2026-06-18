@@ -24,6 +24,7 @@ The JSON must parse with `json.loads()` exactly as emitted. Do not include
 parentheses, comments, trailing commas, or partial objects.
 
 {
+  "verdict": "APPROVED | CHANGES_REQUESTED | COMMENTED",
   "issues": [
     {
       "file": "path/to/file.py",
@@ -42,20 +43,24 @@ parentheses, comments, trailing commas, or partial objects.
 }
 
 Mandatory Rules:
-1. issues: List only real review findings. Every issue MUST include file, category, severity, description, current_code, and suggested_fix.
-2. category: Choose from {{ issue_category_values | replace("/", ", ") }}.
-3. severity: high = must fix (triggers "request changes" verdict), medium = should fix, info = suggestion.
-4. current_code: Copy the actual + lines from the diff verbatim. Never use placeholders like "logger.<level>(<message>)".
-5. suggested_fix: The corrected code — a concrete, real code snippet. Never abstract text or descriptions.
-6. Do NOT suggest removing code. Suggest changing it instead (current_code → suggested_fix).
-7. praise: MUST have at least 1-2 praise items. Find genuinely good things about the changes.
-8. summary: Always include 2-3 sentences.
-9. NEVER use keys called "changes" or "files". Put everything in issues, praise, or summary.
-10. Do NOT flag deleted lines (- prefix) as problems. They are already removed from the codebase.
-11. If a finding does not have exact current_code from added/current lines and a concrete suggested_fix, omit it.
-12. Logging added for observability should be DEBUG unless it is an important user-visible lifecycle event; verbose request/response details should not appear in normal runs.
-13. For this PR, actively look for added `logger.info(...)` lines that should be `logger.debug(...)` and report them with concrete code replacements.
-14. Validate every issue object has all six fields: file, category, severity, description, current_code, suggested_fix.
+1. verdict: MUST be one of [APPROVED, CHANGES_REQUESTED, COMMENTED].
+   - APPROVED: No critical or major issues found.
+   - CHANGES_REQUESTED: One or more critical or major issues found.
+   - COMMENTED: General feedback provided without a strong block/approve status.
+2. issues: List only real review findings. Every issue MUST include file, category, severity, description, current_code, and suggested_fix.
+3L. category: Choose from {{ issue_category_values | replace("/", ", ") }}.
+4. severity: high = must fix (triggers "request changes" verdict), medium = should fix, info = suggestion.
+5. current_code: Copy the actual + lines from the diff verbatim. Never use placeholders like "logger.<level>(<message>)".
+6. suggested_fix: The corrected code — a concrete, real code snippet. Never abstract text or descriptions.
+7. Do NOT suggest removing code. Suggest changing it instead (current_code → suggested_fix).
+8. praise: MUST have at least 1-2 praise items. Find genuinely good things about the changes.
+9. summary: Always include 2-3 sentences.
+10. NEVER use keys called "changes" or "files". Put everything in issues, praise, or summary.
+11. Do NOT flag deleted lines (- prefix) as problems. They are already removed from the codebase.
+12. If a finding does not have exact current_code from added/current lines and a concrete suggested_fix, omit it.
+13. Logging added for observability should be DEBUG unless it is an important user-visible lifecycle event; verbose request/response details should not appear in normal runs.
+14. For this PR, actively look for added `logger.info(...)` lines that should be `logger.debug(...)` and report them with concrete code replacements.
+15. Validate every issue object has all six fields: file, category, severity, description, current_code, suggested_fix.
 
 ## Context
 
