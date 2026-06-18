@@ -179,7 +179,7 @@ class Container:
                 "codeberg": GitRepositoryContextAdapter(self._codeberg_client),
                 "github": GitRepositoryContextAdapter(self._github_client),
             })
-            self._review_publisher: ReviewPublisherPort = TerminalReviewPublisherAdapter() if is_terminal else DispatchingReviewPublisher({
+            self._review_publisher: ReviewPublisherPort = TerminalReviewPublisherAdapter(self._config.output_dest) if is_terminal else DispatchingReviewPublisher({
                 "codeberg": GitReviewPublisherAdapter(
                     self._codeberg_client, self._config.codeberg_reviewer_token or self._config.codeberg_token or "", 
                     self._config.codeberg_reviewer_username
@@ -223,7 +223,7 @@ class Container:
                 GitRepositoryContextAdapter(self._http_client)
             )
             self._review_publisher: ReviewPublisherPort = (
-                TerminalReviewPublisherAdapter()
+                TerminalReviewPublisherAdapter(self._config.output_dest)
                 if is_terminal
                 else GitReviewPublisherAdapter(
                     self._reviewer_client,
