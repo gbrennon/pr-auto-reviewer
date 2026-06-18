@@ -37,22 +37,50 @@ _review_output_env = jinja2.Environment(
 
 
 def format_review_body(review: CodeReview) -> str:
-    """Render a CodeReview via the review_output.j2 Jinja2 template."""
+    """Render a CodeReview via the review_output.j2 Jinja2 template.
+
+    All sections (issues, praise, suggestions) share a single
+    continuous counter that starts at 0 and increments across every item.
+    """
     verdict_text = review.verdict.value.replace("_", " ").title()
 
-    # Assign sequential numbers to suggestions (continuing from items)
-    next_num = len(review.items) + 1
-    suggestions = getattr(review, 'suggestions', [])
+    idx = 0
+
+    numbered_items = []
+    for item in review.items:
+        numbered_items.append({
+            "number": idx,
+            "severity": item.severity,
+            "category": item.category,
+            "file_path": item.file_path,
+            "line": item.line,
+            "description": item.description,
+            "current_code": item.current_code,
+            "suggested_fix": item.suggested_fix,
+        })
+        idx += 1
+
+    numbered_praise = []
+    for p in review.praise:
+        p_copy = dict(p)
+        p_copy["number"] = idx
+        numbered_praise.append(p_copy)
+        idx += 1
+
+    suggestions_raw = getattr(review, 'suggestions', [])
     numbered_suggestions = []
-    for i, s in enumerate(suggestions):
+    for s in suggestions_raw:
         s_copy = dict(s)
-        s_copy["number"] = next_num + i
+        s_copy["number"] = idx
         numbered_suggestions.append(s_copy)
+        idx += 1
 
     template = _review_output_env.get_template("review_output.j2")
     return template.render(
         review=review,
         verdict_text=verdict_text,
+        items=numbered_items,
+        praise=numbered_praise,
         suggestions=numbered_suggestions,
     )
 
@@ -115,64 +143,58 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
                 pr_id,
             )
 
-        if self._client._platform_mode == "github" and self._review_mode == "comment":
-            reviews_path = (
-                f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
-            )
-            payload = {"body": body}
-        else:
-            reviews_path = (
-                f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
-            )
-            payload = {"event": verdict_event, "body": body}
-            
-            if self._client._platform_mode == "codeberg":
-                payload["official"] = True
-            
-            # Formal reviews should include inline comments
-            if self._review_mode == "formal":
-                try:
-                    # 1. Get diff to resolve positions
-                    # The path for the diff is the same for both platforms (standard Git diff)
-                    diff_text = self._client.get_raw(
-                        f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
-                        headers={"Accept": "application/vnd.github.v3.diff"} if self._client._platform_mode == "github" else {},
-                    )
-                    
-                    # 2. Build inline comments for each review item
-                    comments = []
-                    for item in review.items:
-                        pos_data = self._get_diff_position(diff_text, item.file_path, item.current_code)
-                        if pos_data:
-                            if self._client._platform_mode == "github":
-                                comments.append({
-                                    "path": item.file_path,
-                                    "position": pos_data["position"],
-                                    "body": item.description,
-                                })
-                            elif self._client._platform_mode == "codeberg":
-                                # Codeberg uses old_position or new_position
-                                # If it's a deleted line, use old_position. 
-                                # If it's an added line, use new_position.
-                                # If it's context, we prefer new_position.
-                                line_no = pos_data["new_line"] or pos_data["old_line"]
-                                key = "new_position" if pos_data["new_line"] else "old_position"
-                                comments.append({
-                                    "path": item.file_path,
-                                    "body": item.description,
-                                    key: line_no,
-                                })
-                    
-                    if comments:
-                        payload["comments"] = comments
-                        logger.info("Added %d inline comments to formal review", len(comments))
+        # All reviews go through the formal review endpoint.
+        # Comments will be handled separately for issue creation.
+        reviews_path = (
+            f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
+        )
+        payload = {"event": verdict_event, "body": body}
 
-                    # Both GitHub and Codeberg/Gitea typically require commit_id for reviews with comments
-                    pr_info = self._client.get(f"/repos/{pr_id.repository}/pulls/{pr_id.number}")
-                    payload["commit_id"] = pr_info["head"]["sha"]
-                        
-                except Exception as exc:
-                    logger.error("Failed to resolve inline comments for formal review: %s", exc)
+        if self._client._platform_mode == "codeberg":
+            payload["official"] = True
+
+        # Always include inline comments for formal reviews
+        try:
+            # 1. Get diff to resolve positions
+            diff_text = self._client.get_raw(
+                f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
+                headers={"Accept": "application/vnd.github.v3.diff"} if self._client._platform_mode == "github" else {},
+            )
+
+            # 2. Build inline comments for each review item
+            comments = []
+            for item in review.items:
+                pos_data = self._get_diff_position(diff_text, item.file_path, item.current_code)
+                if pos_data:
+                    if self._client._platform_mode == "github":
+                        comments.append({
+                            "path": item.file_path,
+                            "position": pos_data["position"],
+                            "body": item.description,
+                        })
+                    elif self._client._platform_mode == "codeberg":
+                        # Codeberg uses old_position or new_position
+                        # If it's a deleted line, use old_position. 
+                        # If it's an added line, use new_position.
+                        # If it's context, we prefer new_position.
+                        line_no = pos_data["new_line"] or pos_data["old_line"]
+                        key = "new_position" if pos_data["new_line"] else "old_position"
+                        comments.append({
+                            "path": item.file_path,
+                            "body": item.description,
+                            key: line_no,
+                        })
+
+            if comments:
+                payload["comments"] = comments
+                logger.info("Added %d inline comments to formal review", len(comments))
+
+            # Both GitHub and Codeberg/Gitea typically require commit_id for reviews with comments
+            pr_info = self._client.get(f"/repos/{pr_id.repository}/pulls/{pr_id.number}")
+            payload["commit_id"] = pr_info["head"]["sha"]
+
+        except Exception as exc:
+            logger.error("Failed to resolve inline comments for formal review: %s", exc)
 
         try:
             response = self._client.post(
