@@ -1,59 +1,26 @@
 # PR Auto Reviewer
 
-AI-powered code review for **GitHub**, **Codeberg**, any **Forgejo**-compatible platform, or **both at the same time** — using local Ollama models.
+AI-powered code review for **GitHub** and **Codeberg/Forgejo** — using local Ollama models.
 
-## Getting Started
-
-```bash
-git clone https://codeberg.org/gbrennon/pr-auto-reviewer.git
-cd pr-auto-reviewer
-```
-
-### 1. Environment Variables
-
-Create `.env` in the project root:
+## Quick Start
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # edit .env with your tokens
+uv run pr-auto-reviewer review --repo owner/repo --pr <number>
 ```
 
-Edit `.env` with required variables. See [Configuration](docs/configuration.md) for all options.
+See [How to Run a Single Review](docs/HOWTO-single-review.md) for full instructions.
 
-### 2. Install & Run
+## Docs
 
-```bash
-make install
-```
-
-## Quick Commands
-
-| Command | What it does |
-|---------|--------------|
-| `make test` | Run unit tests |
-| `make watch` | Run watcher once (manual mode) |
-| `make start` | Start the service |
-| `make stop` | Stop the service |
-| `make status` | Show service status |
-| `make restart` | Restart the service |
-| `make logs` | View service logs |
-| `make clean` | Reset state files |
-
-See [Scripts Reference](docs/scripts.md) for full command list.
-
-## Requirements
-
-- **Ollama** - Local AI inference. [Install](https://ollama.ai)
-- **Forgejo or Codeberg** - Self-hosted or cloud
-- **Two API tokens** - Owner and reviewer accounts
-- **systemd** - For service management
-
-See [Requirements](docs/requirements.md) for full details.
-
-## Learn More
-
-- [Configuration](docs/configuration.md) - All env vars explained
-- [Scripts Reference](docs/scripts.md) - Available commands
-- [Features](docs/features.md) - What's implemented
-- [Structure](docs/structure.md) - How it works
-- [Troubleshooting](docs/troubleshooting.md) - Common issues
-- [Testing](docs/HOWTO-test.md) - How to test changes
+| Doc | Topic |
+|-----|-------|
+| [How to Run](docs/HOWTO-single-review.md) | Single PR review walkthrough |
+| [Configuration](docs/configuration.md) | All env vars |
+| [Requirements](docs/requirements.md) | Prerequisites & tokens |
+| [Scripts & Makefile](docs/scripts.md) | Available commands |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems |
+| [Testing](docs/HOWTO-test.md) | Running tests |
+| [Features](docs/features.md) | What's implemented |
+| [Architecture](docs/structure.md) | Codebase structure |
+| [Review Flow](docs/review-flow-architecture.md) | Detailed flow |
