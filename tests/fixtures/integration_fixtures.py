@@ -22,6 +22,8 @@ def integration_data() -> dict[str, Any]:
 class FixtureHttpClient:
     """HTTP client that returns fixture data instead of making real calls."""
 
+    _platform_mode = "codeberg"  # required by GitReviewPublisherAdapter
+
     def __init__(self, data: dict, scenario: str) -> None:
         self._data = data
         self._scenario = scenario
