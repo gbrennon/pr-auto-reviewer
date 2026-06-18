@@ -9,13 +9,25 @@ All configuration via environment variables. Two ways to set:
 
 ## Required Variables
 
+The application uses generic variables for the platform token and reviewer token to support multiple Git hosts (GitHub, Codeberg/Forgejo).
+
 | Variable | Description |
 |----------|-------------|
-| `FORGEJO_TOKEN` | Your account API token. Scopes: `repo`, `read:user` |
-| `FORGEJO_HOST` | Platform URL. E.g., `https://codeberg.org` or `http://forgejo:3000` |
-| `FORGEJO_REVIEWER_TOKEN` | Different account's token. Scopes: `repo` |
-| `FORGEJO_REVIEWER_USERNAME` | Username of reviewer account |
-| `OLLAMA_MODEL` | Model name to use for reviews |
+| `PLATFORM_MODE` | Platform to use: `codeberg`, `github`, or `both` |
+| `PLATFORM_TOKEN` | Owner account API token (used if mode is `codeberg` or `github`). |
+| `REVIEWER_TOKEN` | Reviewer account API token (used if mode is `codeberg` or `github`). |
+| `REVIEWER_USERNAME` | Username of the reviewer account (used if mode is `codeberg` or `github`). |
+| `OLLAMA_MODEL` | Model name to use for reviews. |
+
+### Multi-Platform Mode (`PLATFORM_MODE=both`)
+When reviewing PRs from both platforms simultaneously, you must provide separate tokens for each host:
+- **GitHub**: Set `GITHUB_TOKEN`, `GITHUB_REVIEWER_TOKEN`, and `GITHUB_REVIEWER_USERNAME`.
+- **Codeberg/Forgejo**: Set `FORGEJO_TOKEN`, `FORGEJO_REVIEWER_TOKEN`, and `FORGEJO_REVIEWER_USERNAME`.
+
+### Single-Platform Fallbacks
+If `PLATFORM_MODE` is not `both`, the application will look for:
+- **Forgejo/Codeberg**: `FORGEJO_TOKEN`, `FORGEJO_REVIEWER_TOKEN`, `FORGEJO_REVIEWER_USERNAME`.
+- **GitHub**: `GITHUB_TOKEN`, `GITHUB_REVIEWER_TOKEN`, `GITHUB_REVIEWER_USERNAME`.
 
 ## Optional Variables
 
@@ -27,30 +39,31 @@ All configuration via environment variables. Two ways to set:
 
 ## Generating Tokens
 
-### Owner Token
-1. Go to platform settings → Applications
-2. Create new token with scopes: `repo`, `read:user`
-3. Copy to `FORGEJO_TOKEN`
+### GitHub
+1. Go to **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens** $\rightarrow$ **Tokens (classic)**.
+2. Create a new token with scopes: `repo` (all), `read:user`, and `user:email`.
+3. Copy to `PLATFORM_TOKEN` (or `GITHUB_TOKEN`).
 
-### Reviewer Token
-1. Create account (different from owner)
-2. Go to platform settings → Applications
-3. Create token with scope: `repo`
-4. Copy to `FORGEJO_REVIEWER_TOKEN`
-5. Set `FORGEJO_REVIEWER_USERNAME` to account name
+### Codeberg / Forgejo
+1. Go to **Settings** $\rightarrow$ **Applications**.
+2. Create new token with scopes: `repo`, `read:user`.
+3. Copy to `PLATFORM_TOKEN` (or `FORGEJO_TOKEN`).
+
+### Reviewer Tokens
+For both platforms, create a separate account for the bot and generate a token with `repo` scope. Copy this to `REVIEWER_TOKEN` (or the platform-specific equivalent) and set `REVIEWER_USERNAME` to the bot's username.
 
 ## Example .env
 
 ```bash
-FORGEJO_TOKEN=your_owner_token_here
-FORGEJO_HOST=https://codeberg.org
-FORGEJO_REVIEWER_TOKEN=your_reviewer_token_here
-FORGEJO_REVIEWER_USERNAME=code-reviewer
+PLATFORM_MODE=github
+PLATFORM_TOKEN=ghp_your_github_token
+REVIEWER_TOKEN=ghp_your_reviewer_token
+REVIEWER_USERNAME=code-reviewer-bot
 OLLAMA_MODEL=code-review
 OLLAMA_HOST=http://localhost:11434
 POLL_INTERVAL=60
-USE_MONOLITHIC_PROMPT=true
-USE_STRICT_FRAGMENT_SELECTION=false
+PROMPT_MODE=fragments
+USE_STRICT_FRAGMENT_SELECTION=true
 ```
 
 ### Feature flags
