@@ -6,20 +6,31 @@ AI-powered code review for **GitHub** and **Codeberg/Forgejo** — using local O
 
 ```bash
 cp .env.example .env   # edit .env with your tokens
-uv run pr-auto-reviewer review --repo owner/repo --pr <number>
 ```
 
-See [How to Run a Single Review](docs/HOWTO-single-review.md) for full instructions.
-
-## Daemon Mode
-
-Poll all repos continuously, reviewing open PRs automatically:
+### Single Review
 
 ```bash
-uv run pr-auto-reviewer watch-prs                  # poll every 60s
+# GitHub
+PLATFORM_MODE=github uv run pr-auto-reviewer review --repo owner/repo --pr 42
+
+# Codeberg
+PLATFORM_MODE=codeberg uv run pr-auto-reviewer review --repo owner/repo --pr 42
+
+# Via Make (uses PLATFORM_MODE from .env)
+make review REPO=owner/repo PR=42
+```
+
+### Daemon Mode
+
+Poll all repos the token can access, reviewing open PRs automatically.
+Set `PLATFORM_MODE` in `.env` first.
+
+```bash
+uv run pr-auto-reviewer watch-prs                  # all repos, every 60s
+uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo
+uv run pr-auto-reviewer watch-prs --once           # one cycle and exit
 uv run pr-auto-reviewer watch-prs -i 120           # poll every 120s
-uv run pr-auto-reviewer watch-prs -r owner/repo    # watch a single repo
-uv run pr-auto-reviewer watch-prs --once           # run once and exit
 ```
 
 ## Install (systemd)
