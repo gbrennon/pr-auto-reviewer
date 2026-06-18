@@ -88,3 +88,79 @@ class TestGitPlatformHttpClient:
         client.get_raw("/repos/test/pulls/1.diff")
         assert "headers" in captured_kwargs
         assert captured_kwargs["headers"]["Authorization"] == "token t"
+
+    def test_github_auth_header_is_bearer(self):
+        """GitHub mode uses Bearer authorization."""
+        client = GitPlatformHttpClient("https://api.github.com", "ghp_xxx", "github")
+        assert client._get_auth_header() == {"Authorization": "Bearer ghp_xxx"}
+
+    def test_codeberg_auth_header_is_token(self):
+        """Codeberg mode uses 'token' prefix."""
+        client = GitPlatformHttpClient("https://codeberg.org/api/v1", "tok", "codeberg")
+        assert client._get_auth_header() == {"Authorization": "token tok"}
+
+    def test_get_merges_custom_headers(self, monkeypatch):
+        """get() merges custom headers with auth header."""
+        captured_headers = {}
+
+        class FakeResponse:
+            status_code = 200
+            def json(self):
+                return {"ok": True}
+            def raise_for_status(self):
+                pass
+
+        def fake_get(url, *, headers, params, timeout):
+            captured_headers.update(headers)
+            return FakeResponse()
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient("https://x", "t")
+        result = client.get("/test", headers={"X-Custom": "v"})
+        assert result == {"ok": True}
+        assert captured_headers["X-Custom"] == "v"
+        assert "Authorization" in captured_headers
+
+    def test_get_raw_merges_custom_headers(self, monkeypatch):
+        """get_raw() merges custom headers with auth header."""
+        captured_headers = {}
+
+        class FakeResponse:
+            status_code = 200
+            text = "raw"
+            def raise_for_status(self):
+                pass
+
+        def fake_get(url, *, headers, timeout):
+            captured_headers.update(headers)
+            return FakeResponse()
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient("https://x", "t")
+        result = client.get_raw("/test", headers={"X-Custom": "v"})
+        assert result == "raw"
+        assert captured_headers["X-Custom"] == "v"
+        assert "Authorization" in captured_headers
+
+    def test_post_logs_http_error(self, monkeypatch, caplog):
+        """post() logs response body on HTTPError."""
+        import logging
+
+        class FakeResponse:
+            status_code = 422
+            text = '{"error": "gone"}'
+            content = b'{"error": "gone"}'
+
+        def fake_post(url, *, headers, json, timeout):
+            r = FakeResponse()
+
+            def raise_err():
+                raise requests_lib.exceptions.HTTPError(response=r)
+
+            r.raise_for_status = raise_err
+            return r
+
+        monkeypatch.setattr(requests_lib, "post", fake_post)
+        client = GitPlatformHttpClient("https://x", "t")
+        with pytest.raises(requests_lib.exceptions.HTTPError):
+            client.post("/test", {"k": "v"})
