@@ -29,7 +29,7 @@ class TestGitChangesetFetcherAdapter:
 
     def test_fetch_raises_on_empty_diff(self, patched_client, monkeypatch):
         """Raises EmptyDiffError when diff is empty."""
-        monkeypatch.setattr(patched_client, "get_raw", lambda path: "")
+        monkeypatch.setattr(patched_client, "get_raw", lambda path, **kw: "")
         adapter = GitChangesetFetcherAdapter(patched_client)
         pr_id = PullRequestId(repository="o/r", number=1)
         sha = CommitSha("abc123")
@@ -39,7 +39,7 @@ class TestGitChangesetFetcherAdapter:
 
     def test_fetch_raises_on_short_diff(self, patched_client, monkeypatch):
         """Raises EmptyDiffError when diff is too short."""
-        monkeypatch.setattr(patched_client, "get_raw", lambda path: "short")
+        monkeypatch.setattr(patched_client, "get_raw", lambda path, **kw: "short")
         adapter = GitChangesetFetcherAdapter(patched_client)
         pr_id = PullRequestId(repository="o/r", number=1)
         sha = CommitSha("abc123")
@@ -49,7 +49,7 @@ class TestGitChangesetFetcherAdapter:
 
     def test_fetch_excludes_dev_null(self, patched_client, monkeypatch):
         """Deleted files (b/dev/null) are excluded."""
-        monkeypatch.setattr(patched_client, "get_raw", lambda path: (
+        monkeypatch.setattr(patched_client, "get_raw", lambda path, **kw: (
             "diff --git a/deleted.py b//dev/null\n"
             "diff --git a/kept.py b/kept.py\n"
             "@@ -0,0 +1 @@\n+line\n"
@@ -64,7 +64,7 @@ class TestGitChangesetFetcherAdapter:
     def test_fetch_skips_unreadable_file(self, patched_client, monkeypatch):
         """Unreadable file is silently skipped."""
         call_count = [0]
-        def fake_get_raw(path):
+        def fake_get_raw(path, **kw):
             call_count[0] += 1
             if call_count[0] == 1:
                 return "diff --git a/a.py b/a.py\ndiff --git a/b.py b/b.py\n@@ -0,0 +1 @@\n+line\n"

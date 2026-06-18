@@ -49,7 +49,7 @@ class FixtureHttpClient:
             return result
         return http["get_pull"]
 
-    def get_raw(self, path: str) -> str:
+    def get_raw(self, path: str, headers: dict[str, str] | None = None) -> str:
         http = self._data["http"]
         if path.endswith(".diff"):
             return http["get_raw_diff"]
