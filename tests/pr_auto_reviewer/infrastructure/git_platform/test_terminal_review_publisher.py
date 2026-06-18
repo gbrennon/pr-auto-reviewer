@@ -1,68 +1,61 @@
+"""Tests for TerminalReviewPublisherAdapter."""
+
 import pytest
+
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.infrastructure.git_platform.terminal_review_publisher import (
     TerminalReviewPublisherAdapter,
+    _review_to_json,
 )
-from pr_auto_reviewer.domain import (
-    CodeReview, ReviewVerdict, PullRequestId, ItemSeverity, ReviewItem,
-)
+
+
+class TestReviewToJson:
+    def test_serializes_full_review(self):
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="lgtm",
+            summary="all good",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                          file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
+            ],
+            praise=[{"file": "a.py", "description": "nice"}],
+            model_used="test-model",
+        )
+        json_text = _review_to_json(review)
+        assert '"verdict"' in json_text
+        assert '"approved"' in json_text
+        assert '"a.py"' in json_text
+        assert '"test-model"' in json_text
 
 
 class TestTerminalReviewPublisherAdapter:
-
-    @pytest.fixture
-    def _publisher(self):
-        return TerminalReviewPublisherAdapter()
-
-    @pytest.fixture
-    def _pr_id(self):
-        return PullRequestId(repository="owner/repo", number=42)
-
-    @pytest.fixture
-    def _review(self):
-        return CodeReview(
-            verdict=ReviewVerdict.APPROVED,
-            summary="Looks good.",
-            items=[
-                ReviewItem(
-                    number=1, severity=ItemSeverity.INFO,
-                    category="style", file_path="x.py",
-                    description="Consider adding type hints.",
-                ),
-            ],
-            model_used="test-model",
+    def test_writes_to_file(self, tmp_path, monkeypatch):
+        out_file = tmp_path / "subdir" / "review.txt"
+        adapter = TerminalReviewPublisherAdapter(output_dest=str(out_file))
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED, summary="ok", items=[], model_used="m",
         )
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "Review for o/r#1" in content
+        assert "--- HUMAN-READABLE ---" in content
+        assert "--- JSON ---" in content
 
-    def test_publish_prints_review_to_stdout(
-        self, _publisher, _pr_id, _review, capsys,
-    ):
-        _publisher.publish(_pr_id, _review)
+    def test_writes_to_stdout(self, capsys):
+        adapter = TerminalReviewPublisherAdapter(output_dest="stdout")
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED, summary="ok", items=[], model_used="m",
+        )
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
         captured = capsys.readouterr()
-        assert "owner/repo#42" in captured.out
-
-    def test_publish_includes_verdict(
-        self, _publisher, _pr_id, _review, capsys,
-    ):
-        _publisher.publish(_pr_id, _review)
-        captured = capsys.readouterr()
-        assert "Approved" in captured.out
-
-    def test_publish_includes_summary(
-        self, _publisher, _pr_id, _review, capsys,
-    ):
-        _publisher.publish(_pr_id, _review)
-        captured = capsys.readouterr()
-        assert "Looks good." in captured.out
-
-    def test_publish_includes_items(
-        self, _publisher, _pr_id, _review, capsys,
-    ):
-        _publisher.publish(_pr_id, _review)
-        captured = capsys.readouterr()
-        assert "Consider adding type hints." in captured.out
-
-    def test_publish_includes_model_used(
-        self, _publisher, _pr_id, _review, capsys,
-    ):
-        _publisher.publish(_pr_id, _review)
-        captured = capsys.readouterr()
-        assert "test-model" in captured.out
+        assert "Review for o/r#1" in captured.out
+        assert "--- JSON ---" in captured.out

@@ -8,8 +8,10 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.infrastructure.git_platform.review_publisher import (
     GitReviewPublisherAdapter,
+    format_review_body,
 )
 
 
@@ -80,3 +82,139 @@ class TestGitReviewPublisherAdapter:
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         assert len(call_paths) == 2
+
+
+class TestFormatReviewBody:
+    """Tests for format_review_body."""
+
+    def test_items_numbered_from_zero(self):
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                          file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
+            ],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "0. [bug] [MAJOR] a.py" in body
+
+    def test_praise_numbered_after_items(self):
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                          file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
+                ReviewItem(number=1, category=IssueCategory.STYLE, severity=ItemSeverity.INFO,
+                          file_path="b.py", description="ugly", current_code="z", suggested_fix="w"),
+            ],
+            praise=[{"file": "c.py", "description": "nice work"}],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "0. [bug] [MAJOR] a.py" in body
+        assert "1. [style] [INFO] b.py" in body
+        assert "2. c.py: nice work" in body
+
+    def test_reason_and_summary_present(self):
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="security bug",
+            summary="needs work",
+            items=[],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "Changes Requested" in body
+        assert "security bug" in body
+        assert "needs work" in body
+
+    def test_empty_items_shows_placeholder(self):
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="",
+            items=[],
+            model_used=None,
+        )
+        body = format_review_body(review)
+        assert "No issues found" in body
+        assert "No notable patterns" in body
+
+
+class TestGetDiffPosition:
+    """Tests for _get_diff_position."""
+
+    def test_finds_added_line(self):
+        diff = "diff --git a/x.py b/x.py\n@@ -1,3 +2,4 @@\n context\n+added line here\n context"
+        result = GitReviewPublisherAdapter._get_diff_position(diff, "x.py", "added line here")
+        assert result is not None
+        assert result["old_line"] is None
+        assert result["new_line"] == 3
+
+    def test_finds_deleted_line(self):
+        diff = "diff --git a/x.py b/x.py\n@@ -1,5 +1,4 @@\n context\n-removed line here\n context"
+        result = GitReviewPublisherAdapter._get_diff_position(diff, "x.py", "removed line here")
+        assert result is not None
+        assert result["old_line"] == 2
+        assert result["new_line"] is None
+
+    def test_finds_context_line(self):
+        diff = "diff --git a/x.py b/x.py\n@@ -10,5 +11,5 @@\n context line here"
+        result = GitReviewPublisherAdapter._get_diff_position(diff, "x.py", "context line here")
+        assert result is not None
+        assert result["old_line"] == 10
+        assert result["new_line"] == 11
+
+    def test_returns_none_for_missing_file(self):
+        diff = "diff --git a/x.py b/x.py\n@@ -1 +1 @@\n-old\n+new"
+        result = GitReviewPublisherAdapter._get_diff_position(diff, "y.py", "new")
+        assert result is None
+
+    def test_returns_none_for_empty_inputs(self):
+        assert GitReviewPublisherAdapter._get_diff_position("", None, "") is None
+        assert GitReviewPublisherAdapter._get_diff_position("diff", "f.py", "") is None
+
+
+class TestReviewPublisherCodeberg:
+    """Tests for Codeberg-specific review publisher behavior."""
+
+    def test_codeberg_adds_official_flag(self, patched_private_client, monkeypatch):
+        """Codeberg client sets official=True in payload."""
+        captured_payload = {}
+        def fake_post(path, body):
+            captured_payload.update(body)
+            return {"id": 1}
+        monkeypatch.setattr(patched_private_client, "post", fake_post)
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "codeberg")
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
+        assert captured_payload.get("official") is True
+        assert captured_payload.get("event") == "APPROVED"
+
+
+    def test_codeberg_review_with_inline_comment_error(self, patched_private_client, monkeypatch):
+        """Inline comment resolution failure is logged but doesn't crash."""
+        captured_payload = {}
+        calls = []
+        def fake_post(path, body):
+            calls.append(path)
+            captured_payload.update(body)
+            return {"id": 1}
+        monkeypatch.setattr(patched_private_client, "post", fake_post)
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "codeberg")
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u")
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="fix",
+            items=[ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                             file_path="x.py", description="bad", current_code="code", suggested_fix="fix")],
+            model_used="m",
+        )
+        pr_id = PullRequestId(repository="o/r", number=1)
+        # Should not raise even if diff resolution fails
+        adapter.publish(pr_id, review)
+        assert captured_payload.get("event") == "REQUEST_CHANGES"

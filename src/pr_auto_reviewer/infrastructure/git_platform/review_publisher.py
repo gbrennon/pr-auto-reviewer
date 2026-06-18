@@ -216,7 +216,8 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
                 f"Failed to publish review for {pr_id}: {exc}"
             ) from exc
 
-    def _get_diff_position(self, diff_text: str, file_path: str | None, current_code: str) -> dict[str, int] | None:
+    @staticmethod
+    def _get_diff_position(diff_text: str, file_path: str | None, current_code: str) -> dict[str, int] | None:
         """
         Finds the diff positions for the given code snippet.
         
