@@ -30,6 +30,7 @@ class Config:
     poll_interval: int = 60
     debug: bool = False
     output_mode: str = "codeberg"
+    output_dest: str = "stdout"
     fragments_dir: str = "fragments"
     max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
@@ -133,6 +134,7 @@ def load_config() -> Config:
     ).strip() or None
 
     output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
+    output_dest = os.environ.get("REVIEW_OUTPUT_DEST", "stdout").strip()
     max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "9999"))
     max_file_chars = int(os.environ.get("MAX_FILE_CHARS", "3000"))
     max_files = int(os.environ.get("MAX_FILES", "10"))
@@ -165,6 +167,7 @@ def load_config() -> Config:
         poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
         debug=os.environ.get("DEBUG", "0") == "1",
         output_mode=output_mode,
+        output_dest=output_dest,
         max_prompt_tokens=max_prompt_tokens,
         max_file_chars=max_file_chars,
         max_files=max_files,
