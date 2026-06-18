@@ -19,8 +19,9 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 logger = logging.getLogger(__name__)
 
 # Regex to extract changed file paths from unified-diff headers.
+# Supports standard git diff format, allowing for optional leading whitespace.
 _DIFF_FILE_PATH_RE = re.compile(
-    r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE
+    r"^\s*diff --git a/(.+?)\s+b/(.+?)$", re.MULTILINE
 )
 
 
@@ -60,7 +61,12 @@ class GitChangesetFetcherAdapter(ChangesetFetcherPort):
         logger.info("ChangesetFetcher.fetch(pr_id=%s, sha=%s)", pr_id, sha.value[:7])
         # -- [http] fetch unified diff ---------------------------------------
         diff_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff"
-        raw_diff = self._client.get_raw(diff_path)
+        
+        headers = {}
+        if self._client._platform_mode == "github":
+            headers["Accept"] = "application/vnd.github.diff"
+            
+        raw_diff = self._client.get_raw(diff_path, headers=headers)
 
         # -- [err] empty / tiny diff -----------------------------------------
         if not raw_diff or len(raw_diff.strip()) < 50:
@@ -71,6 +77,9 @@ class GitChangesetFetcherAdapter(ChangesetFetcherPort):
         # -- [map] extract changed file paths from diff headers --------------
         file_paths: set[str] = set()
         deleted_paths: set[str] = set()
+        
+        logger.debug("First 500 chars of diff: %s", raw_diff[:500])
+        
         for match in _DIFF_FILE_PATH_RE.finditer(raw_diff):
             # b-side path is the "new" file (may be /dev/null for deletions)
             new_path = match.group(2)
@@ -89,14 +98,32 @@ class GitChangesetFetcherAdapter(ChangesetFetcherPort):
         # -- [http] fetch each file's content (skip deleted / unreadable) ---
         file_contents: dict[str, str] = {}
         for file_path in sorted(file_paths):
-            raw_path = f"/repos/{pr_id.repository}/raw/{sha.value}/{file_path}"
-            try:
-                content = self._client.get_raw(raw_path)
-                file_contents[file_path] = content
-                logger.debug("Fetched content for %s: %d chars", file_path, len(content))
-            except Exception:
-                # 404 or other errors → file was probably deleted; skip silently.
-                logger.debug("Skipping unreadable file: %s", file_path)
+            if self._client._platform_mode == "github":
+                # GitHub raw content is hosted on a different domain
+                raw_url = f"https://raw.githubusercontent.com/{pr_id.repository}/{sha.value}/{file_path}"
+                try:
+                    # We use a separate request here because the base_url is different
+                    import requests
+                    response = requests.get(
+                        raw_url,
+                        headers=self._client._get_auth_header(),
+                        timeout=30,
+                    )
+                    response.raise_for_status()
+                    content = response.text
+                    file_contents[file_path] = content
+                    logger.debug("Fetched content for %s: %d chars", file_path, len(content))
+                except Exception:
+                    logger.debug("Skipping unreadable file: %s", file_path)
+            else:
+                raw_path = f"/repos/{pr_id.repository}/raw/{sha.value}/{file_path}"
+                try:
+                    content = self._client.get_raw(raw_path)
+                    file_contents[file_path] = content
+                    logger.debug("Fetched content for %s: %d chars", file_path, len(content))
+                except Exception:
+                    # 404 or other errors → file was probably deleted; skip silently.
+                    logger.debug("Skipping unreadable file: %s", file_path)
 
         # -- [http] fetch commit messages -------------------------------------
         commit_messages = self._fetch_commit_messages(pr_id)
