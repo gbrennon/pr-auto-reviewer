@@ -16,6 +16,15 @@ class Config:
     platform_api_url: str = "https://codeberg.org/api/v1"
     reviewer_token: str | None = None
     reviewer_username: str | None = None
+    # Added for 'both' mode
+    github_token: str | None = None
+    github_reviewer_token: str | None = None
+    github_reviewer_username: str | None = None
+    github_review_mode: str = "formal"
+    codeberg_token: str | None = None
+    codeberg_reviewer_token: str | None = None
+    codeberg_reviewer_username: str | None = None
+    
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
     poll_interval: int = 60
@@ -39,9 +48,10 @@ def _is_installed() -> bool:
     return not (_get_repo_root() / ".env").exists()
 
 
-def _normalize_platform_api_url(url: str) -> str:
-    if not url.endswith("/api/v1"):
-        return url + "/api/v1"
+def _normalize_platform_api_url(url: str, platform_mode: GitProvider) -> str:
+    if platform_mode == GitProvider.CODEBERG:
+        if not url.endswith("/api/v1"):
+            return url + "/api/v1"
     return url
 
 
@@ -64,14 +74,6 @@ def load_config() -> Config:
         if os.path.exists(path):
             load_dotenv(path, override=False)
 
-    platform_token = (
-        os.environ.get("PLATFORM_TOKEN")
-        or os.environ.get("FORGEJO_TOKEN")
-        or ""
-    ).strip()
-    # platform_token may be empty during some test scenarios; return Config
-    # with empty platform_token and let callers decide if it's required.
-
     platform_mode_raw = (
         os.environ.get("PLATFORM_MODE")
         or os.environ.get("FORGEJO_MODE")
@@ -79,23 +81,45 @@ def load_config() -> Config:
     ).strip()
     platform_mode = GitProvider.parse(platform_mode_raw)
 
-    _raw_api_url = (
-        os.environ.get("PLATFORM_API_URL")
-        or os.environ.get("FORGEJO_HOST")
-        or "https://codeberg.org"
-    ).strip()
-    platform_api_url = _normalize_platform_api_url(_raw_api_url)
+    # Set default API URL based on platform mode
+    default_api_url = "https://api.github.com" if platform_mode == GitProvider.GITHUB else "https://codeberg.org"
 
-    reviewer_token = (
-        os.environ.get("REVIEWER_TOKEN")
-        or os.environ.get("FORGEJO_REVIEWER_TOKEN")
-        or ""
-    ).strip() or None
-    reviewer_username = (
-        os.environ.get("REVIEWER_USERNAME")
-        or os.environ.get("FORGEJO_REVIEWER_USERNAME")
-        or ""
-    ).strip() or None
+    _raw_api_url = os.environ.get("PLATFORM_API_URL")
+    if not _raw_api_url:
+        if platform_mode == GitProvider.CODEBERG:
+            _raw_api_url = os.environ.get("FORGEJO_HOST") or default_api_url
+        elif platform_mode == GitProvider.GITHUB:
+            _raw_api_url = default_api_url
+        else:
+            _raw_api_url = default_api_url
+            
+    platform_api_url = _normalize_platform_api_url(_raw_api_url.strip(), platform_mode)
+
+    # Base tokens
+    if platform_mode == GitProvider.GITHUB:
+        platform_token = (os.environ.get("PLATFORM_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+        reviewer_token = (os.environ.get("REVIEWER_TOKEN") or os.environ.get("GITHUB_REVIEWER_TOKEN") or "").strip() or None
+        reviewer_username = (os.environ.get("REVIEWER_USERNAME") or os.environ.get("GITHUB_REVIEWER_USERNAME") or "").strip() or None
+        # Fallback: if owner token is missing, try using the reviewer token for read-only access
+        if not platform_token:
+            platform_token = reviewer_token or ""
+    else:
+        platform_token = (os.environ.get("PLATFORM_TOKEN") or os.environ.get("FORGEJO_TOKEN") or "").strip()
+        reviewer_token = (os.environ.get("REVIEWER_TOKEN") or os.environ.get("FORGEJO_REVIEWER_TOKEN") or "").strip() or None
+        reviewer_username = (os.environ.get("REVIEWER_USERNAME") or os.environ.get("FORGEJO_REVIEWER_USERNAME") or "").strip() or None
+        # Fallback: if owner token is missing, try using the reviewer token
+        if not platform_token:
+            platform_token = reviewer_token or ""
+
+    # Platform-specific tokens for BOTH mode
+    github_token = os.environ.get("GITHUB_TOKEN", "").strip() or None
+    github_reviewer_token = os.environ.get("GITHUB_REVIEWER_TOKEN", "").strip() or None
+    github_reviewer_username = os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip() or None
+    github_review_mode = os.environ.get("GITHUB_REVIEW_MODE", "formal").strip()
+    
+    codeberg_token = os.environ.get("FORGEJO_TOKEN", "").strip() or None
+    codeberg_reviewer_token = os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None
+    codeberg_reviewer_username = os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None
 
     llm_host = (
         os.environ.get("LLM_HOST")
@@ -116,7 +140,6 @@ def load_config() -> Config:
     use_compact_template = (
         os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
     )
-    # PROMPT_MODE must be either 'monolithic' or 'fragments'. Default: MONOLITHIC.
     prompt_mode = PromptMode.parse(os.environ.get("PROMPT_MODE", ""))
 
     use_strict_fragment_selection = (
@@ -130,6 +153,13 @@ def load_config() -> Config:
         platform_api_url=platform_api_url,
         reviewer_token=reviewer_token,
         reviewer_username=reviewer_username,
+        github_token=github_token,
+        github_reviewer_token=github_reviewer_token,
+        github_reviewer_username=github_reviewer_username,
+        github_review_mode=github_review_mode,
+        codeberg_token=codeberg_token,
+        codeberg_reviewer_token=codeberg_reviewer_token,
+        codeberg_reviewer_username=codeberg_reviewer_username,
         llm_host=llm_host,
         llm_model=llm_model,
         poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
