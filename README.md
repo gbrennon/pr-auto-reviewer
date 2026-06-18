@@ -11,6 +11,30 @@ uv run pr-auto-reviewer review --repo owner/repo --pr <number>
 
 See [How to Run a Single Review](docs/HOWTO-single-review.md) for full instructions.
 
+## Daemon Mode
+
+Poll all repos continuously, reviewing open PRs automatically:
+
+```bash
+uv run pr-auto-reviewer watch-prs                  # poll every 60s
+uv run pr-auto-reviewer watch-prs -i 120           # poll every 120s
+uv run pr-auto-reviewer watch-prs -r owner/repo    # watch a single repo
+uv run pr-auto-reviewer watch-prs --once           # run once and exit
+```
+
+## Install (systemd)
+
+```bash
+make install            # install and configure systemd service
+make start              # start the daemon
+make stop               # stop the daemon
+make status             # show service status
+make logs               # view service logs (follow)
+make restart            # restart the service
+```
+
+See [Scripts & Makefile](docs/scripts.md) for all commands.
+
 ## Docs
 
 | Doc | Topic |
