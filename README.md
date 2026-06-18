@@ -23,14 +23,21 @@ make review REPO=owner/repo PR=42
 
 ### Daemon Mode
 
-Poll all repos the token can access, reviewing open PRs automatically.
-Set `PLATFORM_MODE` in `.env` first.
+Poll all repos the token can access on **both** GitHub and Codeberg, reviewing open PRs automatically.
+Set `PLATFORM_MODE` in `.env` (`github`, `codeberg`, or `both`).
 
 ```bash
-uv run pr-auto-reviewer watch-prs                  # all repos, every 60s
-uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo
-uv run pr-auto-reviewer watch-prs --once           # one cycle and exit
-uv run pr-auto-reviewer watch-prs -i 120           # poll every 120s
+# Watch all repos on the configured platform(s)
+uv run pr-auto-reviewer watch-prs
+
+# Watch a single repo
+uv run pr-auto-reviewer watch-prs -r owner/repo
+
+# Run one cycle and exit
+uv run pr-auto-reviewer watch-prs --once
+
+# Custom poll interval (seconds)
+uv run pr-auto-reviewer watch-prs -i 120
 ```
 
 ## Install (systemd)
