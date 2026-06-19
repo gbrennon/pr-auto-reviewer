@@ -120,6 +120,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${REPO_ROOT}
+Environment=ENV=production
+Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=${CONFIG_FILE}
 ExecStart=${REPO_ROOT}/.venv/bin/python -m pr_auto_reviewer watch-prs
 Restart=on-failure
