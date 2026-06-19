@@ -38,7 +38,7 @@ setup_config() {
 # don't use — missing/bad tokens are logged and skipped, not fatal.
 
 # === PLATFORM ===
-PLATFORM_MODE=codeberg
+PLATFORM_MODE=both
 
 # === GITHUB ===
 GITHUB_TOKEN=
@@ -87,7 +87,7 @@ EOF
 # don't use — missing/bad tokens are logged and skipped, not fatal.
 
 # === PLATFORM ===
-PLATFORM_MODE=codeberg
+PLATFORM_MODE=both
 
 # === GITHUB ===
 GITHUB_TOKEN=
