@@ -7,20 +7,67 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
 CONFIG_FILE="${CONFIG_DIR}/config"
 
-# Check if application is already installed
-if [ -d "$CONFIG_DIR" ] || [ -f "$CONFIG_FILE" ]; then
-    echo "ERROR: Application is already installed at $CONFIG_DIR. Use 'make update' to upgrade." >&2
-    exit 1
-fi
-
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
 SERVICE_NAME="pr-auto-reviewer.service"
 CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
 CONFIG_FILE="${CONFIG_DIR}/config"
 
 setup_config() {
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo "Creating config at $CONFIG_FILE..."
+    if [[ -f "$CONFIG_FILE" ]]; then
+        echo "Config already exists at $CONFIG_FILE — updating format..."
+        local tmp_file="${CONFIG_FILE}.new"
+        cp "$CONFIG_FILE" "$CONFIG_FILE.bak.$(date +%Y%m%d-%H%M%S)"
+
+        # Read existing values
+        local existing_token=$(grep -oP '^FORGEJO_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_reviewer=$(grep -oP '^FORGEJO_REVIEWER_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_username=$(grep -oP '^FORGEJO_REVIEWER_USERNAME=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_host=$(grep -oP '^FORGEJO_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_ollama_host=$(grep -oP '^OLLAMA_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_ollama_model=$(grep -oP '^OLLAMA_MODEL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_poll=$(grep -oP '^POLL_INTERVAL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+
+        cat > "$CONFIG_FILE" <<'EOF'
+# PR Auto-Reviewer Configuration
+#
+# Platform: github, codeberg, or both.  Leave tokens blank for platforms you
+# don't use — missing/bad tokens are logged and skipped, not fatal.
+
+# === PLATFORM ===
+PLATFORM_MODE=codeberg
+
+# === GITHUB ===
+GITHUB_TOKEN=
+GITHUB_REVIEWER_TOKEN=
+GITHUB_REVIEWER_USERNAME=
+
+# === CODEBERG / FORGEJO ===
+FORGEJO_TOKEN=EXISTING_TOKEN_PLACEHOLDER
+FORGEJO_REVIEWER_TOKEN=EXISTING_REVIEWER_PLACEHOLDER
+FORGEJO_REVIEWER_USERNAME=EXISTING_USERNAME_PLACEHOLDER
+FORGEJO_HOST=EXISTING_HOST_PLACEHOLDER
+
+# === OLLAMA ===
+OLLAMA_HOST=EXISTING_OLLAMA_HOST_PLACEHOLDER
+OLLAMA_MODEL=EXISTING_OLLAMA_MODEL_PLACEHOLDER
+POLL_INTERVAL=EXISTING_POLL_PLACEHOLDER
+
+# === REVIEW MODE ===
+GITHUB_REVIEW_MODE=formal
+
+# === DEBUG ===
+DEBUG=0
+EOF
+        # Restore existing values
+        sed -i "s|^FORGEJO_TOKEN=.*|FORGEJO_TOKEN=${existing_token}|" "$CONFIG_FILE"
+        sed -i "s|^FORGEJO_REVIEWER_TOKEN=.*|FORGEJO_REVIEWER_TOKEN=${existing_reviewer}|" "$CONFIG_FILE"
+        sed -i "s|^FORGEJO_REVIEWER_USERNAME=.*|FORGEJO_REVIEWER_USERNAME=${existing_username}|" "$CONFIG_FILE"
+        sed -i "s|^FORGEJO_HOST=.*|FORGEJO_HOST=${existing_host}|" "$CONFIG_FILE"
+        sed -i "s|^OLLAMA_HOST=.*|OLLAMA_HOST=${existing_ollama_host}|" "$CONFIG_FILE"
+        sed -i "s|^OLLAMA_MODEL=.*|OLLAMA_MODEL=${existing_ollama_model}|" "$CONFIG_FILE"
+        sed -i "s|^POLL_INTERVAL=.*|POLL_INTERVAL=${existing_poll}|" "$CONFIG_FILE"
+        echo "Config updated. Previous version backed up to $CONFIG_FILE.bak.*"
+    else
         mkdir -p "$CONFIG_DIR"
         cat > "$CONFIG_FILE" <<'EOF'
 # PR Auto-Reviewer Configuration
@@ -44,7 +91,7 @@ FORGEJO_HOST=https://codeberg.org
 
 # === OLLAMA ===
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
+OLLAMA_MODEL=             # Required
 POLL_INTERVAL=60
 
 # === REVIEW MODE ===
@@ -54,8 +101,6 @@ GITHUB_REVIEW_MODE=formal
 DEBUG=0
 EOF
         echo "Config created. Please edit $CONFIG_FILE with your tokens and model."
-    else
-        echo "Config already exists at $CONFIG_FILE"
     fi
 }
 
