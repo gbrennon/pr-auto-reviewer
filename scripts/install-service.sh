@@ -24,20 +24,31 @@ setup_config() {
         mkdir -p "$CONFIG_DIR"
         cat > "$CONFIG_FILE" <<'EOF'
 # PR Auto-Reviewer Configuration
+#
+# Platform: github, codeberg, or both.  Leave tokens blank for platforms you
+# don't use — missing/bad tokens are logged and skipped, not fatal.
 
-# === FORGEJO/CODEBERG ===
-FORGEJO_TOKEN=           # Required - Generate at https://codeberg.org/settings/applications (scopes: repo, read:user)
-FORGEJO_MODE=codeberg    # "local" or "codeberg" (default: codeberg)
+# === PLATFORM ===
+PLATFORM_MODE=codeberg
+
+# === GITHUB ===
+GITHUB_TOKEN=
+GITHUB_REVIEWER_TOKEN=
+GITHUB_REVIEWER_USERNAME=
+
+# === CODEBERG / FORGEJO ===
+FORGEJO_TOKEN=
+FORGEJO_REVIEWER_TOKEN=
+FORGEJO_REVIEWER_USERNAME=
 FORGEJO_HOST=https://codeberg.org
-
-# === REVIEWER ===
-FORGEJO_REVIEWER_TOKEN=  # Required - Different user's token (scopes: repo)
-FORGEJO_REVIEWER_USERNAME=  # Required
 
 # === OLLAMA ===
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=             # Required - Your model (e.g., code-review, llama3.2, qwen2.5-coder:14b)
 POLL_INTERVAL=60
+
+# === REVIEW MODE ===
+GITHUB_REVIEW_MODE=formal
 
 # === DEBUG ===
 DEBUG=0

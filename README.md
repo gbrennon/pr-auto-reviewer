@@ -27,20 +27,22 @@ Poll all repos the token can access on **both** GitHub and Codeberg, reviewing o
 Set `PLATFORM_MODE` in `.env` (`github`, `codeberg`, or `both`).
 
 ```bash
-# Watch all repos on the configured platform(s)
-uv run pr-auto-reviewer watch-prs
+# Via uv
+uv run pr-auto-reviewer watch-prs                  # all repos, every 60s
+uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo
+uv run pr-auto-reviewer watch-prs --once           # one cycle and exit
 
-# Watch a single repo
-uv run pr-auto-reviewer watch-prs -r owner/repo
-
-# Run one cycle and exit
-uv run pr-auto-reviewer watch-prs --once
-
-# Custom poll interval (seconds)
-uv run pr-auto-reviewer watch-prs -i 120
+# Via Make
+make daemon                                         # continuous polling
+make daemon-once                                    # one cycle and exit
+make watch REPO=owner/repo                          # watch single repo once
 ```
 
-## Install (systemd)
+Missing or invalid tokens are **logged and skipped** — the daemon never stops on auth errors.
+
+### Install (systemd)
+
+Installs a systemd user service that runs the daemon at login, polling both platforms continuously.
 
 ```bash
 make install            # install and configure systemd service
