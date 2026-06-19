@@ -41,7 +41,6 @@ install:
 
 start:
 	@bash $(SCRIPT_DIR)/start.sh
-	@python -m pr_auto_reviewer watch-prs
 
 stop:
 	@bash $(SCRIPT_DIR)/stop.sh
