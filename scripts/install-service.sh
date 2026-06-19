@@ -23,6 +23,10 @@ setup_config() {
         local existing_reviewer=$(grep -oP '^FORGEJO_REVIEWER_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
         local existing_username=$(grep -oP '^FORGEJO_REVIEWER_USERNAME=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
         local existing_host=$(grep -oP '^FORGEJO_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_platform_mode=$(grep -oP '^PLATFORM_MODE=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_gh_token=$(grep -oP '^GITHUB_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_gh_reviewer=$(grep -oP '^GITHUB_REVIEWER_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
+        local existing_gh_username=$(grep -oP '^GITHUB_REVIEWER_USERNAME=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
         local existing_ollama_host=$(grep -oP '^OLLAMA_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
         local existing_ollama_model=$(grep -oP '^OLLAMA_MODEL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
         local existing_poll=$(grep -oP '^POLL_INTERVAL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
@@ -62,6 +66,10 @@ GITHUB_REVIEW_MODE=formal
 DEBUG=0
 EOF
         # Restore existing values
+        sed -i "s|^PLATFORM_MODE=.*|PLATFORM_MODE=${existing_platform_mode:-codeberg}|" "$CONFIG_FILE"
+        sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${existing_gh_token}|" "$CONFIG_FILE"
+        sed -i "s|^GITHUB_REVIEWER_TOKEN=.*|GITHUB_REVIEWER_TOKEN=${existing_gh_reviewer}|" "$CONFIG_FILE"
+        sed -i "s|^GITHUB_REVIEWER_USERNAME=.*|GITHUB_REVIEWER_USERNAME=${existing_gh_username}|" "$CONFIG_FILE"
         sed -i "s|^FORGEJO_TOKEN=.*|FORGEJO_TOKEN=${existing_token}|" "$CONFIG_FILE"
         sed -i "s|^FORGEJO_REVIEWER_TOKEN=.*|FORGEJO_REVIEWER_TOKEN=${existing_reviewer}|" "$CONFIG_FILE"
         sed -i "s|^FORGEJO_REVIEWER_USERNAME=.*|FORGEJO_REVIEWER_USERNAME=${existing_username}|" "$CONFIG_FILE"
