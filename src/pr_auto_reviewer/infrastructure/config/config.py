@@ -1,3 +1,14 @@
+"""Application configuration — loads and validates settings from environment.
+
+Environment variables are sourced from config files via python-dotenv,
+then read through ``os.environ`` to build a single ``Config`` dataclass
+consumed by the dependency-injection container.
+
+Search order (highest priority last, so it wins):
+  - Production: ``~/.config/pr-auto-reviewer/config``, then repo ``.env``
+  - Development: repo ``.env``, then ``~/.config/pr-auto-reviewer/config``
+"""
+
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +35,7 @@ class Config:
     codeberg_token: str | None = None
     codeberg_reviewer_token: str | None = None
     codeberg_reviewer_username: str | None = None
-    
+
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
     poll_interval: int = 60
@@ -42,7 +53,7 @@ class Config:
 
 
 def _get_repo_root() -> Path:
-    return Path(__file__).parent.parent.parent.parent
+    return Path(__file__).parent.parent.parent.parent.parent
 
 
 def _is_installed() -> bool:
@@ -57,7 +68,7 @@ def _normalize_platform_api_url(url: str, platform_mode: GitProvider) -> str:
 
 
 def load_config() -> Config:
-    repo_root = Path(__file__).parent.parent.parent.parent
+    repo_root = Path(__file__).parent.parent.parent.parent.parent
     env = os.environ.get("ENV", "").strip()
 
     if not env:
@@ -67,23 +78,25 @@ def load_config() -> Config:
     repo_env_path = repo_root / ".env"
 
     if env == "production":
-        paths = [user_config_path, repo_env_path]
-    else:
         paths = [repo_env_path, user_config_path]
+    else:
+        paths = [user_config_path, repo_env_path]
 
     for path in paths:
         if os.path.exists(path):
-            load_dotenv(path, override=False)
+            load_dotenv(path, override=True)
 
     platform_mode_raw = (
-        os.environ.get("PLATFORM_MODE")
-        or os.environ.get("FORGEJO_MODE")
-        or "codeberg"
+        os.environ.get("PLATFORM_MODE") or os.environ.get("FORGEJO_MODE") or "forgejo"
     ).strip()
     platform_mode = GitProvider.parse(platform_mode_raw)
 
     # Set default API URL based on platform mode
-    default_api_url = "https://api.github.com" if platform_mode == GitProvider.GITHUB else "https://codeberg.org"
+    default_api_url = (
+        "https://api.github.com"
+        if platform_mode == GitProvider.GITHUB
+        else "https://codeberg.org"
+    )
 
     _raw_api_url = os.environ.get("PLATFORM_API_URL")
     if not _raw_api_url:
@@ -93,21 +106,41 @@ def load_config() -> Config:
             _raw_api_url = default_api_url
         else:
             _raw_api_url = default_api_url
-            
+
     platform_api_url = _normalize_platform_api_url(_raw_api_url.strip(), platform_mode)
 
     # Base tokens
     if platform_mode == GitProvider.GITHUB:
-        platform_token = (os.environ.get("PLATFORM_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
-        reviewer_token = (os.environ.get("REVIEWER_TOKEN") or os.environ.get("GITHUB_REVIEWER_TOKEN") or "").strip() or None
-        reviewer_username = (os.environ.get("REVIEWER_USERNAME") or os.environ.get("GITHUB_REVIEWER_USERNAME") or "").strip() or None
+        platform_token = (
+            os.environ.get("PLATFORM_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
+        ).strip()
+        reviewer_token = (
+            os.environ.get("REVIEWER_TOKEN")
+            or os.environ.get("GITHUB_REVIEWER_TOKEN")
+            or ""
+        ).strip() or None
+        reviewer_username = (
+            os.environ.get("REVIEWER_USERNAME")
+            or os.environ.get("GITHUB_REVIEWER_USERNAME")
+            or ""
+        ).strip() or None
         # Fallback: if owner token is missing, try using the reviewer token for read-only access
         if not platform_token:
             platform_token = reviewer_token or ""
     else:
-        platform_token = (os.environ.get("PLATFORM_TOKEN") or os.environ.get("FORGEJO_TOKEN") or "").strip()
-        reviewer_token = (os.environ.get("REVIEWER_TOKEN") or os.environ.get("FORGEJO_REVIEWER_TOKEN") or "").strip() or None
-        reviewer_username = (os.environ.get("REVIEWER_USERNAME") or os.environ.get("FORGEJO_REVIEWER_USERNAME") or "").strip() or None
+        platform_token = (
+            os.environ.get("PLATFORM_TOKEN") or os.environ.get("FORGEJO_TOKEN") or ""
+        ).strip()
+        reviewer_token = (
+            os.environ.get("REVIEWER_TOKEN")
+            or os.environ.get("FORGEJO_REVIEWER_TOKEN")
+            or ""
+        ).strip() or None
+        reviewer_username = (
+            os.environ.get("REVIEWER_USERNAME")
+            or os.environ.get("FORGEJO_REVIEWER_USERNAME")
+            or ""
+        ).strip() or None
         # Fallback: if owner token is missing, try using the reviewer token
         if not platform_token:
             platform_token = reviewer_token or ""
@@ -115,12 +148,18 @@ def load_config() -> Config:
     # Platform-specific tokens for BOTH mode
     github_token = os.environ.get("GITHUB_TOKEN", "").strip() or None
     github_reviewer_token = os.environ.get("GITHUB_REVIEWER_TOKEN", "").strip() or None
-    github_reviewer_username = os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip() or None
+    github_reviewer_username = (
+        os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip() or None
+    )
     github_review_mode = os.environ.get("GITHUB_REVIEW_MODE", "formal").strip()
-    
+
     codeberg_token = os.environ.get("FORGEJO_TOKEN", "").strip() or None
-    codeberg_reviewer_token = os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None
-    codeberg_reviewer_username = os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None
+    codeberg_reviewer_token = (
+        os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None
+    )
+    codeberg_reviewer_username = (
+        os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None
+    )
 
     llm_host = (
         os.environ.get("LLM_HOST")
@@ -128,9 +167,7 @@ def load_config() -> Config:
         or "http://localhost:11434"
     ).strip()
     llm_model = (
-        os.environ.get("LLM_MODEL")
-        or os.environ.get("OLLAMA_MODEL")
-        or ""
+        os.environ.get("LLM_MODEL") or os.environ.get("OLLAMA_MODEL") or ""
     ).strip() or None
 
     output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
@@ -176,5 +213,3 @@ def load_config() -> Config:
         prompt_mode=prompt_mode,
         use_strict_fragment_selection=use_strict_fragment_selection,
     )
-
-
