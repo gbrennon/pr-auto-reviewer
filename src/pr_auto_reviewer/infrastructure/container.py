@@ -144,22 +144,26 @@ class Container:
                 "https://api.github.com",
                 self._config.github_reviewer_token or self._config.github_token or "",
                 "github",
+                "owner",
             )
             cb_client = GitPlatformHttpClient(
                 "https://codeberg.org/api/v1",
                 self._config.codeberg_token or self._config.platform_token or "",
                 "codeberg",
+                "owner",
             )
 
             gb_reviewer = GitPlatformHttpClient(
                 "https://api.github.com",
                 self._config.github_reviewer_token or self._config.github_token or "",
                 "github",
+                "reviewer",
             )
             cb_reviewer = GitPlatformHttpClient(
                 "https://codeberg.org/api/v1",
                 self._config.codeberg_reviewer_token or self._config.codeberg_token or "",
                 "codeberg",
+                "reviewer",
             )
 
             self._http_client = gb_client  # default for read ops
@@ -199,13 +203,13 @@ class Container:
             })
         else:
             self._http_client = GitPlatformHttpClient(
-                self._config.platform_api_url, self._config.platform_token, self._config.platform_mode.value
+                self._config.platform_api_url, self._config.platform_token, self._config.platform_mode.value, "owner",
             )
             reviewer_token = (
                 self._config.reviewer_token or self._config.platform_token
             )
             self._reviewer_client = GitPlatformHttpClient(
-                self._config.platform_api_url, reviewer_token, self._config.platform_mode.value
+                self._config.platform_api_url, reviewer_token, self._config.platform_mode.value, "reviewer",
             )
             self._pr_repository: PullRequestRepository = (
                 NullPullRequestRepository()
