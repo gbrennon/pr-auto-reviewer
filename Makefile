@@ -1,4 +1,4 @@
-.PHONY: help start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once capture-fixture
+.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once capture-fixture
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -10,6 +10,7 @@ SCRIPT_DIR := scripts
 help:
 	@echo "$$(tput bold)PR Auto Reviewer — Makefile targets$$(tput sgr0)"
 	@echo ""
+	@echo "  make install          Install and configure the systemd service"
 	@echo "  make start            Start the daemon in background"
 	@echo "  make stop             Stop the daemon"
 	@echo "  make status           Check if daemon is running"
@@ -38,6 +39,11 @@ help:
 	@echo ""
 	@echo "  make capture-fixture  Capture Ollama response fixtures"
 	@echo "                        \$$ make capture-fixture REPO=owner/repo PR=8"
+
+# ── production install ───────────────────────────────────────────────────────
+
+install:
+	@bash $(SCRIPT_DIR)/install-service.sh
 
 # ── dev-mode service management ──────────────────────────────────────────────
 
