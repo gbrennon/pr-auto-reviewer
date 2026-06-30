@@ -10,8 +10,8 @@
 {% endif %}
 
 ### Issues
-{% if review.items %}
-{% for item in review.items %}
+{% if items %}
+{% for item in items %}
 {{ item.number }}.{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
 
 {{ item.description }}
@@ -32,9 +32,9 @@
 No issues found.
 {% endif %}
 ### Praise
-{% if review.praise %}
-{% for p in review.praise %}
--{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
+{% if praise %}
+{% for p in praise %}
+{{ p.number }}.{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
 {% endfor %}
 {% else %}
 No notable patterns or practices to highlight.

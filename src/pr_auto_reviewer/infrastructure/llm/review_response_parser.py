@@ -151,7 +151,7 @@ class ReviewResponseParser:
                 reason = reasons
 
         items = []
-        for idx, issue in enumerate(issues, 1):
+        for issue in issues:
             file_path = (issue.get("file") or "").strip()
             if not file_path:
                 logger.debug(
@@ -193,7 +193,7 @@ class ReviewResponseParser:
 
             items.append(
                 ReviewItem(
-                    number=len(items) + 1,
+                    number=len(items),
                     severity=severity,
                     category=category,
                     file_path=file_path,
@@ -616,7 +616,6 @@ class ReviewResponseParser:
         items: list[ReviewItem] = []
         for idx, match in enumerate(
             ReviewResponseParser._ITEM_RE_MD.finditer(items_section),
-            start=1,
         ):
             file_path = match.group("file_path").strip() or None
 

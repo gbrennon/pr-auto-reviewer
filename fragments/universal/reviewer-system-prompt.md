@@ -57,7 +57,41 @@ For EACH issue you're about to report, verify:
 
 Flagging `-` lines as problems when the commit message explicitly says "remove unused X". If you do this, you produce a worthless review. ALWAYS read commit messages and PR description first.
 
-## RESPONSE FORMAT
+### CORRECT vs INCORRECT INTERPRETATION EXAMPLES
+
+**Example 1: Pure Removal (Cleanup)**
+Diff:
+```diff
+- // This was a temporary hack
+- function temporaryFix() {
+-   console.log("fixing...");
+- }
+```
+❌ **INCORRECT:** "The `temporaryFix` function is no longer used and should be removed." (Hallucination: It's already gone!)
+✅ **CORRECT:** (Praise) "The PR correctly removes dead code (`temporaryFix`), reducing codebase noise."
+
+**Example 2: Rename/Refactor**
+Diff:
+```diff
+- export class UserRepo {
+-   getUser(id: string) { ... }
+- }
++ export class UserRepository {
++   findById(id: string) { ... }
++ }
+```
+❌ **INCORRECT:** "The `getUser` method was deleted. This will break the application." (Hallucination: It was renamed to `findById`)
+✅ **CORRECT:** "The `UserRepo` was renamed to `UserRepository` and `getUser` to `findById`, aligning better with naming conventions."
+
+**Example 3: Bug Fix**
+Diff:
+```diff
+- if (value == null) {
++ if (value === null || value === undefined) {
+```
+❌ **INCORRECT:** "The `value == null` check was removed and should be restored." (Hallucination: It was improved)
+✅ **CORRECT:** "The equality check was tightened to explicitly handle null and undefined."
+
 
 Output ONLY a raw JSON object. No markdown, no code fences, no extra text.
 

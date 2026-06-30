@@ -11,6 +11,7 @@ from pr_auto_reviewer.infrastructure.config.config import (
     _normalize_platform_api_url,
     load_config,
 )
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
 class _FakePath:
@@ -44,15 +45,15 @@ class TestNormalizePlatformApiUrl:
 
     def test_adds_suffix_when_missing(self):
         """Adds /api/v1 when not present."""
-        assert _normalize_platform_api_url("https://codeberg.org") == "https://codeberg.org/api/v1"
+        assert _normalize_platform_api_url("https://codeberg.org", GitProvider.CODEBERG) == "https://codeberg.org/api/v1"
 
     def test_keeps_suffix_when_present(self):
         """Keeps URL unchanged when /api/v1 already present."""
-        assert _normalize_platform_api_url("https://codeberg.org/api/v1") == "https://codeberg.org/api/v1"
+        assert _normalize_platform_api_url("https://codeberg.org/api/v1", GitProvider.CODEBERG) == "https://codeberg.org/api/v1"
 
     def test_handles_trailing_slash(self):
         """Adds /api/v1 when URL has trailing slash."""
-        assert _normalize_platform_api_url("https://codeberg.org/") == "https://codeberg.org//api/v1"
+        assert _normalize_platform_api_url("https://codeberg.org/", GitProvider.CODEBERG) == "https://codeberg.org//api/v1"
 
 
 class TestLoadConfig:

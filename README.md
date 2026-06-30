@@ -1,59 +1,70 @@
 # PR Auto Reviewer
 
-AI-powered code review for Forgejo/Codeberg using local Ollama models.
+AI-powered code review for **GitHub** and **Codeberg/Forgejo** — using local Ollama models.
 
-## Getting Started
-
-```bash
-git clone https://codeberg.org/gbrennon/pr-auto-reviewer.git
-cd pr-auto-reviewer
-```
-
-### 1. Environment Variables
-
-Create `.env` in the project root:
+## Quick Start
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # edit .env with your tokens
 ```
 
-Edit `.env` with required variables. See [Configuration](docs/configuration.md) for all options.
-
-### 2. Install & Run
+### Single Review
 
 ```bash
-make install
+# GitHub
+PLATFORM_MODE=github uv run pr-auto-reviewer review --repo owner/repo --pr 42
+
+# Codeberg
+PLATFORM_MODE=codeberg uv run pr-auto-reviewer review --repo owner/repo --pr 42
+
+# Via Make (uses PLATFORM_MODE from .env)
+make review REPO=owner/repo PR=42
 ```
 
-## Quick Commands
+### Daemon Mode
 
-| Command | What it does |
-|---------|--------------|
-| `make test` | Run unit tests |
-| `make watch` | Run watcher once (manual mode) |
-| `make start` | Start the service |
-| `make stop` | Stop the service |
-| `make status` | Show service status |
-| `make restart` | Restart the service |
-| `make logs` | View service logs |
-| `make clean` | Reset state files |
+Poll all repos the token can access on **both** GitHub and Codeberg, reviewing open PRs automatically.
+Set `PLATFORM_MODE` in `.env` (`github`, `codeberg`, or `both`).
 
-See [Scripts Reference](docs/scripts.md) for full command list.
+```bash
+# Via uv
+uv run pr-auto-reviewer watch-prs                  # all repos, every 60s
+uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo
+uv run pr-auto-reviewer watch-prs --once           # one cycle and exit
 
-## Requirements
+# Via Make
+make daemon                                         # continuous polling
+make daemon-once                                    # one cycle and exit
+make watch REPO=owner/repo                          # watch single repo once
+```
 
-- **Ollama** - Local AI inference. [Install](https://ollama.ai)
-- **Forgejo or Codeberg** - Self-hosted or cloud
-- **Two API tokens** - Owner and reviewer accounts
-- **systemd** - For service management
+Missing or invalid tokens are **logged and skipped** — the daemon never stops on auth errors.
 
-See [Requirements](docs/requirements.md) for full details.
+### Install (systemd)
 
-## Learn More
+Installs a systemd user service that runs the daemon at login, polling both platforms continuously.
 
-- [Configuration](docs/configuration.md) - All env vars explained
-- [Scripts Reference](docs/scripts.md) - Available commands
-- [Features](docs/features.md) - What's implemented
-- [Structure](docs/structure.md) - How it works
-- [Troubleshooting](docs/troubleshooting.md) - Common issues
-- [Testing](docs/HOWTO-test.md) - How to test changes
+```bash
+make install            # install and configure systemd service
+make start              # start the daemon
+make stop               # stop the daemon
+make status             # show service status
+make logs               # view service logs (follow)
+make restart            # restart the service
+```
+
+See [Scripts & Makefile](docs/scripts.md) for all commands.
+
+## Docs
+
+| Doc | Topic |
+|-----|-------|
+| [How to Run](docs/HOWTO-single-review.md) | Single PR review walkthrough |
+| [Configuration](docs/configuration.md) | All env vars |
+| [Requirements](docs/requirements.md) | Prerequisites & tokens |
+| [Scripts & Makefile](docs/scripts.md) | Available commands |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems |
+| [Testing](docs/HOWTO-test.md) | Running tests |
+| [Features](docs/features.md) | What's implemented |
+| [Architecture](docs/structure.md) | Codebase structure |
+| [Review Flow](docs/review-flow-architecture.md) | Detailed flow |

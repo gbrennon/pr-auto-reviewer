@@ -22,6 +22,8 @@ def integration_data() -> dict[str, Any]:
 class FixtureHttpClient:
     """HTTP client that returns fixture data instead of making real calls."""
 
+    _platform_mode = "codeberg"  # required by GitReviewPublisherAdapter
+
     def __init__(self, data: dict, scenario: str) -> None:
         self._data = data
         self._scenario = scenario
@@ -47,7 +49,7 @@ class FixtureHttpClient:
             return result
         return http["get_pull"]
 
-    def get_raw(self, path: str) -> str:
+    def get_raw(self, path: str, headers: dict[str, str] | None = None) -> str:
         http = self._data["http"]
         if path.endswith(".diff"):
             return http["get_raw_diff"]

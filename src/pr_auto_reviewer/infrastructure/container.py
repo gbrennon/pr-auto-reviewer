@@ -68,6 +68,13 @@ from pr_auto_reviewer.infrastructure.fragments.renderers import (
     Jinja2Renderer,
 )
 from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
+    CompositeRepoLister,
+    CompositePrLister,
+    CompositeReviewPublisher,
+)
+
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
@@ -129,30 +136,107 @@ class Container:
             self._config.platform_api_url,
         )
 
-        self._http_client = GitPlatformHttpClient(
-            self._config.platform_api_url, self._config.platform_token,
-        )
-        reviewer_token = (
-            self._config.reviewer_token or self._config.platform_token
-        )
-        self._reviewer_client = GitPlatformHttpClient(
-            self._config.platform_api_url, reviewer_token,
-        )
-
         is_terminal = self._config.output_mode == "terminal"
-        self._pr_repository: PullRequestRepository = (
-            NullPullRequestRepository()
-            if is_terminal
-            else JsonFilePullRequestRepository(_state_file_path())
-        )
-        logger.debug("PullRequestRepository -> %s", type(self._pr_repository).__name__)
+        is_both = self._config.platform_mode == GitProvider.BOTH
 
-        self._changeset_fetcher: ChangesetFetcherPort = (
-            GitChangesetFetcherAdapter(self._http_client)
-        )
-        self._repository_context: RepositoryContextPort = (
-            GitRepositoryContextAdapter(self._http_client)
-        )
+        if is_both:
+            gb_client = GitPlatformHttpClient(
+                "https://api.github.com",
+                self._config.github_reviewer_token or self._config.github_token or "",
+                "github",
+                "owner",
+            )
+            cb_client = GitPlatformHttpClient(
+                "https://codeberg.org/api/v1",
+                self._config.codeberg_token or self._config.platform_token or "",
+                "codeberg",
+                "owner",
+            )
+
+            gb_reviewer = GitPlatformHttpClient(
+                "https://api.github.com",
+                self._config.github_reviewer_token or self._config.github_token or "",
+                "github",
+                "reviewer",
+            )
+            cb_reviewer = GitPlatformHttpClient(
+                "https://codeberg.org/api/v1",
+                self._config.codeberg_reviewer_token or self._config.codeberg_token or "",
+                "codeberg",
+                "reviewer",
+            )
+
+            self._http_client = gb_client  # default for read ops
+            self._reviewer_client = gb_reviewer
+
+            self._pr_repository: PullRequestRepository = JsonFilePullRequestRepository(_state_file_path())
+            self._changeset_fetcher: ChangesetFetcherPort = GitChangesetFetcherAdapter(gb_client)
+            self._repository_context: RepositoryContextPort = GitRepositoryContextAdapter(gb_client)
+
+            self._review_publisher: ReviewPublisherPort = TerminalReviewPublisherAdapter(
+                self._config.output_dest
+            ) if is_terminal else CompositeReviewPublisher({
+                "github": GitReviewPublisherAdapter(
+                    gb_reviewer,
+                    self._config.github_reviewer_token or self._config.github_token or "",
+                    self._config.github_reviewer_username,
+                    review_mode=self._config.github_review_mode,
+                ),
+                "codeberg": GitReviewPublisherAdapter(
+                    cb_reviewer,
+                    self._config.codeberg_reviewer_token or self._config.codeberg_token or "",
+                    self._config.codeberg_reviewer_username,
+                ),
+            })
+            self._review_reader = GitReviewReaderAdapter(gb_client)
+            self._comment_reader = GitCommentReaderAdapter(gb_client)
+            self._comment_publisher = GitCommentPublisherAdapter(gb_reviewer)
+            self._issue_tracker = GitIssueTrackerAdapter(gb_client)
+
+            self._repo_lister: RepoListerPort = CompositeRepoLister({
+                "github": GitRepoListerAdapter(gb_client),
+                "codeberg": GitRepoListerAdapter(cb_client),
+            })
+            self._pr_lister: PrListerPort = CompositePrLister({
+                "github": GitPrListerAdapter(gb_client),
+                "codeberg": GitPrListerAdapter(cb_client),
+            })
+        else:
+            self._http_client = GitPlatformHttpClient(
+                self._config.platform_api_url, self._config.platform_token, self._config.platform_mode.value, "owner",
+            )
+            reviewer_token = (
+                self._config.reviewer_token or self._config.platform_token
+            )
+            self._reviewer_client = GitPlatformHttpClient(
+                self._config.platform_api_url, reviewer_token, self._config.platform_mode.value, "reviewer",
+            )
+            self._pr_repository: PullRequestRepository = (
+                NullPullRequestRepository()
+                if is_terminal
+                else JsonFilePullRequestRepository(_state_file_path())
+            )
+            logger.debug("PullRequestRepository -> %s", type(self._pr_repository).__name__)
+
+            self._changeset_fetcher: ChangesetFetcherPort = GitChangesetFetcherAdapter(self._http_client)
+            self._repository_context: RepositoryContextPort = GitRepositoryContextAdapter(self._http_client)
+            self._review_publisher: ReviewPublisherPort = (
+                TerminalReviewPublisherAdapter(self._config.output_dest)
+                if is_terminal
+                else GitReviewPublisherAdapter(
+                    self._reviewer_client,
+                    reviewer_token,
+                    self._config.reviewer_username,
+                    review_mode=self._config.github_review_mode if self._config.platform_mode == GitProvider.GITHUB else "formal",
+                )
+            )
+            self._review_reader: ReviewReaderPort = GitReviewReaderAdapter(self._http_client)
+            self._comment_reader: CommentReaderPort = GitCommentReaderAdapter(self._http_client)
+            self._comment_publisher: CommentPublisherPort = GitCommentPublisherAdapter(self._reviewer_client)
+            self._issue_tracker: IssueTrackerPort = GitIssueTrackerAdapter(self._http_client)
+            self._pr_lister: PrListerPort = GitPrListerAdapter(self._http_client)
+            self._repo_lister: RepoListerPort = GitRepoListerAdapter(self._http_client)
+
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
             self._config.llm_host,
             self._config.llm_model or "code-review:latest",
@@ -161,29 +245,6 @@ class Container:
             max_files=self._config.max_files,
             max_structure_lines=self._config.max_structure_lines,
             use_compact_template=self._config.use_compact_template,
-        )
-        self._review_publisher: ReviewPublisherPort = (
-            TerminalReviewPublisherAdapter()
-            if is_terminal
-            else GitReviewPublisherAdapter(
-                self._reviewer_client,
-                reviewer_token,
-                self._config.reviewer_username,
-            )
-        )
-        logger.debug("ReviewPublisher -> %s", type(self._review_publisher).__name__)
-
-        self._review_reader: ReviewReaderPort = GitReviewReaderAdapter(
-            self._http_client,
-        )
-        self._comment_reader: CommentReaderPort = GitCommentReaderAdapter(
-            self._http_client,
-        )
-        self._comment_publisher: CommentPublisherPort = (
-            GitCommentPublisherAdapter(self._reviewer_client)
-        )
-        self._issue_tracker: IssueTrackerPort = GitIssueTrackerAdapter(
-            self._http_client,
         )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
 
@@ -219,14 +280,6 @@ class Container:
                 repository_context=self._repository_context,
                 compose_review_prompt=prompt_adapter,
             )
-        )
-
-        self._repo_lister: RepoListerPort = GitRepoListerAdapter(
-            client=self._http_client,
-            repos_filter=os.environ.get("REPOS_FILTER"),
-        )
-        self._pr_lister: PrListerPort = GitPrListerAdapter(
-            client=self._http_client,
         )
 
     @property

@@ -9,6 +9,7 @@ class GitProvider(str, Enum):
     FORGEJO = "forgejo"
     LOCAL = "local"
     OTHER = "other"
+    BOTH = "both"
 
     @staticmethod
     def parse(value: str | None) -> "GitProvider":
@@ -23,4 +24,6 @@ class GitProvider(str, Enum):
             return GitProvider.GITLAB
         if v in ("local", "localhost"):
             return GitProvider.LOCAL
+        if v in ("both", "all"):
+            return GitProvider.BOTH
         return GitProvider.OTHER
