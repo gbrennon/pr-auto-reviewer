@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart logs test clean reset issues list-items bootstrap review review-force daemon daemon-once capture-fixture
+.PHONY: help start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once capture-fixture
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -10,12 +10,17 @@ SCRIPT_DIR := scripts
 help:
 	@echo "$$(tput bold)PR Auto Reviewer — Makefile targets$$(tput sgr0)"
 	@echo ""
-	@echo "  make install          Install and configure the systemd service"
-	@echo "  make start            Start the daemon"
+	@echo "  make start            Start the daemon in background"
 	@echo "  make stop             Stop the daemon"
-	@echo "  make status           Show daemon status"
+	@echo "  make status           Check if daemon is running"
 	@echo "  make restart          Restart the daemon"
-	@echo "  make logs             Show daemon logs (follow)"
+	@echo ""
+	@echo "Service management (systemd):"
+	@echo "  systemctl --user start   pr-auto-reviewer.service"
+	@echo "  systemctl --user stop    pr-auto-reviewer.service"
+	@echo "  systemctl --user status  pr-auto-reviewer.service"
+	@echo "  systemctl --user restart pr-auto-reviewer.service"
+	@echo "  journalctl --user -u pr-auto-reviewer.service -f"
 	@echo ""
 	@echo "  make bootstrap        Bootstrap the application (install deps, check env)"
 	@echo "  make test             Run all tests (uv run pytest)"
@@ -34,25 +39,39 @@ help:
 	@echo "  make capture-fixture  Capture Ollama response fixtures"
 	@echo "                        \$$ make capture-fixture REPO=owner/repo PR=8"
 
-# ── service management ──────────────────────────────────────────────────────
+# ── dev-mode service management ──────────────────────────────────────────────
 
-install:
-	@bash $(SCRIPT_DIR)/install-service.sh
+PIDFILE := /tmp/pr-auto-reviewer.pid
 
 start:
-	@bash $(SCRIPT_DIR)/start.sh
+	@nohup python -m pr_auto_reviewer watch-prs > /tmp/pr-auto-reviewer.log 2>&1 & echo $$! > $(PIDFILE); \
+	echo "Daemon started (pid $$(cat $(PIDFILE))); log: /tmp/pr-auto-reviewer.log"
 
 stop:
-	@bash $(SCRIPT_DIR)/stop.sh
+	@pid=$$(cat $(PIDFILE) 2>/dev/null); \
+	if [ -n "$$pid" ] && kill $$pid 2>/dev/null; then \
+		rm -f $(PIDFILE); \
+		echo "Daemon stopped (pid $$pid)"; \
+	else \
+		pid=$$(pgrep -f "python.*pr_auto_reviewer watch-prs" 2>/dev/null | head -1); \
+		if [ -n "$$pid" ]; then \
+			kill $$pid 2>/dev/null && echo "Daemon stopped (pid $$pid)"; \
+		else \
+			echo "Daemon not running"; \
+		fi; \
+	fi
 
 status:
-	@bash $(SCRIPT_DIR)/status.sh
+	@pid=$$(cat $(PIDFILE) 2>/dev/null); \
+	if [ -n "$$pid" ] && kill -0 $$pid 2>/dev/null; then \
+		echo "Daemon running (pid $$pid)"; \
+	elif pid=$$(pgrep -f "python.*pr_auto_reviewer watch-prs" 2>/dev/null | head -1) && [ -n "$$pid" ]; then \
+		echo "Daemon running (pid $$pid)"; \
+	else \
+		echo "Daemon not running"; \
+	fi
 
-restart:
-	@bash $(SCRIPT_DIR)/restart.sh
-
-logs:
-	@bash $(SCRIPT_DIR)/logs.sh
+restart: stop start
 
 # ── development ─────────────────────────────────────────────────────────────
 
