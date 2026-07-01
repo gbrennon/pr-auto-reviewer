@@ -14,6 +14,7 @@ from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -26,6 +27,13 @@ _VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
     ReviewVerdict.APPROVED: "APPROVE",
     ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
     ReviewVerdict.COMMENTED: "COMMENT",
+}
+
+# Items with these severities are excluded from formal review output.
+# Only MINOR and INFO items (plus praise) are published.
+_EXCLUDED_SEVERITIES = {
+    ItemSeverity.CRITICAL,
+    ItemSeverity.MAJOR,
 }
 
 
@@ -48,6 +56,8 @@ def format_review_body(review: CodeReview) -> str:
 
     numbered_items = []
     for item in review.items:
+        if item.severity in _EXCLUDED_SEVERITIES:
+            continue
         numbered_items.append({
             "number": idx,
             "severity": item.severity,
@@ -164,6 +174,8 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
             # 2. Build inline comments for each review item
             comments = []
             for item in review.items:
+                if item.severity in _EXCLUDED_SEVERITIES:
+                    continue
                 pos_data = self._get_diff_position(diff_text, item.file_path, item.current_code)
                 if pos_data:
                     if self._client._platform_mode == "github":
@@ -182,6 +194,30 @@ class GitReviewPublisherAdapter(ReviewPublisherPort):
                         comments.append({
                             "path": item.file_path,
                             "body": item.description,
+                            key: line_no,
+                        })
+
+            # 3. Build inline comments for each suggestion
+            for s in review.suggestions:
+                s_file = s.get("file", "")
+                s_code = s.get("current_code", "")
+                if not s_file or not s_code:
+                    continue
+                pos_data = self._get_diff_position(diff_text, s_file, s_code)
+                if pos_data:
+                    s_body = s.get("description", "")
+                    if self._client._platform_mode == "github":
+                        comments.append({
+                            "path": s_file,
+                            "position": pos_data["position"],
+                            "body": s_body,
+                        })
+                    elif self._client._platform_mode == "codeberg":
+                        line_no = pos_data["new_line"] or pos_data["old_line"]
+                        key = "new_position" if pos_data["new_line"] else "old_position"
+                        comments.append({
+                            "path": s_file,
+                            "body": s_body,
                             key: line_no,
                         })
 
