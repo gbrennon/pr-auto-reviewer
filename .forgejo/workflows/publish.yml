@@ -1,0 +1,118 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: codeberg-medium
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run tests
+        run: uv run pytest tests/ --tb=short
+
+  publish-testpypi:
+    if: startsWith(gitea.ref, 'refs/tags/v')
+    needs: test
+    runs-on: codeberg-medium
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify build artifacts
+        run: |
+          echo "=== Wheel contents ==="
+          unzip -l dist/*.whl | grep -E '(template|fragment|\.md)' || true
+          echo ""
+          echo "=== Sdist contents ==="
+          tar tzf dist/*.tar.gz | grep -E '(template|fragment|\.md)' || true
+
+      - name: Publish to TestPyPI (verification gate)
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TESTPYPI_TOKEN }}
+        run: |
+          uv tool install twine
+          uvx twine upload \
+            --repository testpypi \
+            --non-interactive \
+            dist/*
+
+      - name: Verify TestPyPI install works
+        run: |
+          sleep 15  # let TestPyPI index the package
+          python -m venv /tmp/testpypi-venv
+          /tmp/testpypi-venv/bin/pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            pr-auto-reviewer==$(uv run python -c "import runpy; m=runpy.run_path('pyproject.toml'); print(m['project']['version'])")
+
+  publish-codeberg:
+    if: gitea.event.pull_request.merged == true && startsWith(gitea.event.pull_request.head.ref, 'release/')
+    needs: test
+    runs-on: codeberg-medium
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to Codeberg PyPI registry
+        env:
+          TWINE_USERNAME: ${{ secrets.CODEBERG_PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.CODEBERG_PYPI_TOKEN }}
+        run: |
+          uv tool install twine
+          uvx twine upload \
+            --repository-url https://codeberg.org/api/packages/${{ secrets.CODEBERG_PYPI_USERNAME }}/pypi/ \
+            --non-interactive \
+            dist/*
