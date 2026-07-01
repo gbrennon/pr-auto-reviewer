@@ -249,9 +249,16 @@ class Container:
         self._command_bus: CommandBusPort = InMemoryCommandBus()
 
         # Fragment-based prompt composition subsystem.
-        fragments_dir = self._config.fragments_dir or "fragments"
+        # Default to bundled templates inside the package; allow
+        # FRAGMENTS_DIR env override for custom fragment directories.
+        _default_fragments = Path(__file__).parent / "fragments" / "templates"
+        _fragments_dir_value = self._config.fragments_dir
+        if _fragments_dir_value:
+            _fragments_dir = Path(_fragments_dir_value)
+        else:
+            _fragments_dir = _default_fragments
         self._fragment_repository: FragmentRepositoryPort = (
-            FileSystemFragmentRepository(Path(fragments_dir))
+            FileSystemFragmentRepository(_fragments_dir)
         )
         self._fragment_renderer: PromptRendererPort = Jinja2Renderer()
         self._fragment_max_tokens: int | None = getattr(
