@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# install-service.sh — Create persistent shell aliases for systemd service control
+# install-service.sh — Install pr-auto-reviewer: shell aliases for systemd +
+# CLI available in PATH
 #
-# Detects OS and shell (fish, zsh, bash), then writes a shell function to the
-# user's config file so they can control the service with short commands:
+# 1. Creates shell aliases so you can control the systemd service with short commands:
+#      pr-reviewer start / stop / status / logs / restart
 #
-#   pr-reviewer start   → systemctl --user start pr-auto-reviewer.service
-#   pr-reviewer stop    → systemctl --user stop pr-auto-reviewer.service
-#   pr-reviewer status  → systemctl --user status pr-auto-reviewer.service
-#   pr-reviewer logs    → journalctl --user -u pr-auto-reviewer.service -f
-#   pr-reviewer restart → systemctl --user restart pr-auto-reviewer.service
+# 2. Installs the pr-auto-reviewer CLI globally via `uv tool install --editable`
+#    so you can run it directly without going through systemd:
+#      pr-auto-reviewer --help
 
 set -euo pipefail
 
@@ -130,4 +129,20 @@ else
     echo "  ${FUNC_NAME} status"
     echo "  ${FUNC_NAME} logs"
     echo "  ${FUNC_NAME} restart"
+fi
+
+# ── Install CLI in PATH ─────────────────────────────────────────────────────
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo ""
+echo "Installing pr-auto-reviewer CLI..."
+
+if command -v uv &>/dev/null; then
+    if uv tool install --editable "$PROJECT_ROOT" 2>&1; then
+        echo "CLI installed: 'pr-auto-reviewer' is now available in PATH"
+        echo "Try: pr-auto-reviewer --help"
+    fi
+else
+    echo "Warning: uv not found — CLI not installed in PATH"
+    echo "Install uv (https://docs.astral.sh/uv/) or run: pip install --editable ."
 fi
