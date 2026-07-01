@@ -5,55 +5,25 @@ SCRIPT_DIR := scripts
 
 .DEFAULT_GOAL := help
 
-# ── help ────────────────────────────────────────────────────────────────────
 
-help:
-	@echo "$$(tput bold)PR Auto Reviewer — Makefile targets$$(tput sgr0)"
-	@echo ""
-	@echo "  make install          Install and configure the systemd service"
-	@echo "  make start            Start the daemon in background"
-	@echo "  make stop             Stop the daemon"
-	@echo "  make status           Check if daemon is running"
-	@echo "  make restart          Restart the daemon"
-	@echo ""
-	@echo "Service management (systemd):"
-	@echo "  systemctl --user start   pr-auto-reviewer.service"
-	@echo "  systemctl --user stop    pr-auto-reviewer.service"
-	@echo "  systemctl --user status  pr-auto-reviewer.service"
-	@echo "  systemctl --user restart pr-auto-reviewer.service"
-	@echo "  journalctl --user -u pr-auto-reviewer.service -f"
-	@echo ""
-	@echo "  make bootstrap        Bootstrap the application (install deps, check env)"
-	@echo "  make test             Run all tests (uv run pytest)"
-	@echo ""
-	@echo "  make clean [reset]    Reset reviewed-PR tracking state"
-	@echo "  make review [force]   Force-review a specific PR"
-	@echo "                        \$$ make review REPO=owner/repo PR=42"
-	@echo "  make daemon-once      Poll all repos once, reviewing any open PRs"
-	@echo "  make daemon           Poll continuously (daemon mode)"
-	@echo ""
-	@echo "  make list-items       List review items from a PR"
-	@echo "                        \$$ make list-items REPO=owner/repo PR=8"
-	@echo "  make issues           Create issues from PR commands"
-	@echo "                        \$$ make issues REPO=owner/repo PR=8"
-	@echo ""
-	@echo "  make capture-fixture  Capture Ollama response fixtures"
-	@echo "                        \$$ make capture-fixture REPO=owner/repo PR=8"
+help:  ## Show this help
+	@grep -E '^[a-zA-Z_-][a-zA-Z_ -]*:.*?## .*$$' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ── production install ───────────────────────────────────────────────────────
 
-install:
+install:  ## Install shell aliases + CLI in PATH
 	@bash $(SCRIPT_DIR)/install-service.sh
 
 # ── dev-mode service management ──────────────────────────────────────────────
 
 PIDFILE := /tmp/pr-auto-reviewer.pid
 
-start:
+start:  ## Start the PR reviewer daemon
 	@nohup python -m pr_auto_reviewer watch-prs > /tmp/pr-auto-reviewer.log 2>&1 & echo $$! > $(PIDFILE); \
 	echo "Daemon started (pid $$(cat $(PIDFILE))); log: /tmp/pr-auto-reviewer.log"
 
-stop:
+stop:  ## Stop the PR reviewer daemon
 	@pid=$$(cat $(PIDFILE) 2>/dev/null); \
 	if [ -n "$$pid" ] && kill $$pid 2>/dev/null; then \
 		rm -f $(PIDFILE); \
@@ -67,7 +37,7 @@ stop:
 		fi; \
 	fi
 
-status:
+status:  ## Show daemon status
 	@pid=$$(cat $(PIDFILE) 2>/dev/null); \
 	if [ -n "$$pid" ] && kill -0 $$pid 2>/dev/null; then \
 		echo "Daemon running (pid $$pid)"; \
@@ -77,39 +47,39 @@ status:
 		echo "Daemon not running"; \
 	fi
 
-restart: stop start
+restart: stop start  ## Restart the daemon
 
 # ── development ─────────────────────────────────────────────────────────────
 
-bootstrap:
+bootstrap:  ## Bootstrap the project environment
 	@bash $(SCRIPT_DIR)/bootstrap.sh
 
-test:
+test:  ## Run tests
 	uv run pytest
 
 # ── operations ──────────────────────────────────────────────────────────────
 
-clean reset:
+clean reset:  ## Clean state files
 	@python -m pr_auto_reviewer clean
 
-review review-force:
+review review-force:  ## Review a PR (REPO=owner/repo PR=N)
 	@python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
 
-daemon-once:
+daemon-once:  ## Run the watcher once
 	@python -m pr_auto_reviewer watch-prs --once
 
-daemon:
+daemon:  ## Run the watcher continuously
 	@python -m pr_auto_reviewer watch-prs
 
 # ── issue commands ──────────────────────────────────────────────────────────
 
-issues:
+issues:  ## Create issues from PR comments
 	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
 
-list-items:
+list-items:  ## List review items (REPO=owner/repo PR=N)
 	@python -m pr_auto_reviewer list-items --repo $(REPO) --pr $(PR)
 
 # ── fixtures ────────────────────────────────────────────────────────────────
 
-capture-fixture:
+capture-fixture:  ## Capture test fixtures (REPO=owner/repo PR=N)
 	@bash $(SCRIPT_DIR)/capture-fixture.sh -r $(REPO) -p $(PR)
