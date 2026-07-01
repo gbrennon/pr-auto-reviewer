@@ -76,9 +76,9 @@ def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
         ComposeReviewPromptAdapter,
     )
 
-    fragments_dir = Path("fragments")
+    fragments_dir = Path(__file__).parent.parent / "src" / "pr_auto_reviewer" / "infrastructure" / "fragments" / "templates"
     if not fragments_dir.is_dir():
-        sys.exit("No fragments/ directory — run from project root")
+        sys.exit("No templates/ directory found inside the package")
 
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
     renderer = Jinja2Renderer()
