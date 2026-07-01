@@ -2,9 +2,22 @@
 
 import argparse
 import os
+import subprocess
 import sys
 
 from .presentation.composition_root import bootstrap, run_daemon
+
+SERVICE_NAME = "pr-auto-reviewer.service"
+
+
+def _run_systemctl(action: str) -> None:
+    """Run a systemctl --user command for the service."""
+    subprocess.run(["systemctl", "--user", action, SERVICE_NAME], check=False)
+
+
+def _run_journalctl() -> None:
+    """Follow the service journal."""
+    subprocess.run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
 
 
 def main() -> None:
@@ -12,42 +25,85 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="PR AI Auto-Reviewer")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # watch-prs command
+    subparsers.add_parser("start", help="Start the systemd service")
+    subparsers.add_parser("stop", help="Stop the systemd service")
+    subparsers.add_parser("status", help="Show service status")
+    subparsers.add_parser("logs", help="Follow service logs")
+    subparsers.add_parser("restart", help="Restart the service")
+
     watch_parser = subparsers.add_parser("watch-prs", help="Watch PRs for reviews")
-    watch_parser.add_argument("-i", "--interval", type=int, default=60, help="Poll interval in seconds")
+    watch_parser.add_argument(
+        "-i", "--interval", type=int, default=60, help="Poll interval in seconds"
+    )
     watch_parser.add_argument("-r", "--repo", help="Watch specific repo")
     watch_parser.add_argument("--once", action="store_true", help="Run once and exit")
-    watch_parser.add_argument("-p", "--pr", "--force", type=int, dest="force_pr", help="Force re-review specific PR")
-    watch_parser.add_argument("-v", "--verbose", action="store_true", help="Show debug logs")
+    watch_parser.add_argument(
+        "-p",
+        "--pr",
+        "--force",
+        type=int,
+        dest="force_pr",
+        help="Force re-review specific PR",
+    )
+    watch_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Show debug logs"
+    )
 
-    # review command
     review_parser = subparsers.add_parser("review", help="Review a specific PR")
-    review_parser.add_argument("-r", "--repo", required=True, help="Repository in format owner/repo")
+    review_parser.add_argument(
+        "-r", "--repo", required=True, help="Repository in format owner/repo"
+    )
     review_parser.add_argument("-p", "--pr", required=True, type=int, help="PR number")
-    review_parser.add_argument("--force", action="store_true", help="Force re-review even if already reviewed")
-    review_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed error information")
+    review_parser.add_argument(
+        "--force", action="store_true", help="Force re-review even if already reviewed"
+    )
+    review_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Show detailed error information"
+    )
 
-    # process-commands command
-    process_cmd_parser = subparsers.add_parser("process-commands", help="Process issue commands for a PR")
-    process_cmd_parser.add_argument("-r", "--repo", required=True, help="Repository in format owner/repo")
-    process_cmd_parser.add_argument("-p", "--pr", required=True, type=int, help="PR number")
-    process_cmd_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed error information")
+    process_cmd_parser = subparsers.add_parser(
+        "process-commands", help="Process issue commands for a PR"
+    )
+    process_cmd_parser.add_argument(
+        "-r", "--repo", required=True, help="Repository in format owner/repo"
+    )
+    process_cmd_parser.add_argument(
+        "-p", "--pr", required=True, type=int, help="PR number"
+    )
+    process_cmd_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Show detailed error information"
+    )
 
-    # bootstrap command
     subparsers.add_parser("bootstrap", help="Bootstrap the application")
 
-    # clean command
     subparsers.add_parser("clean", help="Clean state files")
 
-    # list-items command
-    list_items_parser = subparsers.add_parser("list-items", help="List review items for a PR")
-    list_items_parser.add_argument("-r", "--repo", required=True, help="Repository in format owner/repo")
-    list_items_parser.add_argument("-p", "--pr", required=True, type=int, help="PR number")
-    list_items_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed error information")
+    list_items_parser = subparsers.add_parser(
+        "list-items", help="List review items for a PR"
+    )
+    list_items_parser.add_argument(
+        "-r", "--repo", required=True, help="Repository in format owner/repo"
+    )
+    list_items_parser.add_argument(
+        "-p", "--pr", required=True, type=int, help="PR number"
+    )
+    list_items_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Show detailed error information"
+    )
 
     args = parser.parse_args()
 
-    if args.command == "watch-prs":
+    if args.command == "start":
+        _run_systemctl("start")
+    elif args.command == "stop":
+        _run_systemctl("stop")
+    elif args.command == "status":
+        _run_systemctl("status")
+    elif args.command == "logs":
+        _run_journalctl()
+    elif args.command == "restart":
+        _run_systemctl("restart")
+    elif args.command == "watch-prs":
         if args.interval != 60:
             os.environ["POLL_INTERVAL"] = str(args.interval)
         if args.repo:
@@ -74,7 +130,14 @@ def main() -> None:
         if args.verbose:
             os.environ["DEBUG"] = "1"
         components = bootstrap()
-        process_argv = [sys.argv[0], "process-commands", "--repo", args.repo, "--pr", str(args.pr)]
+        process_argv = [
+            sys.argv[0],
+            "process-commands",
+            "--repo",
+            args.repo,
+            "--pr",
+            str(args.pr),
+        ]
         if args.verbose:
             process_argv.append("--verbose")
         sys.exit(components.cli_runner.run(process_argv))
@@ -87,7 +150,14 @@ def main() -> None:
         if args.verbose:
             os.environ["DEBUG"] = "1"
         components = bootstrap()
-        list_argv = [sys.argv[0], "list-items", "--repo", args.repo, "--pr", str(args.pr)]
+        list_argv = [
+            sys.argv[0],
+            "list-items",
+            "--repo",
+            args.repo,
+            "--pr",
+            str(args.pr),
+        ]
         if args.verbose:
             list_argv.append("--verbose")
         sys.exit(components.cli_runner.run(list_argv))

@@ -1,43 +1,36 @@
 #!/usr/bin/env bash
-# install-service.sh — Create persistent shell aliases for systemd service control
+# install-service.sh — Install pr-auto-reviewer CLI globally
 #
-# Detects OS and shell (fish, zsh, bash), then writes a shell function to the
-# user's config file so they can control the service with short commands:
+# Installs the pr-auto-reviewer CLI via `uv tool install` (real install — no
+# symlink, fully isolated) and cleans up any old shell aliases (the `pr-reviewer`
+# function) since the CLI now has built-in service commands:
 #
-#   pr-reviewer start   → systemctl --user start pr-auto-reviewer.service
-#   pr-reviewer stop    → systemctl --user stop pr-auto-reviewer.service
-#   pr-reviewer status  → systemctl --user status pr-auto-reviewer.service
-#   pr-reviewer logs    → journalctl --user -u pr-auto-reviewer.service -f
-#   pr-reviewer restart → systemctl --user restart pr-auto-reviewer.service
+#   pr-auto-reviewer start / stop / status / logs / restart
 
 set -euo pipefail
 
-SERVICE_NAME="pr-auto-reviewer.service"
-FUNC_NAME="pr-reviewer"
-
-# ── OS detection ────────────────────────────────────────────────────────────
-detect_os() {
-    case "$(uname -s)" in
-        Linux)  echo "linux" ;;
-        Darwin) echo "macos" ;;
-        *)      echo "unknown" ;;
+# ── Helper ──────────────────────────────────────────────────────────────────
+confirm() {
+    local prompt="$1"
+    local default="${2:-n}"
+    local answer
+    read -r -p "$prompt " answer
+    answer="${answer:-$default}"
+    case "$answer" in
+        [Yy]*) return 0 ;;
+        *)     return 1 ;;
     esac
 }
 
-OS=$(detect_os)
+OLD_FUNC_NAME="pr-reviewer"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TOOL_NAME="pr-auto-reviewer"
 
-if [[ "$OS" != "linux" ]]; then
-    echo "systemd is not available on $OS. No aliases created."
-    exit 0
-fi
-
-# ── Shell detection ─────────────────────────────────────────────────────────
+# ── Shell detection (for rc file cleanup) ──────────────────────────────────
 detect_shell() {
     local shell_name
     shell_name=$(basename "${SHELL:-/bin/bash}")
 
-    # The SHELL env var always points to the login shell.
-    # We trust it for bash/zsh.  For fish we also check its own variable.
     if [[ -n "${FISH_VERSION:-}" ]]; then
         echo "fish"
         return
@@ -53,81 +46,55 @@ detect_shell() {
 
 SHELL_NAME=$(detect_shell)
 
-# ── Config file path ────────────────────────────────────────────────────────
 case "$SHELL_NAME" in
-    fish) RC_FILE="${HOME}/.config/fish/config.fish" ;;
-    zsh)  RC_FILE="${HOME}/.zshrc" ;;
-    bash) RC_FILE="${HOME}/.bashrc" ;;
+    fish) RC_FILE="${HOME}/.config/fish/config.fish"
+          GREP_PATTERN="function ${OLD_FUNC_NAME}" ;;
+    zsh)  RC_FILE="${HOME}/.zshrc"
+          GREP_PATTERN="${OLD_FUNC_NAME}()" ;;
+    bash) RC_FILE="${HOME}/.bashrc"
+          GREP_PATTERN="${OLD_FUNC_NAME}()" ;;
 esac
 
-# ── Generate the shell function ─────────────────────────────────────────────
-case "$SHELL_NAME" in
-    fish)
-        # fish uses a different syntax for functions and strings
-        FUNCTION_BLOCK="# pr-auto-reviewer aliases — installed by install-service.sh
-function ${FUNC_NAME}
-    switch \$argv[1]
-        case start
-            systemctl --user start ${SERVICE_NAME}
-        case stop
-            systemctl --user stop ${SERVICE_NAME}
-        case status
-            systemctl --user status ${SERVICE_NAME}
-        case logs
-            journalctl --user -u ${SERVICE_NAME} -f
-        case restart
-            systemctl --user restart ${SERVICE_NAME}
-        case '*'
-            echo 'Usage: ${FUNC_NAME} {start|stop|status|logs|restart}'
-            return 1
-    end
-end"
-        GREP_PATTERN="function ${FUNC_NAME}"
-        ACTIVATE_CMD="source ${RC_FILE}"
-        ;;
-    *)
-        # bash / zsh (POSIX)
-        FUNCTION_BLOCK="# pr-auto-reviewer aliases — installed by install-service.sh
-${FUNC_NAME}() {
-    case \"\$1\" in
-        start)   systemctl --user start ${SERVICE_NAME} ;;
-        stop)    systemctl --user stop ${SERVICE_NAME} ;;
-        status)  systemctl --user status ${SERVICE_NAME} ;;
-        logs)    journalctl --user -u ${SERVICE_NAME} -f ;;
-        restart) systemctl --user restart ${SERVICE_NAME} ;;
-        *)
-            echo \"Usage: ${FUNC_NAME} {start|stop|status|logs|restart}\"
-            return 1
-            ;;
-    esac
-}"
-        GREP_PATTERN="${FUNC_NAME}()"
-        ACTIVATE_CMD="source ${RC_FILE}"
-        ;;
-esac
-
-# ── Interactive shell detection message ─────────────────────────────────────
-echo "Detected shell: ${SHELL_NAME}"
-echo "Config file:    ${RC_FILE}"
-echo ""
-
-# ── Persist (idempotent — skip if already present) ──────────────────────────
+# ── Clean up old shell aliases ──────────────────────────────────────────────
 if grep -qF "${GREP_PATTERN}" "${RC_FILE}" 2>/dev/null; then
-    echo "Aliases already present — nothing to do."
-else
-    # Ensure parent directory exists (fish config dir may not)
-    mkdir -p "$(dirname "${RC_FILE}")"
-    echo "" >> "${RC_FILE}"
-    echo "${FUNCTION_BLOCK}" >> "${RC_FILE}"
-    echo "Aliases written."
+    echo "Found old '${OLD_FUNC_NAME}' shell function in ${RC_FILE}"
+    echo "(The CLI now has built-in service commands: ${TOOL_NAME} start/stop/status/logs/restart)"
     echo ""
-    echo "Run this to activate now:"
-    echo "  ${ACTIVATE_CMD}"
+
+    if confirm "Remove old '${OLD_FUNC_NAME}' function? [Y/n]" "y"; then
+        sed -i '/^# pr-auto-reviewer aliases/,/^}\|^end$/d' "${RC_FILE}" 2>/dev/null || true
+        echo "Old aliases removed from ${RC_FILE}"
+    else
+        echo "Old aliases left in place."
+    fi
     echo ""
-    echo "Then use:"
-    echo "  ${FUNC_NAME} start"
-    echo "  ${FUNC_NAME} stop"
-    echo "  ${FUNC_NAME} status"
-    echo "  ${FUNC_NAME} logs"
-    echo "  ${FUNC_NAME} restart"
+fi
+
+# ── Install CLI in PATH ─────────────────────────────────────────────────────
+if ! command -v uv &>/dev/null; then
+    echo "Warning: uv not found — CLI not installed in PATH"
+    echo "Install uv (https://docs.astral.sh/uv/) or run: pip install ."
+    exit 1
+fi
+
+if uv tool list 2>/dev/null | grep -q "^${TOOL_NAME} "; then
+    if ! confirm "${TOOL_NAME} is already installed. Reinstall? [y/N]"; then
+        echo "Skipped — CLI unchanged."
+        exit 0
+    fi
+fi
+
+echo "Installing ${TOOL_NAME} CLI..."
+if uv tool install --force --reinstall "$PROJECT_ROOT" 2>&1; then
+    echo ""
+    echo "CLI installed: '${TOOL_NAME}' is now available in PATH"
+    echo ""
+    echo "Service commands:"
+    echo "  ${TOOL_NAME} start     Start the daemon"
+    echo "  ${TOOL_NAME} stop      Stop the daemon"
+    echo "  ${TOOL_NAME} status    Show daemon status"
+    echo "  ${TOOL_NAME} logs      Follow daemon logs"
+    echo "  ${TOOL_NAME} restart   Restart the daemon"
+    echo ""
+    echo "Try: ${TOOL_NAME} --help"
 fi
