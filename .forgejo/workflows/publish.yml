@@ -150,7 +150,17 @@ jobs:
               capture_output=True, text=True
           ).stdout.strip().split("\n")
           prev_tag = next((t for t in prev if t != tag), None)
+
+          # Check if previous tag has a published Codeberg release
           is_dev = prev_tag is None
+          if prev_tag and not is_dev:
+              check = subprocess.run(
+                  ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                   f"{api_url}/repos/{repo}/releases/tags/{prev_tag}"],
+                  capture_output=True, text=True
+              )
+              if check.stdout.strip() != "200":
+                  is_dev = True  # tag exists but never released
           rev_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD"
 
           sections = {
