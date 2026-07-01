@@ -76,9 +76,9 @@ def build_fragment_prompt() -> str | None:
         ComposeReviewPromptAdapter,
     )
 
-    fragments_dir = Path("fragments")
+    fragments_dir = Path(__file__).parent.parent / "src" / "pr_auto_reviewer" / "infrastructure" / "fragments" / "templates"
     if not fragments_dir.is_dir():
-        print("[FRAGMENT] No fragments/ directory found — skipping fragment build")
+        print("[FRAGMENT] No templates/ directory found — skipping fragment build")
         return None
 
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
