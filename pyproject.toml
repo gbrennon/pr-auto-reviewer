@@ -21,6 +21,14 @@ pr-auto-reviewer = "pr_auto_reviewer.cli:main"
 requires = ["uv_build>=0.9.18,<0.10.0"]
 build-backend = "uv_build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/pr_auto_reviewer"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
