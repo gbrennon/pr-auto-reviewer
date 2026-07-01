@@ -85,7 +85,7 @@ jobs:
             pr-auto-reviewer==$(uv run python -c "import runpy; m=runpy.run_path('pyproject.toml'); print(m['project']['version'])")
 
   publish-codeberg:
-    if: gitea.event.pull_request.merged == true && startsWith(gitea.event.pull_request.head.ref, 'release/')
+    if: gitea.event.pull_request.merged == true && startsWith(gitea.event.pull_request.head.ref, 'release/v')
     needs: test
     runs-on: codeberg-medium
     permissions:
