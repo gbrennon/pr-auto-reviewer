@@ -89,9 +89,29 @@ jobs:
     needs: test
     runs-on: codeberg-medium
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from branch name
+        id: version
+        run: |
+          BRANCH="${{ gitea.event.pull_request.head.ref }}"
+          TAG="${BRANCH#release/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate pyproject.toml version matches tag
+        run: |
+          EXPECTED="${{ steps.version.outputs.version }}"
+          ACTUAL=$(uv run python -c "import runpy; m=runpy.run_path('pyproject.toml'); print(m['project']['version'])")
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "Version mismatch: tag=$EXPECTED, pyproject.toml=$ACTUAL"
+            exit 1
+          fi
+          echo "Version $EXPECTED matches pyproject.toml"
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -102,6 +122,33 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Create git tag
+        run: |
+          git config user.name "CI Bot"
+          git config user.email "ci@codeberg.org"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create Codeberg release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          REPO="${{ gitea.repository }}"
+          API_URL="${{ gitea.server_url }}/api/v1"
+
+          curl -s -X POST "$API_URL/repos/$REPO/releases" \
+            -H "Authorization: token $FORGEJO_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"tag_name\": \"$TAG\",
+              \"name\": \"$TAG\",
+              \"body\": \"Release $TAG — published automatically on merge of ${{ gitea.event.pull_request.head.ref }} into main.\",
+              \"draft\": false,
+              \"prerelease\": false,
+              \"target_commitish\": \"main\"
+            }"
 
       - name: Build package
         run: uv build
