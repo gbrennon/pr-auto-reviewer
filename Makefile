@@ -12,7 +12,7 @@ help:  ## Show this help
 
 # ── production install ───────────────────────────────────────────────────────
 
-install:  ## Install shell aliases + CLI in PATH
+install:  ## Install CLI globally (pr-auto-reviewer)
 	@bash $(SCRIPT_DIR)/install-service.sh
 
 # ── dev-mode service management ──────────────────────────────────────────────
