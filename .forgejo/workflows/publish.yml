@@ -170,7 +170,7 @@ jobs:
           for prefix, label in sections.items():
               commits = subprocess.run(
                   ["git", "log", rev_range, "--pretty=format:- %s (%h)",
-                   f"--grep=^{prefix}:", "-i"],
+                   f"--grep=^{prefix}[(:]", "-i", "-E"],
                   capture_output=True, text=True
               ).stdout.strip()
               if commits:
