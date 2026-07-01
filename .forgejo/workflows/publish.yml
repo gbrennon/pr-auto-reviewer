@@ -130,25 +130,76 @@ jobs:
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
-      - name: Create Codeberg release
+      - name: Generate changelog and create Codeberg release
         env:
           FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_STEP: ${{ steps.version.outputs.tag }}
+          REPO_STEP: ${{ gitea.repository }}
+          API_URL_STEP: ${{ gitea.server_url }}/api/v1
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          REPO="${{ gitea.repository }}"
-          API_URL="${{ gitea.server_url }}/api/v1"
+          python3 << 'PYEOF'
+          import json, os, subprocess
 
-          curl -s -X POST "$API_URL/repos/$REPO/releases" \
-            -H "Authorization: token $FORGEJO_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"tag_name\": \"$TAG\",
-              \"name\": \"$TAG\",
-              \"body\": \"Release $TAG — published automatically on merge of ${{ gitea.event.pull_request.head.ref }} into main.\",
-              \"draft\": false,
-              \"prerelease\": false,
-              \"target_commitish\": \"main\"
-            }"
+          tag = os.environ["TAG_STEP"]
+          repo = os.environ["REPO_STEP"]
+          api_url = os.environ["API_URL_STEP"]
+          token = os.environ["FORGEJO_TOKEN"]
+
+          prev = subprocess.run(
+              ["git", "tag", "--sort=-creatordate"],
+              capture_output=True, text=True
+          ).stdout.strip().split("\n")
+          prev_tag = next((t for t in prev if t != tag), None)
+          is_dev = prev_tag is None
+          rev_range = f"{prev_tag}..HEAD" if prev_tag else "HEAD"
+
+          sections = {
+              "feat": "Features", "fix": "Bug Fixes",
+              "refactor": "Refactoring", "perf": "Performance",
+              "docs": "Documentation", "test": "Tests",
+              "ci": "CI/CD", "build": "Build System",
+              "chore": "Chores", "style": "Style",
+              "revert": "Reverts",
+          }
+
+          header = f"## {tag}"
+          if is_dev:
+              header += " (dev — unreleased)"
+          body_parts = [header, ""]
+
+          for prefix, label in sections.items():
+              commits = subprocess.run(
+                  ["git", "log", rev_range, "--pretty=format:- %s (%h)",
+                   f"--grep=^{prefix}:", "-i"],
+                  capture_output=True, text=True
+              ).stdout.strip()
+              if commits:
+                  body_parts.append(f"### {label}")
+                  body_parts.append(commits)
+                  body_parts.append("")
+
+          changelog = "\n".join(body_parts)
+          print("=== Generated changelog ===")
+          print(changelog)
+
+          payload = {
+              "tag_name": tag, "name": tag, "body": changelog,
+              "draft": False, "prerelease": False,
+              "target_commitish": "main",
+          }
+
+          result = subprocess.run(
+              ["curl", "-s", "-X", "POST", f"{api_url}/repos/{repo}/releases",
+               "-H", f"Authorization: token {token}",
+               "-H", "Content-Type: application/json",
+               "-d", json.dumps(payload)],
+              capture_output=True, text=True
+          )
+          print(f"API response: {result.stdout}")
+          if result.returncode != 0:
+              print(f"API error: {result.stderr}")
+              exit(1)
+          PYEOF
 
       - name: Build package
         run: uv build
