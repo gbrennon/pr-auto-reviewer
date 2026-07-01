@@ -42,18 +42,14 @@ Missing or invalid tokens are **logged and skipped** — the daemon never stops 
 
 ### Install (systemd)
 
-Installs a systemd user service that runs the daemon at login, polling both platforms continuously.
+Creates shell aliases (`pr-reviewer start|stop|status|logs|restart`) for controlling
+the systemd service.  Supported shells: **fish**, **zsh**, **bash**.
 
 ```bash
-make install            # install and configure systemd service
-make start              # start the daemon
-make stop               # stop the daemon
-make status             # show service status
-make logs               # view service logs (follow)
-make restart            # restart the service
+make install-aliases   # write aliases to your shell config
 ```
 
-See [Scripts & Makefile](docs/scripts.md) for all commands.
+See [Install](docs/HOWTO-install.md) for the full systemd setup.
 
 ## Docs
 

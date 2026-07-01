@@ -92,20 +92,20 @@ class TestFormatReviewBody:
             verdict=ReviewVerdict.APPROVED,
             summary="ok",
             items=[
-                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MINOR,
                           file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
             ],
             model_used="m",
         )
         body = format_review_body(review)
-        assert "0. [bug] [MAJOR] a.py" in body
+        assert "0. [bug] [MINOR] a.py" in body
 
     def test_praise_numbered_after_items(self):
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             summary="ok",
             items=[
-                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MINOR,
                           file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
                 ReviewItem(number=1, category=IssueCategory.STYLE, severity=ItemSeverity.INFO,
                           file_path="b.py", description="ugly", current_code="z", suggested_fix="w"),
@@ -114,7 +114,7 @@ class TestFormatReviewBody:
             model_used="m",
         )
         body = format_review_body(review)
-        assert "0. [bug] [MAJOR] a.py" in body
+        assert "0. [bug] [MINOR] a.py" in body
         assert "1. [style] [INFO] b.py" in body
         assert "2. c.py: nice work" in body
 
@@ -141,6 +141,142 @@ class TestFormatReviewBody:
         body = format_review_body(review)
         assert "No issues found" in body
         assert "No notable patterns" in body
+
+    def test_filters_out_critical_items(self):
+        """CRITICAL severity items are excluded from the rendered output."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.SECURITY,
+                          severity=ItemSeverity.CRITICAL,
+                          file_path="a.py", description="critical issue"),
+            ],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "CRITICAL" not in body
+        assert "critical issue" not in body
+
+    def test_filters_out_major_items(self):
+        """MAJOR severity items are excluded from the rendered output."""
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.BUG,
+                          severity=ItemSeverity.MAJOR,
+                          file_path="a.py", description="major issue"),
+            ],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "MAJOR" not in body
+        assert "major issue" not in body
+
+    def test_includes_minor_items(self):
+        """MINOR severity items ARE included in the rendered output."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.STYLE,
+                          severity=ItemSeverity.MINOR,
+                          file_path="b.py", description="minor issue"),
+            ],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "[MINOR]" in body
+        assert "minor issue" in body
+
+    def test_includes_info_items(self):
+        """INFO severity items ARE included in the rendered output."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.DOCS,
+                          severity=ItemSeverity.INFO,
+                          file_path="c.py", description="info note"),
+            ],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "[INFO]" in body
+        assert "info note" in body
+
+    def test_praise_always_included(self):
+        """Praise items are always included regardless of issue severity filtering."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.SECURITY,
+                          severity=ItemSeverity.CRITICAL,
+                          file_path="a.py", description="critical issue"),
+            ],
+            praise=[{"file": "d.py", "description": "great code organization"}],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "CRITICAL" not in body
+        assert "critical issue" not in body
+        assert "great code organization" in body
+        assert "### Praise" in body
+
+    def test_mixed_items_filter_critical_and_major_only(self):
+        """When mixed: CRITICAL and MAJOR are excluded, MINOR and INFO remain, praise stays."""
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="mixed",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.SECURITY,
+                          severity=ItemSeverity.CRITICAL,
+                          file_path="a.py", description="critical"),
+                ReviewItem(number=1, category=IssueCategory.BUG,
+                          severity=ItemSeverity.MAJOR,
+                          file_path="b.py", description="major"),
+                ReviewItem(number=2, category=IssueCategory.STYLE,
+                          severity=ItemSeverity.MINOR,
+                          file_path="c.py", description="minor"),
+                ReviewItem(number=3, category=IssueCategory.DOCS,
+                          severity=ItemSeverity.INFO,
+                          file_path="d.py", description="info"),
+            ],
+            praise=[{"file": "e.py", "description": "clean code"}],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "critical" not in body
+        assert "major" not in body
+        assert "[MINOR]" in body
+        assert "minor" in body
+        assert "[INFO]" in body
+        assert "info" in body
+        assert "clean code" in body
+
+    def test_all_critical_major_shows_no_issues(self):
+        """When all items are CRITICAL or MAJOR, the 'No issues found' placeholder appears."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="ok",
+            items=[
+                ReviewItem(number=0, category=IssueCategory.SECURITY,
+                          severity=ItemSeverity.CRITICAL,
+                          file_path="a.py", description="critical"),
+                ReviewItem(number=1, category=IssueCategory.BUG,
+                          severity=ItemSeverity.MAJOR,
+                          file_path="b.py", description="major"),
+            ],
+            praise=[{"file": "f.py", "description": "nice"}],
+            model_used="m",
+        )
+        body = format_review_body(review)
+        assert "No issues found" in body
+        assert "critical" not in body
+        assert "major" not in body
+        assert "nice" in body
 
 
 class TestGetDiffPosition:
@@ -210,7 +346,7 @@ class TestReviewPublisherCodeberg:
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="fix",
-            items=[ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+            items=[ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MINOR,
                              file_path="x.py", description="bad", current_code="code", suggested_fix="fix")],
             model_used="m",
         )

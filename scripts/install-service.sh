@@ -1,183 +1,133 @@
 #!/usr/bin/env bash
+# install-service.sh — Create persistent shell aliases for systemd service control
+#
+# Detects OS and shell (fish, zsh, bash), then writes a shell function to the
+# user's config file so they can control the service with short commands:
+#
+#   pr-reviewer start   → systemctl --user start pr-auto-reviewer.service
+#   pr-reviewer stop    → systemctl --user stop pr-auto-reviewer.service
+#   pr-reviewer status  → systemctl --user status pr-auto-reviewer.service
+#   pr-reviewer logs    → journalctl --user -u pr-auto-reviewer.service -f
+#   pr-reviewer restart → systemctl --user restart pr-auto-reviewer.service
+
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
-CONFIG_FILE="${CONFIG_DIR}/config"
-
-SYSTEMD_DIR="${HOME}/.config/systemd/user"
 SERVICE_NAME="pr-auto-reviewer.service"
-CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
-CONFIG_FILE="${CONFIG_DIR}/config"
+FUNC_NAME="pr-reviewer"
 
-setup_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
-        echo "Config already exists at $CONFIG_FILE — updating format..."
-        local tmp_file="${CONFIG_FILE}.new"
-        cp "$CONFIG_FILE" "$CONFIG_FILE.bak.$(date +%Y%m%d-%H%M%S)"
-
-        # Read existing values
-        local existing_token=$(grep -oP '^FORGEJO_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_reviewer=$(grep -oP '^FORGEJO_REVIEWER_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_username=$(grep -oP '^FORGEJO_REVIEWER_USERNAME=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_host=$(grep -oP '^FORGEJO_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_platform_mode=$(grep -oP '^PLATFORM_MODE=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_gh_token=$(grep -oP '^GITHUB_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_gh_reviewer=$(grep -oP '^GITHUB_REVIEWER_TOKEN=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_gh_username=$(grep -oP '^GITHUB_REVIEWER_USERNAME=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_ollama_host=$(grep -oP '^OLLAMA_HOST=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_ollama_model=$(grep -oP '^OLLAMA_MODEL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-        local existing_poll=$(grep -oP '^POLL_INTERVAL=\K.*' "$CONFIG_FILE" 2>/dev/null || true)
-
-        cat > "$CONFIG_FILE" <<'EOF'
-# PR Auto-Reviewer Configuration
-#
-# Platform: github, codeberg, or both.  Leave tokens blank for platforms you
-# don't use — missing/bad tokens are logged and skipped, not fatal.
-
-# === PLATFORM ===
-PLATFORM_MODE=both
-
-# === GITHUB ===
-GITHUB_TOKEN=
-GITHUB_REVIEWER_TOKEN=
-GITHUB_REVIEWER_USERNAME=
-
-# === CODEBERG / FORGEJO ===
-FORGEJO_TOKEN=EXISTING_TOKEN_PLACEHOLDER
-FORGEJO_REVIEWER_TOKEN=EXISTING_REVIEWER_PLACEHOLDER
-FORGEJO_REVIEWER_USERNAME=EXISTING_USERNAME_PLACEHOLDER
-FORGEJO_HOST=EXISTING_HOST_PLACEHOLDER
-
-# === API (usually auto-detected, override if needed) ===
-# PLATFORM_API_URL=https://codeberg.org/api/v1
-
-# === OLLAMA ===
-OLLAMA_HOST=EXISTING_OLLAMA_HOST_PLACEHOLDER
-OLLAMA_MODEL=EXISTING_OLLAMA_MODEL_PLACEHOLDER
-POLL_INTERVAL=EXISTING_POLL_PLACEHOLDER
-
-# === REVIEW MODE ===
-GITHUB_REVIEW_MODE=formal
-
-# === DEBUG ===
-DEBUG=0
-EOF
-        # Restore existing values
-        sed -i "s|^PLATFORM_MODE=.*|PLATFORM_MODE=${existing_platform_mode:-codeberg}|" "$CONFIG_FILE"
-        sed -i "s|^GITHUB_TOKEN=.*|GITHUB_TOKEN=${existing_gh_token}|" "$CONFIG_FILE"
-        sed -i "s|^GITHUB_REVIEWER_TOKEN=.*|GITHUB_REVIEWER_TOKEN=${existing_gh_reviewer}|" "$CONFIG_FILE"
-        sed -i "s|^GITHUB_REVIEWER_USERNAME=.*|GITHUB_REVIEWER_USERNAME=${existing_gh_username}|" "$CONFIG_FILE"
-        sed -i "s|^FORGEJO_TOKEN=.*|FORGEJO_TOKEN=${existing_token}|" "$CONFIG_FILE"
-        sed -i "s|^FORGEJO_REVIEWER_TOKEN=.*|FORGEJO_REVIEWER_TOKEN=${existing_reviewer}|" "$CONFIG_FILE"
-        sed -i "s|^FORGEJO_REVIEWER_USERNAME=.*|FORGEJO_REVIEWER_USERNAME=${existing_username}|" "$CONFIG_FILE"
-        sed -i "s|^FORGEJO_HOST=.*|FORGEJO_HOST=${existing_host}|" "$CONFIG_FILE"
-        sed -i "s|^OLLAMA_HOST=.*|OLLAMA_HOST=${existing_ollama_host}|" "$CONFIG_FILE"
-        sed -i "s|^OLLAMA_MODEL=.*|OLLAMA_MODEL=${existing_ollama_model}|" "$CONFIG_FILE"
-        sed -i "s|^POLL_INTERVAL=.*|POLL_INTERVAL=${existing_poll}|" "$CONFIG_FILE"
-        echo "Config updated. Previous version backed up to $CONFIG_FILE.bak.*"
-    else
-        mkdir -p "$CONFIG_DIR"
-        cat > "$CONFIG_FILE" <<'EOF'
-# PR Auto-Reviewer Configuration
-#
-# Platform: github, codeberg, or both.  Leave tokens blank for platforms you
-# don't use — missing/bad tokens are logged and skipped, not fatal.
-
-# === PLATFORM ===
-PLATFORM_MODE=both
-
-# === GITHUB ===
-GITHUB_TOKEN=
-GITHUB_REVIEWER_TOKEN=
-GITHUB_REVIEWER_USERNAME=
-
-# === CODEBERG / FORGEJO ===
-FORGEJO_TOKEN=
-FORGEJO_REVIEWER_TOKEN=
-FORGEJO_REVIEWER_USERNAME=
-FORGEJO_HOST=https://codeberg.org
-
-# === OLLAMA ===
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=             # Required
-POLL_INTERVAL=60
-
-# === REVIEW MODE ===
-GITHUB_REVIEW_MODE=formal
-
-# === DEBUG ===
-DEBUG=0
-EOF
-        echo "Config created. Please edit $CONFIG_FILE with your tokens and model."
-    fi
+# ── OS detection ────────────────────────────────────────────────────────────
+detect_os() {
+    case "$(uname -s)" in
+        Linux)  echo "linux" ;;
+        Darwin) echo "macos" ;;
+        *)      echo "unknown" ;;
+    esac
 }
 
-install_service() {
-    echo "Installing $SERVICE_NAME to $SYSTEMD_DIR/"
-    mkdir -p "$SYSTEMD_DIR"
+OS=$(detect_os)
 
-    cat > "$SYSTEMD_DIR/$SERVICE_NAME" <<EOF
-[Unit]
-Description=PR Auto Reviewer — AI-powered code review daemon
-After=network-online.target
-Wants=network-online.target
+if [[ "$OS" != "linux" ]]; then
+    echo "systemd is not available on $OS. No aliases created."
+    exit 0
+fi
 
-[Service]
-Type=simple
-WorkingDirectory=${REPO_ROOT}
-Environment=ENV=production
-Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=${CONFIG_FILE}
-ExecStart=${REPO_ROOT}/.venv/bin/python -m pr_auto_reviewer watch-prs
-Restart=on-failure
-RestartSec=10
+# ── Shell detection ─────────────────────────────────────────────────────────
+detect_shell() {
+    local shell_name
+    shell_name=$(basename "${SHELL:-/bin/bash}")
 
-[Install]
-WantedBy=default.target
-EOF
+    # The SHELL env var always points to the login shell.
+    # We trust it for bash/zsh.  For fish we also check its own variable.
+    if [[ -n "${FISH_VERSION:-}" ]]; then
+        echo "fish"
+        return
+    fi
 
-    echo "Installing Python dependencies..."
-    (cd "$REPO_ROOT" && uv sync)
+    case "$shell_name" in
+        fish) echo "fish" ;;
+        zsh)  echo "zsh" ;;
+        bash) echo "bash" ;;
+        *)    echo "bash" ;;
+    esac
+}
 
-    echo "Reloading systemd user daemon..."
-    systemctl --user daemon-reload
+SHELL_NAME=$(detect_shell)
 
-    echo "Enabling service to start on login..."
-    systemctl --user enable "$SERVICE_NAME"
+# ── Config file path ────────────────────────────────────────────────────────
+case "$SHELL_NAME" in
+    fish) RC_FILE="${HOME}/.config/fish/config.fish" ;;
+    zsh)  RC_FILE="${HOME}/.zshrc" ;;
+    bash) RC_FILE="${HOME}/.bashrc" ;;
+esac
 
-    echo "Starting service..."
-    systemctl --user restart "$SERVICE_NAME"
+# ── Generate the shell function ─────────────────────────────────────────────
+case "$SHELL_NAME" in
+    fish)
+        # fish uses a different syntax for functions and strings
+        FUNCTION_BLOCK="# pr-auto-reviewer aliases — installed by install-service.sh
+function ${FUNC_NAME}
+    switch \$argv[1]
+        case start
+            systemctl --user start ${SERVICE_NAME}
+        case stop
+            systemctl --user stop ${SERVICE_NAME}
+        case status
+            systemctl --user status ${SERVICE_NAME}
+        case logs
+            journalctl --user -u ${SERVICE_NAME} -f
+        case restart
+            systemctl --user restart ${SERVICE_NAME}
+        case '*'
+            echo 'Usage: ${FUNC_NAME} {start|stop|status|logs|restart}'
+            return 1
+    end
+end"
+        GREP_PATTERN="function ${FUNC_NAME}"
+        ACTIVATE_CMD="source ${RC_FILE}"
+        ;;
+    *)
+        # bash / zsh (POSIX)
+        FUNCTION_BLOCK="# pr-auto-reviewer aliases — installed by install-service.sh
+${FUNC_NAME}() {
+    case \"\$1\" in
+        start)   systemctl --user start ${SERVICE_NAME} ;;
+        stop)    systemctl --user stop ${SERVICE_NAME} ;;
+        status)  systemctl --user status ${SERVICE_NAME} ;;
+        logs)    journalctl --user -u ${SERVICE_NAME} -f ;;
+        restart) systemctl --user restart ${SERVICE_NAME} ;;
+        *)
+            echo \"Usage: ${FUNC_NAME} {start|stop|status|logs|restart}\"
+            return 1
+            ;;
+    esac
+}"
+        GREP_PATTERN="${FUNC_NAME}()"
+        ACTIVATE_CMD="source ${RC_FILE}"
+        ;;
+esac
 
+# ── Interactive shell detection message ─────────────────────────────────────
+echo "Detected shell: ${SHELL_NAME}"
+echo "Config file:    ${RC_FILE}"
+echo ""
+
+# ── Persist (idempotent — skip if already present) ──────────────────────────
+if grep -qF "${GREP_PATTERN}" "${RC_FILE}" 2>/dev/null; then
+    echo "Aliases already present — nothing to do."
+else
+    # Ensure parent directory exists (fish config dir may not)
+    mkdir -p "$(dirname "${RC_FILE}")"
+    echo "" >> "${RC_FILE}"
+    echo "${FUNCTION_BLOCK}" >> "${RC_FILE}"
+    echo "Aliases written."
     echo ""
-    echo "Service installed and started"
-    echo "Check status:  systemctl --user status $SERVICE_NAME"
-    echo "View logs:     journalctl --user -u $SERVICE_NAME -f"
-    echo "Stop:          systemctl --user stop $SERVICE_NAME"
-}
-
-# ── main ───────────────────────────────────────────────────────────
-
-main() {
-    setup_config
-
-    # Stop old service if it exists (migration from pr-ai-auto-reviewer)
-    local old_service="pr-ai-auto-reviewer.service"
-    if [[ -f "$SYSTEMD_DIR/$old_service" ]]; then
-        echo "Removing old service $old_service..."
-        systemctl --user stop "$old_service" 2>/dev/null || true
-        systemctl --user disable "$old_service" 2>/dev/null || true
-        rm -f "$SYSTEMD_DIR/$old_service"
-        systemctl --user daemon-reload
-    fi
-
-    if [[ -f "$SYSTEMD_DIR/$SERVICE_NAME" ]]; then
-        echo "Service already installed, updating..."
-        systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
-    fi
-    install_service
-}
-
-main "$@"
+    echo "Run this to activate now:"
+    echo "  ${ACTIVATE_CMD}"
+    echo ""
+    echo "Then use:"
+    echo "  ${FUNC_NAME} start"
+    echo "  ${FUNC_NAME} stop"
+    echo "  ${FUNC_NAME} status"
+    echo "  ${FUNC_NAME} logs"
+    echo "  ${FUNC_NAME} restart"
+fi
