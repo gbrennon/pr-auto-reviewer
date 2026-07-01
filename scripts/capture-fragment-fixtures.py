@@ -81,7 +81,7 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
         (DIFFS_DIR / f"{base}.full").write_text(full_content)
 
     # Build fragment-based prompt
-    fragments_dir = PROJECT_ROOT / "fragments"
+    fragments_dir = PROJECT_ROOT / "src" / "pr_auto_reviewer" / "infrastructure" / "fragments" / "templates"
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
     renderer = Jinja2Renderer()
     # Auto-detect language from file paths
