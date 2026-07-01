@@ -42,7 +42,7 @@ class Config:
     debug: bool = False
     output_mode: str = "codeberg"
     output_dest: str = "stdout"
-    fragments_dir: str = "fragments"
+    fragments_dir: str = ""
     max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
     max_files: int = 10
@@ -185,6 +185,8 @@ def load_config() -> Config:
         os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
     )
 
+    fragments_dir = os.environ.get("FRAGMENTS_DIR", "").strip()
+
     return Config(
         env=env,
         platform_token=platform_token,
@@ -212,4 +214,5 @@ def load_config() -> Config:
         use_compact_template=use_compact_template,
         prompt_mode=prompt_mode,
         use_strict_fragment_selection=use_strict_fragment_selection,
+        fragments_dir=fragments_dir,
     )
