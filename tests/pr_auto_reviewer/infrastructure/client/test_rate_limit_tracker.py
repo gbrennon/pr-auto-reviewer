@@ -1,6 +1,7 @@
 """Tests for RateLimitTracker using captured fixtures."""
 
 import io
+import time
 from pathlib import Path
 
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import RateLimitSnapshot
@@ -59,3 +60,73 @@ class TestRateLimitTracker:
         assert "Rate-Limit" in output
         assert "forgejo/owner" in output
         assert "4990/5000" in output
+
+    def test_record_exhausted_logs_warning(self, tmp_path: Path, caplog):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = tmp_path / "forgejo-owner-12345678.json"
+
+        snapshot = RateLimitSnapshot.from_response_headers(F.exhausted_headers)
+        tracker.record(snapshot)
+        assert "EXHAUSTED" in caplog.text
+
+    def test_wait_if_needed_skips_when_remaining_above_min(self, tmp_path: Path):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = tmp_path / "forgejo-owner-12345678.json"
+        tracker.current = RateLimitSnapshot.from_response_headers(F.full_headers)
+
+        # remaining=4990 >= min_remaining=5 → should return immediately
+        tracker.wait_if_needed(min_remaining=5)
+
+    def test_wait_if_needed_skips_when_not_exhausted_but_low(self, tmp_path: Path):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = tmp_path / "forgejo-owner-12345678.json"
+        tracker.current = RateLimitSnapshot(
+            limit=5000, remaining=3, used=4997,
+            reset=int(time.time()) + 3600, resource="core",
+        )
+
+        # not exhausted (remaining=3 > 0) → should return immediately
+        tracker.wait_if_needed(min_remaining=5)
+
+    def test_wait_if_needed_waits_when_exhausted(self, tmp_path: Path, monkeypatch):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = tmp_path / "forgejo-owner-12345678.json"
+        tracker.current = RateLimitSnapshot.from_response_headers(F.exhausted_headers)
+
+        sleep_calls = []
+        monkeypatch.setattr(time, "sleep", lambda s: sleep_calls.append(s))
+        tracker.wait_if_needed()
+        assert len(sleep_calls) == 1
+
+    def test_wait_if_needed_waits_default_when_reset_passed(self, tmp_path: Path, monkeypatch):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = tmp_path / "forgejo-owner-12345678.json"
+        tracker.current = RateLimitSnapshot(
+            limit=5000, remaining=0, used=5000,
+            reset=int(time.time()) - 60, resource="core",
+        )
+
+        sleep_calls = []
+        monkeypatch.setattr(time, "sleep", lambda s: sleep_calls.append(s))
+        tracker.wait_if_needed()
+        assert len(sleep_calls) == 1
+        assert sleep_calls[0] == 60
+
+    def test_persist_oserror_silent(self, tmp_path: Path):
+        tracker = RateLimitTracker("token_suffix_12345678", "forgejo", "owner")
+        tracker._STORAGE_DIR = tmp_path
+        tracker._path = Path("/nonexistent_dir_should_not_exist/sub/file.json")
+        tracker.current = RateLimitSnapshot.from_response_headers(F.full_headers)
+
+        # should not raise
+        tracker._persist()
+
+    def test_token_slug_empty_token(self):
+        from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import _token_slug
+
+        assert _token_slug("") == "none"
