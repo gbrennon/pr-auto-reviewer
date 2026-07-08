@@ -29,8 +29,10 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 import os
 from pr_auto_reviewer.presentation.ports import PrListerPort
+from pr_auto_reviewer.infrastructure.system_notifier import SystemNotifier
 
 logger = logging.getLogger(__name__)
+_notifier = SystemNotifier()
 
 
 class CliRunner:
@@ -136,9 +138,11 @@ class CliRunner:
         try:
             self._review_service.execute(command)
             print(f"Review posted for PR #{args.pr}")
+            _notifier.notify_step("Review complete", f"PR #{args.pr} in {args.repo}")
             return 0
         except Exception as e:
             print(f"Error: {e}")
+            _notifier.notify_error(f"Review failed for PR #{command.pr_id.number}", e)
             if args.verbose:
                 import traceback
 
@@ -192,6 +196,7 @@ class CliRunner:
             return 1
         except Exception as e:
             print(f"Error: {e}")
+            _notifier.notify_error(f"Command processing failed for PR #{args.pr}", e)
             if args.verbose:
                 import traceback
 

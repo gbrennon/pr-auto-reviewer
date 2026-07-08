@@ -7,7 +7,6 @@ from pr_auto_reviewer.domain import (
 )
 from pr_auto_reviewer.application.serializers import IssueBodyBuilder
 
-
 class TestIssueBodyBuilder:
     """Tests for IssueBodyBuilder.build(pr_id, item) -> tuple[str, str]."""
 
@@ -68,7 +67,6 @@ class TestIssueBodyBuilder:
             description="Fix typo",
         )
         title, body = builder.build(pr_id, item)
-        # The enum value is "minor", output must be "MINOR"
         assert "[MINOR]" in title
         assert "MINOR" in body
         assert "minor" not in title
@@ -85,13 +83,11 @@ class TestIssueBodyBuilder:
             description=long_desc,
         )
         title, body = builder.build(pr_id, item)
-        # Title format: "[SEVERITY] category: description[:80]"
         prefix = "[INFO] general: "
         assert title.startswith(prefix)
         desc_part = title[len(prefix):]
         assert len(desc_part) == 80
         assert desc_part == long_desc[:80]
-        # Body includes full description unchanged
         assert long_desc in body
 
     def test_title_uses_full_description_when_short(self) -> None:

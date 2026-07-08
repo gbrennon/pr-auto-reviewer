@@ -9,7 +9,6 @@ from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
     PromptRendererPort as PromptRenderer,
 )
 
-
 class TestPromptRenderer:
     """Tests for PromptRenderer protocol interface."""
 

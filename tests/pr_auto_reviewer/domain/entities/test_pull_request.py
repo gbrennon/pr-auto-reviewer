@@ -10,7 +10,6 @@ from pr_auto_reviewer.domain import (
     CommentId,
 )
 
-
 class TestPullRequest:
     """Tests for PullRequest aggregate root entity (immutable)."""
 
@@ -211,7 +210,7 @@ class TestPullRequest:
             head_sha=CommitSha(value="abc"),
         )
         with pytest.raises(Exception):
-            pr.id = PullRequestId(repository="x", number=2)  # type: ignore[misc]
+            pr.id = PullRequestId(repository="x", number=2)
 
     def test_immutable_field_reassignment(self) -> None:
         pr = PullRequest(
@@ -220,4 +219,4 @@ class TestPullRequest:
             head_sha=CommitSha(value="abc"),
         )
         with pytest.raises(Exception):
-            pr.head_sha = CommitSha(value="def")  # type: ignore[misc]
+            pr.head_sha = CommitSha(value="def")

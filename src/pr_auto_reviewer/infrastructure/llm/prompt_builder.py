@@ -27,8 +27,6 @@ from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryC
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
-# -- Regex patterns -----------------------------------------------------------
-
 _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
 _DIFF_FILE_PATH_RE = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE)
 _DIFF_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", re.MULTILINE)
@@ -38,10 +36,6 @@ _DEVNULL_SRC_RE = re.compile(r"^--- /dev/null$", re.MULTILINE)
 _DEVNULL_DST_RE = re.compile(r"^\+\+\+ /dev/null$", re.MULTILINE)
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-
-
-# -- Token budget management --------------------------------------------------
-
 
 @dataclass
 class PromptBudget:
@@ -79,10 +73,6 @@ class PromptBudget:
             self.consume(text)
             return True
         return False
-
-
-# -- Diff hunk parser ---------------------------------------------------------
-
 
 def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
     """Parse unified diff to extract per-file hunk line ranges.
@@ -133,7 +123,6 @@ def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
 
     return hunks
 
-
 def _extract_surrounding_context(
     content: str,
     hunks: list[tuple[int, int]],
@@ -174,10 +163,6 @@ def _extract_surrounding_context(
 
     return "\n".join(out_lines)
 
-
-# -- File-status markers (module-level) ---------------------------------------
-
-
 def _classify_chunk(chunk: str) -> str:
     """Return '[ADDED]', '[DELETED]', or '[MODIFIED]' for a diff chunk."""
     if _DELETED_FILE_RE.search(chunk) or _DEVNULL_DST_RE.search(chunk):
@@ -185,7 +170,6 @@ def _classify_chunk(chunk: str) -> str:
     if _NEW_FILE_RE.search(chunk) or _DEVNULL_SRC_RE.search(chunk):
         return "[ADDED]"
     return "[MODIFIED]"
-
 
 def _annotate_diff(raw_diff: str) -> str:
     """Insert file-status markers into a unified diff."""
@@ -223,10 +207,6 @@ def _annotate_diff(raw_diff: str) -> str:
 
     return "\n".join(annotated)
 
-
-# -- Truncation helpers -------------------------------------------------------
-
-
 def _trim_diff(raw_diff: str, max_tokens: int) -> str:
     """Truncate diff at ``diff --git`` boundaries to fit *max_tokens*.
 
@@ -263,7 +243,6 @@ def _trim_diff(raw_diff: str, max_tokens: int) -> str:
 
     return result
 
-
 def _trim_file_contents(
     file_contents: dict[str, str],
     diff_content: str,
@@ -299,7 +278,6 @@ def _trim_file_contents(
 
     return trimmed
 
-
 def _trim_repo_structure(structure: str, max_lines: int = 100) -> str:
     """Truncate repository structure listing to *max_lines* lines."""
     lines = structure.split("\n")
@@ -308,10 +286,6 @@ def _trim_repo_structure(structure: str, max_lines: int = 100) -> str:
     return "\n".join(lines[:max_lines]) + (
         f"\n... ({len(lines) - max_lines} more entries omitted)\n"
     )
-
-
-# -- Main builder -------------------------------------------------------------
-
 
 class PromptBuilder:
     """Build the prompt sent to the LLM from a diff + review context.
@@ -368,7 +342,6 @@ class PromptBuilder:
         repo_structure = context.repository_structure or diff.repository_structure
         annotated_diff = _annotate_diff(diff.diff_content)
 
-        # --- unlimited mode (legacy) ----------------------------------------
         if self._max_tokens <= 0:
             return template.render(
                 architecture_hint=(
@@ -389,16 +362,13 @@ class PromptBuilder:
                 issue_severity_values=ItemSeverity.prompt_values(),
             )
 
-        # --- budget-aware mode ----------------------------------------------
         budget = PromptBudget(max_tokens=self._max_tokens)
 
-        # Priority 1: PR context (tiny — always fits)
         budget.consume(context.pr_title or "")
         budget.consume(context.pr_description or "")
         for msg in (diff.commit_messages or []):
             budget.consume(msg)
 
-        # Priority 2: Diff (truncated if needed)
         if budget.would_fit(annotated_diff):
             budget.consume(annotated_diff)
         else:
@@ -411,7 +381,6 @@ class PromptBuilder:
             )
             budget.consume(annotated_diff)
 
-        # Priority 3: File contents (trimmed)
         file_contents = None
         if diff.file_contents and budget.remaining_tokens > 500:
             trimmed_fc = _trim_file_contents(
@@ -424,15 +393,12 @@ class PromptBuilder:
                 file_contents = trimmed_fc
                 budget.consume(str(trimmed_fc))
 
-        # Priority 4: Conventions
         if conventions and budget.remaining_tokens > 200:
             budget.consume(conventions)
 
-        # Priority 5: Architecture hint
         if context.architecture_hint and budget.remaining_tokens > 100:
             budget.consume(context.architecture_hint)
 
-        # Priority 6: Repo structure (trimmed)
         if repo_structure and budget.remaining_tokens > 200:
             trimmed_structure = _trim_repo_structure(
                 repo_structure, self._max_structure_lines

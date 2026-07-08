@@ -43,18 +43,12 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
-
 def _load_fixture(relative: str) -> str:
     return (FIXTURES / relative).read_text()
-
 
 def _parsed_review_from_fixture(name: str, model: str = "code-review") -> CodeReview:
     raw = json.loads(_load_fixture(f"ollama_responses/{name}"))
     return ReviewResponseParser.parse(raw["response"], model)
-
-
-# ── Stub-based verdict tests ──────────────────────────────────────────
-
 
 class TestReviewVerdict:
     """Verdict tests using stub ports — no MagicMock, no requests.post.
@@ -73,8 +67,6 @@ class TestReviewVerdict:
     @pytest.fixture
     def head_sha(self) -> CommitSha:
         return CommitSha("abc123def456")
-
-    # ── APPROVED scenario ──────────────────────────────────────────
 
     def test_shell_with_shebang_is_approved(
         self, pr_id: PullRequestId, head_sha: CommitSha,
@@ -110,8 +102,6 @@ class TestReviewVerdict:
         published: CodeReview = publisher.publish_calls[0][1]
         assert published.verdict == ReviewVerdict.APPROVED
         assert published.model_used == "code-review"
-
-    # ── CHANGES_REQUESTED scenario ──────────────────────────────────
 
     def test_shell_missing_shebang_real_model(
         self, pr_id: PullRequestId, head_sha: CommitSha,
@@ -149,8 +139,6 @@ class TestReviewVerdict:
         published: CodeReview = publisher.publish_calls[0][1]
         assert published.verdict == ReviewVerdict.APPROVED
         assert len(published.items) == 1
-
-    # ── PROMPT includes file_contents ───────────────────────────────
 
     def test_prompt_includes_file_content_in_composed_prompt(
         self, pr_id: PullRequestId, head_sha: CommitSha,
@@ -198,8 +186,6 @@ class TestReviewVerdict:
         assert "### scripts/deploy.sh" in prompt_sent.content
         assert "#!/usr/bin/env bash" in prompt_sent.content
 
-    # ── VERDICT from parsed issues ──────────────────────────────────
-
     def test_verdict_follows_severity_rules(
         self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
@@ -210,7 +196,6 @@ class TestReviewVerdict:
         fetcher = StubChangesetFetcher(diff)
         ctx_factory = StubReviewContextFactory()
 
-        # -- APPROVED --------------------------------------------------
         publisher1 = StubReviewPublisher()
         approved_review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
@@ -232,7 +217,6 @@ class TestReviewVerdict:
         published1: CodeReview = publisher1.publish_calls[0][1]
         assert published1.verdict == ReviewVerdict.APPROVED
 
-        # -- CHANGES_REQUESTED -----------------------------------------
         publisher2 = StubReviewPublisher()
         cr_review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
@@ -253,10 +237,6 @@ class TestReviewVerdict:
         ))
         published2 = publisher2.publish_calls[0][1]
         assert published2.verdict == ReviewVerdict.CHANGES_REQUESTED
-
-
-# ── LLM unavailable / broken / offline ────────────────────────────────
-
 
 class TestLlmUnavailable:
     """Error-path tests with a REAL OllamaLlmAdapter + monkeypatched requests.post.

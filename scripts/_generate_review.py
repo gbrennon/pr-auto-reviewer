@@ -1,11 +1,3 @@
-"""Generate a local LLM review for a diff and save as JSON fixture.
-
-Usage:
-    python scripts/_generate_review.py <diff_file> <output_json> \
-        [--repo <repo>] [--owner <owner>] [--repo-name <name>] \
-        [--pr <number>] [--sha <head_sha>]
-"""
-
 import json, os, sys
 from pathlib import Path
 
@@ -19,9 +11,7 @@ from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryC
 from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 
-
 def _parse_argv(argv: list[str]) -> dict:
-    """Parse CLI args into a dict of options."""
     opts: dict = {
         "diff_file": None,
         "output_file": None,
@@ -55,7 +45,6 @@ def _parse_argv(argv: list[str]) -> dict:
         opts["output_file"] = Path(positional[1])
     return opts
 
-
 def main():
     opts = _parse_argv(sys.argv)
 
@@ -71,8 +60,6 @@ def main():
     diff_content = opts["diff_file"].read_text()
     max_diff = int(os.environ.get("OLLAMA_MAX_DIFF_CHARS", 20000))
     if len(diff_content) > max_diff:
-        # Truncate large diffs to avoid Ollama timeout.
-        # Keep whole diff chunks (split on "diff --git" boundaries).
         chunks = diff_content.split("diff --git ")
         truncated = []
         for chunk in chunks:
@@ -115,7 +102,6 @@ def main():
             ],
         }
 
-        # Merge PR metadata into review JSON so auto_fixtures / test_fixture_pairs can validate
         if opts["owner"]:
             result["owner"] = opts["owner"]
         if opts["repo_name"]:
@@ -138,7 +124,6 @@ def main():
         print("Saving placeholder...", file=sys.stderr)
         opts["output_file"].write_text(json.dumps({"_error": str(e)}, indent=2))
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

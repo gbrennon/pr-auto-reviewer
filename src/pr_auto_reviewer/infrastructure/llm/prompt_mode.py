@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-
 class PromptMode(StrEnum):
     """Enumeration of prompt composition modes for LLM usage.
 

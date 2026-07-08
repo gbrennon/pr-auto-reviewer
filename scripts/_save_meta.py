@@ -1,4 +1,3 @@
-"""Save fixture metadata as JSON. Called by capture-fixture.sh"""
 import json, sys
 
 meta = {

@@ -1,14 +1,13 @@
 import pytest
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
-
 class TestGitProvider:
 
-    def test_parse_codeberg_returns_codeberg(self):
-        assert GitProvider.parse("codeberg") == GitProvider.CODEBERG
+    def test_parse_codeberg_returns_forgejo(self):
+        assert GitProvider.parse("forgejo") == GitProvider.FORGEJO
 
-    def test_parse_forgejo_returns_codeberg(self):
-        assert GitProvider.parse("forgejo") == GitProvider.CODEBERG
+    def test_parse_forgejo_returns_forgejo(self):
+        assert GitProvider.parse("forgejo") == GitProvider.FORGEJO
 
     def test_parse_github_returns_github(self):
         assert GitProvider.parse("github") == GitProvider.GITHUB
@@ -38,7 +37,7 @@ class TestGitProvider:
         assert GitProvider.parse("   ") == GitProvider.OTHER
 
     def test_parse_case_insensitive(self):
-        assert GitProvider.parse("Codeberg") == GitProvider.CODEBERG
+        assert GitProvider.parse("Codeberg") == GitProvider.FORGEJO
 
     def test_parse_already_git_provider_returns_same(self):
         assert GitProvider.parse(GitProvider.GITHUB) == GitProvider.GITHUB

@@ -12,35 +12,38 @@ from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
-from pr_auto_reviewer.infrastructure.git_platform.changeset_fetcher import (
-    GitChangesetFetcherAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
+    ForgejoChangesetFetcher,
 )
-from pr_auto_reviewer.infrastructure.git_platform.comment_publisher import (
-    GitCommentPublisherAdapter,
+from pr_auto_reviewer.infrastructure.github.changeset_fetcher import (
+    GithubChangesetFetcher,
 )
-from pr_auto_reviewer.infrastructure.git_platform.comment_reader import (
-    GitCommentReaderAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
+    ForgejoCommentPublisher,
 )
-from pr_auto_reviewer.infrastructure.git_platform.issue_tracker import (
-    GitIssueTrackerAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.comment_reader import (
+    ForgejoCommentReader,
 )
-from pr_auto_reviewer.infrastructure.git_platform.pr_lister_adapter import (
-    GitPrListerAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import (
+    ForgejoIssueTracker,
 )
-from pr_auto_reviewer.infrastructure.git_platform.repo_lister_adapter import (
-    GitRepoListerAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.pr_lister import (
+    ForgejoPrLister,
 )
-from pr_auto_reviewer.infrastructure.git_platform.repository_context import (
-    GitRepositoryContextAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.repo_lister import (
+    ForgejoRepoLister,
 )
-from pr_auto_reviewer.infrastructure.git_platform.review_publisher import (
-    GitReviewPublisherAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.repository_context import (
+    ForgejoRepositoryContext,
 )
-from pr_auto_reviewer.infrastructure.git_platform.terminal_review_publisher import (
+from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
+    ForgejoReviewReader,
+)
+
+
+from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import PlatformReviewPublisherAdapter
+from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
-)
-from pr_auto_reviewer.infrastructure.git_platform.review_reader import (
-    GitReviewReaderAdapter,
 )
 from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
@@ -61,7 +64,7 @@ from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
 from pr_auto_reviewer.infrastructure.fragments.repositories import (
     FileSystemFragmentRepository,
 )
-from pr_auto_reviewer.infrastructure.git_platform.review_context_factory import (
+from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
 from pr_auto_reviewer.infrastructure.fragments.renderers import (
@@ -69,12 +72,14 @@ from pr_auto_reviewer.infrastructure.fragments.renderers import (
 )
 from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.review_publishers.composite_publisher import (
+    CompositeReviewPublisher,
+)
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
     CompositeRepoLister,
     CompositePrLister,
-    CompositeReviewPublisher,
+    CompositeChangesetFetcher,
 )
-
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
@@ -91,12 +96,23 @@ from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
 )
-from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
+from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
+    FragmentRepositoryPort,
+)
+from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
+    LlmReviewPort,
+)
+from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
+    PromptRendererPort,
+)
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
     PullRequestRepository,
 )
 from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
     RepositoryContextPort,
+)
+from pr_auto_reviewer.application.ports.outbound.review_context_factory_port import (
+    ReviewContextFactoryPort,
 )
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
@@ -107,158 +123,134 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.application.ports.outbound.review_context_factory_port import (
-    ReviewContextFactoryPort,
-)
-from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
-    FragmentRepositoryPort,
-)
-from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
-    PromptRendererPort,
-)
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
-
 class Container:
-    """Owns and provides all infrastructure-layer dependencies.
-
-    Created eagerly — all adapters and clients are instantiated at
-    construction time.  Immutable after ``__init__`` returns.
-    """
+    """Dependency-injection container.  Creates and wires all infrastructure
+    adapters based on Config."""
 
     def __init__(self, config: Config | None = None) -> None:
         self._config = config or load_config()
+        self._pr_repository: PullRequestRepository = NullPullRequestRepository()
+        self._wire()
 
-        logger.debug(
-            "Container config: output_mode=%s, llm=%s:%s, api=%s",
-            self._config.output_mode,
-            self._config.llm_host, self._config.llm_model,
-            self._config.platform_api_url,
-        )
-
+    def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
-        is_both = self._config.platform_mode == GitProvider.BOTH
 
-        if is_both:
-            gb_client = GitPlatformHttpClient(
-                "https://api.github.com",
-                self._config.github_reviewer_token or self._config.github_token or "",
-                "github",
-                "owner",
+        if self._config.platform_mode == GitProvider.BOTH:
+            gb_owner = GitPlatformHttpClient(
+                self._config.github_api_url, self._config.github_owner_token,
+                "github", "owner",
             )
-            cb_client = GitPlatformHttpClient(
-                "https://codeberg.org/api/v1",
-                self._config.codeberg_token or self._config.platform_token or "",
-                "codeberg",
-                "owner",
-            )
-
             gb_reviewer = GitPlatformHttpClient(
-                "https://api.github.com",
-                self._config.github_reviewer_token or self._config.github_token or "",
-                "github",
-                "reviewer",
+                self._config.github_api_url, self._config.github_reviewer_token,
+                "github", "reviewer",
             )
-            cb_reviewer = GitPlatformHttpClient(
-                "https://codeberg.org/api/v1",
-                self._config.codeberg_reviewer_token or self._config.codeberg_token or "",
-                "codeberg",
-                "reviewer",
+            fj_owner = GitPlatformHttpClient(
+                self._config.forgejo_api_url, self._config.forgejo_owner_token,
+                "forgejo", "owner",
+            )
+            fj_reviewer = GitPlatformHttpClient(
+                self._config.forgejo_api_url, self._config.forgejo_reviewer_token,
+                "forgejo", "reviewer",
             )
 
-            self._http_client = gb_client  # default for read ops
-            self._reviewer_client = gb_reviewer
+            self._repository_context: RepositoryContextPort = ForgejoRepositoryContext(fj_owner)
+            self._changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
+                GithubChangesetFetcher(gb_owner), ForgejoChangesetFetcher(fj_owner),
+                default_platform="codeberg",
+            )
 
-            self._pr_repository: PullRequestRepository = JsonFilePullRequestRepository(_state_file_path())
-            self._changeset_fetcher: ChangesetFetcherPort = GitChangesetFetcherAdapter(gb_client)
-            self._repository_context: RepositoryContextPort = GitRepositoryContextAdapter(gb_client)
-
-            self._review_publisher: ReviewPublisherPort = TerminalReviewPublisherAdapter(
-                self._config.output_dest
-            ) if is_terminal else CompositeReviewPublisher({
-                "github": GitReviewPublisherAdapter(
-                    gb_reviewer,
-                    self._config.github_reviewer_token or self._config.github_token or "",
-                    self._config.github_reviewer_username,
-                    review_mode=self._config.github_review_mode,
-                ),
-                "codeberg": GitReviewPublisherAdapter(
-                    cb_reviewer,
-                    self._config.codeberg_reviewer_token or self._config.codeberg_token or "",
-                    self._config.codeberg_reviewer_username,
-                ),
-            })
-            self._review_reader = GitReviewReaderAdapter(gb_client)
-            self._comment_reader = GitCommentReaderAdapter(gb_client)
-            self._comment_publisher = GitCommentPublisherAdapter(gb_reviewer)
-            self._issue_tracker = GitIssueTrackerAdapter(gb_client)
+            self._review_publisher: ReviewPublisherPort = (
+                TerminalReviewPublisherAdapter(self._config.output_path)
+                if is_terminal
+                else CompositeReviewPublisher({
+                    "github": PlatformReviewPublisherAdapter(
+                        gb_reviewer,
+                        self._config.github_reviewer_token or "",
+                        self._config.github_reviewer_username,
+                        owner_client=gb_owner,
+                        review_mode=self._config.github_review_mode,
+                    ),
+                    "forgejo": PlatformReviewPublisherAdapter(
+                        fj_reviewer,
+                        self._config.forgejo_reviewer_token or "",
+                        self._config.forgejo_reviewer_username,
+                        owner_client=fj_owner,
+                    ),
+                })
+            )
+            self._review_reader = ForgejoReviewReader(gb_owner)
+            self._comment_reader = ForgejoCommentReader(gb_owner)
+            self._comment_publisher = ForgejoCommentPublisher(gb_reviewer)
+            self._issue_tracker = ForgejoIssueTracker(gb_owner)
 
             self._repo_lister: RepoListerPort = CompositeRepoLister({
-                "github": GitRepoListerAdapter(gb_client),
-                "codeberg": GitRepoListerAdapter(cb_client),
+                "github": ForgejoRepoLister(gb_owner),
+                "forgejo": ForgejoRepoLister(fj_owner),
             })
             self._pr_lister: PrListerPort = CompositePrLister({
-                "github": GitPrListerAdapter(gb_client),
-                "codeberg": GitPrListerAdapter(cb_client),
+                "github": ForgejoPrLister(gb_owner),
+                "forgejo": ForgejoPrLister(fj_owner),
             })
         else:
-            self._http_client = GitPlatformHttpClient(
-                self._config.platform_api_url, self._config.platform_token, self._config.platform_mode.value, "owner",
-            )
+            is_github = self._config.platform_mode == GitProvider.GITHUB
+            api_url = self._config.github_api_url if is_github else self._config.forgejo_api_url
+            owner_token = self._config.github_owner_token if is_github else self._config.forgejo_owner_token
             reviewer_token = (
-                self._config.reviewer_token or self._config.platform_token
+                (self._config.github_reviewer_token or self._config.github_owner_token)
+                if is_github
+                else (self._config.forgejo_reviewer_token or self._config.forgejo_owner_token)
+            )
+            reviewer_username = (
+                self._config.github_reviewer_username
+                if is_github
+                else self._config.forgejo_reviewer_username
+            )
+            platform_value = self._config.platform_mode.value
+
+            self._http_client = GitPlatformHttpClient(
+                api_url, owner_token, platform_value, "owner",
             )
             self._reviewer_client = GitPlatformHttpClient(
-                self._config.platform_api_url, reviewer_token, self._config.platform_mode.value, "reviewer",
+                api_url, reviewer_token, platform_value, "reviewer",
             )
-            self._pr_repository: PullRequestRepository = (
-                NullPullRequestRepository()
-                if is_terminal
-                else JsonFilePullRequestRepository(_state_file_path())
-            )
-            logger.debug("PullRequestRepository -> %s", type(self._pr_repository).__name__)
 
-            self._changeset_fetcher: ChangesetFetcherPort = GitChangesetFetcherAdapter(self._http_client)
-            self._repository_context: RepositoryContextPort = GitRepositoryContextAdapter(self._http_client)
+            self._repository_context: RepositoryContextPort = ForgejoRepositoryContext(self._http_client)
+            self._changeset_fetcher: ChangesetFetcherPort = (
+                GithubChangesetFetcher(self._http_client)
+                if is_github
+                else ForgejoChangesetFetcher(self._http_client)
+            )
+
             self._review_publisher: ReviewPublisherPort = (
-                TerminalReviewPublisherAdapter(self._config.output_dest)
+                TerminalReviewPublisherAdapter(self._config.output_path)
                 if is_terminal
-                else GitReviewPublisherAdapter(
+                else PlatformReviewPublisherAdapter(
                     self._reviewer_client,
                     reviewer_token,
-                    self._config.reviewer_username,
-                    review_mode=self._config.github_review_mode if self._config.platform_mode == GitProvider.GITHUB else "formal",
+                    reviewer_username,
+                    owner_client=self._http_client,
                 )
             )
-            self._review_reader: ReviewReaderPort = GitReviewReaderAdapter(self._http_client)
-            self._comment_reader: CommentReaderPort = GitCommentReaderAdapter(self._http_client)
-            self._comment_publisher: CommentPublisherPort = GitCommentPublisherAdapter(self._reviewer_client)
-            self._issue_tracker: IssueTrackerPort = GitIssueTrackerAdapter(self._http_client)
-            self._pr_lister: PrListerPort = GitPrListerAdapter(self._http_client)
-            self._repo_lister: RepoListerPort = GitRepoListerAdapter(self._http_client)
+            self._review_reader: ReviewReaderPort = ForgejoReviewReader(self._http_client)
+            self._comment_reader: CommentReaderPort = ForgejoCommentReader(self._http_client)
+            self._comment_publisher: CommentPublisherPort = ForgejoCommentPublisher(self._reviewer_client)
+            self._issue_tracker: IssueTrackerPort = ForgejoIssueTracker(self._http_client)
+            self._pr_lister: PrListerPort = ForgejoPrLister(self._http_client)
+            self._repo_lister: RepoListerPort = ForgejoRepoLister(self._http_client)
 
+        self._pr_repository = JsonFilePullRequestRepository(_state_file_path())
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
-            self._config.llm_host,
-            self._config.llm_model or "code-review:latest",
-            max_tokens=self._config.max_prompt_tokens,
-            max_file_chars=self._config.max_file_chars,
-            max_files=self._config.max_files,
-            max_structure_lines=self._config.max_structure_lines,
-            use_compact_template=self._config.use_compact_template,
+            self._config.llm_host, self._config.llm_model or "code-review:latest",
         )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
 
-        # Fragment-based prompt composition subsystem.
         fragments_dir = self._config.fragments_dir or "fragments"
-        self._fragment_repository: FragmentRepositoryPort = (
-            FileSystemFragmentRepository(Path(fragments_dir))
-        )
+        self._fragment_repository: FragmentRepositoryPort = FileSystemFragmentRepository(Path(fragments_dir))
         self._fragment_renderer: PromptRendererPort = Jinja2Renderer()
-        self._fragment_max_tokens: int | None = getattr(
-            self._config, "fragment_max_tokens", None,
-        )
+        self._fragment_max_tokens: int | None = getattr(self._config, "fragment_max_tokens", None)
 
-        # Composite port — eliminates data clump in ReviewPullRequestService
         if self._config.prompt_mode == PromptMode.MONOLITHIC:
             prompt_adapter: ComposeReviewPromptPort = MonolithicReviewPromptAdapter(
                 max_total_chars=self._config.max_prompt_tokens * 4
@@ -275,11 +267,9 @@ class Container:
                 else 60_000,
                 use_strict_selection=getattr(self._config, "use_strict_fragment_selection", False),
             )
-        self._review_context_factory: ReviewContextFactoryPort = (
-            ReviewContextFactory(
-                repository_context=self._repository_context,
-                compose_review_prompt=prompt_adapter,
-            )
+        self._review_context_factory: ReviewContextFactoryPort = ReviewContextFactory(
+            repository_context=self._repository_context,
+            compose_review_prompt=prompt_adapter,
         )
 
     @property
@@ -357,7 +347,6 @@ class Container:
     @property
     def fragment_max_tokens(self) -> int | None:
         return self._fragment_max_tokens
-
 
 def _state_file_path() -> str:
     config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")

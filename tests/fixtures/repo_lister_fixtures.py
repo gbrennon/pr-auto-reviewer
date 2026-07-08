@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-
 def user_dict(username: str = "testuser") -> dict:
     return {"login": username, "username": username}
-
 
 def repo_dicts() -> list[dict]:
     return [

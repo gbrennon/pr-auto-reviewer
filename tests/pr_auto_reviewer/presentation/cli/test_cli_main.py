@@ -6,7 +6,6 @@ import pytest
 
 from pr_auto_reviewer.cli import SERVICE_NAME, main
 
-
 class TestCliServiceCommands:
     """E2E tests for pr-auto-reviewer service subcommands."""
 

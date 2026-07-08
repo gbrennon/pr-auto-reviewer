@@ -6,7 +6,6 @@ from pr_auto_reviewer.domain import (
     PullRequest, PullRequestId, CommitSha, CodeReview, ReviewVerdict,
 )
 
-
 class TestNullPullRequestRepository:
 
     @pytest.fixture

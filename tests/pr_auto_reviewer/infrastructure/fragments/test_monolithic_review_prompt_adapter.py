@@ -5,7 +5,6 @@ from pr_auto_reviewer.infrastructure.fragments.monolithic_review_prompt_adapter 
     MonolithicReviewPromptAdapter,
 )
 
-
 class TestMonolithicReviewPromptAdapter:
     def test_truncates_diff_to_fit_budget(self):
         """Diff is truncated when it exceeds budget."""

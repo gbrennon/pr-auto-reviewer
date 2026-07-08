@@ -29,7 +29,6 @@ from tests.pr_auto_reviewer.application.stubs import (
     StubIssueTracker,
 )
 
-
 class TestProcessIssueCommandsService:
 
     @pytest.fixture

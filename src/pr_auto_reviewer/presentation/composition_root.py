@@ -37,7 +37,6 @@ from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class ApplicationComponents:
     """All application components wired together."""
@@ -49,7 +48,6 @@ class ApplicationComponents:
     repo_lister: RepoListerPort
     review_item_parser: ReviewItemParser
     cli_runner: CliRunner
-
 
 class CompositionRoot:
     """Wires infrastructure, application and presentation layers.
@@ -157,12 +155,10 @@ class CompositionRoot:
 
         daemon.start()
 
-
 def bootstrap() -> ApplicationComponents:
     """Backward-compatible entry point.  Delegates to CompositionRoot."""
     root = CompositionRoot()
     return root.components
-
 
 def run_daemon(components: ApplicationComponents | None = None) -> None:
     """Backward-compatible daemon runner."""

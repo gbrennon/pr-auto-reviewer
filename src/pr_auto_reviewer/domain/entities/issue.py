@@ -7,7 +7,6 @@ from dataclasses import dataclass, replace
 from ..value_objects.pull_request_id import PullRequestId
 from ..exceptions import InvalidIssueBodyError
 
-
 @dataclass(frozen=True)
 class Issue:
     """A tracker issue created from a review finding on the remote platform.

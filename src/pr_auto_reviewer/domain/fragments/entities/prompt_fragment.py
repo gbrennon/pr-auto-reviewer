@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 @dataclass(frozen=True)
 class PromptFragment:
     """Immutable value object representing a prompt template fragment.
@@ -23,7 +22,7 @@ class PromptFragment:
     language: str | None
     priority: int
     category: str
-    metadata: dict[str, Any] = None  # type: ignore[assignment]
+    metadata: dict[str, Any] = None
 
     def __post_init__(self) -> None:
         """Validate and initialise defaults after dataclass construction."""

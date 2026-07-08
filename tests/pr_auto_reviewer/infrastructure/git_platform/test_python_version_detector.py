@@ -1,7 +1,6 @@
-from pr_auto_reviewer.infrastructure.git_platform.python_version_detector import (
+from pr_auto_reviewer.infrastructure.context.python_version_detector import (
     PythonVersionDetector,
 )
-
 
 class TestPythonVersionDetector:
 
@@ -28,7 +27,6 @@ class TestPythonVersionDetector:
     def test_detect_when_empty_paths_then_returns_none(self):
         d = PythonVersionDetector()
         assert d.detect([]) is None
-
 
 class TestPythonVersionGuidance:
 

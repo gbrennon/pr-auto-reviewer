@@ -6,7 +6,6 @@ from pr_auto_reviewer.infrastructure.fragments.repositories import (
     FileSystemFragmentRepository,
 )
 
-
 _VALID_FRAGMENT = """---
 id: test-fragment
 language: python
@@ -34,7 +33,6 @@ category: universal
 ---
 Review all code for general best practices.
 """
-
 
 class TestFileSystemFragmentRepository:
 

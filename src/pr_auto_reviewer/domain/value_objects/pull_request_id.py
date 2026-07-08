@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from ..exceptions import InvalidPullRequestIdError
 
-
 @dataclass(frozen=True)
 class PullRequestId:
     """Composite identity of a pull request within a platform.

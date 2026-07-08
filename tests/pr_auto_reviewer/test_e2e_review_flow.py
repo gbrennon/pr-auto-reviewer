@@ -13,7 +13,6 @@ from pr_auto_reviewer.presentation.ports import OpenPullRequest, RepoListerPort,
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 
-
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[str]) -> None:
         self._repos = repos
@@ -22,7 +21,6 @@ class MockRepoLister(RepoListerPort):
     def list_repos(self) -> list[str]:
         self.call_count += 1
         return self._repos
-
 
 class MockPrLister(PrListerPort):
     def __init__(self, prs: list[OpenPullRequest]) -> None:
@@ -40,7 +38,6 @@ class MockPrLister(PrListerPort):
             if p.pr_id.number == pr_number:
                 return p
         return None
-
 
 class TestPollingDaemonE2E:
     """E2E tests for PollingDaemon."""
@@ -251,7 +248,6 @@ class TestPollingDaemonE2E:
 
         assert stub_review_service.call_count == 2
 
-
 class TestCliRunnerE2E:
     """E2E tests for CliRunner."""
 
@@ -415,7 +411,6 @@ class TestCliRunnerE2E:
         result_commands = runner._run_process_commands(["--repo", "test/repo", "--pr", "1"])
         assert result_commands == 0
 
-
 class TestPR18DiffE2E:
     """E2E tests specifically for PR18 diff scenario."""
 
@@ -455,7 +450,7 @@ class TestPR18DiffE2E:
         review_flow_fixtures: dict,
     ) -> None:
         """Test that PR18 tree paths detect clean architecture."""
-        from pr_auto_reviewer.infrastructure.git_platform.architecture_detector import ArchitectureDetector
+        from pr_auto_reviewer.infrastructure.context.architecture_detector import ArchitectureDetector
 
         tree_paths = [
             "evals/evaluators/factory.py",

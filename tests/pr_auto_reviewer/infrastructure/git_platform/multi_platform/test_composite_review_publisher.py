@@ -10,13 +10,12 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_revie
     CompositeReviewPublisher,
 )
 
-
 class TestCompositeReviewPublisher:
     def test_publish_routes_to_correct_platform(self):
         codeberg_publisher = Mock(spec=ReviewPublisherPort)
         github_publisher = Mock(spec=ReviewPublisherPort)
         composite = CompositeReviewPublisher({
-            "codeberg": codeberg_publisher,
+            "forgejo": codeberg_publisher,
             "github": github_publisher,
         })
 
@@ -30,10 +29,10 @@ class TestCompositeReviewPublisher:
         github_publisher.publish.assert_called_once_with(github_pr_id, review)
         codeberg_publisher.publish.assert_called_once_with(codeberg_pr_id, review)
 
-    def test_publish_defaults_to_codeberg_without_prefix(self):
+    def test_publish_defaults_to_forgejo_without_prefix(self):
         codeberg_publisher = Mock(spec=ReviewPublisherPort)
         composite = CompositeReviewPublisher({
-            "codeberg": codeberg_publisher,
+            "forgejo": codeberg_publisher,
         })
 
         review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test")

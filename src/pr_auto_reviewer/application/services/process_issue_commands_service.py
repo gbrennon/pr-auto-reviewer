@@ -21,7 +21,6 @@ from ...domain.services.issue_command_parser import IssueCommandParser
 from ..serializers.issue_body_builder import IssueBodyBuilder
 from ..messages.messages import invalid_items_message, issues_created_message
 
-
 class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
 
     def __init__(

@@ -6,21 +6,17 @@ import json
 import os
 import re
 
-
 def extract_json(text):
-    """Try to extract valid JSON from text that may contain markdown or other content."""
     if not text:
         return None
 
     text = text.strip()
 
-    # Try direct parse first
     try:
         return json.loads(text)
     except:
         pass
 
-    # Try to find JSON in markdown code blocks
     match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if match:
         try:
@@ -28,7 +24,6 @@ def extract_json(text):
         except:
             pass
 
-    # Try to find any {...} block
     match = re.search(r'\{[^{}]*"[^"]+":\s*[^{}]*\}', text, re.DOTALL)
     if match:
         try:
@@ -38,15 +33,7 @@ def extract_json(text):
 
     return None
 
-
 def determine_verdict(review):
-    """Determine review verdict based on issues.
-
-    Returns:
-        'approved' if no critical/high issues
-        'changes_requested' if there are critical/high issues
-        'comment' if only medium/low issues or suggestions
-    """
     verdict = review.get("verdict", "").lower()
     if verdict in ("approve", "approved"):
         return "approved"
@@ -55,7 +42,6 @@ def determine_verdict(review):
     if verdict == "comment":
         return "approved"
 
-    # Fallback: determine from issue severity
     issues = review.get("issues", [])
     for issue in issues:
         severity = issue.get("severity", "").lower()
@@ -64,13 +50,9 @@ def determine_verdict(review):
 
     return "approved"
 
-
 def code_block(code: str, lang: str = "") -> str:
-    """Render a fenced code block at column 0, expanding escaped newlines."""
-    # Expand escaped newlines from JSON string values
     code = code.replace("\\n", "\n").replace("\\t", "    ")
     return f"```{lang}\n{code}\n```\n"
-
 
 def main():
     review_json = os.environ.get("REVIEW_JSON", "")
@@ -173,7 +155,6 @@ def main():
 
     print(verdict)
     print(body)
-
 
 if __name__ == "__main__":
     main()

@@ -6,7 +6,6 @@ from pr_auto_reviewer.domain import (
     ItemSeverity,
 )
 
-
 class TestCodeReview:
     """Tests for CodeReview value object."""
 
@@ -64,12 +63,9 @@ class TestCodeReview:
     def test_immutability(self) -> None:
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
         with pytest.raises(Exception):
-            review.summary = "changed"  # type: ignore[misc]
+            review.summary = "changed"
 
     def test_hash_consistency(self) -> None:
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
-        # Frozen dataclass would auto-generate __hash__, but list[ReviewItem]
-        # makes it unhashable. This is expected for VOs with collection fields.
-        # Two identical CodeReviews are still equal via __eq__.
         with pytest.raises(TypeError, match="unhashable"):
             hash(review)

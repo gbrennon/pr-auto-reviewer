@@ -4,7 +4,6 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 
-
 class TestReviewContext:
     """Tests for ReviewContext immutable value object."""
 
@@ -63,4 +62,4 @@ class TestReviewContext:
         )
 
         with pytest.raises(AttributeError):
-            context.language = "go"  # type: ignore[misc]
+            context.language = "go"

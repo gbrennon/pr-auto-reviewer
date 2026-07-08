@@ -1,7 +1,6 @@
 import pytest
 from pr_auto_reviewer.domain import IssueCommand
 
-
 class TestIssueCommand:
     """Tests for IssueCommand value object."""
 
@@ -31,12 +30,10 @@ class TestIssueCommand:
 
     def test_immutability(self) -> None:
         cmd = IssueCommand(comment_id="12345", item_numbers=[1])
-        # Frozen dataclass prevents reassignment of the field itself
         with pytest.raises(Exception):
-            cmd.item_numbers = [2]  # type: ignore[misc]
+            cmd.item_numbers = [2]
 
     def test_hash_consistency(self) -> None:
         cmd = IssueCommand(comment_id="12345", item_numbers=[1])
-        # list[int] makes the frozen dataclass unhashable by default
         with pytest.raises(TypeError, match="unhashable"):
             hash(cmd)

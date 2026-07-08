@@ -62,7 +62,7 @@ test:  ## Run tests
 clean reset:  ## Clean state files
 	@python -m pr_auto_reviewer clean
 
-review review-force:  ## Review a PR (REPO=owner/repo PR=N)
+review review-force:  ## Review a PR (REPO=owner/repo PR=N GITHUB_OWNER_TOKEN=... or FORGEJO_OWNER_TOKEN=...)
 	@python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
 
 daemon-once:  ## Run the watcher once

@@ -6,7 +6,6 @@ from typing import Any
 
 from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateError
 
-
 class Jinja2Renderer:
     """Renders prompt templates using the Jinja2 template engine.
 

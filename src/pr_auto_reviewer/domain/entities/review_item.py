@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
 
-
 @dataclass(frozen=True)
 class ReviewItem:
     """A single actionable finding produced by the AI review.

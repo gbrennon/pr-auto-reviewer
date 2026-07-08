@@ -5,19 +5,7 @@ import sys
 import json
 import os
 
-
 def get_latest_review_json(json_data):
-    """Find the most recent review from API response.
-
-    The API returns reviews in unspecified order. We need to sort by
-    created_at to get the most recent one.
-
-    Args:
-        json_data: Parsed JSON from Forgejo API
-
-    Returns:
-        The most recent review dict with body, or None
-    """
     if isinstance(json_data, list):
         reviews = json_data
     else:
@@ -40,7 +28,6 @@ def get_latest_review_json(json_data):
 
     return valid_reviews[0]
 
-
 def main():
     json_data = json.load(sys.stdin)
     review = get_latest_review_json(json_data)
@@ -54,7 +41,6 @@ def main():
         print(f"{review_id}|{verdict}|{created}|{body}")
     else:
         print("")
-
 
 if __name__ == "__main__":
     main()

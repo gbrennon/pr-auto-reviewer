@@ -94,9 +94,9 @@ Diff:
 
 
 Output ONLY a raw JSON object. No markdown, no code fences, no extra text.
-
 ```json
 {
+  "verdict": "APPROVED | CHANGES_REQUESTED | COMMENTED",
   "issues": [
     {
       "file": "path/to/file.py",
@@ -115,6 +115,10 @@ Output ONLY a raw JSON object. No markdown, no code fences, no extra text.
 ```
 
 **MANDATORY RULES (obey all of them):**
+0. `verdict` — MUST be one of [APPROVED, CHANGES_REQUESTED, COMMENTED].
+   - APPROVED: No critical or major issues found.
+   - CHANGES_REQUESTED: One or more critical or major issues found.
+   - COMMENTED: General feedback without a strong block/approve status.
 
 1. `issues` — MUST contain EVERY change worth noting. Each entry MUST have `file`, `category`, `severity`, `description`, `current_code`, and `suggested_fix`.
 2. category: {{ issue_category_values | replace("/", ", ") }}.

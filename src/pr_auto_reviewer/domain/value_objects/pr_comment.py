@@ -5,7 +5,6 @@ from datetime import datetime
 
 from .comment_id import CommentId
 
-
 @dataclass(frozen=True)
 class PrComment:
     """DTO carrying only what the service needs from a PR comment."""

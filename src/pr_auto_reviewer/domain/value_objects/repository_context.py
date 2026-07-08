@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 
-
 @dataclass(frozen=True)
 class RepositoryContext:
     """Supporting context passed alongside the diff to improve review quality.

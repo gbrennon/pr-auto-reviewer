@@ -7,7 +7,6 @@ from typing import Optional
 
 from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
 
-
 class PrListerPort(ABC):
     """Port for listing and fetching pull requests."""
 

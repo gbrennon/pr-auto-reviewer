@@ -24,7 +24,6 @@ from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCas
 
 logger = logging.getLogger(__name__)
 
-
 class ReviewPullRequestService(ReviewPullRequestUseCase):
     """Orchestrates: load PR → check if review needed → fetch diff →
     build context + compose prompt via ReviewContextFactoryPort →

@@ -11,7 +11,7 @@ Fixture naming: {username}-{repo}-pr{number}.json
 
 Usage:
   python scripts/capture-fragment-fixtures.py gbrennon/dotfiles 22
-  python scripts/capture-fragment-fixtures.py --all  # all PRs in SCENARIOS
+  python scripts/capture-fragment-fixtures.py --all
 """
 
 import json
@@ -50,7 +50,6 @@ SCENARIOS = [
     ("gbrennon/dotfiles", 22, "47b99e8"),
 ]
 
-
 def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     cfg = load_config()
     client = GitPlatformHttpClient(cfg.platform_api_url, cfg.platform_token)
@@ -58,12 +57,10 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     parts = repo.split("/")
     base = f"{parts[0]}-{parts[1]}-pr{pr_num}"
 
-    # Fetch diff
     raw_diff = client.get_raw(f"/repos/{repo}/pulls/{pr_num}.diff")
     (DIFFS_DIR / f"{base}.diff").write_text(raw_diff)
     print(f"  Diff: {len(raw_diff)} chars")
 
-    # Fetch file contents
     paths = re.findall(r"^diff --git a/(.+?) b/(.+?)$", raw_diff, re.MULTILINE)
     file_contents = {}
     full_content = ""
@@ -80,12 +77,10 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     if full_content:
         (DIFFS_DIR / f"{base}.full").write_text(full_content)
 
-    # Build fragment-based prompt
     fragments_dir = PROJECT_ROOT / "fragments"
     repo = FileSystemFragmentRepository(base_path=fragments_dir)
     renderer = Jinja2Renderer()
-    # Auto-detect language from file paths
-    from pr_auto_reviewer.infrastructure.git_platform.language_detector import (
+    from pr_auto_reviewer.infrastructure.context.language_detector import (
         LanguageDetector,
     )
     file_paths = list(file_contents.keys())
@@ -100,7 +95,6 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
     model = os.environ.get("OLLAMA_MODEL", "code-review")
 
-    # Call Ollama
     resp = requests.post(
         f"{host}/api/generate",
         json={"model": model, "prompt": prompt, "stream": False},
@@ -109,17 +103,14 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     resp.raise_for_status()
     raw_response = resp.json()
 
-    # Save Ollama response
     RESPONSES_DIR.mkdir(exist_ok=True)
     (RESPONSES_DIR / f"{base}.json").write_text(json.dumps(raw_response, indent=2))
 
-    # Save parsed review
     REVIEWS_DIR.mkdir(exist_ok=True)
     review_text = raw_response.get("response", "")
     (REVIEWS_DIR / f"{base}.json").write_text(review_text)
 
     print(f"  Done: {base}")
-
 
 def main():
     DIFFS_DIR.mkdir(exist_ok=True)
@@ -127,7 +118,6 @@ def main():
     if len(sys.argv) >= 3:
         repo = sys.argv[1]
         pr_num = int(sys.argv[2])
-        # Fetch sha from the PR
         cfg = load_config()
         client = GitPlatformHttpClient(cfg.platform_api_url, cfg.platform_token)
         pr_data = client.get(f"/repos/{repo}/pulls/{pr_num}")
@@ -139,7 +129,6 @@ def main():
     for repo, pr_num, sha in SCENARIOS:
         print(f"Capturing {repo}#{pr_num}")
         capture_pr(repo, pr_num, sha)
-
 
 if __name__ == "__main__":
     main()

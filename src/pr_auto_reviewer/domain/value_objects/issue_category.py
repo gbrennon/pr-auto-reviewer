@@ -2,7 +2,6 @@
 
 from enum import StrEnum
 
-
 class IssueCategory(StrEnum):
     """Classification of the kind of review finding."""
 

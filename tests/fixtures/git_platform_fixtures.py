@@ -10,7 +10,6 @@ import pytest
 
 FIXTURES_DIR = Path(__file__).resolve().parent
 
-
 def _load(name: str) -> dict[str, Any]:
     path = FIXTURES_DIR / f"{name}.json"
     if not path.exists():
@@ -18,74 +17,50 @@ def _load(name: str) -> dict[str, Any]:
     with open(path) as f:
         return json.load(f)
 
-
-# ==== HTTP Client fixtures ====
-
 @pytest.fixture
 def http_client_fixtures() -> dict[str, Any]:
     """HTTP client captured responses."""
     return _load("http_client_fixtures")
-
-
-# ==== Comment Reader fixtures ====
 
 @pytest.fixture
 def comment_reader_fixtures() -> dict[str, Any]:
     """Comment reader captured responses."""
     return _load("comment_reader_fixtures")
 
-
 @pytest.fixture
 def comment_reader_scenario(request):
     """Parametrized fixture for comment_reader tests."""
     return request.getfixturevalue(request.param)
-
-
-# ==== Review Reader fixtures ====
 
 @pytest.fixture
 def review_reader_fixtures() -> dict[str, Any]:
     """Review reader captured responses."""
     return _load("review_reader_fixtures")
 
-
 @pytest.fixture
 def review_reader_scenario(request):
     """Parametrized fixture for review_reader tests."""
     return request.getfixturevalue(request.param)
-
-
-# ==== Repository Context fixtures ====
 
 @pytest.fixture
 def repository_context_fixtures() -> dict[str, Any]:
     """Repository context captured responses."""
     return _load("repository_context_fixtures")
 
-
 @pytest.fixture
 def repository_context_scenario(request):
     """Parametrized fixture for repository_context tests."""
     return request.getfixturevalue(request.param)
-
-
-# ==== Comment Publisher fixtures ====
 
 @pytest.fixture
 def comment_publisher_fixtures() -> dict[str, Any]:
     """Comment publisher captured responses."""
     return _load("comment_publisher_fixtures")
 
-
-# ==== Issue Tracker fixtures ====
-
 @pytest.fixture
 def issue_tracker_fixtures() -> dict[str, Any]:
     """Issue tracker captured responses."""
     return _load("issue_tracker_fixtures")
-
-
-# ==== Review Publisher fixtures ====
 
 @pytest.fixture
 def review_publisher_fixtures() -> dict[str, Any]:

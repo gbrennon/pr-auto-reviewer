@@ -1,7 +1,6 @@
 import pytest
 from pr_auto_reviewer.domain import ReviewItem, ItemSeverity
 
-
 class TestReviewItem:
     """Tests for ReviewItem value object."""
 
@@ -89,7 +88,7 @@ class TestReviewItem:
             description="desc",
         )
         with pytest.raises(Exception):
-            item.description = "changed"  # type: ignore[misc]
+            item.description = "changed"
 
     def test_hash_consistency(self) -> None:
         item = ReviewItem(

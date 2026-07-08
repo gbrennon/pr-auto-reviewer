@@ -7,7 +7,6 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_
     CompositeRepoLister,
 )
 
-
 class StubRepoLister(RepoListerPort):
     def __init__(self, repos: list[str]) -> None:
         self._repos = repos
@@ -15,21 +14,20 @@ class StubRepoLister(RepoListerPort):
     def list_repos(self) -> list[str]:
         return list(self._repos)
 
-
 class TestCompositeRepoLister:
     def test_aggregates_repos_from_multiple_platforms(self):
         codeberg_lister = StubRepoLister(["o/r1", "o/r2"])
         github_lister = StubRepoLister(["o/r3"])
         composite = CompositeRepoLister({
-            "codeberg": codeberg_lister,
+            "forgejo": codeberg_lister,
             "github": github_lister,
         })
 
         repos = composite.list_repos()
 
         assert sorted(repos) == sorted([
-            "codeberg:o/r1",
-            "codeberg:o/r2",
+            "forgejo:o/r1",
+            "forgejo:o/r2",
             "github:o/r3",
         ])
 
@@ -44,7 +42,7 @@ class TestCompositeRepoLister:
         empty_lister = StubRepoLister([])
         nonempty_lister = StubRepoLister(["x/y"])
         composite = CompositeRepoLister({
-            "codeberg": empty_lister,
+            "forgejo": empty_lister,
             "github": nonempty_lister,
         })
 

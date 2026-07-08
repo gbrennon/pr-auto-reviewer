@@ -8,7 +8,6 @@ from pr_auto_reviewer.infrastructure.fragments.repositories import (
     FileSystemFragmentRepository,
 )
 
-
 class TestFileSystemFragmentRepository:
     """Integration tests using real fragment files from disk."""
 
@@ -25,7 +24,6 @@ class TestFileSystemFragmentRepository:
     ) -> FileSystemFragmentRepository:
         """Create repository pointing to real test fixture files."""
         return FileSystemFragmentRepository(base_path=fixtures_dir)
-
 
     def test_creates_repository_with_valid_path(
         self, fixtures_dir: Path,
@@ -46,7 +44,6 @@ class TestFileSystemFragmentRepository:
 
         with pytest.raises(ValueError, match="must be a directory"):
             FileSystemFragmentRepository(base_path=some_file)
-
 
     def test_finds_fragments_by_language(
         self, repository: FileSystemFragmentRepository,
@@ -110,7 +107,6 @@ class TestFileSystemFragmentRepository:
         assert fragments[0].priority == 85
         assert "Go Concurrency" in fragments[0].content
 
-
     def test_finds_universal_fragments(
         self, repository: FileSystemFragmentRepository,
     ) -> None:
@@ -120,7 +116,6 @@ class TestFileSystemFragmentRepository:
         assert len(fragments) == 1
         assert fragments[0].id == "solid-principles"
         assert fragments[0].language is None
-
 
     def test_finds_fragment_by_id(
         self, repository: FileSystemFragmentRepository,
@@ -149,7 +144,6 @@ class TestFileSystemFragmentRepository:
         fragment = repository.find_by_id("nonexistent-id")
 
         assert fragment is None
-
 
     def test_handles_malformed_yaml_gracefully(
         self,
@@ -228,7 +222,6 @@ class TestFileSystemFragmentRepository:
             assert fragments[0].id == "python-error-handling"
         finally:
             no_yaml.unlink()
-
 
     def test_returns_fragments_sorted_by_priority_descending(
         self,

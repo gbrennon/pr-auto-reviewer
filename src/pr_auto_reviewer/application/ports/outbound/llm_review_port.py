@@ -7,7 +7,6 @@ from ....domain.value_objects.repository_context import RepositoryContext
 from ....domain.value_objects.code_review import CodeReview
 from ....domain.fragments.entities.composed_prompt import ComposedPrompt
 
-
 class LlmReviewPort(Protocol):
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
         """Deprecated: use :meth:`review_prompt` with fragment-based composition.

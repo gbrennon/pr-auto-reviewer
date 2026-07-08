@@ -2,7 +2,6 @@
 
 import pytest
 
-
 @pytest.fixture
 def pr_fixture(request):
     """Parametrized fixture resolving to private_pr_fixtures or public_pr_fixtures.

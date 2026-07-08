@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 
-
 @dataclass(frozen=True)
 class IssueCommand:
     """A parsed user intent extracted from a PR comment requesting issue creation.

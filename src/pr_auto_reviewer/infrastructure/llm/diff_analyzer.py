@@ -5,7 +5,6 @@ import re
 
 logger = logging.getLogger(__name__)
 
-
 class DiffAnalyzer:
 
     _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)

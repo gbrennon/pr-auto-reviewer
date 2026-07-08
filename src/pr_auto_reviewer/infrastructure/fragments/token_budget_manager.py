@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 class TokenBudgetManager:
     """Manages token budget for prompt composition.
 

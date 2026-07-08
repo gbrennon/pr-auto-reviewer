@@ -15,7 +15,6 @@ from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedP
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 
-
 class TestComposeReviewPromptAdapter:
     """Tests for the infrastructure adapter — all ports mocked."""
 
@@ -66,10 +65,8 @@ class TestComposeReviewPromptAdapter:
         assert isinstance(result, ComposedPrompt)
         assert "# SOLID Principles" in result.content
         assert "# Python Review" in result.content
-        # Diff is included once in a ## Diff section at the end.
         assert "## Diff" in result.content
         assert "+def new_function():" in result.content
-        # Fragment uses a placeholder instead of the diff inline.
         assert "Full diff is included below" in result.content
         assert result.fragments_used == ["solid", "python-errors"]
         assert result.total_tokens > 0
@@ -173,7 +170,6 @@ class TestComposeReviewPromptAdapter:
         assert "chars=" in ret[0]
         assert "tokens=" in ret[0]
 
-
     def test_with_budget_constraints_filters_by_token_limit(
         self, mock_repository: Mock,
     ) -> None:
@@ -198,7 +194,6 @@ class TestComposeReviewPromptAdapter:
         mock_repository.find_by_language.return_value = [small_fragment]
         mock_repository.find_universal.return_value = [large_fragment]
 
-        # Budget of ~1000 tokens (~4000 chars) — only small fragment fits
         adapter = ComposeReviewPromptAdapter(
             repository=mock_repository, max_tokens=1000,
         )
@@ -237,8 +232,6 @@ class TestComposeReviewPromptAdapter:
         result = adapter.execute(context)
 
         assert mock_renderer.render.called
-        # Renderer receives the raw template with {{ diff }}.
-        # When called from _compose_prompt (inline_diff=False), diff is a placeholder.
         call_args = mock_renderer.render.call_args
         template_arg: str = call_args[0][0]
         variables_arg: dict = call_args[0][1]
@@ -246,9 +239,7 @@ class TestComposeReviewPromptAdapter:
         assert "Full diff is included below" in variables_arg["diff"]
         assert "Full diff is included below" in variables_arg["code"]
         assert variables_arg["language"] == "python"
-        # The rendered content appears in the composed prompt.
         assert "RENDERED_PROMPT" in result.content
-        # The real diff is in the ## Diff section.
         assert "## Diff" in result.content
         assert "+def f(): pass" in result.content
 
@@ -275,13 +266,11 @@ class TestComposeReviewPromptAdapter:
         adapter = ComposeReviewPromptAdapter(repository=mock_repository)
         result = adapter.execute(context)
 
-        # Diff is included once in a ## Diff section at end, not inline per fragment.
         assert "# Error Handling" in result.content
         assert "Check bare excepts." in result.content
         assert "## Diff" in result.content
         assert "+def foo():" in result.content
         assert "+    return 42" in result.content
-        # Fragment uses a placeholder, not the real diff.
         assert "Full diff is included below" in result.content
 
     def test_with_repository_context_appends_it(

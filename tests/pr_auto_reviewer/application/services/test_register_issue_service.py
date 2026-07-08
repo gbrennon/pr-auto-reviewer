@@ -23,7 +23,6 @@ from tests.pr_auto_reviewer.application.stubs import (
     StubIssueTracker,
 )
 
-
 class TestRegisterIssueService:
 
     @pytest.fixture
@@ -91,7 +90,7 @@ class TestRegisterIssueService:
 
     def test_raises_when_no_review(self, _pr_id, _sha, _pr):
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body=None)  # no review
+        review_reader = StubReviewReader(body=None)
         svc = RegisterIssueService(
             pr_repo, review_reader, ReviewItemParser(),
             StubIssueTracker(), IssueBodyBuilder(),

@@ -6,7 +6,6 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 
-
 class FakeGitPlatformHttpClient(GitPlatformHttpClient):
 
     def __init__(self, paths: dict[str, Any] | None = None) -> None:

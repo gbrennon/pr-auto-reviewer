@@ -1,7 +1,6 @@
 import pytest
 from pr_auto_reviewer.domain import CommitSha, InvalidCommitShaError
 
-
 class TestCommitSha:
     """Tests for CommitSha value object."""
 
@@ -31,7 +30,7 @@ class TestCommitSha:
     def test_immutability(self) -> None:
         sha = CommitSha(value="abc123")
         with pytest.raises(Exception):
-            sha.value = "def456"  # type: ignore[misc]
+            sha.value = "def456"
 
     def test_str_representation(self) -> None:
         sha = CommitSha(value="abc123def")

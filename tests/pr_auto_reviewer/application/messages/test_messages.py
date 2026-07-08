@@ -11,7 +11,6 @@ from pr_auto_reviewer.application.messages import (
     issues_created_message,
 )
 
-
 class TestInvalidItemsMessage:
     """Tests for invalid_items_message(invalid, available) -> str."""
 
@@ -80,7 +79,6 @@ class TestInvalidItemsMessage:
         result = invalid_items_message([7], [])
         assert "#7." in result
         assert "#7," not in result
-
 
 class TestIssuesCreatedMessage:
     """Tests for issues_created_message(issues) -> str."""

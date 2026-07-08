@@ -6,7 +6,6 @@ from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
     LlmResponseMalformedError,
 )
 
-
 class TestLlmResponseMalformedError:
     """Tests for LlmResponseMalformedError."""
 

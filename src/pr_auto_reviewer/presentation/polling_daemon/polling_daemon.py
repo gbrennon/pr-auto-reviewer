@@ -22,7 +22,6 @@ from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
 
 logger = logging.getLogger(__name__)
 
-
 class PollingDaemon:
     """Polls repositories for open PRs and triggers review operations."""
 
@@ -82,11 +81,9 @@ class PollingDaemon:
         for repo in repos:
             open_prs = self._pr_lister.list_open(repo)
 
-            # If force_pr is set, also fetch that specific PR (may be closed/merged)
             if self._force_pr is not None:
                 forced = self._pr_lister.get_pr(repo, self._force_pr)
                 if forced is not None:
-                    # Avoid duplicates: only add if not already in open_prs
                     if not any(p.pr_id.number == self._force_pr for p in open_prs):
                         open_prs.append(forced)
                         logger.info(

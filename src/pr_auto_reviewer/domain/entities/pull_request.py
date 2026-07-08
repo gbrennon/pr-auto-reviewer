@@ -9,7 +9,6 @@ from ..value_objects.commit_sha import CommitSha
 from ..value_objects.code_review import CodeReview
 from ..value_objects.comment_id import CommentId
 
-
 @dataclass(frozen=True)
 class PullRequest:
     """The central aggregate root.

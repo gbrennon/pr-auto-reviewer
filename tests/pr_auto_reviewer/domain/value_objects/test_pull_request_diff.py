@@ -5,7 +5,6 @@ from pr_auto_reviewer.domain import (
     CommitSha,
 )
 
-
 class TestPullRequestDiff:
     """Tests for PullRequestDiff value object."""
 
@@ -62,12 +61,11 @@ class TestPullRequestDiff:
             pr_id=pr_id, head_sha=CommitSha(value="abc"), diff_content="diff"
         )
         with pytest.raises(Exception):
-            diff.diff_content = "changed"  # type: ignore[misc]
+            diff.diff_content = "changed"
 
     def test_hash_consistency(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=1)
         sha = CommitSha(value="abc")
         diff = PullRequestDiff(pr_id=pr_id, head_sha=sha, diff_content="diff")
-        # dict[str, str] makes the frozen dataclass unhashable by default
         with pytest.raises(TypeError, match="unhashable"):
             hash(diff)

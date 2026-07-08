@@ -2,10 +2,9 @@
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.git_platform.architecture_detector import (
+from pr_auto_reviewer.infrastructure.context.architecture_detector import (
     ArchitectureDetector,
 )
-
 
 LANGUAGES = [
     "golang",
@@ -25,10 +24,8 @@ EXTENSIONS = {
     "rust": "rs",
 }
 
-
 def get_ext(lang: str) -> str:
     return EXTENSIONS.get(lang, "txt")
-
 
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestHexagonal:
@@ -49,7 +46,6 @@ class TestHexagonal:
         ext = get_ext(lang)
         paths = [f"domain/entity.{ext}", f"adapters/repository.{ext}", f"ports/interface.{ext}"]
         assert detector.detect(paths) == "hexagonal"
-
 
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestClean:
@@ -78,7 +74,6 @@ class TestClean:
             f"infrastructure/persistence.{ext}",
         ]
         assert detector.detect(paths) == "clean"
-
 
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestLayered:
@@ -110,7 +105,6 @@ class TestLayered:
         ]
         assert detector.detect(paths) == "layered"
 
-
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestOnion:
     """Tests for onion architecture detection across languages."""
@@ -138,7 +132,6 @@ class TestOnion:
             f"infrastructure/repository.{ext}",
         ]
         assert detector.detect(paths) == "onion"
-
 
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestMVC:
@@ -169,7 +162,6 @@ class TestMVC:
         ]
         assert detector.detect(paths) == "mvc"
 
-
 @pytest.mark.parametrize("lang", LANGUAGES)
 class TestCQRS:
     """Tests for CQRS pattern detection across languages."""
@@ -195,7 +187,6 @@ class TestCQRS:
             f"src/queries/handler.{ext}",
         ]
         assert detector.detect(paths) == "cqrs"
-
 
 class TestReturnsUnknown:
     """Tests for unknown architecture detection."""

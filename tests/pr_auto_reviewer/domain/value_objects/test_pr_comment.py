@@ -6,7 +6,6 @@ import pytest
 
 from pr_auto_reviewer.domain import CommentId, PrComment
 
-
 class TestPrComment:
     """Tests for PrComment frozen dataclass."""
 
@@ -57,7 +56,7 @@ class TestPrComment:
         created = datetime(2025, 1, 15, tzinfo=timezone.utc)
         comment = PrComment(id=cid, body="Body", created_at=created)
         with pytest.raises(Exception):
-            comment.body = "changed"  # type: ignore[misc]
+            comment.body = "changed"
 
     def test_hash_consistency(self) -> None:
         cid = CommentId(value="c_abc123")
