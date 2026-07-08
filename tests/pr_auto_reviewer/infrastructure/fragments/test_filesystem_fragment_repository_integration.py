@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.fragments.repositories import (
+from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
 )
 
