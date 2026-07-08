@@ -1,19 +1,11 @@
-"""Application configuration — loads and validates settings from environment.
-
-Environment variables are sourced from config files via python-dotenv,
-then read through ``os.environ`` to build a single ``Config`` dataclass
-consumed by the dependency-injection container.
-
-Search order (highest priority last, so it wins):
-  - Production: ``~/.config/pr-auto-reviewer/config``, then repo ``.env``
-  - Development: repo ``.env``, then ``~/.config/pr-auto-reviewer/config``
-"""
-
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
@@ -22,26 +14,26 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 @dataclass
 class Config:
     env: str
-    platform_token: str
-    platform_mode: GitProvider = GitProvider.CODEBERG
-    platform_api_url: str = "https://codeberg.org/api/v1"
-    reviewer_token: str | None = None
-    reviewer_username: str | None = None
-    # Added for 'both' mode
-    github_token: str | None = None
-    github_reviewer_token: str | None = None
-    github_reviewer_username: str | None = None
+    platform_mode: GitProvider = GitProvider.FORGEJO
+
+    github_api_url: str = "https://api.github.com"
+    forgejo_api_url: str = "https://codeberg.org/api/v1"
+
+    github_owner_token: str = ""
+    github_reviewer_token: str = ""
+    github_reviewer_username: str = ""
     github_review_mode: str = "formal"
-    codeberg_token: str | None = None
-    codeberg_reviewer_token: str | None = None
-    codeberg_reviewer_username: str | None = None
+
+    forgejo_owner_token: str = ""
+    forgejo_reviewer_token: str = ""
+    forgejo_reviewer_username: str = ""
 
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
     poll_interval: int = 60
     debug: bool = False
-    output_mode: str = "codeberg"
-    output_dest: str = "stdout"
+    output_mode: str = "forgejo"
+    output_path: str | None = None
     fragments_dir: str = "fragments"
     max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
@@ -60,11 +52,10 @@ def _is_installed() -> bool:
     return not (_get_repo_root() / ".env").exists()
 
 
-def _normalize_platform_api_url(url: str, platform_mode: GitProvider) -> str:
-    if platform_mode == GitProvider.CODEBERG:
-        if not url.endswith("/api/v1"):
-            return url + "/api/v1"
-    return url
+def _normalize_forgejo_api_url(url: str) -> str:
+    if url.endswith("/api/v1"):
+        return url
+    return url.rstrip("/") + "/api/v1"
 
 
 def load_config() -> Config:
@@ -83,7 +74,7 @@ def load_config() -> Config:
         paths = [user_config_path, repo_env_path]
 
     for path in paths:
-        if os.path.exists(path):
+        if (path if isinstance(path, Path) else Path(path)).exists():
             load_dotenv(path, override=True)
 
     platform_mode_raw = (
@@ -91,75 +82,25 @@ def load_config() -> Config:
     ).strip()
     platform_mode = GitProvider.parse(platform_mode_raw)
 
-    # Set default API URL based on platform mode
-    default_api_url = (
-        "https://api.github.com"
-        if platform_mode == GitProvider.GITHUB
-        else "https://codeberg.org"
+    github_api_url = (
+        os.environ.get("GITHUB_API_URL", "").strip()
+        or "https://api.github.com"
     )
-
-    _raw_api_url = os.environ.get("PLATFORM_API_URL")
-    if not _raw_api_url:
-        if platform_mode == GitProvider.CODEBERG:
-            _raw_api_url = os.environ.get("FORGEJO_HOST") or default_api_url
-        elif platform_mode == GitProvider.GITHUB:
-            _raw_api_url = default_api_url
-        else:
-            _raw_api_url = default_api_url
-
-    platform_api_url = _normalize_platform_api_url(_raw_api_url.strip(), platform_mode)
-
-    # Base tokens
-    if platform_mode == GitProvider.GITHUB:
-        platform_token = (
-            os.environ.get("PLATFORM_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-        ).strip()
-        reviewer_token = (
-            os.environ.get("REVIEWER_TOKEN")
-            or os.environ.get("GITHUB_REVIEWER_TOKEN")
-            or ""
-        ).strip() or None
-        reviewer_username = (
-            os.environ.get("REVIEWER_USERNAME")
-            or os.environ.get("GITHUB_REVIEWER_USERNAME")
-            or ""
-        ).strip() or None
-        # Fallback: if owner token is missing, try using the reviewer token for read-only access
-        if not platform_token:
-            platform_token = reviewer_token or ""
-    else:
-        platform_token = (
-            os.environ.get("PLATFORM_TOKEN") or os.environ.get("FORGEJO_TOKEN") or ""
-        ).strip()
-        reviewer_token = (
-            os.environ.get("REVIEWER_TOKEN")
-            or os.environ.get("FORGEJO_REVIEWER_TOKEN")
-            or ""
-        ).strip() or None
-        reviewer_username = (
-            os.environ.get("REVIEWER_USERNAME")
-            or os.environ.get("FORGEJO_REVIEWER_USERNAME")
-            or ""
-        ).strip() or None
-        # Fallback: if owner token is missing, try using the reviewer token
-        if not platform_token:
-            platform_token = reviewer_token or ""
-
-    # Platform-specific tokens for BOTH mode
-    github_token = os.environ.get("GITHUB_TOKEN", "").strip() or None
-    github_reviewer_token = os.environ.get("GITHUB_REVIEWER_TOKEN", "").strip() or None
-    github_reviewer_username = (
-        os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip() or None
+    forgejo_api_url = (
+        os.environ.get("FORGEJO_API_URL", "").strip()
+        or os.environ.get("FORGEJO_HOST", "").strip()
+        or "https://codeberg.org"
     )
+    forgejo_api_url = _normalize_forgejo_api_url(forgejo_api_url)
+
+    github_owner_token = os.environ.get("GITHUB_OWNER_TOKEN", "").strip()
+    github_reviewer_token = os.environ.get("GITHUB_REVIEWER_TOKEN", "").strip()
+    github_reviewer_username = os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip()
     github_review_mode = os.environ.get("GITHUB_REVIEW_MODE", "formal").strip()
 
-    codeberg_token = os.environ.get("FORGEJO_TOKEN", "").strip() or None
-    codeberg_reviewer_token = (
-        os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip() or None
-    )
-    codeberg_reviewer_username = (
-        os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip() or None
-    )
+    forgejo_owner_token = os.environ.get("FORGEJO_OWNER_TOKEN", "").strip()
+    forgejo_reviewer_token = os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip()
+    forgejo_reviewer_username = os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip()
 
     llm_host = (
         os.environ.get("LLM_HOST")
@@ -170,8 +111,16 @@ def load_config() -> Config:
         os.environ.get("LLM_MODEL") or os.environ.get("OLLAMA_MODEL") or ""
     ).strip() or None
 
-    output_mode = os.environ.get("REVIEW_OUTPUT", "codeberg").strip()
-    output_dest = os.environ.get("REVIEW_OUTPUT_DEST", "stdout").strip()
+    output_mode = os.environ.get("REVIEW_OUTPUT", "").strip()
+    output_path: str | None = None
+    if output_mode.startswith("file:"):
+        output_path = output_mode.removeprefix("file:") or None
+        output_mode = "terminal"
+    elif not output_mode:
+        output_mode = "forgejo"
+
+    poll_interval = int(os.environ.get("POLL_INTERVAL", "60"))
+    debug = os.environ.get("DEBUG", "0").strip() in ("1", "true", "yes")
     max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "9999"))
     max_file_chars = int(os.environ.get("MAX_FILE_CHARS", "3000"))
     max_files = int(os.environ.get("MAX_FILES", "10"))
@@ -180,31 +129,28 @@ def load_config() -> Config:
         os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
     )
     prompt_mode = PromptMode.parse(os.environ.get("PROMPT_MODE", ""))
-
     use_strict_fragment_selection = (
         os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
     )
 
     return Config(
         env=env,
-        platform_token=platform_token,
         platform_mode=platform_mode,
-        platform_api_url=platform_api_url,
-        reviewer_token=reviewer_token,
-        reviewer_username=reviewer_username,
-        github_token=github_token,
+        github_api_url=github_api_url,
+        forgejo_api_url=forgejo_api_url,
+        github_owner_token=github_owner_token,
         github_reviewer_token=github_reviewer_token,
         github_reviewer_username=github_reviewer_username,
         github_review_mode=github_review_mode,
-        codeberg_token=codeberg_token,
-        codeberg_reviewer_token=codeberg_reviewer_token,
-        codeberg_reviewer_username=codeberg_reviewer_username,
+        forgejo_owner_token=forgejo_owner_token,
+        forgejo_reviewer_token=forgejo_reviewer_token,
+        forgejo_reviewer_username=forgejo_reviewer_username,
         llm_host=llm_host,
         llm_model=llm_model,
-        poll_interval=int(os.environ.get("POLL_INTERVAL", "60")),
-        debug=os.environ.get("DEBUG", "0") == "1",
+        poll_interval=poll_interval,
+        debug=debug,
         output_mode=output_mode,
-        output_dest=output_dest,
+        output_path=output_path,
         max_prompt_tokens=max_prompt_tokens,
         max_file_chars=max_file_chars,
         max_files=max_files,
