@@ -8,7 +8,6 @@ from ..entities.review_item import ReviewItem
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
 
-
 class ReviewItemParser:
     """Pure domain service. Receives the markdown body of a posted review
     and returns a structured list of ReviewItem. Contains all parsing rules

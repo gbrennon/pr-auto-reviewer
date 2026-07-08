@@ -17,7 +17,6 @@ from ..serializers.issue_body_builder import IssueBodyBuilder
 
 logger = logging.getLogger(__name__)
 
-
 class RegisterIssueService(RegisterIssuePort):
     """Registers a single review item as a tracker issue on the remote platform.
 

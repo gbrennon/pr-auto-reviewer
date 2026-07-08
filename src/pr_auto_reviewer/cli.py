@@ -9,16 +9,13 @@ from .presentation.composition_root import bootstrap, run_daemon
 
 SERVICE_NAME = "pr-auto-reviewer.service"
 
-
 def _run_systemctl(action: str) -> None:
     """Run a systemctl --user command for the service."""
     subprocess.run(["systemctl", "--user", action, SERVICE_NAME], check=False)
 
-
 def _run_journalctl() -> None:
     """Follow the service journal."""
     subprocess.run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
-
 
 def main() -> None:
     """Main CLI entry point."""
@@ -161,7 +158,6 @@ def main() -> None:
         if args.verbose:
             list_argv.append("--verbose")
         sys.exit(components.cli_runner.run(list_argv))
-
 
 if __name__ == "__main__":
     main()

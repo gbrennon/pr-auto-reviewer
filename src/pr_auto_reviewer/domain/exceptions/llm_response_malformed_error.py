@@ -2,7 +2,6 @@
 
 from .domain_error import DomainError
 
-
 class LlmResponseMalformedError(DomainError):
     """Raised when the LLM response cannot be parsed into a CodeReview."""
 

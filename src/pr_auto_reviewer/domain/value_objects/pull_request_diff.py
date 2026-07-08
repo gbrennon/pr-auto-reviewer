@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from .pull_request_id import PullRequestId
 from .commit_sha import CommitSha
 
-
 @dataclass(frozen=True)
 class PullRequestDiff:
     """Immutable snapshot of what changed in a PR at a specific commit."""

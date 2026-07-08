@@ -3,7 +3,6 @@
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.entities.review_item import ReviewItem
 
-
 class IssueBodyBuilder:
     """Produces (title, body) for a tracker issue from a ReviewItem.
     The template is a domain rule — no platform formatting leaks in."""

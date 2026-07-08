@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-
 class RepoListerPort(ABC):
     """Port for listing repositories to watch."""
 

@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from .review_verdict import ReviewVerdict
 from ..entities.review_item import ReviewItem
 
-
 @dataclass(frozen=True)
 class CodeReview:
     """The complete, structured output produced by the LLM for a given diff.

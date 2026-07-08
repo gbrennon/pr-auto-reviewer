@@ -2,7 +2,6 @@
 
 from typing import Any, Protocol
 
-
 class CommandBusPort(Protocol):
     def dispatch(self, command: Any) -> None:
         ...

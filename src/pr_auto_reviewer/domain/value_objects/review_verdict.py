@@ -2,7 +2,6 @@
 
 from enum import StrEnum
 
-
 class ReviewVerdict(StrEnum):
     """Enumerated conclusion of a code review.
 

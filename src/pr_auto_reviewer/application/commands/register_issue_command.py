@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.commit_sha import CommitSha
 
-
 @dataclass(frozen=True)
 class RegisterIssueCommand:
     """Command to register a single review item as a tracker issue.

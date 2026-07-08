@@ -4,7 +4,6 @@ from typing import Protocol
 
 from ...commands.register_issue_command import RegisterIssueCommand
 
-
 class RegisterIssuePort(Protocol):
     """Inbound port for registering a single review item as a tracker issue.
 

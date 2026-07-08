@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from ..exceptions import InvalidCommitShaError
 
-
 @dataclass(frozen=True)
 class CommitSha:
     """Represents a specific, immutable snapshot of code.

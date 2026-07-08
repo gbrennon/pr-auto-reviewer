@@ -1,8 +1,6 @@
 from .ports import (
-    # Inbound
     ReviewPullRequestUseCase,
     ProcessIssueCommandsUseCase,
-    # Outbound
     PullRequestRepository,
     ChangesetFetcherPort,
     RepositoryContextPort,
