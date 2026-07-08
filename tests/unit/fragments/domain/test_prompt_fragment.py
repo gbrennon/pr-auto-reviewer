@@ -4,6 +4,7 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 
+
 class TestPromptFragment:
     """Tests for PromptFragment immutable value object."""
 
@@ -129,3 +130,14 @@ class TestPromptFragment:
         )
 
         assert fragment.metadata == {"source": "community", "version": 1}
+
+    def test_not_equal_to_non_prompt_fragment(self) -> None:
+        """PromptFragment.__eq__ returns NotImplemented for other types."""
+        fragment = PromptFragment(
+            id="test",
+            content="content",
+            language=None,
+            priority=50,
+            category="test",
+        )
+        assert fragment.__eq__("not a fragment") is NotImplemented

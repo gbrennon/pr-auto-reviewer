@@ -12,8 +12,14 @@ from pr_auto_reviewer.application.serializers.issue_body_builder import (
     IssueBodyBuilder,
 )
 from pr_auto_reviewer.domain import (
-    CommitSha, Issue, ItemSeverity, PullRequest, PullRequestId,
-    PullRequestNotFoundError, ReviewItemNotFoundError, ReviewItem,
+    CommitSha,
+    Issue,
+    ItemSeverity,
+    PullRequest,
+    PullRequestId,
+    PullRequestNotFoundError,
+    ReviewItemNotFoundError,
+    ReviewItem,
 )
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 
@@ -23,8 +29,8 @@ from tests.pr_auto_reviewer.application.stubs import (
     StubIssueTracker,
 )
 
-class TestRegisterIssueService:
 
+class TestRegisterIssueService:
     @pytest.fixture
     def _pr_id(self):
         return PullRequestId(repository="owner/repo", number=42)
@@ -39,8 +45,12 @@ class TestRegisterIssueService:
 
     def test_registers_issue_by_id(self, _pr_id, _sha, _pr):
         item = ReviewItem(
-            number=1, severity=ItemSeverity.MAJOR, category="bug",
-            file_path="x.py", description="broken", id="a3f2",
+            number=1,
+            severity=ItemSeverity.MAJOR,
+            category="bug",
+            file_path="x.py",
+            description="broken",
+            id="a3f2",
         )
         pr_repo = StubPullRequestRepository(initial=_pr)
         review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
@@ -49,9 +59,14 @@ class TestRegisterIssueService:
         builder = IssueBodyBuilder()
 
         svc = RegisterIssueService(pr_repo, review_reader, parser, tracker, builder)
-        svc.execute(RegisterIssueCommand(
-            pr_id=_pr_id, head_sha=_sha, issue_id="1", command_text="issue 1",
-        ))
+        svc.execute(
+            RegisterIssueCommand(
+                pr_id=_pr_id,
+                head_sha=_sha,
+                issue_id="1",
+                command_text="issue 1",
+            )
+        )
 
         assert len(tracker.create_calls) == 1
         repo, title, body = tracker.create_calls[0]
@@ -61,8 +76,12 @@ class TestRegisterIssueService:
 
     def test_registers_issue_by_number_fallback(self, _pr_id, _sha, _pr):
         item = ReviewItem(
-            number=1, severity=ItemSeverity.MINOR, category="style",
-            file_path="y.py", description="nit", id="",
+            number=1,
+            severity=ItemSeverity.MINOR,
+            category="style",
+            file_path="y.py",
+            description="nit",
+            id="",
         )
         pr_repo = StubPullRequestRepository(initial=_pr)
         review_reader = StubReviewReader(body="1. **MINOR** [style] `y.py`: nit")
@@ -71,44 +90,114 @@ class TestRegisterIssueService:
         builder = IssueBodyBuilder()
 
         svc = RegisterIssueService(pr_repo, review_reader, parser, tracker, builder)
-        svc.execute(RegisterIssueCommand(
-            pr_id=_pr_id, head_sha=_sha, issue_id="1", command_text="issue 1",
-        ))
+        svc.execute(
+            RegisterIssueCommand(
+                pr_id=_pr_id,
+                head_sha=_sha,
+                issue_id="1",
+                command_text="issue 1",
+            )
+        )
 
         assert len(tracker.create_calls) == 1
 
     def test_raises_when_pr_not_found(self, _pr_id, _sha):
         pr_repo = StubPullRequestRepository(initial=None)
         svc = RegisterIssueService(
-            pr_repo, StubReviewReader(), ReviewItemParser(),
-            StubIssueTracker(), IssueBodyBuilder(),
+            pr_repo,
+            StubReviewReader(),
+            ReviewItemParser(),
+            StubIssueTracker(),
+            IssueBodyBuilder(),
         )
         with pytest.raises(PullRequestNotFoundError):
-            svc.execute(RegisterIssueCommand(
-                pr_id=_pr_id, head_sha=_sha, issue_id="x", command_text="x",
-            ))
+            svc.execute(
+                RegisterIssueCommand(
+                    pr_id=_pr_id,
+                    head_sha=_sha,
+                    issue_id="x",
+                    command_text="x",
+                )
+            )
 
     def test_raises_when_no_review(self, _pr_id, _sha, _pr):
         pr_repo = StubPullRequestRepository(initial=_pr)
         review_reader = StubReviewReader(body=None)
         svc = RegisterIssueService(
-            pr_repo, review_reader, ReviewItemParser(),
-            StubIssueTracker(), IssueBodyBuilder(),
+            pr_repo,
+            review_reader,
+            ReviewItemParser(),
+            StubIssueTracker(),
+            IssueBodyBuilder(),
         )
         with pytest.raises(ReviewItemNotFoundError):
-            svc.execute(RegisterIssueCommand(
-                pr_id=_pr_id, head_sha=_sha, issue_id="x", command_text="x",
-            ))
+            svc.execute(
+                RegisterIssueCommand(
+                    pr_id=_pr_id,
+                    head_sha=_sha,
+                    issue_id="x",
+                    command_text="x",
+                )
+            )
 
     def test_raises_when_item_not_found(self, _pr_id, _sha, _pr):
         pr_repo = StubPullRequestRepository(initial=_pr)
         review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
         svc = RegisterIssueService(
-            pr_repo, review_reader, ReviewItemParser(),
-            StubIssueTracker(), IssueBodyBuilder(),
+            pr_repo,
+            review_reader,
+            ReviewItemParser(),
+            StubIssueTracker(),
+            IssueBodyBuilder(),
         )
         with pytest.raises(ReviewItemNotFoundError):
-            svc.execute(RegisterIssueCommand(
-                pr_id=_pr_id, head_sha=_sha, issue_id="nonexistent",
-                command_text="issue nonexistent",
-            ))
+            svc.execute(
+                RegisterIssueCommand(
+                    pr_id=_pr_id,
+                    head_sha=_sha,
+                    issue_id="nonexistent",
+                    command_text="issue nonexistent",
+                )
+            )
+
+    def test_raises_when_empty_review_items(self, _pr_id, _sha, _pr):
+        """When review body parses to zero items, raises ReviewItemNotFoundError."""
+        pr_repo = StubPullRequestRepository(initial=_pr)
+        review_reader = StubReviewReader(body="No structured items")
+        svc = RegisterIssueService(
+            pr_repo,
+            review_reader,
+            ReviewItemParser(),
+            StubIssueTracker(),
+            IssueBodyBuilder(),
+        )
+        with pytest.raises(ReviewItemNotFoundError, match="no review items found"):
+            svc.execute(
+                RegisterIssueCommand(
+                    pr_id=_pr_id,
+                    head_sha=_sha,
+                    issue_id="x",
+                    command_text="x",
+                )
+            )
+
+    def test_find_item_by_id_directly(self, _pr_id, _sha, _pr):
+        """_find_item returns the item when issue_id matches item.id."""
+        pr_repo = StubPullRequestRepository(initial=_pr)
+        svc = RegisterIssueService(
+            pr_repo,
+            StubReviewReader(body=None),
+            ReviewItemParser(),
+            StubIssueTracker(),
+            IssueBodyBuilder(),
+        )
+        item = ReviewItem(
+            number=1,
+            severity=ItemSeverity.MAJOR,
+            category="bug",
+            file_path="x.py",
+            description="broken",
+            id="custom-id",
+        )
+        result = svc._find_item([item], "custom-id")
+        assert result is item

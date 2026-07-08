@@ -17,8 +17,14 @@ from pr_auto_reviewer.application.commands.review_pull_request_command import (
 )
 from pr_auto_reviewer.application.services import ReviewPullRequestService
 from pr_auto_reviewer.domain import (
-    CodeReview, CommitSha, EmptyDiffError, PullRequest, PullRequestDiff,
-    PullRequestId, RepositoryContext, ReviewVerdict,
+    CodeReview,
+    CommitSha,
+    EmptyDiffError,
+    PullRequest,
+    PullRequestDiff,
+    PullRequestId,
+    RepositoryContext,
+    ReviewVerdict,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
@@ -33,32 +39,41 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "diffs"
 
+
 def _pr_id(repo="owner/repo", num=42):
     return PullRequestId(repository=repo, number=num)
+
 
 def _sha(v="abc123"):
     return CommitSha(value=v)
 
+
 def _cmd(pr_id=None, sha=None):
     return ReviewPullRequestCommand(
-        pr_id=pr_id or _pr_id(), head_sha=sha or _sha(), title="Add feature X",
+        pr_id=pr_id or _pr_id(),
+        head_sha=sha or _sha(),
+        title="Add feature X",
     )
+
 
 def _diff_fixture(pr_id, sha):
     return PullRequestDiff(
-        pr_id=pr_id, head_sha=sha,
+        pr_id=pr_id,
+        head_sha=sha,
         diff_content=(FIXTURES / "sample-service.diff").read_text(),
         file_contents={"src/main.py": "def hello(): pass\n"},
     )
 
+
 def _review(verdict=ReviewVerdict.APPROVED):
     return CodeReview(verdict=verdict, summary="Looks good", model_used="test")
+
 
 def _pr(pr_id, sha):
     return PullRequest(id=pr_id, title="Add feature X", head_sha=sha)
 
-class TestReviewPullRequestService:
 
+class TestReviewPullRequestService:
     def test_new_pr_full_flow(self):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
@@ -69,7 +84,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert pr_repo.find_calls == [cmd.pr_id]
@@ -91,7 +110,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 0
@@ -103,7 +126,10 @@ class TestReviewPullRequestService:
     def test_force_bypasses_idempotency_guard(self):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
-            pr_id=_pr_id(), head_sha=sha, title="Add feature X", force=True,
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            force=True,
         )
         existing = _pr(cmd.pr_id, sha)
         existing = existing.add_review(_review(), sha)
@@ -115,7 +141,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 1
@@ -126,12 +156,19 @@ class TestReviewPullRequestService:
 
     def test_empty_diff_raises(self):
         pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(PullRequestDiff(
-            pr_id=_pr_id(), head_sha=_sha(), diff_content="   \n ",
-        ))
+        changeset = StubChangesetFetcher(
+            PullRequestDiff(
+                pr_id=_pr_id(),
+                head_sha=_sha(),
+                diff_content="   \n ",
+            )
+        )
         svc = ReviewPullRequestService(
-            pr_repo, changeset, StubReviewContextFactory(),
-            StubLlmReview(_review()), StubReviewPublisher(),
+            pr_repo,
+            changeset,
+            StubReviewContextFactory(),
+            StubLlmReview(_review()),
+            StubReviewPublisher(),
         )
         with pytest.raises(EmptyDiffError):
             svc.execute(_cmd())
@@ -149,7 +186,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert len(changeset.fetch_calls) == 1
@@ -168,12 +209,15 @@ class TestReviewPullRequestService:
 
         caplog.set_level(logging.DEBUG)
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         summaries = [
-            r.message for r in caplog.records
-            if "REVIEW COMPLETE" in r.message
+            r.message for r in caplog.records if "REVIEW COMPLETE" in r.message
         ]
         assert len(summaries) == 1
         assert "verdict=changes_requested" in summaries[0]
@@ -191,12 +235,15 @@ class TestReviewPullRequestService:
 
         caplog.set_level(logging.INFO)
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         summaries = [
-            r.message for r in caplog.records
-            if "REVIEW COMPLETE" in r.message
+            r.message for r in caplog.records if "REVIEW COMPLETE" in r.message
         ]
         assert len(summaries) == 0
 
@@ -212,12 +259,15 @@ class TestReviewPullRequestService:
 
         caplog.set_level(logging.DEBUG)
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         summaries = [
-            r.message for r in caplog.records
-            if "REVIEW COMPLETE" in r.message
+            r.message for r in caplog.records if "REVIEW COMPLETE" in r.message
         ]
         assert len(summaries) == 0
 
@@ -231,7 +281,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert len(factory.build_calls) == 1
@@ -251,7 +305,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         prompt = llm.review_prompt_calls[0]
@@ -269,7 +327,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         prompt = llm.review_prompt_calls[0]
@@ -279,7 +341,8 @@ class TestReviewPullRequestService:
 
     def test_prompt_includes_pr_title_when_present(self):
         cmd = ReviewPullRequestCommand(
-            pr_id=_pr_id(), head_sha=_sha(),
+            pr_id=_pr_id(),
+            head_sha=_sha(),
             title="Fix SQL injection in login handler",
         )
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
@@ -290,7 +353,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         prompt = llm.review_prompt_calls[0]
@@ -306,7 +373,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         assert len(factory.build_calls) == 1
@@ -323,7 +394,7 @@ class TestReviewPullRequestService:
                 "diff --git a/src/client.py b/src/client.py\n"
                 "+++ b/src/client.py\n"
                 "@@ -1,2 +1,3 @@\n"
-                "+        logger.info(\"GET %s params=%s\", url, params)\n"
+                '+        logger.info("GET %s params=%s", url, params)\n'
             ),
         )
         pr_repo = StubPullRequestRepository(initial=None)
@@ -333,7 +404,11 @@ class TestReviewPullRequestService:
         publisher = StubReviewPublisher()
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            pr_repo,
+            changeset,
+            factory,
+            llm,
+            publisher,
         ).execute(cmd)
 
         _pr_id_arg, review = publisher.publish_calls[0]
@@ -355,7 +430,7 @@ class TestReviewPullRequestService:
                 "diff --git a/src/client.py b/src/client.py\n"
                 "+++ b/src/client.py\n"
                 "@@ -1,2 +1,3 @@\n"
-                "+        logger.info(\"GET %s params=%s\", url, params)\n"
+                '+        logger.info("GET %s params=%s", url, params)\n'
             ),
         )
         llm_review = CodeReview(
@@ -387,3 +462,66 @@ class TestReviewPullRequestService:
         assert len(review.items) == 2
         assert review.items[0].file_path == "src/client.py"
         assert review.items[1].file_path == "src/other.py"
+
+    def test_skips_log_info_without_noisy_marker(self):
+        """A logger.info() line without noisy markers does not produce a finding."""
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/client.py b/src/client.py\n"
+                "+++ b/src/client.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                '+        logger.info("processing complete without markers")\n'
+            ),
+        )
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo,
+            changeset,
+            StubReviewContextFactory(),
+            llm,
+            publisher,
+        ).execute(cmd)
+
+        _pr_id_arg, review = publisher.publish_calls[0]
+        assert len(review.items) == 0
+
+    def test_limits_noisy_log_findings_to_five(self):
+        """Noisy log detection caps at 5 findings."""
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/app.py b/src/app.py\n"
+                "+++ b/src/app.py\n"
+                "@@ -1,10 +1,10 @@\n"
+                '+        logger.info("GET %s", url)\n'
+                '+        logger.info("POST %s", url)\n'
+                '+        logger.info("return: %s", result)\n'
+                '+        logger.info("keys=%s", data.keys())\n'
+                '+        logger.info("chars=%s", text)\n'
+                '+        logger.info("tokens=%s", tokens)\n'
+            ),
+        )
+        pr_repo = StubPullRequestRepository(initial=None)
+        changeset = StubChangesetFetcher(diff)
+        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo,
+            changeset,
+            StubReviewContextFactory(),
+            llm,
+            publisher,
+        ).execute(cmd)
+
+        _pr_id_arg, review = publisher.publish_calls[0]
+        assert len(review.items) == 5
