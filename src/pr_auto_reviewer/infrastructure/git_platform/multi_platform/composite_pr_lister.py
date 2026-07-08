@@ -2,7 +2,6 @@ from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
 from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import split_repository_prefix
 
-
 class CompositePrLister(PrListerPort):
     def __init__(self, listers: dict[str, PrListerPort]) -> None:
         self._listers = listers

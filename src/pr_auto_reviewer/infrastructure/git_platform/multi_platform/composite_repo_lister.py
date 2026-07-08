@@ -1,6 +1,5 @@
 from pr_auto_reviewer.presentation.ports.repo_lister_port import RepoListerPort
 
-
 class CompositeRepoLister(RepoListerPort):
     def __init__(self, listers: dict[str, RepoListerPort]) -> None:
         self._listers = listers
