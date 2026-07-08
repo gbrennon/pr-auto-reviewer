@@ -73,3 +73,12 @@ class ResponseNormalizerFixtures:
     retry_failures_single: list[str] = ["missing_severity"]
     retry_failures_multiple: list[str] = ["missing_severity", "invalid_category"]
     retry_failures_unknown: list[str] = ["unknown_key"]
+
+    # Description formats from LLM outputs
+    description_dict: dict[str, Any] = {"detail": "The function is too long", "line": "42"}
+    description_list: list[str] = ["Missing null check", "No input validation"]
+    description_int: int = 404
+
+    # Dict/list values for _ensure_str
+    ensure_str_dict: dict[str, Any] = {"key": "value", "status": "error"}
+    ensure_str_list: list[int] = [1, 2, 3]

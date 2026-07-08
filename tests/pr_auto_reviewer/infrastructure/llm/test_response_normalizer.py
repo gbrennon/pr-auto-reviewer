@@ -132,3 +132,66 @@ class TestResponseFieldNormalizer:
     def test_ensure_str_number(self):
         normalizer = ResponseFieldNormalizer()
         assert normalizer._ensure_str(42) == "42"
+
+    def test_ensure_str_dict(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._ensure_str(F.ensure_str_dict)
+        assert "key=value" in result
+        assert "status=error" in result
+
+    def test_ensure_str_list(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._ensure_str(F.ensure_str_list)
+        assert "1" in result
+        assert "2" in result
+        assert "3" in result
+
+    def test_coerce_description_dict(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._coerce_description(F.description_dict)
+        assert "detail=The function is too long" in result
+        assert "line=42" in result
+
+    def test_coerce_description_list(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._coerce_description(F.description_list)
+        assert "Missing null check" in result
+        assert "No input validation" in result
+
+    def test_coerce_description_int(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._coerce_description(F.description_int)
+        assert result == "404"
+
+    def test_coerce_severity_high(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("high") == "major"
+
+    def test_coerce_severity_major_alias(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("major") == "major"
+
+    def test_coerce_severity_medium(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("medium") == "minor"
+
+    def test_coerce_severity_low(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("low") == "info"
+
+    def test_coerce_severity_security_keyword(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("security_issue") == "critical"
+
+    def test_coerce_severity_critical_keyword(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_severity("critical_bug") == "critical"
+
+    def test_coerce_category_invalid_value_error(self):
+        normalizer = ResponseFieldNormalizer()
+        assert normalizer._coerce_category(12345) == "general"
+
+    def test_ensure_str_custom_object(self):
+        normalizer = ResponseFieldNormalizer()
+        result = normalizer._ensure_str(object())
+        assert isinstance(result, str)
