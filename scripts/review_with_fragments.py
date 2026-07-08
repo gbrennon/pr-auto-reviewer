@@ -14,6 +14,7 @@ Usage:
     PYTHONPATH=src:. python scripts/review_with_fragments.py \
         --diff-file my.diff --language python
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +34,7 @@ _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
 
+
 def _build_http_client() -> object:
     from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
         GitPlatformHttpClient,
@@ -41,6 +43,7 @@ def _build_http_client() -> object:
 
     cfg = load_config()
     return GitPlatformHttpClient(cfg.platform_api_url, cfg.platform_token)
+
 
 def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
     client = _build_http_client()
@@ -57,6 +60,7 @@ def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
 
     return diff, file_paths
 
+
 def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
     from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
     from pr_auto_reviewer.infrastructure.fragments.repositories import (
@@ -67,27 +71,28 @@ def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
         ComposeReviewPromptAdapter,
     )
 
-    fragments_dir = Path("fragments")
-    if not fragments_dir.is_dir():
-        sys.exit("No fragments/ directory — run from project root")
-
-    repo = FileSystemFragmentRepository(base_path=fragments_dir)
+    repo = FileSystemFragmentRepository()
     renderer = Jinja2Renderer()
     service = ComposeReviewPromptAdapter(
-        repository=repo, renderer=renderer, max_tokens=4000,
+        repository=repo,
+        renderer=renderer,
+        max_tokens=4000,
     )
 
     context = ReviewContext(language=language, file_paths=file_paths, diff=diff)
 
     composed = service.execute(context)
-    print(f"\nSelected {len(composed.fragments_used)} fragments: {composed.fragments_used}")
+    print(
+        f"\nSelected {len(composed.fragments_used)} fragments: {composed.fragments_used}"
+    )
     print(f"\nTokens: {composed.total_tokens}  Fragments: {composed.fragments_used}")
     return composed.content
+
 
 def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
     print(f"Calling Ollama at {host} with model {model}...")
-    print(f"Prompt: {len(prompt)} chars (~{len(prompt)//4} tokens)\n")
+    print(f"Prompt: {len(prompt)} chars (~{len(prompt) // 4} tokens)\n")
 
     SEP = "\n\n---\n\n"
     system_text = ""
@@ -110,8 +115,10 @@ def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     body = resp.json()
     return body.get("response", ""), body
 
+
 def extract_json(text: str):
     import re
+
     if not text:
         return None
     text = text.strip()
@@ -127,6 +134,7 @@ def extract_json(text: str):
             pass
     return None
 
+
 def determine_verdict(review: dict) -> str:
     verdict = review.get("verdict", "").lower()
     if verdict in ("approve", "approved"):
@@ -138,17 +146,21 @@ def determine_verdict(review: dict) -> str:
             return "changes_requested"
     return "approved"
 
+
 def _code_fence(code: str, lang: str = "") -> str:
     code = code.replace("\\n", "\n").replace("\\t", "    ")
     return f"```{lang}\n{code}\n```"
+
 
 def _fmt_location(file: str, line: str) -> str:
     if file and line:
         return f"{file}:{line}"
     return file or ""
 
+
 def build_review_body(review: dict, model: str) -> tuple[str, str]:
     import os as _os
+
     issues = review.get("issues", [])
     suggestions = review.get("suggestions", [])
     praise = review.get("praise", [])
@@ -217,6 +229,7 @@ def build_review_body(review: dict, model: str) -> tuple[str, str]:
     body += f"\n---\n*Review by {model_name} via local Forgejo*"
     return verdict, body
 
+
 def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> None:
     from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
         GitPlatformHttpClient,
@@ -264,6 +277,7 @@ def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> No
         print(body)
         raise
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Review code using fragment-based prompt composition"
@@ -271,15 +285,28 @@ def main() -> None:
     parser.add_argument("--repo", help="Repository (owner/repo)")
     parser.add_argument("--pr", type=int, help="PR number")
     parser.add_argument("--diff-file", type=Path, help="Local diff file")
-    parser.add_argument("--full-file", type=Path, help="Full source file for language auto-detection")
-    parser.add_argument("--language", default=None, help="Programming language (auto-detected if omitted)")
-    parser.add_argument("--model", default=os.environ.get("OLLAMA_MODEL", "codellama"), help="Ollama model")
     parser.add_argument(
-        "--output", choices=["terminal", "platform"], default="terminal",
+        "--full-file", type=Path, help="Full source file for language auto-detection"
+    )
+    parser.add_argument(
+        "--language",
+        default=None,
+        help="Programming language (auto-detected if omitted)",
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OLLAMA_MODEL", "codellama"),
+        help="Ollama model",
+    )
+    parser.add_argument(
+        "--output",
+        choices=["terminal", "platform"],
+        default="terminal",
         help="Where to send the review (default: terminal)",
     )
     parser.add_argument(
-        "--prompt-only", action="store_true",
+        "--prompt-only",
+        action="store_true",
         help="Only compose the prompt, skip Ollama",
     )
     args = parser.parse_args()
@@ -291,8 +318,10 @@ def main() -> None:
     elif args.repo and args.pr:
         print(f"Fetching PR #{args.pr} from {args.repo}...")
         diff, file_paths = fetch_pr_diff(args.repo, args.pr)
-        print(f"Fetched {len(diff)} chars, {len(file_paths)} files: "
-              f"{', '.join(file_paths[:10])}")
+        print(
+            f"Fetched {len(diff)} chars, {len(file_paths)} files: "
+            f"{', '.join(file_paths[:10])}"
+        )
     else:
         sys.exit("Need --repo/--pr or --diff-file")
 
@@ -300,6 +329,7 @@ def main() -> None:
         from pr_auto_reviewer.infrastructure.context.language_detector import (
             LanguageDetector,
         )
+
         detector = LanguageDetector()
         args.language = detector.detect(file_paths)
         if args.language != "unknown":
@@ -307,6 +337,7 @@ def main() -> None:
         elif args.full_file:
             full_content = args.full_file.read_text()
             import re
+
             if re.search(r"^\s*use\s+", full_content, re.MULTILINE):
                 args.language = "rust"
             elif re.search(r"^\s*(import|from)\s+", full_content, re.MULTILINE):
@@ -337,7 +368,9 @@ def main() -> None:
     prompt_eval_count = ollama_body.get("prompt_eval_count", "?")
 
     print(f"\n{'─' * 60}")
-    print(f"  Tokens — prompt: ~{prompt_tokens_est} est (Ollama eval: {prompt_eval_count})")
+    print(
+        f"  Tokens — prompt: ~{prompt_tokens_est} est (Ollama eval: {prompt_eval_count})"
+    )
     print(f"  Tokens — completion: {eval_count}")
     print(f"  Tokens — total: ~{prompt_tokens_est + eval_count}")
     input_cost = os.getenv("MODEL_INPUT_COST_PER_1K")
@@ -347,13 +380,20 @@ def main() -> None:
         output_c = float(output_cost)
         cost = (prompt_tokens_est / 1000) * input_c + (eval_count / 1000) * output_c
         print(f"  Cost estimate: ${cost:.6f}")
-    print(f"  Time — eval: {eval_duration:.1f}s, load: {load_duration:.1f}s, total: {total_duration:.1f}s")
+    print(
+        f"  Time — eval: {eval_duration:.1f}s, load: {load_duration:.1f}s, total: {total_duration:.1f}s"
+    )
     print(f"{'─' * 60}")
 
     parsed = extract_json(raw_response)
     if parsed is None:
         print("WARNING: Could not parse JSON from Ollama response, using raw text")
-        parsed = {"summary": raw_response, "issues": [], "suggestions": [], "praise": []}
+        parsed = {
+            "summary": raw_response,
+            "issues": [],
+            "suggestions": [],
+            "praise": [],
+        }
 
     verdict, formatted = build_review_body(parsed, args.model)
 
@@ -364,6 +404,7 @@ def main() -> None:
         print(f"REVIEW — Verdict: {verdict.upper()}")
         print("=" * 60)
         print(formatted)
+
 
 if __name__ == "__main__":
     main()

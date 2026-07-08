@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+
 def build_legacy_prompt() -> str:
     from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
         PullRequestDiff,
@@ -59,6 +60,7 @@ def build_legacy_prompt() -> str:
 
     return PromptBuilder().build(diff, context)
 
+
 def build_fragment_prompt() -> str | None:
     from pr_auto_reviewer.domain.fragments.entities.review_context import (
         ReviewContext,
@@ -71,15 +73,12 @@ def build_fragment_prompt() -> str | None:
         ComposeReviewPromptAdapter,
     )
 
-    fragments_dir = Path("fragments")
-    if not fragments_dir.is_dir():
-        print("[FRAGMENT] No fragments/ directory found — skipping fragment build")
-        return None
-
-    repo = FileSystemFragmentRepository(base_path=fragments_dir)
+    repo = FileSystemFragmentRepository()
     renderer = Jinja2Renderer()
     service = ComposeReviewPromptAdapter(
-        repository=repo, renderer=renderer, max_tokens=4000,
+        repository=repo,
+        renderer=renderer,
+        max_tokens=4000,
     )
 
     context = ReviewContext(
@@ -100,6 +99,7 @@ def build_fragment_prompt() -> str | None:
         f"fragments={composed.fragments_used}"
     )
     return composed.content
+
 
 def main() -> None:
     output_dir = Path("comparison_output")
@@ -132,7 +132,10 @@ def main() -> None:
     if fragment and (output_dir / "prompt_FRAGMENT.md").exists():
         print(f"  FRAGMENT:  {len(fragment):>6} chars")
     print()
-    print("Run: diff comparison_output/prompt_LEGACY.md comparison_output/prompt_FRAGMENT.md")
+    print(
+        "Run: diff comparison_output/prompt_LEGACY.md comparison_output/prompt_FRAGMENT.md"
+    )
+
 
 if __name__ == "__main__":
     main()

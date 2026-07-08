@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from dotenv import load_dotenv
+
 load_dotenv(PROJECT_ROOT / ".env")
 
 import requests
@@ -49,6 +50,7 @@ REVIEWS_DIR = FIXTURES_DIR / "reviews"
 SCENARIOS = [
     ("gbrennon/dotfiles", 22, "47b99e8"),
 ]
+
 
 def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     cfg = load_config()
@@ -77,12 +79,12 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
     if full_content:
         (DIFFS_DIR / f"{base}.full").write_text(full_content)
 
-    fragments_dir = PROJECT_ROOT / "fragments"
-    repo = FileSystemFragmentRepository(base_path=fragments_dir)
+    repo = FileSystemFragmentRepository()
     renderer = Jinja2Renderer()
     from pr_auto_reviewer.infrastructure.context.language_detector import (
         LanguageDetector,
     )
+
     file_paths = list(file_contents.keys())
     detector = LanguageDetector()
     language = detector.detect(file_paths)
@@ -112,6 +114,7 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
 
     print(f"  Done: {base}")
 
+
 def main():
     DIFFS_DIR.mkdir(exist_ok=True)
 
@@ -129,6 +132,7 @@ def main():
     for repo, pr_num, sha in SCENARIOS:
         print(f"Capturing {repo}#{pr_num}")
         capture_pr(repo, pr_num, sha)
+
 
 if __name__ == "__main__":
     main()

@@ -11,6 +11,7 @@ from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFra
 
 logger = logging.getLogger(__name__)
 
+
 class FileSystemFragmentRepository:
     """Loads prompt fragments from YAML-front-matter Markdown files on disk.
 
@@ -34,20 +35,26 @@ class FileSystemFragmentRepository:
     cause the repository to crash.
     """
 
-    def __init__(self, base_path: Path) -> None:
+    _DEFAULT_CONTENT_DIR: Path = Path(__file__).parent / "content"
+
+    def __init__(self, base_path: Path | None = None) -> None:
         """Initialise the repository.
 
         Args:
             base_path: Root directory containing per-language
                 sub-directories and a ``universal/`` directory.
+                When ``None``, defaults to the ``content/`` directory
+                shipped with the package.
 
         Raises:
-            ValueError: If *base_path* does not exist or is not a
-                directory.
+            ValueError: If *base_path* is explicitly provided and does
+                not exist or is not a directory.
         """
-        if not base_path.exists():
+        if base_path is None:
+            base_path = self._DEFAULT_CONTENT_DIR
+        elif not base_path.exists():
             raise ValueError(f"base_path does not exist: {base_path}")
-        if not base_path.is_dir():
+        elif not base_path.is_dir():
             raise ValueError(f"base_path must be a directory: {base_path}")
 
         self.base_path = base_path
@@ -153,6 +160,8 @@ class FileSystemFragmentRepository:
             )
         except (ValueError, TypeError) as exc:
             logger.warning(
-                "Invalid fragment data in %s: %s", file_path, exc,
+                "Invalid fragment data in %s: %s",
+                file_path,
+                exc,
             )
             return None
