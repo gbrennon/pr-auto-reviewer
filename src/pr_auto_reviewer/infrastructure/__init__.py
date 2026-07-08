@@ -1,14 +1,14 @@
 from .client import GitPlatformHttpClient
 from .persistence import JsonFilePullRequestRepository
 from .command_bus import InMemoryCommandBus
-from .git_platform.architecture_detector import ArchitectureDetector
-from .git_platform.changeset_fetcher import GitChangesetFetcherAdapter
-from .git_platform.repository_context import GitRepositoryContextAdapter
-from .git_platform.review_publisher import GitReviewPublisherAdapter
-from .git_platform.review_reader import GitReviewReaderAdapter
-from .git_platform.comment_reader import GitCommentReaderAdapter
-from .git_platform.comment_publisher import GitCommentPublisherAdapter
-from .git_platform.issue_tracker import GitIssueTrackerAdapter
+from .context.architecture_detector import ArchitectureDetector
+from .forgejo.changeset_fetcher import ForgejoChangesetFetcher as GitChangesetFetcherAdapter
+from .forgejo.repository_context import ForgejoRepositoryContext as GitRepositoryContextAdapter
+from .review_publishers.platform_publisher import PlatformReviewPublisherAdapter as GitReviewPublisherAdapter
+from .forgejo.review_reader import ForgejoReviewReader as GitReviewReaderAdapter
+from .forgejo.comment_reader import ForgejoCommentReader as GitCommentReaderAdapter
+from .forgejo.comment_publisher import ForgejoCommentPublisher as GitCommentPublisherAdapter
+from .forgejo.issue_tracker import ForgejoIssueTracker as GitIssueTrackerAdapter
 from .llm import OllamaLlmAdapter
 
 __all__ = [
