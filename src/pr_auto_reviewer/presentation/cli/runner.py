@@ -22,6 +22,7 @@ from pr_auto_reviewer.application.ports.outbound.pull_request_repository import 
     PullRequestRepository,
 )
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
 )
@@ -143,6 +144,16 @@ class CliRunner:
             if self._notifier:
                 self._notifier.notify_success("Review complete", f"PR #{args.pr} in {args.repo}")
             return 0
+        except LlmUnavailableError as e:
+            print("Error: LLM host unreachable — cancelling review")
+            if self._notifier:
+                self._notifier.notify_error(
+                    f"LLM unavailable for PR #{command.pr_id.number}", e)
+            if args.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return 1
         except Exception as e:
             print(f"Error: {e}")
             if self._notifier:
@@ -197,6 +208,16 @@ class CliRunner:
             return 0
         except PullRequestNotFoundError:
             print("Error: PR not in local state")
+            return 1
+        except LlmUnavailableError as e:
+            print("Error: LLM host unreachable — cancelling command processing")
+            if self._notifier:
+                self._notifier.notify_error(
+                    f"LLM unavailable for PR #{args.pr}", e)
+            if args.verbose:
+                import traceback
+
+                traceback.print_exc()
             return 1
         except Exception as e:
             print(f"Error: {e}")

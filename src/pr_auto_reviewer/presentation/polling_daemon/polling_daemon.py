@@ -12,6 +12,7 @@ from pr_auto_reviewer.application.commands.review_pull_request_command import (
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
+from pr_auto_reviewer.application.ports.outbound.notifier import Notifier
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
@@ -31,11 +32,13 @@ class PollingDaemon:
         repo_lister: RepoListerPort,
         pr_lister: PrListerPort,
         review_service: ReviewPullRequestUseCase,
+        notifier: Notifier | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
         self._pr_lister = pr_lister
         self._review_service = review_service
+        self._notifier = notifier
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
 
@@ -78,29 +81,32 @@ class PollingDaemon:
             logger.warning("No repositories found")
             return
 
-        for repo in repos:
-            open_prs = self._pr_lister.list_open(repo)
+        try:
+            for repo in repos:
+                open_prs = self._pr_lister.list_open(repo)
 
-            if self._force_pr is not None:
-                forced = self._pr_lister.get_pr(repo, self._force_pr)
-                if forced is not None:
-                    if not any(p.pr_id.number == self._force_pr for p in open_prs):
-                        open_prs.append(forced)
-                        logger.info(
-                            "Force-fetched PR #%d in %s (state-agnostic)",
-                            self._force_pr, repo,
-                        )
+                if self._force_pr is not None:
+                    forced = self._pr_lister.get_pr(repo, self._force_pr)
+                    if forced is not None:
+                        if not any(p.pr_id.number == self._force_pr for p in open_prs):
+                            open_prs.append(forced)
+                            logger.info(
+                                "Force-fetched PR #%d in %s (state-agnostic)",
+                                self._force_pr, repo,
+                            )
 
-            if not open_prs:
-                logger.debug(f"No open PRs in {repo}")
-                continue
-
-            for pr in open_prs:
-                if pr.is_draft:
-                    logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
+                if not open_prs:
+                    logger.debug(f"No open PRs in {repo}")
                     continue
 
-                self._process_pr(pr)
+                for pr in open_prs:
+                    if pr.is_draft:
+                        logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
+                        continue
+
+                    self._process_pr(pr)
+        except LlmUnavailableError:
+            logger.warning("LLM unavailable — cancelling this cycle")
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
@@ -126,6 +132,12 @@ class PollingDaemon:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
         except LlmUnavailableError:
             logger.error("LLM unavailable, will retry next cycle")
+            if self._notifier:
+                self._notifier.notify_error(
+                    f"LLM unavailable for PR #{pr.pr_id.number} in {pr.pr_id.repository}",
+                    LlmUnavailableError("Ollama host unreachable"),
+                )
+            raise
         except ReviewPublishError as e:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
         except Exception as e:
