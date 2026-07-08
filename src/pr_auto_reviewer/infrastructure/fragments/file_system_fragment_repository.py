@@ -12,6 +12,62 @@ from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFra
 logger = logging.getLogger(__name__)
 
 
+def _load_fragment(file_path: Path) -> PromptFragment | None:
+    """Parse a single ``.md`` file into a :class:`PromptFragment`.
+
+    Returns ``None`` for any file that is malformed, missing
+    required front-matter fields, or otherwise unparseable — the
+    caller is responsible for skipping these gracefully.
+    """
+    try:
+        raw = file_path.read_text()
+    except OSError:
+        logger.warning("Cannot read fragment file: %s", file_path)
+        return None
+
+    if not raw.startswith("---"):
+        return None
+
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return None
+
+    front_matter_raw = parts[1]
+    markdown_content = parts[2].strip()
+
+    try:
+        front_matter: dict = yaml.safe_load(front_matter_raw)
+    except yaml.YAMLError:
+        logger.warning("Malformed YAML in fragment: %s", file_path)
+        return None
+
+    if not isinstance(front_matter, dict):
+        return None
+
+    fragment_id = front_matter.get("id")
+
+    if not fragment_id or not str(fragment_id).strip():
+        logger.warning("Fragment missing 'id' field: %s", file_path)
+        return None
+
+    try:
+        return PromptFragment(
+            id=str(fragment_id),
+            content=markdown_content,
+            language=front_matter.get("language"),
+            priority=int(front_matter.get("priority", 50)),
+            category=str(front_matter.get("category", "general")),
+            metadata=front_matter,
+        )
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            "Invalid fragment data in %s: %s",
+            file_path,
+            exc,
+        )
+        return None
+
+
 class FileSystemFragmentRepository:
     """Loads prompt fragments from YAML-front-matter Markdown files on disk.
 
@@ -71,7 +127,7 @@ class FileSystemFragmentRepository:
 
         fragments: list[PromptFragment] = []
         for md_file in sorted(language_dir.glob("*.md")):
-            fragment = self._load_fragment(md_file)
+            fragment = _load_fragment(md_file)
             if fragment is not None:
                 fragments.append(fragment)
 
@@ -87,7 +143,7 @@ class FileSystemFragmentRepository:
 
         fragments: list[PromptFragment] = []
         for md_file in sorted(universal_dir.glob("*.md")):
-            fragment = self._load_fragment(md_file)
+            fragment = _load_fragment(md_file)
             if fragment is not None and fragment.is_universal():
                 fragments.append(fragment)
 
@@ -104,64 +160,9 @@ class FileSystemFragmentRepository:
                 continue
 
             for md_file in sorted(subdir.glob("*.md")):
-                fragment = self._load_fragment(md_file)
+                fragment = _load_fragment(md_file)
                 if fragment is not None and fragment.id == fragment_id:
                     return fragment
 
         return None
 
-    @staticmethod
-    def _load_fragment(file_path: Path) -> PromptFragment | None:
-        """Parse a single ``.md`` file into a :class:`PromptFragment`.
-
-        Returns ``None`` for any file that is malformed, missing
-        required front-matter fields, or otherwise unparseable — the
-        caller is responsible for skipping these gracefully.
-        """
-        try:
-            raw = file_path.read_text()
-        except OSError:
-            logger.warning("Cannot read fragment file: %s", file_path)
-            return None
-
-        if not raw.startswith("---"):
-            return None
-
-        parts = raw.split("---", 2)
-        if len(parts) < 3:
-            return None
-
-        front_matter_raw = parts[1]
-        markdown_content = parts[2].strip()
-
-        try:
-            front_matter: dict = yaml.safe_load(front_matter_raw)
-        except yaml.YAMLError:
-            logger.warning("Malformed YAML in fragment: %s", file_path)
-            return None
-
-        if not isinstance(front_matter, dict):
-            return None
-
-        fragment_id = front_matter.get("id")
-
-        if not fragment_id or not str(fragment_id).strip():
-            logger.warning("Fragment missing 'id' field: %s", file_path)
-            return None
-
-        try:
-            return PromptFragment(
-                id=str(fragment_id),
-                content=markdown_content,
-                language=front_matter.get("language"),
-                priority=int(front_matter.get("priority", 50)),
-                category=str(front_matter.get("category", "general")),
-                metadata=front_matter,
-            )
-        except (ValueError, TypeError) as exc:
-            logger.warning(
-                "Invalid fragment data in %s: %s",
-                file_path,
-                exc,
-            )
-            return None

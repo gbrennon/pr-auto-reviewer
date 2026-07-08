@@ -60,13 +60,13 @@ from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter imp
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
-from pr_auto_reviewer.infrastructure.fragments.repositories import (
+from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
 )
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
-from pr_auto_reviewer.infrastructure.fragments.renderers import (
+from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider

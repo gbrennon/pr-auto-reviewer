@@ -63,10 +63,10 @@ def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
 
 def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
     from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
-    from pr_auto_reviewer.infrastructure.fragments.repositories import (
+    from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
         FileSystemFragmentRepository,
     )
-    from pr_auto_reviewer.infrastructure.fragments.renderers import Jinja2Renderer
+    from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import Jinja2Renderer
     from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
         ComposeReviewPromptAdapter,
     )
