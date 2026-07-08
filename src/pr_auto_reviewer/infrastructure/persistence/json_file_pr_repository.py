@@ -29,7 +29,6 @@ from ...application.ports.outbound.pull_request_repository import (
 
 _STATE_KEY_SEPARATOR = "/"
 
-
 class JsonFilePullRequestRepository(PullRequestRepository):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
 
@@ -39,8 +38,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
 
     def __init__(self, file_path: str | Path) -> None:
         self._file_path = Path(file_path)
-
-    # ── port methods ────────────────────────────────────────────────
 
     def find(self, pr_id: PullRequestId) -> PullRequest | None:
         data = self._load()
@@ -78,8 +75,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         self._file_path.write_text('{"reviewed":{}}')
 
-    # ── private ─────────────────────────────────────────────────────
-
     def _load(self) -> dict:
         if not self._file_path.exists():
             return {"reviewed": {}}
@@ -107,8 +102,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             raise
-
-    # ── serialization ───────────────────────────────────────────────
 
     def _serialize(self, pr: PullRequest) -> dict:
         return {
@@ -172,7 +165,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             reviews=reviews,
             processed_comment_ids=processed_ids,
         )
-
 
 def _make_key(pr_id: PullRequestId) -> str:
     return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"

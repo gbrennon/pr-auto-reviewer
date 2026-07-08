@@ -2,20 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.git_platform.pr_lister_adapter import (
-    GitPrListerAdapter,
+from pr_auto_reviewer.infrastructure.forgejo.pr_lister import (
+    ForgejoPrLister,
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest
 
 from tests.fakes.http_client import FakeGitPlatformHttpClient
 from tests.fixtures.pr_lister_fixtures import pr_dict, pr_dicts
 
-
 def _adapter(api_data):
-    return GitPrListerAdapter(FakeGitPlatformHttpClient(api_data))
+    return ForgejoPrLister(FakeGitPlatformHttpClient(api_data))
 
-
-class TestGitPrListerAdapter:
+class TestForgejoPrLister:
 
     def test_list_open_when_repo_has_prs_then_returns_open_pull_requests(self):
         adapter = _adapter({"/repos/o/r/pulls": pr_dicts(3)})
@@ -80,4 +78,4 @@ class TestGitPrListerAdapter:
         d = {pr: 1}
         assert d[pr] == 1
         with pytest.raises(Exception):
-            pr.title = "mutated"  # type: ignore[misc]
+            pr.title = "mutated"

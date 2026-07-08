@@ -11,11 +11,10 @@ from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
-from pr_auto_reviewer.infrastructure.git_platform.review_context_factory import (
+from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
 from tests.pr_auto_reviewer.application.stubs import StubRepositoryContext
-
 
 class _SpyComposeReviewPrompt(ComposeReviewPromptPort):
 
@@ -29,13 +28,10 @@ class _SpyComposeReviewPrompt(ComposeReviewPromptPort):
         self.execute_calls.append(context)
         return self._default
 
-
 def _make_pr_id() -> PullRequestId:
     return PullRequestId(repository="test/repo", number=7)
 
-
 _DEFAULT_FILE_CONTENTS = {"src/main.py": "def foo(): pass\n"}
-
 
 def _make_diff(
     *, diff_content: str = "+def foo(): pass\n",
@@ -53,7 +49,6 @@ def _make_diff(
         file_contents=file_contents,
         commit_messages=commit_messages,
     )
-
 
 class TestReviewContextFactoryBuild:
 
@@ -171,7 +166,7 @@ class TestReviewContextFactoryBuild:
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
-        result = factory.build(_make_pr_id(), _make_diff())  # no title / description
+        result = factory.build(_make_pr_id(), _make_diff())
 
         assert isinstance(result, ComposedPrompt)
         assert compose.execute_calls[0].diff == "+def foo(): pass\n"

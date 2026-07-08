@@ -33,7 +33,6 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "diffs"
 
-
 def _pr_id(repo="owner/repo", num=42):
     return PullRequestId(repository=repo, number=num)
 
@@ -57,7 +56,6 @@ def _review(verdict=ReviewVerdict.APPROVED):
 
 def _pr(pr_id, sha):
     return PullRequest(id=pr_id, title="Add feature X", head_sha=sha)
-
 
 class TestReviewPullRequestService:
 
@@ -222,7 +220,6 @@ class TestReviewPullRequestService:
             if "REVIEW COMPLETE" in r.message
         ]
         assert len(summaries) == 0
-
 
     def test_prompt_contains_diff_content(self):
         cmd = _cmd()

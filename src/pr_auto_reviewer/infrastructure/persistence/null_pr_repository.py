@@ -12,7 +12,6 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 
 logger = logging.getLogger(__name__)
 
-
 class NullPullRequestRepository(PullRequestRepository):
     """Discards all state.  find() always returns None, save() is a no-op.
 

@@ -35,15 +35,12 @@ LAYER_INDICATORS = {
     "handlers", "controllers", "persistence",
 }
 
-
 def should_skip_dir(name):
     return name in SKIP_DIRS or name.startswith(".")
-
 
 def should_skip_file(name):
     _, ext = os.path.splitext(name)
     return ext.lower() in SKIP_EXTENSIONS
-
 
 def generate_tree(root, prefix="", depth=0, file_count=[0]):
     if depth > MAX_DEPTH or file_count[0] > MAX_FILES:
@@ -83,9 +80,7 @@ def generate_tree(root, prefix="", depth=0, file_count=[0]):
             print(f"{prefix}... (truncated, too many files)")
             return
 
-
 def detect_project_type_local(root):
-    """Derive project type hint from a local directory structure."""
     try:
         entries = set(os.listdir(root))
     except (PermissionError, FileNotFoundError):
@@ -129,17 +124,7 @@ def detect_project_type_local(root):
 
     return "unknown"
 
-
 def detect_project_type_from_tree(tree_text):
-    """Derive project type hint from a flat path tree (API response).
-
-    Expected input: one path per line, dirs end with /, e.g.:
-        src/
-        src/domain/
-        src/application/
-        scripts/
-        Makefile
-    """
     lines = [line.strip() for line in tree_text.strip().splitlines() if line.strip()]
     dirs = set()
     files = set()
@@ -196,7 +181,6 @@ def detect_project_type_from_tree(tree_text):
 
     return "unknown"
 
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: generate_repo_structure.py <repo_path>", file=sys.stderr)
@@ -228,7 +212,6 @@ def main():
     repo_name = os.path.basename(os.path.abspath(repo_path))
     print(f"{repo_name}/")
     generate_tree(repo_path, prefix="", depth=0)
-
 
 if __name__ == "__main__":
     main()

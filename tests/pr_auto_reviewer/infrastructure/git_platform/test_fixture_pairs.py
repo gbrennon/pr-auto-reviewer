@@ -19,7 +19,6 @@ from pr_auto_reviewer.domain.value_objects.repository_context import (
 )
 from tests.fixtures.auto_fixtures import discovered_pairs
 
-
 class TestFixturePairs:
     """Auto-discovered tests for each captured fixture pair."""
 
@@ -67,7 +66,6 @@ class TestFixturePairs:
         assert data["verdict"] in ("approved", "changes_requested", "commented")
         assert data["summary"], f"{name}: empty summary"
         assert isinstance(data["items"], list), f"{name}: items not a list"
-        # Metadata should be embedded in review too
         assert data.get("pr_number") is not None, f"{name}: missing pr_number in review"
         assert data.get("head_sha"), f"{name}: missing head_sha in review"
 

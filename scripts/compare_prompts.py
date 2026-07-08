@@ -14,13 +14,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Ensure we can import the project
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
 def build_legacy_prompt() -> str:
-    """Build a prompt using the old monolithic PromptBuilder."""
     from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
         PullRequestDiff,
     )
@@ -62,9 +59,7 @@ def build_legacy_prompt() -> str:
 
     return PromptBuilder().build(diff, context)
 
-
 def build_fragment_prompt() -> str | None:
-    """Build a prompt using the new fragment-based system."""
     from pr_auto_reviewer.domain.fragments.entities.review_context import (
         ReviewContext,
     )
@@ -106,12 +101,10 @@ def build_fragment_prompt() -> str | None:
     )
     return composed.content
 
-
 def main() -> None:
     output_dir = Path("comparison_output")
     output_dir.mkdir(exist_ok=True)
 
-    # Legacy
     print("=" * 60)
     print("Building LEGACY prompt (PromptBuilder)...")
     print("=" * 60)
@@ -121,7 +114,6 @@ def main() -> None:
     print(f"Written: {legacy_file} ({len(legacy)} chars)")
     print()
 
-    # Fragment
     print("=" * 60)
     print("Building FRAGMENT prompt (FragmentSelector + PromptComposer)...")
     print("=" * 60)
@@ -132,7 +124,6 @@ def main() -> None:
         print(f"Written: {fragment_file} ({len(fragment)} chars)")
     print()
 
-    # Summary
     print("=" * 60)
     print("COMPARISON")
     print("=" * 60)
@@ -142,7 +133,6 @@ def main() -> None:
         print(f"  FRAGMENT:  {len(fragment):>6} chars")
     print()
     print("Run: diff comparison_output/prompt_LEGACY.md comparison_output/prompt_FRAGMENT.md")
-
 
 if __name__ == "__main__":
     main()

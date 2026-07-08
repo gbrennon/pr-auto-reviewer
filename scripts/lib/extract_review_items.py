@@ -5,17 +5,7 @@ import sys
 import re
 import os
 
-
 def extract_review_items(review_body, debug=False):
-    """Extract issues and suggestions from a review body.
-
-    Args:
-        review_body: The review text to parse
-        debug: If True, output debug info to stderr
-
-    Returns:
-        List of strings in format: num|severity|type|location|text
-    """
     if debug:
         print(f"[DEBUG] Input review body length: {len(review_body)}", file=sys.stderr)
         print(f"[DEBUG] First 500 chars: {review_body[:500]}", file=sys.stderr)
@@ -107,7 +97,6 @@ def extract_review_items(review_body, debug=False):
     result = issues + suggestions
     return result
 
-
 def main():
     debug = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
     review_body = sys.stdin.read()
@@ -115,7 +104,6 @@ def main():
 
     for item in items:
         print(item)
-
 
 if __name__ == "__main__":
     main()

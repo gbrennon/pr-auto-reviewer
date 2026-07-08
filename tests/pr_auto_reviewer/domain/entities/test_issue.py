@@ -5,7 +5,6 @@ from pr_auto_reviewer.domain import (
     InvalidIssueBodyError,
 )
 
-
 class TestIssue:
     """Tests for Issue entity (immutable)."""
 
@@ -62,7 +61,7 @@ class TestIssue:
         )
         assert original.is_closed() is False
         closed = original.close()
-        assert original.is_closed() is False  # original unchanged
+        assert original.is_closed() is False
         assert closed.is_closed() is True
 
     def test_update_body(self) -> None:
@@ -72,7 +71,7 @@ class TestIssue:
             source_pr_id=pr_id, source_item_number=1,
         )
         updated = original.update_body("updated body")
-        assert original.body == "original body"  # original unchanged
+        assert original.body == "original body"
         assert updated.body == "updated body"
 
     def test_update_body_rejects_empty(self) -> None:
@@ -91,7 +90,7 @@ class TestIssue:
             source_pr_id=pr_id, source_item_number=1,
         )
         issue = issue.close()
-        issue = issue.close()  # Closing twice should not raise
+        issue = issue.close()
         assert issue.is_closed() is True
 
     def test_immutable_id(self) -> None:
@@ -101,7 +100,7 @@ class TestIssue:
             source_pr_id=pr_id, source_item_number=1,
         )
         with pytest.raises(Exception):
-            issue.id = 200  # type: ignore[misc]
+            issue.id = 200
 
     def test_immutable_source_pr_id(self) -> None:
         pr_id = PullRequestId(repository="r", number=1)
@@ -110,4 +109,4 @@ class TestIssue:
             source_pr_id=pr_id, source_item_number=1,
         )
         with pytest.raises(Exception):
-            issue.source_pr_id = PullRequestId(repository="x", number=99)  # type: ignore[misc]
+            issue.source_pr_id = PullRequestId(repository="x", number=99)

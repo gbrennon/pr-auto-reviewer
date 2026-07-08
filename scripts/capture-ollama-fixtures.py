@@ -34,7 +34,6 @@ FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
 DIFFS_DIR = FIXTURES_DIR / "diffs"
 RESPONSES_DIR = FIXTURES_DIR / "ollama_responses"
 
-# ── mapping: diff base name → file_path in the diff ───────────────────
 SCENARIOS = [
     ("python-sql-injection",   "app/repository.py"),
     ("java-god-class",         "src/main/java/com/example/OrderService.java"),
@@ -47,7 +46,6 @@ SCENARIOS = [
     ("shell-missing-shebang",  "scripts/deploy.sh"),
     ("rust-typo-reverse",     "src/infrastructure/persistence/json_dose_record_repository.rs"),
 ]
-
 
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
@@ -96,7 +94,6 @@ def main() -> None:
             print(f"    [DRY RUN] Would save to {out_file.name}")
             continue
 
-        # Call the REAL Ollama (captures raw response via monkey-patch)
         import requests
         import json as _json
 
@@ -121,12 +118,10 @@ def main() -> None:
             print(f"    ERROR: {e}")
             raw_response = {"_error": str(e)}
 
-        # Save the raw Ollama JSON (what the API actually returned)
         out_file.write_text(json.dumps(raw_response, indent=2))
         resp_text = raw_response.get("response", "")
         print(f"    response: {len(resp_text)} chars → saved {out_file.name}")
 
-        # Also parse it to show verdict
         if resp_text and "_error" not in raw_response:
             from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
                 ReviewResponseParser,
@@ -135,7 +130,6 @@ def main() -> None:
             print(f"    verdict: {review.verdict.value}, items: {len(review.items)}")
 
     print(f"\nDone! {len(SCENARIOS)} scenarios processed.")
-
 
 if __name__ == "__main__":
     main()

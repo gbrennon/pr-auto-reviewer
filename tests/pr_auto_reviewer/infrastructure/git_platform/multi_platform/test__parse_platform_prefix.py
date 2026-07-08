@@ -4,11 +4,10 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform
     split_repository_prefix,
 )
 
-
 class TestSplitRepositoryPrefix:
-    def test_returns_codeberg_for_unprefixed_repo(self):
+    def test_returns_forgejo_for_unprefixed_repo(self):
         platform, name = split_repository_prefix("owner/repo")
-        assert platform == "codeberg"
+        assert platform == "forgejo"
         assert name == "owner/repo"
 
     def test_extracts_platform_from_github_prefix(self):
@@ -21,7 +20,7 @@ class TestSplitRepositoryPrefix:
         assert platform == "gitlab"
         assert name == "owner/repo"
 
-    def test_extracts_platform_from_codeberg_prefix(self):
+    def test_extracts_platform_from_forgejo_prefix(self):
         platform, name = split_repository_prefix("codeberg:owner/repo")
-        assert platform == "codeberg"
+        assert platform == "forgejo"
         assert name == "owner/repo"

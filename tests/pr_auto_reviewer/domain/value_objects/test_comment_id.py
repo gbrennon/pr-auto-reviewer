@@ -1,7 +1,6 @@
 import pytest
 from pr_auto_reviewer.domain import CommentId, InvalidCommentIdError
 
-
 class TestCommentId:
     """Tests for CommentId value object."""
 
@@ -23,7 +22,7 @@ class TestCommentId:
     def test_immutability(self) -> None:
         cid = CommentId(value="c_abc123")
         with pytest.raises(Exception):
-            cid.value = "changed"  # type: ignore[misc]
+            cid.value = "changed"
 
     def test_str_representation(self) -> None:
         cid = CommentId(value="c_abc123")

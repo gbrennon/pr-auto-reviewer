@@ -9,7 +9,6 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 
 FIXTURES = "tests/fixtures"
 
-
 class TestReviewResponseParser:
 
     def _load(self, name):
@@ -75,13 +74,13 @@ class TestReviewResponseParser:
         result = ReviewResponseParser.parse(raw, "m")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
-    def test_parse_json_without_issues_returns_approved(self):
+    def test_parse_json_without_issues_returns_commented(self):
         data = {"issues": [], "summary": "ok"}
         raw = json.dumps(data)
         result = ReviewResponseParser.parse(raw, "m")
-        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.verdict == ReviewVerdict.COMMENTED
 
-    def test_parse_json_with_info_only_returns_approved(self):
+    def test_parse_json_with_info_only_no_code_returns_commented(self):
         data = {
             "issues": [
                 {"file": "x.py", "line": "1",
@@ -92,7 +91,8 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser.parse(raw, "m")
-        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.verdict == ReviewVerdict.COMMENTED
+        assert result.items == []
 
     def test_parse_json_drops_issue_without_concrete_code(self):
         data = {
@@ -251,7 +251,6 @@ class TestReviewResponseParser:
     def test_extract_first_paragraph_when_bold_verdict_then_skips_and_returns_none(self):
         assert ReviewResponseParser._extract_first_paragraph("**Verdict:** x\\n\\n## Summary\\n...") is None
 
-
     def test_parse_when_extracted_json_is_malformed_then_falls_back_to_markdown(self):
         raw = "Some text with { malformed: json } inside\n\n## Verdict\napproved\n\n## Summary\ngood\n\n## Items\nNone"
         result = ReviewResponseParser.parse(raw, "m")
@@ -263,8 +262,6 @@ class TestReviewResponseParser:
         result = ReviewResponseParser.parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.summary == "fallback"
-
-    # --- _infer_severity tests -------------------------------------------------
 
     def test_infer_severity_critical_from_security_keywords(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -329,8 +326,6 @@ class TestReviewResponseParser:
         )
         assert severity == ItemSeverity.MINOR
         assert severity_str == "medium"
-
-    # --- _infer_type tests ----------------------------------------------------
 
     def test_infer_type_security_from_security_keywords(self):
         t = ReviewResponseParser._infer_type(
@@ -410,9 +405,6 @@ class TestReviewResponseParser:
         )
         assert t == "quality"
 
-
-    # --- _extract_suggestions_md tests ----------------------------------------
-
     def test_extract_suggestions_md_no_section_returns_empty(self):
         result = ReviewResponseParser._extract_suggestions_md(
             "## Verdict\napproved\n\n## Summary\nok\n\n## Items\nNone\n"
@@ -473,8 +465,6 @@ class TestReviewResponseParser:
         assert len(result) == 1
         assert "refactor" in result[0]["description"]
 
-    # --- _extract_praise_md tests ---------------------------------------------
-
     def test_extract_praise_md_no_section_returns_empty(self):
         result = ReviewResponseParser._extract_praise_md(
             "## Verdict\napproved\n\n## Summary\nok\n\n## Items\nNone\n"
@@ -522,8 +512,6 @@ class TestReviewResponseParser:
         assert len(result) == 1
         assert "error handling" in result[0]["description"]
 
-    # --- parse: reasons field handling ----------------------------------------
-
     def test_parse_json_with_reasons_list_joins_them(self):
         data = {
             "issues": [{"file": "x.py", "line": "1", "severity": "low",
@@ -546,8 +534,6 @@ class TestReviewResponseParser:
         result = ReviewResponseParser.parse(raw, "m")
         assert result.reason == "Single reason string"
 
-    # --- parse: unknown severity triggers _infer_severity ---------------------
-
     def test_parse_json_unknown_severity_triggers_inference(self):
         data = {
             "issues": [
@@ -564,8 +550,6 @@ class TestReviewResponseParser:
         result = ReviewResponseParser.parse(raw, "m")
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
         assert result.items[0].severity == ItemSeverity.CRITICAL
-
-    # --- parse: empty type triggers _infer_type -------------------------------
 
     def test_parse_json_empty_type_triggers_inference(self):
         data = {
@@ -598,4 +582,32 @@ class TestReviewResponseParser:
         result = ReviewResponseParser.parse(raw, "m")
         assert result.items[0].category == "maintainability"
 
-    # --- _extract_items_md: invalid severity falls back to INFO ---------------
+    def test_parse_json_handles_dict_in_description_field(self):
+        data = {
+            "issues": [
+                {"file": "x.py", "line": "1",
+                 "severity": "low",
+                 "type": "test",
+                 "description": {"added": 1, "removed": 1},
+                 "current_code": "+ x = 1",
+                 "suggested_fix": "+ x = 2"},
+            ],
+            "summary": "ok",
+        }
+        raw = json.dumps(data)
+        result = ReviewResponseParser.parse(raw, "m")
+        assert result.items[0].description == "added=1, removed=1"
+
+    def test_parse_json_handles_dict_in_details_field(self):
+        data = {
+            "changes": [
+                {"file": "x.py", "type": "test",
+                 "details": {"added": 1, "removed": 1},
+                 "current_code": "+ x = 1",
+                 "suggested_fix": "+ x = 2"},
+            ],
+            "summary": "ok",
+        }
+        raw = json.dumps(data)
+        result = ReviewResponseParser.parse(raw, "m")
+

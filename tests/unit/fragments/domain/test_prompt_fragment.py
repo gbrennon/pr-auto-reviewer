@@ -4,7 +4,6 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 
-
 class TestPromptFragment:
     """Tests for PromptFragment immutable value object."""
 
@@ -35,7 +34,7 @@ class TestPromptFragment:
         )
 
         with pytest.raises(AttributeError):
-            fragment.id = "new-id"  # type: ignore[misc]
+            fragment.id = "new-id"
 
     def test_creates_universal_fragment_without_language(self) -> None:
         """PromptFragment with language=None represents universal fragment."""

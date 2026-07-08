@@ -4,7 +4,6 @@
 import sys
 import re
 
-
 def parse_issue_command(comment):
     """Parse issue creation command from a comment.
 
@@ -37,12 +36,10 @@ def parse_issue_command(comment):
 
     return ""
 
-
 def main():
     comment = sys.stdin.read().strip()
     result = parse_issue_command(comment)
     print(result)
-
 
 if __name__ == "__main__":
     main()

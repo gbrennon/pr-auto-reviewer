@@ -16,7 +16,6 @@ from pr_auto_reviewer.domain.value_objects.repository_context import (
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 
-
 class TestPromptBuilder:
 
     @pytest.fixture
@@ -141,10 +140,6 @@ class TestPromptBuilder:
         assert "print('hello')" in result
         assert "print('world')" in result
 
-
-# --- PromptBudget tests ------------------------------------------------------
-
-
 class TestPromptBudget:
     def test_estimate_tokens_rough_heuristic(self):
         """1 token ≈ 4 characters."""
@@ -159,23 +154,19 @@ class TestPromptBudget:
 
     def test_would_fit_returns_true_when_room(self):
         budget = PromptBudget(max_tokens=100)
-        assert budget.would_fit("a" * 200) is True  # 50 tokens
-        assert budget.would_fit("a" * 500) is False  # 125 tokens
+        assert budget.would_fit("a" * 200) is True
+        assert budget.would_fit("a" * 500) is False
 
     def test_try_consume_consumes_if_fits(self):
         budget = PromptBudget(max_tokens=50)
-        assert budget.try_consume("a" * 100) is True  # 25 tokens
-        assert budget.try_consume("a" * 200) is False  # 50 tokens would exceed
+        assert budget.try_consume("a" * 100) is True
+        assert budget.try_consume("a" * 200) is False
         assert budget._consumed == 25
 
     def test_remaining_tokens_never_negative(self):
         budget = PromptBudget(max_tokens=10)
-        budget.consume("a" * 100)  # 25 tokens consumed, but max is 10
+        budget.consume("a" * 100)
         assert budget.remaining_tokens == 0
-
-
-# --- Diff annotation tests ---------------------------------------------------
-
 
 class TestAnnotateDiff:
     def test_annotates_added_file(self):
@@ -218,10 +209,6 @@ class TestAnnotateDiff:
         result = _annotate_diff(diff)
         assert "[MODIFIED] file.py" in result
 
-
-# --- Diff truncation tests ---------------------------------------------------
-
-
 class TestTrimDiff:
     def test_returns_unchanged_when_under_budget(self):
         diff = (
@@ -249,10 +236,6 @@ class TestTrimDiff:
         result = _trim_diff(diff, max_tokens=20)
         assert "diff --git" in result
         assert len(result) < len(diff)
-
-
-# --- File content truncation tests -------------------------------------------
-
 
 class TestTrimFileContents:
     def test_returns_empty_for_empty_input(self):
@@ -286,10 +269,6 @@ class TestTrimFileContents:
         assert "line 50" in content
         assert "line 53" in content
 
-
-# --- Repo structure truncation tests -----------------------------------------
-
-
 class TestTrimRepoStructure:
     def test_unchanged_when_under_limit(self):
         structure = "\n".join(f"file{i}.py" for i in range(5))
@@ -301,10 +280,6 @@ class TestTrimRepoStructure:
         result = _trim_repo_structure(structure, max_lines=50)
         assert "..." in result
         assert result.count("\n") < 100
-
-
-# --- Budget-aware PromptBuilder tests ----------------------------------------
-
 
 class TestBudgetAwarePromptBuilder:
     """Tests for budget-aware PromptBuilder with max_tokens > 0."""

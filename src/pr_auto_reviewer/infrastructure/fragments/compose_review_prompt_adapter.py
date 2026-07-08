@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SEPARATOR = "\n\n---\n\n"
 
-
 class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
     """Infrastructure adapter that composes a complete review prompt from fragments.
 
@@ -92,11 +91,6 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         language_fragments = self._repository.find_by_language(context.language)
         universal_fragments = self._repository.find_universal()
 
-        # If strict selection is disabled, preserve the original behaviour:
-        # include all language-specific and universal fragments (sorted by
-        # priority). When strict selection is enabled, apply heuristics to
-        # restrict universal fragments to those that appear relevant to the
-        # change set.
         if not getattr(self, "_strict_selection", False):
             all_fragments = language_fragments + universal_fragments
             sorted_fragments = sorted(
@@ -106,9 +100,7 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
                 return self._apply_budget_constraints(sorted_fragments)
             return sorted_fragments
 
-        # Start with language-specific fragments (they are assumed relevant)
         candidates: list[PromptFragment] = list(language_fragments)
-        # Add universal fragments but filter them by simple heuristics below
         universal_candidates: list[PromptFragment] = list(universal_fragments)
 
         diff_text = (context.diff or "").lower()
@@ -120,7 +112,6 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
             'keywords' list. This allows fragment authors to opt-in to
             stricter selection."""
             meta = fragment.metadata or {}
-            # keywords may be a list or comma-separated string
             kws = meta.get("keywords") or meta.get("keyword") or ""
             if isinstance(kws, str):
                 kws_list = [k.strip().lower() for k in kws.split(",") if k.strip()]
@@ -153,19 +144,15 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
             diff or file paths? Use longer words (>=4 chars) to reduce false
             positives. Limit to a few keywords for speed."""
             text = (fragment.content or "").lower()
-            # Always include explicit system fragments or very high-priority
             if fragment.category == "system" or (getattr(fragment, "priority", 0) or 0) >= 900:
                 return True
 
-            # If author provided explicit matchers, respect them
             if fragment_explicit_match(fragment):
                 return True
 
-            # Extract candidate keywords from fragment content
             import re
 
             words = re.findall(r"\b[a-z]{4,}\b", text)
-            # de-duplicate while preserving order
             seen: set[str] = set()
             keywords: list[str] = []
             for w in words:
@@ -175,29 +162,23 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
                 if len(keywords) >= 15:
                     break
 
-            # Check keywords in diff and filenames
             for kw in keywords:
                 if kw in diff_text or kw in file_list_text:
                     return True
 
             return False
 
-        # Filter universal fragments by heuristics
         for frag in universal_candidates:
             if fragment_content_matches(frag):
                 candidates.append(frag)
 
-        # Ensure deterministic ordering by priority (desc)
         sorted_fragments = sorted(
             candidates, key=lambda f: f.priority, reverse=True,
         )
 
-        # If there is a token budget, apply it to the already-filtered list
         if self._budget_manager is not None:
             return self._apply_budget_constraints(sorted_fragments)
 
-        # As a safe fallback, if filtering removed everything, return the
-        # original broad set so behavior remains predictable.
         if not sorted_fragments:
             all_fragments = language_fragments + universal_fragments
             return sorted(all_fragments, key=lambda f: f.priority, reverse=True)
@@ -209,11 +190,11 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
     ) -> list[PromptFragment]:
         """Greedily select highest-priority fragments that fit the budget."""
         selected: list[PromptFragment] = []
-        self._budget_manager.reset()  # type: ignore[union-attr]
+        self._budget_manager.reset()
 
         for fragment in fragments:
-            if self._budget_manager.fits_budget(fragment.content):  # type: ignore[union-attr]
-                self._budget_manager.consume(fragment.content)  # type: ignore[union-attr]
+            if self._budget_manager.fits_budget(fragment.content):
+                self._budget_manager.consume(fragment.content)
                 selected.append(fragment)
 
         return selected
@@ -234,8 +215,6 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
                 "Cannot compose prompt from empty fragment list",
             )
 
-        # Render every fragment with a short placeholder for code/diff.
-        # The real diff is appended once at the end.
         rendered_sections: list[str] = []
         fragment_ids: list[str] = []
 
@@ -256,13 +235,11 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
             + 'Start with "{" and end with "}".'
         )
 
-        # How many chars remain for the diff?
         overhead = len(body) + len(reminder) + len(self._separator)
         available = max(0, self._max_total_chars - overhead)
 
         diff_text = context.diff
         if len(diff_text) > available > 0:
-            # Truncate at whole-line boundaries.
             truncated = diff_text[:available]
             last_newline = truncated.rfind("\n")
             if last_newline > available // 2:

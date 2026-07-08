@@ -5,7 +5,6 @@ import pytest
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 from pr_auto_reviewer.infrastructure.fragments.renderers import Jinja2Renderer
 
-
 class TestJinja2Renderer:
     """Tests for Jinja2Renderer template rendering."""
 

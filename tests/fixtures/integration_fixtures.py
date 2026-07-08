@@ -10,7 +10,6 @@ import pytest
 
 FIXTURES_DIR = Path(__file__).resolve().parent
 
-
 @pytest.fixture(scope="session")
 def integration_data() -> dict[str, Any]:
     """Load the comprehensive integration fixture data."""
@@ -18,11 +17,10 @@ def integration_data() -> dict[str, Any]:
     with open(path) as f:
         return json.load(f)
 
-
 class FixtureHttpClient:
     """HTTP client that returns fixture data instead of making real calls."""
 
-    _platform_mode = "codeberg"  # required by GitReviewPublisherAdapter
+    _platform_mode = "forgejo"
 
     def __init__(self, data: dict, scenario: str) -> None:
         self._data = data
@@ -58,21 +56,17 @@ class FixtureHttpClient:
     def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"id": 999, "number": 99, "body": body.get("body", "")}
 
-
 @pytest.fixture(params=["private", "public"])
 def patched_client(integration_data, request):
     """Parametrized fixture HTTP client with captured data."""
     scenario = request.param
     return FixtureHttpClient(integration_data[scenario], scenario)
 
-
 @pytest.fixture
 def patched_private_client(integration_data):
     """Fixture HTTP client with private PR data."""
     return FixtureHttpClient(integration_data["private"], "private")
 
-
-# Re-export pr_fixture for changeset tests
 @pytest.fixture
 def pr_fixture(request):
     """Parametrized fixture resolving to scenario name."""

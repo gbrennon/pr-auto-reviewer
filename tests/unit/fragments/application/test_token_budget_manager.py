@@ -6,7 +6,6 @@ from pr_auto_reviewer.infrastructure.fragments.token_budget_manager import (
     TokenBudgetManager,
 )
 
-
 class TestTokenBudgetManager:
     """Tests for TokenBudgetManager token counting and budget control."""
 
@@ -14,8 +13,8 @@ class TestTokenBudgetManager:
         """Should check if content fits within remaining budget."""
         manager = TokenBudgetManager(max_tokens=100)
 
-        small_text = "a" * 200  # ~50 tokens
-        large_text = "a" * 600  # ~150 tokens
+        small_text = "a" * 200
+        large_text = "a" * 600
 
         assert manager.fits_budget(small_text) is True
         assert manager.fits_budget(large_text) is False
@@ -23,7 +22,7 @@ class TestTokenBudgetManager:
     def test_calculates_remaining_budget_after_consumption(self) -> None:
         """Should track remaining budget after consuming tokens."""
         manager = TokenBudgetManager(max_tokens=1000)
-        text = "a" * 400  # ~100 tokens
+        text = "a" * 400
 
         manager.consume(text)
 
@@ -36,12 +35,12 @@ class TestTokenBudgetManager:
         with pytest.raises(
             ValueError, match="Text would exceed budget",
         ):
-            manager.consume("a" * 600)  # ~150 tokens > 100 budget
+            manager.consume("a" * 600)
 
     def test_reset_clears_consumed_tokens(self) -> None:
         """Reset should clear consumed tokens back to zero."""
         manager = TokenBudgetManager(max_tokens=1000)
-        manager.consume("a" * 400)  # ~100 tokens
+        manager.consume("a" * 400)
 
         manager.reset()
 
@@ -51,8 +50,8 @@ class TestTokenBudgetManager:
         """Should track cumulative consumption across multiple texts."""
         manager = TokenBudgetManager(max_tokens=500)
 
-        manager.consume("a" * 200)  # 50 tokens
-        manager.consume("b" * 400)  # 100 tokens
+        manager.consume("a" * 200)
+        manager.consume("b" * 400)
 
         assert manager.remaining() == 350
 

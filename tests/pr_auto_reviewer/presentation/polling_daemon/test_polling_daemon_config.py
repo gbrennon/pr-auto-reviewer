@@ -6,7 +6,6 @@ from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
     PollingDaemonConfig,
 )
 
-
 class TestPollingDaemonConfig:
     """Tests for PollingDaemonConfig dataclass."""
 

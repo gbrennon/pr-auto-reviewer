@@ -4,7 +4,6 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 
-
 class TestComposedPrompt:
     """Tests for ComposedPrompt immutable value object."""
 
@@ -29,7 +28,7 @@ class TestComposedPrompt:
         )
 
         with pytest.raises(AttributeError):
-            prompt.content = "new content"  # type: ignore[misc]
+            prompt.content = "new content"
 
     @pytest.mark.parametrize(
         ("field", "value", "expected_msg"),

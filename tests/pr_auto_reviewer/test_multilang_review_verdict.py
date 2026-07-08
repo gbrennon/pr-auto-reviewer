@@ -37,13 +37,8 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
-
 def _load(relative: str) -> str:
     return (FIXTURES / relative).read_text()
-
-
-# ── helper ────────────────────────────────────────────────────────────
-
 
 def _run_review(
     diff_name: str,
@@ -82,10 +77,6 @@ def _run_review(
 
     assert len(publisher.publish_calls) == 1
     return publisher.publish_calls[0][1], ctx_factory
-
-
-# ── CHANGES_REQUESTED scenarios ──────────────────────────────────────
-
 
 class TestChangesRequestedMultilang:
 
@@ -138,10 +129,6 @@ class TestChangesRequestedMultilang:
         assert len(r.items) == 1
         assert "src/infrastructure" in r.items[0].file_path
 
-
-# ── APPROVED scenarios ───────────────────────────────────────────────
-
-
 class TestApprovedMultilang:
 
     def test_rust_clean_service(self) -> None:
@@ -156,10 +143,6 @@ class TestApprovedMultilang:
                            "src/main/kotlin/com/example/UserService.kt")
         assert r.verdict == ReviewVerdict.APPROVED
         assert len(r.items) == 0
-
-
-# ── cross-cutting: StubReviewContextFactory.build_calls ───────────────
-
 
 class TestMultilangPromptContents:
     """Verify that StubReviewContextFactory.build() received the correct
@@ -197,7 +180,6 @@ class TestMultilangPromptContents:
         assert len(ctx_factory.build_calls) == 1
         _pr_id, diff, pr_title, pr_description = ctx_factory.build_calls[0]
 
-        # The diff passed to build() contains the file_contents map
         assert file_path in diff.file_contents
         assert keyword in diff.file_contents[file_path]
         assert pr_title == "Test"

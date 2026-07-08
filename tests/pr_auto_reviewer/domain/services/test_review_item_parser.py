@@ -3,7 +3,6 @@
 from pr_auto_reviewer.domain import ItemSeverity, ReviewItem
 from pr_auto_reviewer.domain.services import ReviewItemParser
 
-
 class TestReviewItemParser:
     """Tests for ReviewItemParser.parse(raw_body) -> list[ReviewItem]."""
 
@@ -51,7 +50,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 1  # renumbered sequentially from 1
+        assert item.number == 1
         assert item.severity == ItemSeverity.MAJOR
         assert item.category == "style"
         assert item.file_path is None

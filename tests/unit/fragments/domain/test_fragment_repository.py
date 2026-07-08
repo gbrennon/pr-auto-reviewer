@@ -10,7 +10,6 @@ from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import
     FragmentRepositoryPort as FragmentRepository,
 )
 
-
 class TestFragmentRepository:
     """Tests for FragmentRepository protocol interface."""
 
@@ -31,7 +30,6 @@ class TestFragmentRepository:
         sig = inspect.signature(FragmentRepository.find_universal)
         params = list(sig.parameters.keys())
 
-        # Only 'self' (no extra params)
         assert params == ["self"]
         assert sig.return_annotation == "list[PromptFragment]"
 
@@ -56,7 +54,6 @@ class TestFragmentRepository:
         """Protocol methods should have expected parameter lists."""
         method = getattr(FragmentRepository, method_name)
 
-        # Skip abstract method wrappers
         sig = inspect.signature(method)
         params = list(sig.parameters.keys())
 

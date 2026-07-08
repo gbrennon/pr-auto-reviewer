@@ -2,7 +2,6 @@ import pytest
 
 from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
 
-
 class TestPromptMode:
 
     @pytest.mark.parametrize(

@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
-
 def make_success_response(
     json_data: Any = None,
     text_data: str = None,
@@ -26,7 +24,6 @@ def make_success_response(
         },
     )()
     return mock_resp
-
 
 def mock_pr_list_response() -> list[dict[str, Any]]:
     """Successful response for listing PRs."""
@@ -49,7 +46,6 @@ def mock_pr_list_response() -> list[dict[str, Any]]:
         },
     ]
 
-
 def mock_pr_reviews_response() -> list[dict[str, Any]]:
     """Successful response for listing PR reviews."""
     return [
@@ -62,7 +58,6 @@ def mock_pr_reviews_response() -> list[dict[str, Any]]:
         }
     ]
 
-
 def mock_repo_tree_response() -> dict[str, Any]:
     """Successful response for repository tree."""
     return {
@@ -72,7 +67,6 @@ def mock_repo_tree_response() -> dict[str, Any]:
             {"path": "src/utils", "type": "tree"},
         ]
     }
-
 
 def mock_diff_response() -> str:
     """Successful diff response (raw text)."""
@@ -86,7 +80,6 @@ index abc123..def456 100644
 +    return True
 """
 
-
 def mock_post_review_response() -> dict[str, Any]:
     """Successful response for posting a review."""
     return {
@@ -95,7 +88,6 @@ def mock_post_review_response() -> dict[str, Any]:
         "body": "## AI Code Review\n\nLooks good!",
         "user": {"login": "ai-reviewer"},
     }
-
 
 def mock_post_issue_response() -> dict[str, Any]:
     """Successful response for creating an issue."""
@@ -106,8 +98,6 @@ def mock_post_issue_response() -> dict[str, Any]:
         "body": "Issue description",
         "state": "open",
     }
-
-
 
 class MockHTTPError(Exception):
     """Mock HTTP error with response attribute."""
@@ -123,32 +113,25 @@ class MockHTTPError(Exception):
         )()
         super().__init__(f"{status_code}: {message}")
 
-
 def mock_401_unauthorized() -> None:
     """Simulate 401 Unauthorized error."""
     raise MockHTTPError(401, "Unauthorized")
-
 
 def mock_403_forbidden() -> None:
     """Simulate 403 Forbidden error."""
     raise MockHTTPError(403, "Forbidden")
 
-
 def mock_404_not_found() -> None:
     """Simulate 404 Not Found error."""
     raise MockHTTPError(404, "Not Found")
-
 
 def mock_422_validation_error() -> None:
     """Simulate 422 Validation Error (bad payload)."""
     raise MockHTTPError(422, "Validation Failed")
 
-
 def mock_500_server_error() -> None:
     """Simulate 500 Internal Server Error."""
     raise MockHTTPError(500, "Internal Server Error")
-
-
 
 def create_mock_get(
     success_data: Any = None,
@@ -168,7 +151,6 @@ def create_mock_get(
         return resp
 
     return mock_get
-
 
 def create_mock_post(
     success_data: Any = None,

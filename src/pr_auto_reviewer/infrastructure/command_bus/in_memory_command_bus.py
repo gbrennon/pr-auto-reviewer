@@ -18,9 +18,7 @@ from ...application.ports.outbound.command_bus_port import CommandBusPort
 
 logger = logging.getLogger(__name__)
 
-
 Handler = Callable[[Any], None]
-
 
 class InMemoryCommandBus(CommandBusPort):
     """Synchronous in-memory command dispatcher.

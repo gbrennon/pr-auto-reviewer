@@ -48,7 +48,6 @@ from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestD
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
-
 class StubPullRequestRepository(PullRequestRepository):
     """Controlled PR persistence: returns a fixed PR and records calls."""
 
@@ -70,7 +69,6 @@ class StubPullRequestRepository(PullRequestRepository):
         self.reset_calls += 1
         self._pr = None
 
-
 class StubChangesetFetcher(ChangesetFetcherPort):
     """Returns a fixed PullRequestDiff, tracks call count."""
 
@@ -81,7 +79,6 @@ class StubChangesetFetcher(ChangesetFetcherPort):
     def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
         self.fetch_calls.append((pr_id, sha))
         return self._diff
-
 
 class StubRepositoryContext(RepositoryContextPort):
     def __init__(self, ctx: RepositoryContext | None = None) -> None:
@@ -104,7 +101,7 @@ class StubRepositoryContext(RepositoryContextPort):
         self.build_fragment_context_calls.append(
             (repo_context, file_paths, commit_messages)
         )
-        language = "python"  # default for tests
+        language = "python"
         parts: list[str] = []
         if repo_context.architecture_hint:
             parts.append(f"## Architecture: {repo_context.architecture_hint}")
@@ -120,7 +117,6 @@ class StubRepositoryContext(RepositoryContextPort):
         serialized = "\n\n".join(parts) if parts else None
         return language, serialized
 
-
 class StubLlmReview(LlmReviewPort):
     def __init__(self, review: CodeReview) -> None:
         self._review = review
@@ -135,7 +131,6 @@ class StubLlmReview(LlmReviewPort):
         self.review_prompt_calls.append(prompt)
         return self._review
 
-
 class StubComposeReviewPrompt(ComposeReviewPromptPort):
     def __init__(self, prompt: ComposedPrompt | None = None) -> None:
         self._prompt = prompt or ComposedPrompt(
@@ -148,7 +143,6 @@ class StubComposeReviewPrompt(ComposeReviewPromptPort):
     def execute(self, context: ReviewContext) -> ComposedPrompt:
         self.execute_calls.append(context)
         return self._prompt
-
 
 class StubReviewContextFactory(ReviewContextFactoryPort):
     def __init__(self, prompt: ComposedPrompt | None = None) -> None:
@@ -185,14 +179,12 @@ class StubReviewContextFactory(ReviewContextFactoryPort):
             total_tokens=len(content) // 4,
         )
 
-
 class StubReviewPublisher(ReviewPublisherPort):
     def __init__(self) -> None:
         self.publish_calls: list[tuple[PullRequestId, CodeReview]] = []
 
     def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
         self.publish_calls.append((pr_id, review))
-
 
 class StubReviewReader(ReviewReaderPort):
     def __init__(self, body: str | None = None) -> None:
@@ -203,7 +195,6 @@ class StubReviewReader(ReviewReaderPort):
         self.get_latest_review_calls.append(pr_id)
         return self._body
 
-
 class StubCommentReader(CommentReaderPort):
     def __init__(self, comments: list[PrComment] | None = None) -> None:
         self._comments = comments or []
@@ -213,14 +204,12 @@ class StubCommentReader(CommentReaderPort):
         self.get_comments_calls.append(pr_id)
         return list(self._comments)
 
-
 class StubCommentPublisher(CommentPublisherPort):
     def __init__(self) -> None:
         self.post_calls: list[tuple[PullRequestId, str]] = []
 
     def post(self, pr_id: PullRequestId, body: str) -> None:
         self.post_calls.append((pr_id, body))
-
 
 class StubIssueTracker(IssueTrackerPort):
     def __init__(self, issues_to_return: list[Issue] | None = None) -> None:

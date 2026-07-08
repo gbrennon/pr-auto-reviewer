@@ -11,14 +11,12 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, RepoListerPort, PrListerPort
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
 
-
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[str]) -> None:
         self._repos = repos
 
     def list_repos(self) -> list[str]:
         return self._repos
-
 
 class MockPrLister(PrListerPort):
     def __init__(self, prs: list[OpenPullRequest]) -> None:
@@ -32,7 +30,6 @@ class MockPrLister(PrListerPort):
             if p.pr_id.number == pr_number:
                 return p
         return None
-
 
 class TestPollingDaemon:
     """Tests for PollingDaemon class."""
@@ -180,7 +177,6 @@ class TestPollingDaemon:
         ) as mock_logger:
             daemon.start()
 
-        # Verify force=True was passed to the service command
         mock_review_service.execute.assert_called_once()
         dispatched = mock_review_service.execute.call_args[0][0]
         assert dispatched.force is True
@@ -216,11 +212,9 @@ class TestPollingDaemon:
         ) as mock_logger:
             daemon.start()
 
-        # force_pr=2 doesn't match PR #1 → force=False
         mock_review_service.execute.assert_called_once()
         dispatched = mock_review_service.execute.call_args[0][0]
         assert dispatched.force is False
-        # Verify the force-review log was NOT emitted
         force_calls = [
             c for c in mock_logger.info.call_args_list
             if "Force-reviewing" in str(c)
@@ -253,13 +247,11 @@ class TestPollingDaemon:
         with patch("pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger") as mock_logger:
             daemon.start()
             mock_logger.warning.assert_called_with("Empty diff, skipping PR #%d", 1)
-            # Ensure "Reviewed PR" info is NOT logged when PR is skipped
             reviewed_calls = [
                 c for c in mock_logger.info.call_args_list
                 if "Reviewed PR #1" in str(c)
             ]
             assert len(reviewed_calls) == 0
-
 
     def test_signal_handler_raises_keyboard_interrupt(self, daemon):
         daemon._setup_signal_handlers()

@@ -7,7 +7,6 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 
-
 class TestGitPlatformHttpClient:
     """Tests for GitPlatformHttpClient using captured fixture data."""
 
@@ -96,7 +95,7 @@ class TestGitPlatformHttpClient:
 
     def test_codeberg_auth_header_is_token(self):
         """Codeberg mode uses 'token' prefix."""
-        client = GitPlatformHttpClient("https://codeberg.org/api/v1", "tok", "codeberg")
+        client = GitPlatformHttpClient("https://codeberg.org/api/v1", "tok", "forgejo")
         assert client._get_auth_header() == {"Authorization": "token tok"}
 
     def test_get_merges_custom_headers(self, monkeypatch):

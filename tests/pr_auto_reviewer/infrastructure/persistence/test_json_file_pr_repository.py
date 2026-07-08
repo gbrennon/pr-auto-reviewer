@@ -29,7 +29,6 @@ from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import 
     JsonFilePullRequestRepository,
 )
 
-
 class TestJsonFilePullRequestRepository:
     """Complex TDD test suite for the JSON file persistence adapter."""
 
@@ -190,7 +189,6 @@ class TestJsonFilePullRequestRepository:
         assert found_a is not None and found_a.title == "A"
         assert found_b is not None and found_b.title == "B"
 
-    # Update existing PR (immutable aggregate — new version saved)
     def test_update_existing_pr_overwrites_previous(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         pr = self._pr(number=1, title="Old", sha="s1")
@@ -205,7 +203,6 @@ class TestJsonFilePullRequestRepository:
         assert found.head_sha == CommitSha(value="s2")
         assert len(found.reviews) == 1
 
-    # File schema validation (internal structure)
     def test_file_schema_matches_spec(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         review = self._review(

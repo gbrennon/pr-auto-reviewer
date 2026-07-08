@@ -1,7 +1,6 @@
-from pr_auto_reviewer.infrastructure.git_platform.language_detector import (
+from pr_auto_reviewer.infrastructure.context.language_detector import (
     LanguageDetector,
 )
-
 
 class TestLanguageDetector:
 

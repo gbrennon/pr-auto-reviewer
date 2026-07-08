@@ -8,7 +8,6 @@ from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 
-
 class MockPrLister(PrListerPort):
     def __init__(self, prs: list[OpenPullRequest]) -> None:
         self._prs = prs
@@ -21,7 +20,6 @@ class MockPrLister(PrListerPort):
             if p.pr_id.number == pr_number:
                 return p
         return None
-
 
 class TestCliRunner:
     """Tests for CliRunner class."""

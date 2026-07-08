@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent.parent / "llm" / "templates"
 
-
 class MonolithicReviewPromptAdapter(ComposeReviewPromptPort):
     """Builds prompts from a single Jinja2 template — no fragments.
 

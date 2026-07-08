@@ -1,7 +1,6 @@
 import pytest
 from pr_auto_reviewer.domain import ReviewVerdict
 
-
 class TestReviewVerdict:
     """Tests for ReviewVerdict enum."""
 

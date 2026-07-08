@@ -12,18 +12,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import GitPlatformHttpClient
-from pr_auto_reviewer.infrastructure.git_platform.comment_reader import GitCommentReaderAdapter
-from pr_auto_reviewer.infrastructure.git_platform.comment_publisher import GitCommentPublisherAdapter
-from pr_auto_reviewer.infrastructure.git_platform.issue_tracker import GitIssueTrackerAdapter
-from pr_auto_reviewer.infrastructure.git_platform.repository_context import GitRepositoryContextAdapter
-from pr_auto_reviewer.infrastructure.git_platform.review_publisher import GitReviewPublisherAdapter
-from pr_auto_reviewer.infrastructure.git_platform.review_reader import GitReviewReaderAdapter
+from pr_auto_reviewer.infrastructure.forgejo.comment_reader import ForgejoCommentReader
+from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import ForgejoCommentPublisher
+from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import ForgejoIssueTracker
+from pr_auto_reviewer.infrastructure.forgejo.repository_context import ForgejoRepositoryContext
+from pr_auto_reviewer.infrastructure.review_publishers.composite_publisher import GitReviewPublisherAdapter
+from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewReader
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 
-TOKEN = os.getenv("FORGEJO_TOKEN")
+TOKEN = os.getenv("FORGEJO_OWNER_TOKEN")
 if not TOKEN:
-    print("FORGEJO_TOKEN not set", file=sys.stderr)
+    print("FORGEJO_OWNER_TOKEN not set", file=sys.stderr)
     sys.exit(1)
 
 BASE_URL = "https://codeberg.org/api/v1"
@@ -42,14 +42,11 @@ scenarios = [
 
 client = GitPlatformHttpClient(BASE_URL, TOKEN)
 
-
 def save_json(name, data):
     with open(OUT_DIR / name, "w") as f:
         json.dump(data, f, indent=2, default=str)
     print(f"  -> saved {name}")
 
-
-# ==== 1. HTTP Client ====
 print("1. HTTP client ...")
 http_fix = {}
 for s in scenarios:
@@ -74,10 +71,8 @@ for s in scenarios:
         print(f"  {L}: GET /users/search ERR {e}")
 save_json("http_client_fixtures.json", http_fix)
 
-
-# ==== 2. Comment Reader ====
 print("2. Comment reader ...")
-cr = GitCommentReaderAdapter(client)
+cr = ForgejoCommentReader(client)
 cmt_fix = {}
 for s in scenarios:
     L = s["label"]
@@ -92,10 +87,8 @@ for s in scenarios:
         print(f"  {L}: ERR {e}")
 save_json("comment_reader_fixtures.json", cmt_fix)
 
-
-# ==== 3. Review Reader ====
 print("3. Review reader ...")
-rr = GitReviewReaderAdapter(client)
+rr = ForgejoReviewReader(client)
 rr_fix = {}
 for s in scenarios:
     L = s["label"]
@@ -109,10 +102,8 @@ for s in scenarios:
         print(f"  {L}: ERR {e}")
 save_json("review_reader_fixtures.json", rr_fix)
 
-
-# ==== 4. Repository Context ====
 print("4. Repository context ...")
-rc = GitRepositoryContextAdapter(client)
+rc = ForgejoRepositoryContext(client)
 rc_fix = {}
 for s in scenarios:
     L = s["label"]
@@ -130,10 +121,8 @@ for s in scenarios:
         print(f"  {L}: ERR {e}")
 save_json("repository_context_fixtures.json", rc_fix)
 
-
-# ==== 5. Comment Publisher ====
 print("5. Comment publisher ...")
-cp = GitCommentPublisherAdapter(client)
+cp = ForgejoCommentPublisher(client)
 cp_fix = {}
 s = scenarios[0]
 pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
@@ -146,10 +135,8 @@ except Exception as e:
     print(f"  private: ERR {e}")
 save_json("comment_publisher_fixtures.json", cp_fix)
 
-
-# ==== 6. Issue Tracker ====
 print("6. Issue tracker ...")
-it = GitIssueTrackerAdapter(client)
+it = ForgejoIssueTracker(client)
 it_fix = {}
 s = scenarios[0]
 repo = s["repo"]
@@ -162,8 +149,6 @@ except Exception as e:
     print(f"  private: ERR {e}")
 save_json("issue_tracker_fixtures.json", it_fix)
 
-
-# ==== 7. Review Publisher ====
 print("7. Review publisher ...")
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict

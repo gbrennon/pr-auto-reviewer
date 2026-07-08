@@ -11,7 +11,6 @@ from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFra
 
 logger = logging.getLogger(__name__)
 
-
 class FileSystemFragmentRepository:
     """Loads prompt fragments from YAML-front-matter Markdown files on disk.
 
@@ -118,7 +117,6 @@ class FileSystemFragmentRepository:
             logger.warning("Cannot read fragment file: %s", file_path)
             return None
 
-        # Must start with YAML front matter
         if not raw.startswith("---"):
             return None
 

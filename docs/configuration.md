@@ -25,9 +25,17 @@ When reviewing PRs from both platforms simultaneously, you must provide separate
 - **Codeberg/Forgejo**: Set `FORGEJO_TOKEN`, `FORGEJO_REVIEWER_TOKEN`, and `FORGEJO_REVIEWER_USERNAME`.
 
 ### Single-Platform Fallbacks
-If `PLATFORM_MODE` is not `both`, the application will look for:
-- **Forgejo/Codeberg**: `FORGEJO_TOKEN`, `FORGEJO_REVIEWER_TOKEN`, `FORGEJO_REVIEWER_USERNAME`.
-- **GitHub**: `GITHUB_TOKEN`, `GITHUB_REVIEWER_TOKEN`, `GITHUB_REVIEWER_USERNAME`.
+If `PLATFORM_MODE` is not `both`, the application resolves tokens in this order:
+
+**For GitHub (`PLATFORM_MODE=github`):**
+1. Owner token: `PLATFORM_TOKEN` → `GITHUB_TOKEN`
+2. Reviewer token: `REVIEWER_TOKEN` → `GITHUB_REVIEWER_TOKEN`
+3. Reviewer username: `REVIEWER_USERNAME` → `GITHUB_REVIEWER_USERNAME`
+
+**For Forgejo/Codeberg (`PLATFORM_MODE=codeberg`):**
+1. Owner token: `PLATFORM_TOKEN` → `FORGEJO_TOKEN`
+2. Reviewer token: `REVIEWER_TOKEN` → `FORGEJO_REVIEWER_TOKEN`
+3. Reviewer username: `REVIEWER_USERNAME` → `FORGEJO_REVIEWER_USERNAME`
 
 ## Optional Variables
 
@@ -40,9 +48,23 @@ If `PLATFORM_MODE` is not `both`, the application will look for:
 ## Generating Tokens
 
 ### GitHub
-1. Go to **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens** $\rightarrow$ **Tokens (classic)**.
-2. Create a new token with scopes: `repo` (all), `read:user`, and `user:email`.
+
+**Classic PAT:**
+1. Go to **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens** $\rightarrow$ **Tokens (classic)** (https://github.com/settings/tokens).
+2. Create a new token with scopes: `repo` (all) and `read:user`.
 3. Copy to `PLATFORM_TOKEN` (or `GITHUB_TOKEN`).
+
+**Fine-grained PAT:** Requires explicit org/repo assignment — even for **public** repos. If the org doesn't appear under "Resource owner", use a classic PAT instead.
+
+1. Go to **Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens** $\rightarrow$ **Fine-grained tokens** (https://github.com/settings/tokens?type=beta).
+2. Set **Resource owner** to the target org.
+3. Grant repository access: **Selected repositories** → choose the repos.
+4. Set permissions:
+   - `Metadata`: **Read** (auto-selected)
+   - `Pull requests`: **Write**
+   - `Contents`: **Write** (needed to read PR diff)
+   - `Administration`: **Read** (needed for branch info)
+5. Copy to `PLATFORM_TOKEN` (or `GITHUB_TOKEN`).
 
 ### Codeberg / Forgejo
 1. Go to **Settings** $\rightarrow$ **Applications**.

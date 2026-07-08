@@ -5,7 +5,6 @@ import pytest
 from pr_auto_reviewer.domain import IssueCommand
 from pr_auto_reviewer.domain.services import IssueCommandParser
 
-
 class TestIssueCommandParser:
     """Tests for IssueCommandParser.parse(comment_id, comment_body) -> IssueCommand | None."""
 
@@ -66,7 +65,6 @@ class TestIssueCommandParser:
         parser = IssueCommandParser()
         result = parser.parse("c_12345", "/create-issue 1,abc,3")
         assert result is not None
-        # regex [\d,\s]+ stops at 'abc' so only "1," is captured → [1]
         assert result.item_numbers == [1]
 
     def test_parse_create_issue_embedded_in_longer_text(self) -> None:
@@ -92,6 +90,5 @@ class TestIssueCommandParser:
         parser = IssueCommandParser()
         result = parser.parse("c_12345", "/create-issue 1,2")
         assert result is not None
-        # IssueCommand is frozen; cannot mutate fields
         with pytest.raises(Exception):
-            result.item_numbers = [3]  # type: ignore[misc]
+            result.item_numbers = [3]

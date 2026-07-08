@@ -10,14 +10,12 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_li
     CompositePrLister,
 )
 
-
 def _make_open_pr(repository: str, number: int, sha: str) -> OpenPullRequest:
     return OpenPullRequest(
         pr_id=PullRequestId(repository=repository, number=number),
         head_sha=CommitSha(sha),
         title=f"PR #{number}",
     )
-
 
 class StubPrLister(PrListerPort):
     def __init__(self, open_prs: list[OpenPullRequest]) -> None:
@@ -32,14 +30,13 @@ class StubPrLister(PrListerPort):
                 return pr
         return None
 
-
 class TestCompositePrLister:
     def test_list_open_routes_to_correct_platform(self):
         github_pr = _make_open_pr("owner/repo", 1, "abc123")
         codeberg_pr = _make_open_pr("org/proj", 2, "def456")
         composite = CompositePrLister({
             "github": StubPrLister([github_pr]),
-            "codeberg": StubPrLister([codeberg_pr]),
+            "forgejo": StubPrLister([codeberg_pr]),
         })
 
         github_result = composite.list_open("github:owner/repo")
@@ -57,10 +54,10 @@ class TestCompositePrLister:
 
         assert result == []
 
-    def test_list_open_defaults_to_codeberg_without_prefix(self):
+    def test_list_open_defaults_to_forgejo_without_prefix(self):
         pr = _make_open_pr("owner/repo", 1, "abc123")
         composite = CompositePrLister({
-            "codeberg": StubPrLister([pr]),
+            "forgejo": StubPrLister([pr]),
         })
 
         result = composite.list_open("owner/repo")
@@ -89,7 +86,7 @@ class TestCompositePrLister:
     def test_get_pr_returns_none_when_not_found(self):
         pr = _make_open_pr("owner/repo", 1, "abc123")
         composite = CompositePrLister({
-            "codeberg": StubPrLister([pr]),
+            "forgejo": StubPrLister([pr]),
         })
 
         result = composite.get_pr("codeberg:owner/repo", 999)

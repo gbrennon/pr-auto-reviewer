@@ -22,11 +22,9 @@ FIXTURES_DIR = Path(__file__).resolve().parent
 DIFFS_DIR = FIXTURES_DIR / "diffs"
 REVIEWS_DIR = FIXTURES_DIR / "reviews"
 
-
 def _load_json(path: Path) -> dict:
     with open(path) as f:
         return json.load(f)
-
 
 def _discover_pairs() -> list[dict]:
     """Scan diffs/ for <name>.diff + <name>.json metadata pairs.
@@ -44,7 +42,7 @@ def _discover_pairs() -> list[dict]:
         review_file = REVIEWS_DIR / f"{name}.json"
 
         if not meta_file.exists():
-            continue  # skip legacy diffs without metadata
+            continue
 
         pairs.append({
             "name": name,
@@ -54,7 +52,6 @@ def _discover_pairs() -> list[dict]:
         })
 
     return pairs
-
 
 @pytest.fixture
 def fixture_pair(request):
@@ -66,11 +63,9 @@ def fixture_pair(request):
     """
     return request.param
 
-
 def discovered_pairs() -> list[dict]:
     """Return all discovered pairs for @pytest.mark.parametrize."""
     return _discover_pairs()
-
 
 @pytest.fixture
 def fixture_loaded(request):
@@ -85,7 +80,6 @@ def fixture_loaded(request):
     diff_text = diff_path.read_text()
     review = _load_json(review_path) if review_path else None
     return name, diff_text, meta, review
-
 
 def discovered_pairs_loaded() -> list[tuple]:
     """Pairs as tuples for parametrize — pre-loads metadata only."""

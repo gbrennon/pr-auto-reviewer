@@ -1,12 +1,10 @@
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
-from pr_auto_reviewer.infrastructure.git_platform.context_serializer import (
+from pr_auto_reviewer.infrastructure.context.context_serializer import (
     ContextSerializer,
 )
 
-
 def _ctx(**kwargs):
     return RepositoryContext(architecture_hint=kwargs.pop("architecture_hint", ""), **kwargs)
-
 
 class TestContextSerializer:
 
@@ -22,10 +20,9 @@ class TestContextSerializer:
         assert "## Conventions" in result
         assert "Use 4 spaces" in result
 
-    def test_serialize_when_repository_structure_then_includes_it(self):
+    def test_serialize_when_repository_structure_then_excluded(self):
         result = ContextSerializer().serialize(_ctx(repository_structure="src/\ntests/"))
-        assert "## Repository Structure" in result
-        assert "src/" in result
+        assert result is None
 
     def test_serialize_when_pr_title_then_includes_it(self):
         result = ContextSerializer().serialize(_ctx(pr_title="Add login"))

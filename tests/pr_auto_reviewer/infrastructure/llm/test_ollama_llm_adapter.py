@@ -21,18 +21,15 @@ from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
 
-
 @pytest.fixture
 def adapter() -> OllamaLlmAdapter:
     """Create OllamaLlmAdapter with test host."""
     return OllamaLlmAdapter("http://localhost:11434", "code-review")
 
-
 @pytest.fixture
 def prompt_builder() -> PromptBuilder:
     """Create PromptBuilder instance."""
     return PromptBuilder()
-
 
 @pytest.fixture
 def sample_diff() -> PullRequestDiff:
@@ -44,7 +41,6 @@ def sample_diff() -> PullRequestDiff:
         diff_content=fixture_path.read_text(),
     )
 
-
 @pytest.fixture
 def sample_context() -> RepositoryContext:
     """Create a sample review context."""
@@ -53,7 +49,6 @@ def sample_context() -> RepositoryContext:
         conventions="Use type hints",
         repository_structure="src/\n  main.py\n  utils/",
     )
-
 
 class TestOllamaLlmAdapter:
     """Tests for OllamaLlmAdapter."""
@@ -184,7 +179,6 @@ class TestOllamaLlmAdapter:
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)
 
-
 class TestPromptBuilder:
     """Tests for PromptBuilder."""
 
@@ -243,7 +237,6 @@ class TestPromptBuilder:
         assert '"severity"' in prompt
         assert '"category"' in prompt
 
-
 class TestReviewResponseParser:
     """Tests for ReviewResponseParser."""
 
@@ -268,10 +261,10 @@ class TestReviewResponseParser:
         assert result.items[0].severity == ItemSeverity.MAJOR
         assert result.items[0].category == "security"
 
-    def test_parse_json_approved_when_no_critical(
+    def test_parse_json_changes_requested_for_items_without_verdict(
         self,
     ) -> None:
-        """Returns APPROVED when no critical/high issues."""
+        """Returns CHANGES_REQUESTED when items exist but no explicit verdict."""
         raw_text = json.dumps({
             "issues": [
                 {"file": "foo.py", "line": "3", "severity": "low",
@@ -285,7 +278,7 @@ class TestReviewResponseParser:
         })
         result = ReviewResponseParser.parse(raw_text, "code-review")
 
-        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_parse_json_fallback_to_markdown(
         self,
@@ -294,10 +287,8 @@ class TestReviewResponseParser:
         raw_text = """## Verdict
 approved
 
-## Summary
 Looks good
 
-## Items
 None
 """
         result = ReviewResponseParser.parse(raw_text, "code-review")
@@ -339,14 +330,14 @@ None
         result = ReviewResponseParser.parse(raw_text, "code-review")
 
         assert len(result.items) == 0
-        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.verdict == ReviewVerdict.COMMENTED
 
     @pytest.mark.parametrize("severity,expected_verdict", [
         ("critical", ReviewVerdict.CHANGES_REQUESTED),
         ("high", ReviewVerdict.CHANGES_REQUESTED),
-        ("medium", ReviewVerdict.APPROVED),
-        ("low", ReviewVerdict.APPROVED),
-        ("info", ReviewVerdict.APPROVED),
+        ("medium", ReviewVerdict.CHANGES_REQUESTED),
+        ("low", ReviewVerdict.CHANGES_REQUESTED),
+        ("info", ReviewVerdict.CHANGES_REQUESTED),
     ])
     def test_parse_markdown_code_block_verdict(
         self, severity: str, expected_verdict: ReviewVerdict,
@@ -441,10 +432,8 @@ None
         raw_text = """## Verdict
 changes_requested
 
-## Summary
 Code needs work
 
-## Items
 - [critical] security (auth.py): vulnerability found
 """
         result = ReviewResponseParser.parse(raw_text, "code-review")
