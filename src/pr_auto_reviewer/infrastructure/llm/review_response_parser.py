@@ -14,7 +14,6 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 logger = logging.getLogger(__name__)
 
-
 class ReviewResponseParser:
     """Parse the raw LLM text into a CodeReview domain object."""
 
@@ -76,14 +75,9 @@ class ReviewResponseParser:
         suggestions = ReviewResponseParser._extract_suggestions_md(raw_text)
         praise = ReviewResponseParser._extract_praise_md(raw_text)
 
-        # the first meaningful paragraph as summary (before any ## heading)
         if not summary and not items:
             first_para = ReviewResponseParser._extract_first_paragraph(raw_text)
             summary = first_para if first_para else raw_text.strip()[:500]
-
-        if verdict == ReviewVerdict.COMMENTED:
-            if "commented" not in raw_text[:500].lower():
-                verdict = ReviewVerdict.APPROVED
 
         return CodeReview(
             verdict=verdict,
@@ -160,7 +154,11 @@ class ReviewResponseParser:
                 )
                 continue
 
-            description = issue.get("description") or issue.get("details") or ""
+            raw_desc = issue.get("description") or issue.get("details") or ""
+            if isinstance(raw_desc, dict):
+                description = ", ".join(f"{k}={v}" for k, v in raw_desc.items())
+            else:
+                description = raw_desc
 
             severity_str = issue.get("severity", "").strip().lower()
             if ItemSeverity.accepts(severity_str):
@@ -299,7 +297,6 @@ class ReviewResponseParser:
                        "location": "line"}
         issues: list[dict] = []
 
-        # Format C: "files" array with path/changes
         files_val = data.get("files")
         if isinstance(files_val, list):
             for entry in files_val:
@@ -320,7 +317,6 @@ class ReviewResponseParser:
             if key in _KNOWN_KEYS or key == "files":
                 continue
             if isinstance(val, dict):
-                # Format D: {"file.py": {"changes": ["desc1", "desc2"]}}
                 changes = val.get("changes")
                 if isinstance(changes, list):
                     desc_lines = [c for c in changes if isinstance(c, str)]
@@ -334,7 +330,6 @@ class ReviewResponseParser:
             if not isinstance(val, list) or len(val) == 0:
                 continue
             if all(isinstance(v, str) for v in val):
-                # Format A: plain strings per file
                 code_lines = "\n".join(val)
                 issues.append({
                     "file": key,
@@ -342,7 +337,6 @@ class ReviewResponseParser:
                     "current_code": code_lines,
                 })
             elif all(isinstance(v, dict) for v in val):
-                # Format B: item dicts per file
                 for item in val:
                     mapped: dict[str, str] = {"file": key}
                     for k, v in item.items():
@@ -425,14 +419,12 @@ class ReviewResponseParser:
         for further inference (e.g., type).
         """
         desc = description.lower()
-        # Critical keywords
         if any(kw in desc for kw in (
             "security", "injection", "leak", "vulnerability",
             "exploit", "secret", "credential", "xss", "csrf",
             "auth bypass", "hardcoded",
         )):
             return ItemSeverity.CRITICAL, "critical"
-        # High keywords
         if any(kw in desc for kw in (
             "crash", "race", "deadlock", "null pointer", "undefined",
             "exception", "unhandled error", "logic bug", "wrong result",
@@ -441,7 +433,6 @@ class ReviewResponseParser:
             "improper", "broken", "missing validation",
         )):
             return ItemSeverity.MAJOR, "high"
-        # Medium keywords
         if any(kw in desc for kw in (
             "error handling", "try except", "exception handling",
             "edge case", "boundary condition", "performance",
@@ -449,7 +440,6 @@ class ReviewResponseParser:
             "import", "circular", "mutable default", "side effect",
         )):
             return ItemSeverity.MINOR, "medium"
-        # Low keywords — docs, style, cosmetic
         if any(kw in desc for kw in (
             "naming", "rename", "typo", "style", "todo",
             "unused", "dead code", "comment", "cosmetic",
@@ -458,7 +448,6 @@ class ReviewResponseParser:
             "formatting", "convention",
         )):
             return ItemSeverity.INFO, "low"
-        # Default to medium
         return ItemSeverity.MINOR, "medium"
 
     @staticmethod
@@ -519,12 +508,9 @@ class ReviewResponseParser:
             "debug", "config", "configuration", "setting", "env",
         )):
             return IssueCategory.MAINTAINABILITY
-        # Default by severity
         if severity_str in ("critical", "high"):
             return IssueCategory.BUG
         return IssueCategory.QUALITY
-
-
 
     @staticmethod
     def _resolve_verdict(
@@ -540,6 +526,8 @@ class ReviewResponseParser:
                 return ReviewVerdict.APPROVED
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
+        if not items:
+            return ReviewVerdict.COMMENTED
         return ReviewResponseParser._determine_verdict(items)
 
     @staticmethod
@@ -548,7 +536,9 @@ class ReviewResponseParser:
         for item in items:
             if item.severity in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR):
                 return ReviewVerdict.CHANGES_REQUESTED
-        return ReviewVerdict.APPROVED
+        if items:
+            return ReviewVerdict.CHANGES_REQUESTED
+        return ReviewVerdict.COMMENTED
 
     @staticmethod
     def _extract_verdict_md(raw_text: str) -> ReviewVerdict:
@@ -563,7 +553,6 @@ class ReviewResponseParser:
             if "approved" in value:
                 return ReviewVerdict.APPROVED
 
-        # Try **Verdict:** value (model Modelfile output)
         match = re.search(
             r"\*\*Verdict:\s*\*\*\s*(.+)", raw_text, re.IGNORECASE
         )
@@ -663,7 +652,6 @@ class ReviewResponseParser:
             if not line or line.lower().startswith("no suggestion"):
                 continue
             entry: dict = {}
-            # Numbered: "1. file.py:line description"
             m = re.match(r"^\d+\.\s*(\S+)?:?\s*(\d+\s+)?(.*)", line)
             if m:
                 if m.group(1) and ":" in line.split(". ", 1)[1][:5]:

@@ -7,7 +7,10 @@ import os
 from typing import Any
 
 import requests
-from dotenv import load_dotenv
+from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
+    ResponseFieldNormalizer,
+    RetryPromptBuilder,
+)
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
@@ -19,7 +22,6 @@ from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
 
 logger = logging.getLogger(__name__)
-load_dotenv()
 
 _SEP = "=" * 72
 
@@ -53,6 +55,8 @@ class OllamaLlmAdapter(LlmReviewPort):
         self._compose_review_prompt = compose_review_prompt
         self._fragment_selector = fragment_selector
         self._fragment_composer = fragment_composer
+        self._normalizer = ResponseFieldNormalizer()
+        self._retry_builder = RetryPromptBuilder()
 
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
         """Build prompt from diff+context via PromptBuilder, then call Ollama.
@@ -80,6 +84,13 @@ class OllamaLlmAdapter(LlmReviewPort):
         )
         return self._call_ollama(prompt.content)
 
+    def _dump_prompt_to_file(self, prompt_text: str, attempt: int) -> None:
+        label = "correction" if attempt > 0 else "initial"
+        path = f"/tmp/ollama-prompt-try{attempt + 1}-{label}.txt"
+        with open(path, "w") as f:
+            f.write(prompt_text)
+        logger.info("Try %d/3 — prompt dumped to %s (%d chars)", attempt + 1, path, len(prompt_text))
+
     def _call_ollama(self, prompt_text: str) -> CodeReview:
         """Send *prompt_text* to Ollama, parse the response into a CodeReview."""
         prompt_chars = len(prompt_text)
@@ -89,16 +100,22 @@ class OllamaLlmAdapter(LlmReviewPort):
         last_eval_count: Any = "?"
         last_eval_duration = 0.0
         last_response_ms = 0.0
+        correction_prompt = None
         for attempt in range(3):
-            current_prompt = prompt_text
-            if attempt:
-                current_prompt = (
-                    prompt_text
-                    + "\n\nYour previous response did not follow the required review schema. "
-                    + "Return JSON with an `issues` array. Do not summarize changed files. "
-                    + "Only include issues that have exact `current_code` copied from added "
-                    + "diff lines and concrete `suggested_fix` code."
+            if attempt > 0:
+                delay = 2 ** (attempt - 1)
+                logger.info(
+                    "Try %d/3 — waiting %ds (previous failures: %s)",
+                    attempt + 1, delay,
+                    ", ".join(failures[:3]),
                 )
+                time.sleep(delay)
+            else:
+                logger.info("Try 1/3 — sending review prompt to Ollama")
+
+            current_prompt = correction_prompt if correction_prompt else prompt_text
+
+            self._dump_prompt_to_file(current_prompt, attempt)
 
             raw_text, response_ms, eval_count, eval_duration = self._request_ollama(
                 current_prompt, timeout,
@@ -110,15 +127,20 @@ class OllamaLlmAdapter(LlmReviewPort):
 
             review = ReviewResponseParser.parse(raw_text, self._model)
             logger.info(
-                "Parsed review: verdict=%s, items=%d, summary='%s...'",
+                "Try %d/3 — verdict=%s items=%d summary='%s'",
+                attempt + 1,
                 review.verdict.value, len(review.items),
-                review.summary[:80] if review.summary else "",
+                (review.summary or "")[:80],
             )
 
-            if review.items or not self._looks_like_invalid_review_response(raw_text, review):
+            failures = self._retry_builder.diagnose_failures(review)
+            if not failures:
+                logger.info("Try %d/3 — accepted (no failures)", attempt + 1)
                 break
-
-            logger.debug("Retrying Ollama review after invalid schema response")
+            correction_prompt = self._retry_builder.build_correction_prompt(prompt_text, failures)
+            logger.info("Try %d/3 — rejected with %d failure(s):", attempt + 1, len(failures))
+            for f in failures:
+                logger.info("Try %d/3 —   → %s", attempt + 1, f)
 
         if review is None:
             raise LlmUnavailableError("Ollama did not return a parseable review")
