@@ -33,9 +33,7 @@ _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
 
-
 def _build_http_client() -> object:
-    """Build GitPlatformHttpClient from .env, matching legacy config."""
     from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
         GitPlatformHttpClient,
     )
@@ -44,13 +42,7 @@ def _build_http_client() -> object:
     cfg = load_config()
     return GitPlatformHttpClient(cfg.platform_api_url, cfg.platform_token)
 
-
 def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
-    """Fetch diff and file list using GitPlatformHttpClient.
-
-    Works with any Forgejo/Gitea/GitHub-compatible API configured
-    in .env (FORGEJO_HOST, FORGEJO_TOKEN, etc.).
-    """
     client = _build_http_client()
 
     diff_path = f"/repos/{repo}/pulls/{pr_number}.diff"
@@ -64,7 +56,6 @@ def fetch_pr_diff(repo: str, pr_number: int) -> tuple[str, list[str]]:
     file_paths = [f["filename"] for f in files_data]
 
     return diff, file_paths
-
 
 def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
     from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
@@ -93,15 +84,11 @@ def compose_prompt(language: str, diff: str, file_paths: list[str]) -> str:
     print(f"\nTokens: {composed.total_tokens}  Fragments: {composed.fragments_used}")
     return composed.content
 
-
 def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
     print(f"Calling Ollama at {host} with model {model}...")
     print(f"Prompt: {len(prompt)} chars (~{len(prompt)//4} tokens)\n")
 
-    # Split on the fragment separator to extract the system prompt
-    # (reviewer-system-prompt, priority 1000) and send it as "system"
-    # to override the Modelfile's baked-in system prompt.
     SEP = "\n\n---\n\n"
     system_text = ""
     user_text = prompt
@@ -123,9 +110,7 @@ def call_ollama(prompt: str, model: str) -> tuple[str, dict]:
     body = resp.json()
     return body.get("response", ""), body
 
-
 def extract_json(text: str):
-    """Extract JSON from Ollama response (may contain markdown fences)."""
     import re
     if not text:
         return None
@@ -142,9 +127,7 @@ def extract_json(text: str):
             pass
     return None
 
-
 def determine_verdict(review: dict) -> str:
-    """Determine verdict from issues: critical/high → changes_requested."""
     verdict = review.get("verdict", "").lower()
     if verdict in ("approve", "approved"):
         return "approved"
@@ -155,23 +138,16 @@ def determine_verdict(review: dict) -> str:
             return "changes_requested"
     return "approved"
 
-
 def _code_fence(code: str, lang: str = "") -> str:
-    """Render a fenced code block, expanding escaped newlines."""
     code = code.replace("\\n", "\n").replace("\\t", "    ")
     return f"```{lang}\n{code}\n```"
 
-
 def _fmt_location(file: str, line: str) -> str:
-    """Format file:line location string."""
     if file and line:
         return f"{file}:{line}"
     return file or ""
 
-
 def build_review_body(review: dict, model: str) -> tuple[str, str]:
-    """Build formatted review body matching the shell pipeline format.
-    Returns (verdict, body)."""
     import os as _os
     issues = review.get("issues", [])
     suggestions = review.get("suggestions", [])
@@ -241,9 +217,7 @@ def build_review_body(review: dict, model: str) -> tuple[str, str]:
     body += f"\n---\n*Review by {model_name} via local Forgejo*"
     return verdict, body
 
-
 def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> None:
-    """Post a formal PR review (APPROVED/REQUEST_CHANGES/COMMENT) via API."""
     from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
         GitPlatformHttpClient,
     )
@@ -270,7 +244,7 @@ def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> No
             {"reviewers": [reviewer_username]},
         )
     except Exception:
-        pass  # May already be requested
+        pass
 
     review_client = GitPlatformHttpClient(cfg.platform_api_url, reviewer_token)
     try:
@@ -289,7 +263,6 @@ def post_formal_review(repo: str, pr_number: int, verdict: str, body: str) -> No
         print("=" * 60)
         print(body)
         raise
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -324,7 +297,7 @@ def main() -> None:
         sys.exit("Need --repo/--pr or --diff-file")
 
     if args.language is None:
-        from pr_auto_reviewer.infrastructure.git_platform.language_detector import (
+        from pr_auto_reviewer.infrastructure.context.language_detector import (
             LanguageDetector,
         )
         detector = LanguageDetector()
@@ -358,7 +331,7 @@ def main() -> None:
 
     prompt_tokens_est = len(prompt) // 4
     eval_count = ollama_body.get("eval_count", 0)
-    eval_duration = ollama_body.get("eval_duration", 0) / 1e9  # ns → s
+    eval_duration = ollama_body.get("eval_duration", 0) / 1e9
     total_duration = ollama_body.get("total_duration", 0) / 1e9
     load_duration = ollama_body.get("load_duration", 0) / 1e9
     prompt_eval_count = ollama_body.get("prompt_eval_count", "?")
@@ -391,7 +364,6 @@ def main() -> None:
         print(f"REVIEW — Verdict: {verdict.upper()}")
         print("=" * 60)
         print(formatted)
-
 
 if __name__ == "__main__":
     main()
