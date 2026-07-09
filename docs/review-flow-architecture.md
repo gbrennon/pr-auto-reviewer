@@ -126,7 +126,7 @@
                     │  │  NullPullRequestRepository  ──────▶│─── no-op
                     │  │  JsonFilePullRequestRepo ─────────▶│─── state.json
                     │  │                                    │   │
-                    │  │  FileSystemFragmentRepository ────▶│─── fragments/*.md
+                    │  │  FileSystemFragmentRepository ────▶│─── content/*.md
                     │  │  Jinja2Renderer              ─────▶│─── Jinja2
                     │  │  ComposeReviewPromptAdapter  ─────▶│─── prompt assembly
                     │  └────────────────────────────────────┘   │
@@ -559,16 +559,16 @@
 │    ├─ 1. SELECT FRAGMENTS                                               │
 │    │    fragment_repository.find_by_language("python")                   │
 │    │    └─ FileSystemFragmentRepository                                 │
-│    │         Read fragments/python/type-hints.md                         │
-│    │         Read fragments/python/resource-management.md                │
-│    │         Read fragments/python/error-handling.md                     │
+    │    │         Read content/python/type-hints.md                         │
+    │    │         Read content/python/resource-management.md                │
+    │    │         Read content/python/error-handling.md                     │
 │    │         ...                                                         │
 │    │                                                                     │
 │    │    fragment_repository.find_universal()                             │
 │    │    └─ FileSystemFragmentRepository                                 │
-│    │         Read fragments/universal/reviewer-system-prompt.md          │
-│    │         Read fragments/universal/solid-principles.md                │
-│    │         Read fragments/universal/naming-conventions.md              │
+    │    │         Read content/universal/reviewer-system-prompt.md          │
+    │    │         Read content/universal/solid-principles.md                │
+    │    │         Read content/universal/naming-conventions.md              │
 │    │         ...                                                         │
 │    │                                                                     │
 │    │    Merge → sort by priority descending                              │
@@ -643,7 +643,7 @@
      │ Factory.build()│────────────────────┼───┼───┼──────▶ Git API
      └────────────────┘                    │   │   │        (tree, conv)
               │                            │   │   │
-              ├────────────────────────────┼───┼───┼──────▶ fragments/*.md
+              ├────────────────────────────┼───┼───┼──────▶ content/*.md
               │                            │   │   │
               ▼                            │   │   │
      ┌────────────────┐                    │   │   │
@@ -740,7 +740,7 @@
 | **Adapter: LLM** | `src/pr_auto_reviewer/infrastructure/llm/` (Ollama, parser) |
 | **Adapter: Fragments** | `src/pr_auto_reviewer/infrastructure/fragments/` (compose, repos, renderers) |
 | **Persistence** | `src/pr_auto_reviewer/infrastructure/persistence/` (JSON file, null) |
-| **Fragments Content** | `fragments/` (universal/, python/, shell/, ...) |
+| **Fragments Content** | `src/pr_auto_reviewer/infrastructure/fragments/content/` (universal/, python/, shell/, ...) |
 | **Templates** | `src/pr_auto_reviewer/infrastructure/llm/templates/` (review_output.j2) |
 | **DI Container** | `src/pr_auto_reviewer/infrastructure/container.py` |
 | **Config** | `src/pr_auto_reviewer/infrastructure/config/config.py` |

@@ -22,6 +22,7 @@ from pr_auto_reviewer.application.ports.outbound.pull_request_repository import 
     PullRequestRepository,
 )
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
 )
@@ -29,10 +30,10 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 import os
 from pr_auto_reviewer.presentation.ports import PrListerPort
-from pr_auto_reviewer.infrastructure.system_notifier import SystemNotifier
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 
 logger = logging.getLogger(__name__)
-_notifier = SystemNotifier()
+
 
 
 class CliRunner:
@@ -46,6 +47,7 @@ class CliRunner:
         pr_lister: PrListerPort,
         review_item_parser: ReviewItemParser,
         pr_repository: PullRequestRepository | None = None,
+        notifier: NotifierPort | None = None,
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service
@@ -53,6 +55,7 @@ class CliRunner:
         self._pr_lister = pr_lister
         self._review_item_parser = review_item_parser
         self._pr_repository = pr_repository
+        self._notifier = notifier
 
     def run(self, argv: list[str]) -> int:
         """Run the CLI with the given arguments."""
@@ -138,11 +141,23 @@ class CliRunner:
         try:
             self._review_service.execute(command)
             print(f"Review posted for PR #{args.pr}")
-            _notifier.notify_step("Review complete", f"PR #{args.pr} in {args.repo}")
+            if self._notifier:
+                self._notifier.notify_success("Review complete", f"PR #{args.pr} in {args.repo}")
             return 0
+        except LlmUnavailableError as e:
+            print("Error: LLM host unreachable — cancelling review")
+            if self._notifier:
+                self._notifier.notify_error(
+                    f"LLM unavailable for PR #{command.pr_id.number}", e)
+            if args.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return 1
         except Exception as e:
             print(f"Error: {e}")
-            _notifier.notify_error(f"Review failed for PR #{command.pr_id.number}", e)
+            if self._notifier:
+                self._notifier.notify_error(f"Review failed for PR #{command.pr_id.number}", e)
             if args.verbose:
                 import traceback
 
@@ -194,9 +209,20 @@ class CliRunner:
         except PullRequestNotFoundError:
             print("Error: PR not in local state")
             return 1
+        except LlmUnavailableError as e:
+            print("Error: LLM host unreachable — cancelling command processing")
+            if self._notifier:
+                self._notifier.notify_error(
+                    f"LLM unavailable for PR #{args.pr}", e)
+            if args.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return 1
         except Exception as e:
             print(f"Error: {e}")
-            _notifier.notify_error(f"Command processing failed for PR #{args.pr}", e)
+            if self._notifier:
+                self._notifier.notify_error(f"Command processing failed for PR #{args.pr}", e)
             if args.verbose:
                 import traceback
 

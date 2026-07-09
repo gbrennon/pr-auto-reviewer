@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+
 def build_legacy_prompt() -> str:
     from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
         PullRequestDiff,
@@ -59,27 +60,25 @@ def build_legacy_prompt() -> str:
 
     return PromptBuilder().build(diff, context)
 
+
 def build_fragment_prompt() -> str | None:
     from pr_auto_reviewer.domain.fragments.entities.review_context import (
         ReviewContext,
     )
-    from pr_auto_reviewer.infrastructure.fragments.repositories import (
+    from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
         FileSystemFragmentRepository,
     )
-    from pr_auto_reviewer.infrastructure.fragments.renderers import Jinja2Renderer
+    from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import Jinja2Renderer
     from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
         ComposeReviewPromptAdapter,
     )
 
-    fragments_dir = Path("fragments")
-    if not fragments_dir.is_dir():
-        print("[FRAGMENT] No fragments/ directory found — skipping fragment build")
-        return None
-
-    repo = FileSystemFragmentRepository(base_path=fragments_dir)
+    repo = FileSystemFragmentRepository()
     renderer = Jinja2Renderer()
     service = ComposeReviewPromptAdapter(
-        repository=repo, renderer=renderer, max_tokens=4000,
+        repository=repo,
+        renderer=renderer,
+        max_tokens=4000,
     )
 
     context = ReviewContext(
@@ -94,12 +93,18 @@ def build_fragment_prompt() -> str | None:
 +        )""",
     )
 
-    composed = service.execute(context)
+    try:
+        composed = service.execute(context)
+    except Exception as exc:
+        print(f"Prompt composition failed: {exc}")
+        return None
+
     print(
         f"[FRAGMENT] Composed: {composed.total_tokens} tokens, "
         f"fragments={composed.fragments_used}"
     )
     return composed.content
+
 
 def main() -> None:
     output_dir = Path("comparison_output")
@@ -132,7 +137,10 @@ def main() -> None:
     if fragment and (output_dir / "prompt_FRAGMENT.md").exists():
         print(f"  FRAGMENT:  {len(fragment):>6} chars")
     print()
-    print("Run: diff comparison_output/prompt_LEGACY.md comparison_output/prompt_FRAGMENT.md")
+    print(
+        "Run: diff comparison_output/prompt_LEGACY.md comparison_output/prompt_FRAGMENT.md"
+    )
+
 
 if __name__ == "__main__":
     main()

@@ -10,6 +10,7 @@ from .forgejo.comment_reader import ForgejoCommentReader as GitCommentReaderAdap
 from .forgejo.comment_publisher import ForgejoCommentPublisher as GitCommentPublisherAdapter
 from .forgejo.issue_tracker import ForgejoIssueTracker as GitIssueTrackerAdapter
 from .llm import OllamaLlmAdapter
+from .notifier import LinuxNotifier
 
 __all__ = [
     "GitPlatformHttpClient",
@@ -23,5 +24,6 @@ __all__ = [
     "GitCommentReaderAdapter",
     "GitCommentPublisherAdapter",
     "GitIssueTrackerAdapter",
+    "LinuxNotifier",
     "OllamaLlmAdapter",
 ]

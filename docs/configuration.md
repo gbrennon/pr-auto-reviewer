@@ -84,11 +84,9 @@ REVIEWER_USERNAME=code-reviewer-bot
 OLLAMA_MODEL=code-review
 OLLAMA_HOST=http://localhost:11434
 POLL_INTERVAL=60
-PROMPT_MODE=fragments
 USE_STRICT_FRAGMENT_SELECTION=true
 ```
 
 ### Feature flags
 
-- `PROMPT_MODE` (required if you want to change behavior) — Set to `monolithic` or `fragments`. When set, controls which prompt composition approach is used. Example: `PROMPT_MODE=fragments`.
-- `USE_STRICT_FRAGMENT_SELECTION` (default: `false`) — When using fragment-based prompts, set to `true` to only include fragments strictly related to files changed in the PR.
+- `USE_STRICT_FRAGMENT_SELECTION` (default: `false`) — Set to `true` to only include fragments strictly related to files changed in the PR.
