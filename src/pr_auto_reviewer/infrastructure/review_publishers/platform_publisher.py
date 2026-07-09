@@ -10,6 +10,7 @@ from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -61,13 +62,42 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             self._review_mode,
         )
 
-        body = _body_formatter.format(review)
+        if verdict_event == "COMMENT":
+            non_blocking_items = [i for i in review.items if not i.severity.is_blocking]
+            comment_review = CodeReview(
+                verdict=review.verdict,
+                reason=review.reason,
+                summary=review.summary,
+                items=non_blocking_items,
+                suggestions=review.suggestions,
+                praise=review.praise,
+                model_used=review.model_used,
+            )
+            comment_body = _body_formatter.format(
+                comment_review,
+                start_number=self._count_existing_items(pr_id),
+            )
+            self._publish_comment(pr_id, comment_body)
+            return
 
-        logger.debug(
-            "Review body preview: %s",
-            body[:500] if body else "empty",
-        )
+        blocking = [i for i in review.items if i.severity.is_blocking]
+        body = _body_formatter.format(review, start_number=self._count_existing_items(pr_id))
 
+        self._request_reviewer(pr_id)
+        self._publish_formal_review(pr_id, review, verdict_event, body, blocking)
+
+    def _count_existing_items(self, pr_id: PullRequestId) -> int:
+        """Return count of existing reviews on this PR, used to offset
+        issue numbers so new items don't reuse numbers from prior reviews."""
+        try:
+            reviews = self._client.get(
+                f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
+            )
+            return len(reviews) if isinstance(reviews, list) else 0
+        except Exception:
+            return 0
+
+    def _request_reviewer(self, pr_id: PullRequestId) -> None:
         reviewers_path = (
             f"/repos/{pr_id.repository}/pulls/{pr_id.number}/requested_reviewers"
         )
@@ -95,8 +125,30 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
                     pr_id,
                 )
 
+    def _publish_comment(self, pr_id: PullRequestId, body: str) -> None:
+        comments_path = (
+            f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
+        )
+        logger.info("Posting comment on %s: %d chars", pr_id, len(body))
+        try:
+            response = self._client.post(comments_path, {"body": body})
+            if self._client._platform_mode == "forgejo":
+                logger.debug("Codeberg Comment Response: %s", response)
+        except Exception as exc:
+            logger.warning(
+                "Failed to post comment on %s (non-fatal): %s", pr_id, exc
+            )
+
+    def _publish_formal_review(
+        self,
+        pr_id: PullRequestId,
+        review: CodeReview,
+        verdict_event: str,
+        body: str,
+        blocking: list,
+    ) -> None:
         reviews_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
-        payload = {"event": verdict_event, "body": body}
+        payload: dict = {"event": verdict_event, "body": body}
 
         if self._client._platform_mode == "forgejo":
             payload["official"] = True
@@ -109,61 +161,13 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
                 else {},
             )
 
-            comments = []
-            for item in review.items:
-                pos_data = self._find_diff_position(
-                    diff_text, item.file_path, item.current_code
-                )
-                if pos_data:
-                    if self._client._platform_mode == "github":
-                        comments.append(
-                            {
-                                "path": item.file_path,
-                                "position": pos_data["position"],
-                                "body": item.description,
-                            }
-                        )
-                    elif self._client._platform_mode == "forgejo":
-                        line_no = pos_data["new_line"] or pos_data["old_line"]
-                        key = "new_position" if pos_data["new_line"] else "old_position"
-                        comments.append(
-                            {
-                                "path": item.file_path,
-                                "body": item.description,
-                                key: line_no,
-                            }
-                        )
+            inline = self._build_inline_comments(
+                diff_text, blocking, []
+            )
 
-            for s in review.suggestions:
-                s_file = s.get("file", "")
-                s_code = s.get("current_code", "")
-                if not s_file or not s_code:
-                    continue
-                pos_data = self._find_diff_position(diff_text, s_file, s_code)
-                if pos_data:
-                    s_body = s.get("description", "")
-                    if self._client._platform_mode == "github":
-                        comments.append(
-                            {
-                                "path": s_file,
-                                "position": pos_data["position"],
-                                "body": s_body,
-                            }
-                        )
-                    elif self._client._platform_mode == "forgejo":
-                        line_no = pos_data["new_line"] or pos_data["old_line"]
-                        key = "new_position" if pos_data["new_line"] else "old_position"
-                        comments.append(
-                            {
-                                "path": s_file,
-                                "body": s_body,
-                                key: line_no,
-                            }
-                        )
-
-            if comments:
-                payload["comments"] = comments
-                logger.info("Added %d inline comments to formal review", len(comments))
+            if inline:
+                payload["comments"] = inline
+                logger.info("Added %d inline comments to formal review", len(inline))
 
             pr_info = self._client.get(
                 f"/repos/{pr_id.repository}/pulls/{pr_id.number}"
@@ -174,10 +178,7 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             logger.error("Failed to resolve inline comments for formal review: %s", exc)
 
         try:
-            response = self._client.post(
-                reviews_path,
-                payload,
-            )
+            response = self._client.post(reviews_path, payload)
             if self._client._platform_mode == "forgejo":
                 logger.debug("Codeberg Review Response Body: %s", response)
         except Exception as exc:
@@ -190,6 +191,64 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             raise ReviewPublishError(
                 f"Failed to publish review for {pr_id}: {exc}"
             ) from exc
+
+    def _build_inline_comments(
+        self, diff_text: str, items: list, suggestions: list[dict]
+    ) -> list[dict]:
+        comments: list[dict] = []
+
+        for item in items:
+            pos_data = self._find_diff_position(
+                diff_text, item.file_path, item.current_code
+            )
+            if pos_data:
+                if self._client._platform_mode == "github":
+                    comments.append(
+                        {
+                            "path": item.file_path,
+                            "position": pos_data["position"],
+                            "body": item.description,
+                        }
+                    )
+                elif self._client._platform_mode == "forgejo":
+                    line_no = pos_data["new_line"] or pos_data["old_line"]
+                    key = "new_position" if pos_data["new_line"] else "old_position"
+                    comments.append(
+                        {
+                            "path": item.file_path,
+                            "body": item.description,
+                            key: line_no,
+                        }
+                    )
+
+        for s in suggestions:
+            s_file = s.file
+            s_code = s.current_code
+            if not s_file or not s_code:
+                continue
+            pos_data = self._find_diff_position(diff_text, s_file, s_code)
+            if pos_data:
+                s_body = s.description
+                if self._client._platform_mode == "github":
+                    comments.append(
+                        {
+                            "path": s_file,
+                            "position": pos_data["position"],
+                            "body": s_body,
+                        }
+                    )
+                elif self._client._platform_mode == "forgejo":
+                    line_no = pos_data["new_line"] or pos_data["old_line"]
+                    key = "new_position" if pos_data["new_line"] else "old_position"
+                    comments.append(
+                        {
+                            "path": s_file,
+                            "body": s_body,
+                            key: line_no,
+                        }
+                    )
+
+        return comments
 
     @staticmethod
     def _find_diff_position(
