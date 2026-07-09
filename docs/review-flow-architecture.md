@@ -422,8 +422,10 @@
 │ │  │            category, file_path, line,              │   │   │
 │ │  │            description, current_code,              │   │   │
 │ │  │            suggested_fix)],                        │   │   │
-│ │  │     suggestions=[{file,line,description,...}],     │   │   │
-│ │  │     praise=[{file,description}],                    │   │   │
+│ │  │     suggestions=[ReviewSuggestion(file, line,      │   │   │
+│ │  │            description, current_code,              │   │   │
+│ │  │            suggested_code)],                       │   │   │
+│ │  │     praise=[ReviewPraise(description, file)],       │   │   │
 │ │  │     model_used="code-review:latest",               │   │   │
 │ │  │   )                                                │   │   │
 │ │  └──────────────────────────────────────────────────┘   │   │
@@ -440,7 +442,14 @@
 │ │  │   CHANGES_REQUESTED → "REQUEST_CHANGES"           │   │   │
 │ │  │   COMMENTED         → "COMMENT"                   │   │   │
 │ │  │                                                   │   │   │
-│ │  │ format_review_body(review)                        │   │   │
+│ │  │ COMMENTED → POST /issues/{num}/comments            │   │   │
+│ │  │   (non-blocking items only; blocking → formal only) │   │   │
+│ │  │ APPROVED/REQUEST_CHANGES → first counts existing    │   │   │
+│ │  │   reviews to offset item numbers (no duplicates).   │   │   │
+│ │  │   Then: request reviewer → POST /pulls/{num}/reviews│   │   │
+│ │  │   with full body + inline diff comments.            │   │   │
+│ │  │                                                   │   │   │
+│ │  │ format_review_body(review, start_number=N)          │   │   │
 │ │  │   Jinja2 template: review_output.j2               │   │   │
 │ │  │   → Markdown body with verdict, summary,          │   │   │
 │ │  │     issue table, suggestions, praise              │   │   │
@@ -705,6 +714,14 @@
 │  ReviewItem                                                         │
 │    └─ number, severity, category, file_path,                        │
 │       line, description, current_code, suggested_fix                │
+│                                                                     │
+│  ReviewSuggestion                                                   │
+│    └─ file, line, description,                                      │
+│       current_code, suggested_code                                  │
+│                                                                     │
+│  ReviewPraise                                                       │
+│    └─ description, file                                             │
+│       (never enumerated — purely qualitative)                       │
 │                                                                     │
 │  Issue                                                              │
 │    └─ id, title, body, closed                                       │
