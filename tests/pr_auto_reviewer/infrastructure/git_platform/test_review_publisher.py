@@ -3,6 +3,8 @@
 import pytest
 
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -244,3 +246,252 @@ index def456..ghi789 100644
 
         with pytest.raises(ReviewPublishError):
             adapter.publish(pr_id, review)
+
+    # ===== new tests =====
+
+    def test_count_existing_items_returns_zero_on_api_failure(
+        self, patched_private_client, monkeypatch,
+    ):
+        monkeypatch.setattr(patched_private_client, "get",
+                            lambda path, **kw: (_ for _ in ()).throw(Exception("boom")))
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        result = adapter._count_existing_items(
+            PullRequestId(repository="o/r", number=1),
+        )
+        assert result == 0
+
+    def test_request_reviewer_github_422_logs_specific_warning(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
+        owner._owner_client = patched_private_client
+        owner._reviewer_username = "bot"
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
+        def raise_422(*_a, **_kw):
+            raise Exception("422 Unprocessable Entity")
+        monkeypatch.setattr(patched_private_client, "post", raise_422)
+        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        assert "422" in caplog.text
+
+    def test_request_reviewer_generic_failure_logs_warning(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
+        owner._owner_client = patched_private_client
+        owner._reviewer_username = "bot"
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
+        def raise_500(*_a, **_kw):
+            raise Exception("500 boom")
+        monkeypatch.setattr(patched_private_client, "post", raise_500)
+        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        assert "Failed to request reviewer" in caplog.text
+
+    def test_request_reviewer_forgejo_failure_logs_warning(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
+        owner._owner_client = patched_private_client
+        owner._reviewer_username = "bot"
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
+        def raise_err(*_a, **_kw):
+            raise Exception("forgejo down")
+        monkeypatch.setattr(patched_private_client, "post", raise_err)
+        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        assert "Failed to request reviewer" in caplog.text
+
+    def test_publish_comment_forgejo_logs_debug(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
+        caplog.set_level("DEBUG")
+        adapter._publish_comment(
+            PullRequestId(repository="o/r", number=1), "test body",
+        )
+        assert "Codeberg Comment Response" in caplog.text
+
+    def test_publish_comment_handles_post_failure(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        def raise_err(*_a, **_kw):
+            raise Exception("post failed")
+        monkeypatch.setattr(patched_private_client, "post", raise_err)
+        adapter._publish_comment(
+            PullRequestId(repository="o/r", number=1), "test body",
+        )
+        assert "Failed to post comment" in caplog.text
+
+    def test_build_inline_comments_github_mode(
+        self, patched_private_client, monkeypatch,
+    ):
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
+        diff = (
+            "diff --git a/src/main.py b/src/main.py\n"
+            "@@ -1,3 +1,4 @@\n"
+            " unchanged\n"
+            "+return True\n"
+        )
+        items = [
+            ReviewItem(
+                number=1, severity=ItemSeverity.MAJOR, category="bug",
+                description="Blocking", file_path="src/main.py",
+                current_code="return True",
+            ),
+        ]
+        result = adapter._build_inline_comments(diff, items, [])
+        assert len(result) == 1
+        assert result[0]["path"] == "src/main.py"
+        assert result[0]["body"] == "Blocking"
+        assert "position" in result[0]
+
+    def test_build_inline_comments_with_suggestions_forgejo(
+        self, patched_private_client, monkeypatch,
+    ):
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
+        diff = (
+            "diff --git a/src/main.py b/src/main.py\n"
+            "@@ -1,3 +1,4 @@\n"
+            " unchanged\n"
+            "+return True\n"
+        )
+        suggestions = [
+            ReviewSuggestion(file="src/main.py", current_code="return True",
+                             description="Use a constant instead"),
+        ]
+        result = adapter._build_inline_comments(diff, [], suggestions)
+        assert len(result) == 1
+        assert result[0]["path"] == "src/main.py"
+        assert result[0]["body"] == "Use a constant instead"
+        assert "new_position" in result[0] or "old_position" in result[0]
+
+    def test_comment_verdict_filters_blocking_items(
+        self, patched_private_client, monkeypatch,
+    ):
+        post_payloads = []
+        def fake_post(path, body):
+            post_payloads.append((path, body))
+            return {"id": 1}
+        monkeypatch.setattr(patched_private_client, "post", fake_post)
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.COMMENTED, summary="s",
+            items=[
+                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                           description="Blocking", file_path="f.py",
+                           current_code="x"),
+                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                           description="Nit", file_path="f.py",
+                           current_code="x"),
+            ],
+            praise=[ReviewPraise(description="nice")],
+            model_used="m",
+        )
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
+        comment_calls = [p for p in post_payloads if "/comments" in p[0]]
+        assert len(comment_calls) == 1
+        body = comment_calls[0][1]["body"]
+        assert "Nit" in body
+        assert "Blocking" not in body
+
+    def test_formal_review_body_includes_all_items(
+        self, patched_private_client, monkeypatch,
+    ):
+        post_payloads = []
+        def fake_post(path, body):
+            post_payloads.append((path, body))
+            return {"id": 1}
+        monkeypatch.setattr(patched_private_client, "post", fake_post)
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
+            items=[
+                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                           description="Blocking", file_path="f.py",
+                           current_code="x"),
+                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                           description="Nit", file_path="f.py",
+                           current_code="x"),
+            ],
+            praise=[ReviewPraise(description="nice")],
+            model_used="m",
+        )
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
+        review_calls = [p for p in post_payloads if "/reviews" in p[0]]
+        assert len(review_calls) == 1
+        body = review_calls[0][1]["body"]
+        assert "Blocking" in body
+        assert "Nit" in body
+
+    def test_request_reviewer_github_success_logs_debug(
+        self, patched_private_client, monkeypatch, caplog,
+    ):
+        """GitHub reviewer request success logs a debug message."""
+        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
+        owner._owner_client = patched_private_client
+        owner._reviewer_username = "bot"
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
+        caplog.set_level("DEBUG")
+        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        assert "GitHub Request Reviewer Response" in caplog.text
+
+    def test_build_inline_comments_skips_suggestion_without_file(
+        self, patched_private_client, monkeypatch,
+    ):
+        """Suggestions missing file or code are skipped."""
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "@@ -1 +1,2 @@\n"
+            "+x\n"
+        )
+        suggestions = [
+            ReviewSuggestion(file="", current_code="x", description="no file"),
+            ReviewSuggestion(file="f.py", current_code="", description="no code"),
+        ]
+        result = adapter._build_inline_comments(diff, [], suggestions)
+        assert result == []
+
+    def test_build_inline_comments_suggestions_github_mode(
+        self, patched_private_client, monkeypatch,
+    ):
+        """Suggestions build GitHub-style inline comments."""
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, "t", "u", owner_client=patched_private_client,
+        )
+        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
+        diff = (
+            "diff --git a/src/main.py b/src/main.py\n"
+            "@@ -1,3 +1,4 @@\n"
+            " unchanged\n"
+            "+return True\n"
+        )
+        suggestions = [
+            ReviewSuggestion(file="src/main.py", current_code="return True",
+                             description="Use a constant"),
+        ]
+        result = adapter._build_inline_comments(diff, [], suggestions)
+        assert len(result) == 1
+        assert result[0]["path"] == "src/main.py"
+        assert result[0]["body"] == "Use a constant"
+        assert "position" in result[0]

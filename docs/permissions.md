@@ -61,17 +61,19 @@ This token performs read-heavy operations:
 
 ### FORGEJO_REVIEWER_TOKEN
 
-This token posts the actual review:
+This token submits the review and posts comments:
 
 | Action | Endpoint | Method | Required Scope |
 |---|---|---|---|
 | Submit review | `/repos/{o}/{r}/pulls/{n}/reviews` | POST | `repository` (write) |
+| Post comment | `/repos/{o}/{r}/issues/{n}/comments` | POST | `issue` (write) |
 
 **Minimum scopes:**
 
 | Scope | Permission |
 |---|---|
 | `repository` | write |
+| `issue` | write |
 
 ### Verify Forgejo Tokens
 
@@ -105,6 +107,15 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" \
   -d '{"body":"test","event":"COMMENT"}' \
   https://codeberg.org/api/v1/repos/OWNER/REPO/pulls/PR/reviews
 # 201 = review posted, 401 = invalid token, 403 = insufficient scope
+
+# Verify reviewer can post a comment (non-blocking review items use this)
+curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+  -X POST \
+  -H "Authorization: token $FORGEJO_REVIEWER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"test"}' \
+  https://codeberg.org/api/v1/repos/OWNER/REPO/issues/PR/comments
+# 201 = comment posted, 403 = needs 'issue' (write) scope on the token
 ```
 
 ---

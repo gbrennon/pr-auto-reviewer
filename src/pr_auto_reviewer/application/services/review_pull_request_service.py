@@ -8,6 +8,7 @@ from ..commands.review_pull_request_command import ReviewPullRequestCommand
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
+from ...domain.entities.review_praise import ReviewPraise
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.issue_category import IssueCategory
@@ -159,12 +160,12 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             "behind debug or verbose logging."
         )
         praise = review.praise or [
-            {
-                "description": (
+            ReviewPraise(
+                description=(
                     "The logging additions are consistently placed around the "
                     "operations they observe."
                 )
-            }
+            )
         ]
         return CodeReview(
             verdict=ReviewVerdict.APPROVED,

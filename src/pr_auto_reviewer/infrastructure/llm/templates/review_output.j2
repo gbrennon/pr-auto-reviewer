@@ -34,7 +34,7 @@ No issues found.
 ### Praise
 {% if praise %}
 {% for p in praise %}
-{{ p.number }}.{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
+-{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
 {% endfor %}
 {% else %}
 No notable patterns or practices to highlight.

@@ -3,6 +3,8 @@
 import pytest
 
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -24,7 +26,7 @@ class TestReviewToJson:
                 ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
                           file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
             ],
-            praise=[{"file": "a.py", "description": "nice"}],
+            praise=[ReviewSuggestion(file="a.py", description="nice")],
             model_used="test-model",
         )
         json_text = _review_to_json(review)
