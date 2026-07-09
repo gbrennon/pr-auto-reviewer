@@ -12,6 +12,7 @@ from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case 
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
 )
@@ -48,6 +49,7 @@ class ApplicationComponents:
     repo_lister: RepoListerPort
     review_item_parser: ReviewItemParser
     cli_runner: CliRunner
+    notifier: NotifierPort | None = None
 
 class CompositionRoot:
     """Wires infrastructure, application and presentation layers.
@@ -109,6 +111,7 @@ class CompositionRoot:
             pr_lister=c.pr_lister,
             review_item_parser=review_item_parser,
             pr_repository=c.pr_repository,
+            notifier=c.notifier,
         )
 
         return ApplicationComponents(
@@ -119,6 +122,7 @@ class CompositionRoot:
             repo_lister=c.repo_lister,
             review_item_parser=review_item_parser,
             cli_runner=cli_runner,
+            notifier=c.notifier,
         )
 
     @property
@@ -151,6 +155,7 @@ class CompositionRoot:
             repo_lister=self._components.repo_lister,
             pr_lister=self._components.pr_lister,
             review_service=self._components.review_service,
+            notifier=self._components.notifier,
         )
 
         daemon.start()

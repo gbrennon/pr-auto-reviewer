@@ -6,6 +6,7 @@ from .comment_reader_port import CommentReaderPort
 from .fragment_repository_port import FragmentRepositoryPort
 from .issue_tracker_port import IssueTrackerPort
 from .llm_review_port import LlmReviewPort
+from .notifier_port import NotifierPort
 from .prompt_renderer_port import PromptRendererPort
 from .pull_request_repository import PullRequestRepository
 from .repository_context_port import RepositoryContextPort
@@ -21,6 +22,7 @@ __all__ = [
     "FragmentRepositoryPort",
     "IssueTrackerPort",
     "LlmReviewPort",
+    "NotifierPort",
     "PromptRendererPort",
     "PullRequestRepository",
     "RepositoryContextPort",

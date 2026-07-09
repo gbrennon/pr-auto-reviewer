@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-from pr_auto_reviewer.infrastructure.llm.prompt_mode import PromptMode
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
@@ -34,13 +33,12 @@ class Config:
     debug: bool = False
     output_mode: str = "forgejo"
     output_path: str | None = None
-    fragments_dir: str = "fragments"
+    fragments_dir: str = ""
     max_prompt_tokens: int = 9999
     max_file_chars: int = 3000
     max_files: int = 10
     max_structure_lines: int = 100
     use_compact_template: bool = False
-    prompt_mode: PromptMode = PromptMode.MONOLITHIC
     use_strict_fragment_selection: bool = False
 
 
@@ -83,8 +81,7 @@ def load_config() -> Config:
     platform_mode = GitProvider.parse(platform_mode_raw)
 
     github_api_url = (
-        os.environ.get("GITHUB_API_URL", "").strip()
-        or "https://api.github.com"
+        os.environ.get("GITHUB_API_URL", "").strip() or "https://api.github.com"
     )
     forgejo_api_url = (
         os.environ.get("FORGEJO_API_URL", "").strip()
@@ -128,7 +125,6 @@ def load_config() -> Config:
     use_compact_template = (
         os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
     )
-    prompt_mode = PromptMode.parse(os.environ.get("PROMPT_MODE", ""))
     use_strict_fragment_selection = (
         os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
     )
@@ -156,6 +152,5 @@ def load_config() -> Config:
         max_files=max_files,
         max_structure_lines=max_structure_lines,
         use_compact_template=use_compact_template,
-        prompt_mode=prompt_mode,
         use_strict_fragment_selection=use_strict_fragment_selection,
     )
