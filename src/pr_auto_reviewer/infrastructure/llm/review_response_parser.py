@@ -7,6 +7,8 @@ import logging
 import re
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -202,15 +204,16 @@ class ReviewResponseParser:
                 )
             )
 
-        enriched_suggestions = []
-        for s in suggestions:
-            enriched_suggestions.append({
-                "file": s.get("file", ""),
-                "line": s.get("line", ""),
-                "description": s.get("description", ""),
-                "current_code": s.get("current_code", ""),
-                "suggested_code": s.get("suggested_code", ""),
-            })
+        enriched_suggestions = [
+            ReviewSuggestion(
+                file=s.get("file", ""),
+                line=s.get("line", ""),
+                description=s.get("description", ""),
+                current_code=s.get("current_code", ""),
+                suggested_code=s.get("suggested_code", ""),
+            )
+            for s in suggestions
+        ]
 
         verdict = ReviewResponseParser._resolve_verdict(
             data.get("verdict"), items,
@@ -225,7 +228,7 @@ class ReviewResponseParser:
             summary=summary,
             items=items,
             suggestions=enriched_suggestions,
-            praise=praise,
+            praise=[ReviewPraise(description=p.get("description", ""), file=p.get("file", "")) for p in praise],
             model_used=model_used,
         )
 

@@ -16,10 +16,10 @@ _jinja_env = jinja2.Environment(
 )
 
 class ReviewBodyFormatter:
-    def format(self, review: CodeReview) -> str:
+    def format(self, review: CodeReview, start_number: int = 0) -> str:
         verdict_text = review.verdict.value.replace("_", " ").title()
 
-        idx = 0
+        idx = start_number
         numbered_items = []
         for item in review.items:
             numbered_items.append(
@@ -38,17 +38,22 @@ class ReviewBodyFormatter:
 
         numbered_praise = []
         for p in review.praise:
-            p_copy = dict(p)
-            p_copy["number"] = idx
-            numbered_praise.append(p_copy)
-            idx += 1
+            numbered_praise.append({
+                "description": p.description,
+                "file": p.file,
+            })
 
         suggestions_raw = getattr(review, "suggestions", [])
         numbered_suggestions = []
         for s in suggestions_raw:
-            s_copy = dict(s)
-            s_copy["number"] = idx
-            numbered_suggestions.append(s_copy)
+            numbered_suggestions.append({
+                "number": idx,
+                "description": s.description,
+                "file": s.file,
+                "line": s.line,
+                "current_code": s.current_code,
+                "suggested_code": s.suggested_code,
+            })
             idx += 1
 
         template = _jinja_env.get_template("review_output.j2")
