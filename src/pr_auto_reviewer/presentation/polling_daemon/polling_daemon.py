@@ -12,7 +12,7 @@ from pr_auto_reviewer.application.commands.review_pull_request_command import (
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
-from pr_auto_reviewer.application.ports.outbound.notifier import Notifier
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
@@ -32,7 +32,7 @@ class PollingDaemon:
         repo_lister: RepoListerPort,
         pr_lister: PrListerPort,
         review_service: ReviewPullRequestUseCase,
-        notifier: Notifier | None = None,
+        notifier: NotifierPort | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
@@ -130,12 +130,12 @@ class PollingDaemon:
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
         except EmptyDiffError:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
-        except LlmUnavailableError:
+        except LlmUnavailableError as e:
             logger.error("LLM unavailable, will retry next cycle")
             if self._notifier:
                 self._notifier.notify_error(
                     f"LLM unavailable for PR #{pr.pr_id.number} in {pr.pr_id.repository}",
-                    LlmUnavailableError("Ollama host unreachable"),
+                    e,
                 )
             raise
         except ReviewPublishError as e:

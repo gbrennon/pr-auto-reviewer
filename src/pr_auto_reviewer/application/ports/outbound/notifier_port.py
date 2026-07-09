@@ -1,9 +1,9 @@
-"""Notifier — send system notifications to the user's desktop."""
+"""NotifierPort — send system notifications to the user's desktop."""
 
 from typing import Protocol
 
 
-class Notifier(Protocol):
+class NotifierPort(Protocol):
     def notify_success(self, context: str, detail: str = "") -> None:
         """Send a success notification."""
         ...

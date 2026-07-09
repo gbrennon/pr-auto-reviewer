@@ -30,7 +30,7 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 import os
 from pr_auto_reviewer.presentation.ports import PrListerPort
-from pr_auto_reviewer.application.ports.outbound.notifier import Notifier
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class CliRunner:
         pr_lister: PrListerPort,
         review_item_parser: ReviewItemParser,
         pr_repository: PullRequestRepository | None = None,
-        notifier: Notifier | None = None,
+        notifier: NotifierPort | None = None,
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service

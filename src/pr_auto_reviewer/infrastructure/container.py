@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,9 @@ from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter imp
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
+from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
+    LinuxNotifier,
+)
 from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
 )
@@ -90,6 +94,9 @@ from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
     IssueTrackerPort,
+)
+from pr_auto_reviewer.application.ports.outbound.notifier_port import (
+    NotifierPort,
 )
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
@@ -289,6 +296,7 @@ class Container:
             self._config.llm_model or "code-review:latest",
         )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
+        self._notifier: NotifierPort = LinuxNotifier(run_command=subprocess.run)
 
         fragments_dir = self._config.fragments_dir or None
         self._fragment_repository: FragmentRepositoryPort = (
@@ -384,6 +392,10 @@ class Container:
     @property
     def fragment_repository(self) -> FragmentRepositoryPort:
         return self._fragment_repository
+
+    @property
+    def notifier(self) -> NotifierPort:
+        return self._notifier
 
     @property
     def fragment_renderer(self) -> PromptRendererPort:

@@ -4,10 +4,10 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
-from pr_auto_reviewer.application.ports.outbound.notifier import Notifier
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 
 
-class LinuxNotifier(Notifier):
+class LinuxNotifier(NotifierPort):
     def __init__(
         self,
         run_command: Callable[..., Any] | None = None,
