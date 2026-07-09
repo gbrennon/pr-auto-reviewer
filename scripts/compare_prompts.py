@@ -93,7 +93,12 @@ def build_fragment_prompt() -> str | None:
 +        )""",
     )
 
-    composed = service.execute(context)
+    try:
+        composed = service.execute(context)
+    except Exception as exc:
+        print(f"Prompt composition failed: {exc}")
+        return None
+
     print(
         f"[FRAGMENT] Composed: {composed.total_tokens} tokens, "
         f"fragments={composed.fragments_used}"

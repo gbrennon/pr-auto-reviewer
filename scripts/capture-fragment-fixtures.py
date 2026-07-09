@@ -73,8 +73,8 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
                 file_contents[b] = content
                 full_content += f"\n=== {b} ===\n{content}"
                 print(f"  File: {b} ({len(content)} chars)")
-            except Exception:
-                print(f"  File: {b} (skipped — 404)")
+            except Exception as exc:
+                print(f"  File: {b} (skipped — {exc})")
 
     if full_content:
         (DIFFS_DIR / f"{base}.full").write_text(full_content)
