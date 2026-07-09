@@ -9,6 +9,8 @@ from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
@@ -69,6 +71,15 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
                     "current_code": item.current_code,
                     "suggested_fix": item.suggested_fix,
                 }
+            if isinstance(item, ReviewSuggestion):
+                return {
+                    "file": item.file, "line": item.line,
+                    "description": item.description,
+                    "current_code": item.current_code,
+                    "suggested_code": item.suggested_code,
+                }
+            if isinstance(item, ReviewPraise):
+                return {"file": item.file, "description": item.description}
             return item
 
         data = {
@@ -76,8 +87,8 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
             "reason": review.reason,
             "summary": review.summary,
             "items": [_convert(it) for it in review.items],
-            "suggestions": review.suggestions,
-            "praise": review.praise,
+            "suggestions": [_convert(s) for s in review.suggestions],
+            "praise": [_convert(p) for p in review.praise],
             "model_used": review.model_used,
         }
         return json.dumps(data, indent=2, ensure_ascii=False)

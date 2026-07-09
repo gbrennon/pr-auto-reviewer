@@ -11,8 +11,8 @@ This document outlines what is currently implemented and what is planned.
 - **Draft PR Skipping** - Skips draft PRs automatically
 - **Duplicate Prevention** - Uses SHA-based state to avoid re-reviewing unchanged PRs
 - **AI Code Review** - Sends PR diff to Ollama and receives review
-- **Review Posting** - Posts formatted review comment to Codeberg PR
-- **Formal Review** - Also submits a formal approve/request_changes review
+- **Review Posting** - Submits formal review (approve/request_changes) with inline diff comments
+- **Comment Review** - Non-blocking items posted as single comment on PR (COMMENTED verdict)
 
 ### Configuration
 
@@ -39,7 +39,7 @@ This document outlines what is currently implemented and what is planned.
 ### Code Review Features
 
 - **Verdict System** - AI determines Approved or Changes Requested
-- **Structured Output** - Review includes Issues, Suggestions, Praise, Summary
+- **Structured Domain Model** - Review output uses typed entities: ReviewItem (issues), ReviewSuggestion, ReviewPraise (not enumerated)
 - **Severity Awareness** - AI identifies critical vs minor issues
 
 ## Not Implemented (Planned)

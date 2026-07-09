@@ -41,3 +41,15 @@ class TestItemSeverity:
     def test_invalid_value_raises(self) -> None:
         with pytest.raises(ValueError):
             ItemSeverity("unknown")
+
+    def test_is_blocking_critical(self) -> None:
+        assert ItemSeverity.CRITICAL.is_blocking is True
+
+    def test_is_blocking_major(self) -> None:
+        assert ItemSeverity.MAJOR.is_blocking is True
+
+    def test_is_blocking_minor(self) -> None:
+        assert ItemSeverity.MINOR.is_blocking is False
+
+    def test_is_blocking_info(self) -> None:
+        assert ItemSeverity.INFO.is_blocking is False
