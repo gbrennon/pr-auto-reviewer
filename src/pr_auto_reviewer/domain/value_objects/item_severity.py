@@ -10,6 +10,11 @@ class ItemSeverity(StrEnum):
     MINOR = "minor"
     INFO = "info"
 
+    @property
+    def is_blocking(self) -> bool:
+        """PR-blocking severities require changes before merge."""
+        return self in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR)
+
     @classmethod
     def from_value(cls, value: str | None) -> "ItemSeverity":
         """Return the severity for *value*, accepting prompt aliases."""
