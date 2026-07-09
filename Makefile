@@ -20,7 +20,7 @@ install:  ## Install CLI globally (pr-auto-reviewer)
 PIDFILE := /tmp/pr-auto-reviewer.pid
 
 start:  ## Start the PR reviewer daemon
-	@nohup python -m pr_auto_reviewer watch-prs > /tmp/pr-auto-reviewer.log 2>&1 & echo $$! > $(PIDFILE); \
+	@nohup uv run python -m pr_auto_reviewer watch-prs > /tmp/pr-auto-reviewer.log 2>&1 & echo $$! > $(PIDFILE); \
 	echo "Daemon started (pid $$(cat $(PIDFILE))); log: /tmp/pr-auto-reviewer.log"
 
 stop:  ## Stop the PR reviewer daemon
@@ -60,16 +60,16 @@ test:  ## Run tests
 # ── operations ──────────────────────────────────────────────────────────────
 
 clean reset:  ## Clean state files
-	@python -m pr_auto_reviewer clean
+	@uv run python -m pr_auto_reviewer clean
 
 review review-force:  ## Review a PR (REPO=owner/repo PR=N GITHUB_OWNER_TOKEN=... or FORGEJO_OWNER_TOKEN=...)
-	@python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
+	@uv run python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
 
 daemon-once:  ## Run the watcher once
-	@python -m pr_auto_reviewer watch-prs --once
+	@uv run python -m pr_auto_reviewer watch-prs --once
 
 daemon:  ## Run the watcher continuously
-	@python -m pr_auto_reviewer watch-prs
+	@uv run python -m pr_auto_reviewer watch-prs
 
 # ── issue commands ──────────────────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ issues:  ## Create issues from PR comments
 	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
 
 list-items:  ## List review items (REPO=owner/repo PR=N)
-	@python -m pr_auto_reviewer list-items --repo $(REPO) --pr $(PR)
+	@uv run python -m pr_auto_reviewer list-items --repo $(REPO) --pr $(PR)
 
 # ── fixtures ────────────────────────────────────────────────────────────────
 
