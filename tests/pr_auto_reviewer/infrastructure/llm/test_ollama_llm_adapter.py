@@ -4,7 +4,6 @@ import json
 import logging
 from pathlib import Path
 import re
-import requests as _requests
 
 import pytest
 
@@ -54,25 +53,24 @@ class TestOllamaLlmAdapter:
     """Tests for OllamaLlmAdapter."""
 
     def test_review_sends_request_to_ollama(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post,
     ) -> None:
         """Sends POST request to Ollama with correct payload."""
-        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+        adapter._http_post = ollama_fake_post
 
         result = adapter.review(sample_diff, sample_context)
 
         assert isinstance(result, CodeReview)
 
     def test_review_returns_code_review(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post,
     ) -> None:
         """Returns CodeReview from Ollama response."""
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+        adapter._http_post = ollama_fake_post
 
         result = adapter.review(sample_diff, sample_context)
 
@@ -82,24 +80,22 @@ class TestOllamaLlmAdapter:
         assert result.items[0].severity == ItemSeverity.MAJOR
 
     def test_review_raises_on_request_error(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post_error,
     ) -> None:
         """Raises LlmUnavailableError on request failure."""
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post_error)
+        adapter._http_post = ollama_fake_post_error
 
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)
 
     def test_debug_logs_request_payload_when_debug_enabled(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post, caplog,
     ) -> None:
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+        adapter._http_post = ollama_fake_post
 
         caplog.set_level(logging.DEBUG)
         adapter.review(sample_diff, sample_context)
@@ -113,12 +109,11 @@ class TestOllamaLlmAdapter:
         assert "prompt_chars=" in request_logs[0]
 
     def test_debug_logs_review_summary_when_debug_enabled(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post, caplog,
     ) -> None:
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+        adapter._http_post = ollama_fake_post
 
         caplog.set_level(logging.DEBUG)
         adapter.review(sample_diff, sample_context)
@@ -139,12 +134,11 @@ class TestOllamaLlmAdapter:
         assert "summary=" in summary
 
     def test_review_summary_not_logged_at_info_level(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post, caplog,
     ) -> None:
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post)
+        adapter._http_post = ollama_fake_post
 
         caplog.set_level(logging.INFO)
         adapter.review(sample_diff, sample_context)
@@ -156,25 +150,23 @@ class TestOllamaLlmAdapter:
         assert len(summary_logs) == 0
 
     def test_review_raises_on_invalid_json(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post_invalid_json,
     ) -> None:
         """Raises LlmUnavailableError on invalid JSON."""
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post_invalid_json)
+        adapter._http_post = ollama_fake_post_invalid_json
 
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)
 
     def test_review_handles_empty_response(
-        self, monkeypatch, adapter: OllamaLlmAdapter,
+        self, adapter: OllamaLlmAdapter,
         sample_diff: PullRequestDiff, sample_context: RepositoryContext,
         ollama_fake_post_empty,
     ) -> None:
         """Raises LlmUnavailableError on empty response."""
-        import requests as _requests
-        monkeypatch.setattr(_requests, "post", ollama_fake_post_empty)
+        adapter._http_post = ollama_fake_post_empty
 
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)

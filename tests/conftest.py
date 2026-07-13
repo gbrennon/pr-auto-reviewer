@@ -287,3 +287,63 @@ def ollama_fake_post_invalid_json():
 def ollama_fake_post_empty():
     """Fake requests.post that returns an empty response field."""
     return _make_ollama_fake_post("empty_response.json")
+
+
+# ── llama.cpp fixture-based fakes ────────────────────────────────────────────
+
+def _make_llama_cpp_fake_post(response_fixture: str, *, raise_exc: Exception | None = None):
+    """Build a fake requests.post that returns fixture-based llama.cpp responses."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    _fixtures_dir = _Path(__file__).parent / "fixtures" / "llama_cpp_responses"
+
+    def _fake_post(url, *, json=None, timeout=None, **kwargs):
+        if raise_exc is not None:
+            raise raise_exc
+        fixture_path = _fixtures_dir / response_fixture
+        return _FakeResponse(_json.loads(fixture_path.read_text()))
+
+    return _fake_post
+
+
+@pytest.fixture
+def llama_cpp_fake_post():
+    """Fake requests.post that returns a changes_requested response from fixture.
+
+    Use with monkeypatch.setattr in tests:
+
+        monkeypatch.setattr(requests_module, "post", llama_cpp_fake_post)
+    """
+    return _make_llama_cpp_fake_post("changes_requested.json")
+
+
+@pytest.fixture
+def llama_cpp_fake_post_approved():
+    """Fake requests.post that returns an approved response from fixture."""
+    return _make_llama_cpp_fake_post("approved.json")
+
+
+@pytest.fixture
+def llama_cpp_fake_post_error():
+    """Fake requests.post that raises a RequestException (connection error)."""
+    import requests as _requests
+    return _make_llama_cpp_fake_post("", raise_exc=_requests.RequestException("Connection error"))
+
+
+@pytest.fixture
+def llama_cpp_fake_post_invalid_json():
+    """Fake requests.post that returns invalid (non-JSON) text."""
+    from pathlib import Path as _FPath
+    return _FakeResponse((_FPath(__file__).parent / "fixtures" / "llama_cpp_responses" / "approved.json").read_text())
+
+
+@pytest.fixture
+def llama_cpp_fake_post_empty():
+    """Fake requests.post that returns empty choices list."""
+    import json as _json
+    from pathlib import Path as _FPath
+    fixture_path = _FPath(__file__).parent / "fixtures" / "llama_cpp_responses" / "approved.json"
+    base = _json.loads(fixture_path.read_text())
+    base["choices"] = []
+    return _FakeResponse(base)
