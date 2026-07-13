@@ -40,9 +40,9 @@ class OllamaLlmAdapter(LlmReviewPort):
         max_file_chars: int = 3000,
         max_files: int = 10,
         max_structure_lines: int = 100,
-        use_compact_template: bool = False
+        use_compact_template: bool = False,
+        _http_post: Any = None,
     ) -> None:
-
         self._host = host.rstrip("/")
         self._model = model
         self._prompt_builder = PromptBuilder(
@@ -57,6 +57,15 @@ class OllamaLlmAdapter(LlmReviewPort):
         self._fragment_composer = fragment_composer
         self._normalizer = ResponseFieldNormalizer()
         self._retry_builder = RetryPromptBuilder()
+        self._http_post = _http_post
+
+    @property
+    def _post(self):
+        """HTTP POST callable — injected or defaults to requests.post."""
+        if self._http_post is not None:
+            return self._http_post
+        import requests
+        return requests.post
 
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
         """Build prompt from diff+context via PromptBuilder, then call Ollama.
@@ -213,7 +222,7 @@ class OllamaLlmAdapter(LlmReviewPort):
                 logger.debug("USER PROMPT (%d chars):\n%s", len(user_text), user_text[:1000])
                 logger.debug(_SEP)
 
-            response = requests.post(
+            response = self._post(
                 f"{self._host}/api/generate",
                 json=req,
                 timeout=timeout,
