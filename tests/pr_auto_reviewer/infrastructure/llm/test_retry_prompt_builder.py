@@ -35,10 +35,20 @@ class TestRetryPromptBuilder:
         failures = builder.diagnose_failures(review)
         assert any("verdict is missing or unclear" in f for f in failures)
 
-    def test_diagnose_failures_approved_no_items(self):
+    def test_diagnose_failures_approved_no_items_with_summary(self):
+        """APPROVED with 0 items and a summary is valid — not a failure."""
         builder = RetryPromptBuilder()
         review = CodeReview(
-            verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m",
+            verdict=ReviewVerdict.APPROVED, summary="Looks good", items=[], model_used="m",
+        )
+        failures = builder.diagnose_failures(review)
+        assert failures == []
+
+    def test_diagnose_failures_approved_no_items_empty_summary(self):
+        """APPROVED with 0 items and an empty summary is a failure."""
+        builder = RetryPromptBuilder()
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED, summary="", items=[], model_used="m",
         )
         failures = builder.diagnose_failures(review)
         assert any("no review items found" in f for f in failures)

@@ -136,11 +136,20 @@ class RetryPromptBuilder:
             failures.append(
                 "verdict is missing or unclear (must be 'changes_requested' or 'approved')"
             )
-        if not review.items and review.verdict and review.verdict.value == "approved":
-            failures.append(
-                "no review items found but verdict is 'approved' — "
-                "if there are no issues, include a summary explaining why the PR is approved"
-            )
+        if not review.items:
+            if not review.verdict:
+                failures.append(
+                    "verdict is missing (must be 'changes_requested' or 'approved')"
+                )
+            elif review.verdict.value != "approved":
+                failures.append(
+                    f"no review items found but verdict is '{review.verdict.value}'"
+                )
+            elif not (review.summary or "").strip():
+                failures.append(
+                    "no review items found and summary is empty — "
+                    "if there are no issues, include a summary explaining why the PR is approved"
+                )
         for i, item in enumerate(review.items):
             if not item.description:
                 failures.append(f"item {i} is missing 'description'")
