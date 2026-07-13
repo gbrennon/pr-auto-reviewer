@@ -51,14 +51,14 @@ REVIEW_OUTPUT=file:
 
     # .env with LLM settings
     llm_settings: str = """PLATFORM_MODE=forgejo
-LLM_HOST=http://llm:8080
+LLM_API=http://llm:8080
 LLM_MODEL=gpt-4
 """
 
-    # .env with OLLAMA fallback
-    ollama_fallback: str = """PLATFORM_MODE=forgejo
-OLLAMA_HOST=http://ollama:11434
-OLLAMA_MODEL=code-review:latest
+    # .env with LLM settings (ollama)
+    ollama_settings: str = """PLATFORM_MODE=forgejo
+LLM_API=http://ollama:11434
+LLM_MODEL=code-review:latest
 """
 
     # .env with FORGEJO_HOST fallback (no FORGEJO_API_URL)

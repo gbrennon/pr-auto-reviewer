@@ -29,6 +29,7 @@ class Config:
 
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
+    llm_backend: str = "ollama"
     poll_interval: int = 60
     debug: bool = False
     output_mode: str = "forgejo"
@@ -100,13 +101,13 @@ def load_config() -> Config:
     forgejo_reviewer_username = os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip()
 
     llm_host = (
-        os.environ.get("LLM_HOST")
-        or os.environ.get("OLLAMA_HOST")
+        os.environ.get("LLM_API")
         or "http://localhost:11434"
     ).strip()
     llm_model = (
-        os.environ.get("LLM_MODEL") or os.environ.get("OLLAMA_MODEL") or ""
+        os.environ.get("LLM_MODEL") or ""
     ).strip() or None
+    llm_backend = os.environ.get("LLM_MODE", "").strip()
 
     output_mode = os.environ.get("REVIEW_OUTPUT", "").strip()
     output_path: str | None = None
@@ -143,6 +144,7 @@ def load_config() -> Config:
         forgejo_reviewer_username=forgejo_reviewer_username,
         llm_host=llm_host,
         llm_model=llm_model,
+        llm_backend=llm_backend,
         poll_interval=poll_interval,
         debug=debug,
         output_mode=output_mode,

@@ -49,6 +49,8 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
     TerminalReviewPublisherAdapter,
 )
 from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
+from pr_auto_reviewer.infrastructure.llm.llama_cpp_adapter import LlamaCppAdapter
+from pr_auto_reviewer.infrastructure.llm.backend_detector import BackendDetector
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
@@ -291,10 +293,30 @@ class Container:
             self._repo_lister: RepoListerPort = ForgejoRepoLister(self._http_client)
 
         self._pr_repository = JsonFilePullRequestRepository(_state_file_path())
-        self._llm_review: LlmReviewPort = OllamaLlmAdapter(
-            self._config.llm_host,
-            self._config.llm_model or "code-review:latest",
-        )
+
+        detector = BackendDetector(self._config.llm_host)
+        backend = self._config.llm_backend
+        if not backend:
+            backend = detector.detect()
+
+        detector.health_check(backend)
+
+        if backend == "llama_cpp":
+            self._llm_review: LlmReviewPort = LlamaCppAdapter(
+                self._config.llm_host,
+                self._config.llm_model or "",
+            )
+        elif backend == "ollama":
+            self._llm_review: LlmReviewPort = OllamaLlmAdapter(
+                self._config.llm_host,
+                self._config.llm_model or "code-review:latest",
+            )
+        else:
+            raise ValueError(
+                f"Unknown LLM backend: {backend!r}. "
+                "Set LLM_MODE to 'ollama' or 'llama_cpp', "
+                "or leave it unset for auto-detection."
+            )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
         self._notifier: NotifierPort = LinuxNotifier(run_command=subprocess.run)
 

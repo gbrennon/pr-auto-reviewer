@@ -95,16 +95,16 @@ class TestLoadConfig:
     def test_llm_settings(self, monkeypatch):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
-        monkeypatch.setenv("LLM_HOST", "http://llm:8080")
+        monkeypatch.setenv("LLM_API", "http://llm:8080")
         monkeypatch.setenv("LLM_MODEL", "gpt-4")
         cfg = load_config()
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
-    def test_ollama_fallback_for_llm_host(self, monkeypatch):
+    def test_llm_api_reads_host(self, monkeypatch):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
-        monkeypatch.setenv("OLLAMA_HOST", "http://ollama:11434")
+        monkeypatch.setenv("LLM_API", "http://ollama:11434")
         cfg = load_config()
         assert cfg.llm_host == "http://ollama:11434"
 
