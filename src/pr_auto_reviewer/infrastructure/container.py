@@ -13,6 +13,13 @@ from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.client.token_resolver import (
+    TokenDefaults,
+    TokenResolver,
+)
+from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
+    PreflightVerifier,
+)
 from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
     ForgejoChangesetFetcher,
 )
@@ -144,29 +151,61 @@ class Container:
         is_terminal = self._config.output_mode == "terminal"
 
         if self._config.platform_mode == GitProvider.BOTH:
+            github_resolver = TokenResolver(
+                "GITHUB",
+                TokenDefaults(
+                    owner_token=self._config.github_owner_token,
+                    reviewer_token=self._config.github_reviewer_token,
+                    reviewer_username=self._config.github_reviewer_username,
+                ),
+            )
+            forgejo_resolver = TokenResolver(
+                "FORGEJO",
+                TokenDefaults(
+                    owner_token=self._config.forgejo_owner_token,
+                    reviewer_token=self._config.forgejo_reviewer_token,
+                    reviewer_username=self._config.forgejo_reviewer_username,
+                ),
+            )
+
+            github_preflight = PreflightVerifier(
+                self._config.github_api_url, "github",
+            )
+            forgejo_preflight = PreflightVerifier(
+                self._config.forgejo_api_url, "forgejo",
+            )
+
             gb_owner = GitPlatformHttpClient(
                 self._config.github_api_url,
                 self._config.github_owner_token,
-                "github",
-                "owner",
+                platform_mode="github",
+                client_label="owner",
+                preflight_verifier=github_preflight,
+                token_resolver=github_resolver,
             )
             gb_reviewer = GitPlatformHttpClient(
                 self._config.github_api_url,
                 self._config.github_reviewer_token,
-                "github",
-                "reviewer",
+                platform_mode="github",
+                client_label="reviewer",
+                preflight_verifier=github_preflight,
+                token_resolver=github_resolver,
             )
             fj_owner = GitPlatformHttpClient(
                 self._config.forgejo_api_url,
                 self._config.forgejo_owner_token,
-                "forgejo",
-                "owner",
+                platform_mode="forgejo",
+                client_label="owner",
+                preflight_verifier=forgejo_preflight,
+                token_resolver=forgejo_resolver,
             )
             fj_reviewer = GitPlatformHttpClient(
                 self._config.forgejo_api_url,
                 self._config.forgejo_reviewer_token,
-                "forgejo",
-                "reviewer",
+                platform_mode="forgejo",
+                client_label="reviewer",
+                preflight_verifier=forgejo_preflight,
+                token_resolver=forgejo_resolver,
             )
 
             self._repository_context: RepositoryContextPort = ForgejoRepositoryContext(
@@ -243,17 +282,34 @@ class Container:
             )
             platform_value = self._config.platform_mode.value
 
+            resolver = TokenResolver(
+                "GITHUB" if is_github else "FORGEJO",
+                TokenDefaults(
+                    owner_token=owner_token,
+                    reviewer_token=reviewer_token,
+                    reviewer_username=reviewer_username,
+                ),
+            )
+
+            preflight = PreflightVerifier(
+                api_url, "github" if is_github else "forgejo",
+            )
+
             self._http_client = GitPlatformHttpClient(
                 api_url,
                 owner_token,
-                platform_value,
-                "owner",
+                platform_mode=platform_value,
+                client_label="owner",
+                preflight_verifier=preflight,
+                token_resolver=resolver,
             )
             self._reviewer_client = GitPlatformHttpClient(
                 api_url,
                 reviewer_token,
-                platform_value,
-                "reviewer",
+                platform_mode=platform_value,
+                client_label="reviewer",
+                preflight_verifier=preflight,
+                token_resolver=resolver,
             )
 
             self._repository_context: RepositoryContextPort = ForgejoRepositoryContext(
