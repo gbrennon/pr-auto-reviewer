@@ -64,3 +64,4 @@ See [Install](docs/HOWTO-install.md) for the full systemd setup.
 | [Features](docs/features.md) | What's implemented |
 | [Architecture](docs/structure.md) | Codebase structure |
 | [Review Flow](docs/review-flow-architecture.md) | Detailed flow |
+| [Token Setup](docs/tokens/README.md) | Token types, permissions, verification |
