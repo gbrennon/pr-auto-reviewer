@@ -17,9 +17,9 @@ The application loads settings from `.env`. See [Configuration](configuration.md
 
 ```ini
 PLATFORM_MODE=github
-GITHUB_TOKEN=ghp_xxx                    # your token
-GITHUB_REVIEWER_TOKEN=ghp_xxx           # bot token (repo scope)
-GITHUB_REVIEWER_USERNAME=my-bot         # bot username
+GITHUB_OWNER_TOKEN=github_pat_xxx         # owner token
+GITHUB_REVIEWER_TOKEN=github_pat_xxx      # reviewer token
+GITHUB_REVIEWER_USERNAME=my-bot           # reviewer username
 OLLAMA_MODEL=code-review:latest
 ```
 
@@ -27,9 +27,9 @@ OLLAMA_MODEL=code-review:latest
 
 ```ini
 PLATFORM_MODE=codeberg
-FORGEJO_TOKEN=xxx                       # your token
-FORGEJO_REVIEWER_TOKEN=xxx              # bot token
-FORGEJO_REVIEWER_USERNAME=my-bot        # bot username
+FORGEJO_OWNER_TOKEN=xxx                   # owner token
+FORGEJO_REVIEWER_TOKEN=xxx                # reviewer token
+FORGEJO_REVIEWER_USERNAME=my-bot          # reviewer username
 OLLAMA_MODEL=code-review:latest
 ```
 
@@ -53,19 +53,14 @@ Set `GITHUB_REVIEW_MODE` in `.env`:
 
 > Codeberg formal reviews use `event: "APPROVED"` and `official: true`. Handled automatically.
 
-## Token Scopes
+## Token Setup
 
-| Platform | Scopes needed |
-|----------|---------------|
-| GitHub | `repo` |
-| Codeberg | `repo`, `read:user` |
-
-The reviewer account must differ from the PR author. See [Requirements](requirements.md).
+See [docs/tokens/](tokens/README.md) for full instructions on creating tokens and setting required permissions.
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---------|-------|
-| `403 Forbidden` | Token missing `repo` scope, or reviewer is PR author |
-| `401 Unauthorized` | Invalid/expired token |
+| `403 Forbidden` | Token missing write permissions, or reviewer is PR author |
+| `401 Unauthorized` | Invalid/expired token or wrong auth header format |
 | `Ollama call failed` | Ollama not running or model not pulled |
