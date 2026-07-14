@@ -76,7 +76,7 @@ class TestGitReviewPublisherAdapter:
     def test_reviewer_request_failure_non_fatal(self, patched_private_client, monkeypatch):
         """Reviewer request failure is logged, not raised."""
         call_paths = []
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             call_paths.append(path)
             if "requested_reviewers" in path:
                 raise Exception("422")
@@ -175,12 +175,12 @@ index def456..ghi789 100644
     def test_publish_with_items_adds_inline_comments(self, patched_private_client, monkeypatch):
         """Publish with review items builds inline comments."""
         post_payloads = []
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             post_payloads.append((path, body))
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         monkeypatch.setattr(patched_private_client, "get_raw",
-                            lambda path, headers=None: self.DIFF)
+                            lambda path, headers=None, *, repo=None: self.DIFF)
 
         adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
         review = CodeReview(
@@ -200,12 +200,12 @@ index def456..ghi789 100644
     def test_publish_inline_comment_error_non_fatal(self, patched_private_client, monkeypatch, caplog):
         """Inline comment resolution failure is logged, review still posted."""
         post_payloads = []
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             post_payloads.append((path, body))
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         monkeypatch.setattr(patched_private_client, "get_raw",
-                            lambda path, headers=None: (_ for _ in ()).throw(Exception("diff fetch failed")))
+                            lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(Exception("diff fetch failed")))
 
         adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
@@ -216,7 +216,7 @@ index def456..ghi789 100644
     def test_publish_post_review_403_raises(self, patched_private_client, monkeypatch):
         """403 on review post raises ReviewPublishError."""
         call_count = [0]
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             call_count[0] += 1
             if call_count[0] == 1:
                 return {"id": 1}
@@ -233,7 +233,7 @@ index def456..ghi789 100644
     def test_publish_non_403_raises_review_publish_error(self, patched_private_client, monkeypatch):
         """Non-403 error on review post raises ReviewPublishError."""
         call_count = [0]
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             call_count[0] += 1
             if call_count[0] == 1:
                 return {"id": 1}
@@ -381,7 +381,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         post_payloads = []
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             post_payloads.append((path, body))
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
@@ -413,7 +413,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         post_payloads = []
-        def fake_post(path, body):
+        def fake_post(path, body, *, repo=None):
             post_payloads.append((path, body))
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
