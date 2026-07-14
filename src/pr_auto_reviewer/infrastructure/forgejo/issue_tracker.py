@@ -33,7 +33,7 @@ class ForgejoIssueTracker(IssueTrackerPort):
             repository, title[:80], len(body),
         )
         try:
-            response = self._client.post(path, {"title": title, "body": body})
+            response = self._client.post(path, {"title": title, "body": body}, repo=repository)
         except Exception as exc:
             raise IssueCreationError(
                 repository=repository,

@@ -46,7 +46,7 @@ class ForgejoRepositoryContext(RepositoryContextPort):
         tree_paths: list[str] = []
         tree_path = f"/repos/{pr_id.repository}/git/trees/main?recursive=1"
         try:
-            response = self._client.get(tree_path)
+            response = self._client.get(tree_path, repo=pr_id.repository)
             tree_blobs = response.get("tree", [])
             tree_paths = [entry["path"] for entry in tree_blobs]
             repository_structure = "\n".join(tree_paths)
@@ -61,7 +61,7 @@ class ForgejoRepositoryContext(RepositoryContextPort):
         for filename in _CONVENTIONS_FILENAMES:
             try:
                 raw_path = f"/repos/{pr_id.repository}/raw/main/{filename}"
-                conventions = self._client.get_raw(raw_path)
+                conventions = self._client.get_raw(raw_path, repo=pr_id.repository)
                 break
             except Exception:
                 continue

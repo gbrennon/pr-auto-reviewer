@@ -46,6 +46,8 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         self._owner_client = owner_client
 
     def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+        self._verify_tokens(pr_id)
+
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
 
         if self._client._platform_mode == "forgejo" and verdict_event == "APPROVE":
@@ -86,12 +88,33 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         self._request_reviewer(pr_id)
         self._publish_formal_review(pr_id, review, verdict_event, body, blocking)
 
+    def _verify_tokens(self, pr_id: PullRequestId) -> None:
+        """Run preflight verification for both reviewer and owner tokens
+        before publishing.  Wraps ``PreflightVerificationError`` as
+        ``ReviewPublishError`` so the caller gets a uniform error type."""
+        from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
+            PreflightVerificationError,
+        )
+        try:
+            self._client.verify_token_for_pr(pr_id)
+        except PreflightVerificationError as exc:
+            raise ReviewPublishError(
+                f"Reviewer token preflight failed for {pr_id}: {exc}",
+            ) from exc
+        try:
+            self._owner_client.verify_token_for_pr(pr_id)
+        except PreflightVerificationError as exc:
+            raise ReviewPublishError(
+                f"Owner token preflight failed for {pr_id}: {exc}",
+            ) from exc
+
     def _count_existing_items(self, pr_id: PullRequestId) -> int:
         """Return count of existing reviews on this PR, used to offset
         issue numbers so new items don't reuse numbers from prior reviews."""
         try:
             reviews = self._client.get(
-                f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
+                f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews",
+                repo=pr_id.repository,
             )
             return len(reviews) if isinstance(reviews, list) else 0
         except Exception:
@@ -105,6 +128,7 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             resp = self._owner_client.post(
                 reviewers_path,
                 {"reviewers": [self._reviewer_username]},
+                repo=pr_id.repository,
             )
             if self._owner_client._platform_mode == "forgejo":
                 logger.debug("Codeberg Request Reviewer Response: %s", resp)
@@ -131,7 +155,7 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         )
         logger.info("Posting comment on %s: %d chars", pr_id, len(body))
         try:
-            response = self._client.post(comments_path, {"body": body})
+            response = self._client.post(comments_path, {"body": body}, repo=pr_id.repository)
             if self._client._platform_mode == "forgejo":
                 logger.debug("Codeberg Comment Response: %s", response)
         except Exception as exc:
@@ -148,10 +172,21 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         blocking: list,
     ) -> None:
         reviews_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
-        payload: dict = {"event": verdict_event, "body": body}
+        payload: dict[str, object] = {"event": verdict_event, "body": body}
 
         if self._client._platform_mode == "forgejo":
             payload["official"] = True
+
+        try:
+            pr_info = self._client.get(
+                f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
+                repo=pr_id.repository,
+            )
+            payload["commit_id"] = pr_info["head"]["sha"]
+        except Exception as exc:
+            raise ReviewPublishError(
+                f"Failed to resolve commit_id for formal review of {pr_id}: {exc}",
+            ) from exc
 
         try:
             diff_text = self._client.get_raw(
@@ -159,26 +194,19 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
                 headers={"Accept": "application/vnd.github.v3.diff"}
                 if self._client._platform_mode == "github"
                 else {},
+                repo=pr_id.repository,
             )
-
-            inline = self._build_inline_comments(
-                diff_text, blocking, []
-            )
-
+            inline = self._build_inline_comments(diff_text, blocking, [])
             if inline:
                 payload["comments"] = inline
                 logger.info("Added %d inline comments to formal review", len(inline))
-
-            pr_info = self._client.get(
-                f"/repos/{pr_id.repository}/pulls/{pr_id.number}"
-            )
-            payload["commit_id"] = pr_info["head"]["sha"]
-
         except Exception as exc:
-            logger.error("Failed to resolve inline comments for formal review: %s", exc)
+            logger.warning(
+                "Failed to resolve inline comments for formal review: %s", exc,
+            )
 
         try:
-            response = self._client.post(reviews_path, payload)
+            response = self._client.post(reviews_path, payload, repo=pr_id.repository)
             if self._client._platform_mode == "forgejo":
                 logger.debug("Codeberg Review Response Body: %s", response)
         except Exception as exc:
@@ -191,9 +219,8 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             raise ReviewPublishError(
                 f"Failed to publish review for {pr_id}: {exc}"
             ) from exc
-
     def _build_inline_comments(
-        self, diff_text: str, items: list, suggestions: list[dict]
+        self, diff_text: str, items: list, suggestions: list[dict],
     ) -> list[dict]:
         comments: list[dict] = []
 

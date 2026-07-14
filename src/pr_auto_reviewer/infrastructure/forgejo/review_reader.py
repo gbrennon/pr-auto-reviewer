@@ -25,7 +25,7 @@ class ForgejoReviewReader(ReviewReaderPort):
 
         path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
         logger.info("Fetching latest review for %s", pr_id)
-        reviews = self._client.get(path, limit=10)
+        reviews = self._client.get(path, limit=10, repo=pr_id.repository)
 
         if isinstance(reviews, list):
             sorted_reviews = sorted(

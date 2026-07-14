@@ -28,7 +28,7 @@ class GithubChangesetFetcher(ChangesetFetcherPort):
     def _fetch_commit_messages(self, pr_id: PullRequestId) -> list[str]:
         commits_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/commits"
         try:
-            data = self._client.get(commits_path, limit=30)
+            data = self._client.get(commits_path, limit=30, repo=pr_id.repository)
             commits = data if isinstance(data, list) else data.get("data", [])
             messages: list[str] = []
             for c in commits:
@@ -46,7 +46,7 @@ class GithubChangesetFetcher(ChangesetFetcherPort):
         logger.info("ChangesetFetcher.fetch(pr_id=%s, sha=%s)", pr_id, sha.value[:7])
         diff_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff"
         headers = {"Accept": "application/vnd.github.diff"}
-        raw_diff = self._client.get_raw(diff_path, headers=headers)
+        raw_diff = self._client.get_raw(diff_path, headers=headers, repo=pr_id.repository)
 
         if not raw_diff or len(raw_diff.strip()) < 50:
             raise EmptyDiffError(
@@ -79,6 +79,7 @@ class GithubChangesetFetcher(ChangesetFetcherPort):
                 content = self._client.get_raw(
                     contents_path,
                     headers={"Accept": "application/vnd.github.raw+json"},
+                    repo=pr_id.repository,
                 )
                 file_contents[file_path] = content
                 logger.debug("Fetched content for %s: %d chars", file_path, len(content))

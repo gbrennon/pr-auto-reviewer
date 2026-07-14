@@ -28,6 +28,7 @@ class ForgejoPrLister(PrListerPort):
                 f"/repos/{repository}/pulls",
                 state="open",
                 limit=20,
+                repo=repository,
             )
 
             prs = data if isinstance(data, list) else data.get("data", [])
@@ -68,6 +69,7 @@ class ForgejoPrLister(PrListerPort):
         try:
             pr = self._client.get(
                 f"/repos/{repository}/pulls/{pr_number}",
+                repo=repository,
             )
 
             number = pr.get("number")
