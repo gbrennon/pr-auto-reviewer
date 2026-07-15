@@ -80,7 +80,17 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             return
 
         blocking = [i for i in review.items if i.severity.is_blocking]
-        body = _body_formatter.format(review, start_number=self._count_existing_items(pr_id))
+        non_blocking_items = [i for i in review.items if not i.severity.is_blocking]
+        body_review = CodeReview(
+            verdict=review.verdict,
+            reason=review.reason,
+            summary=review.summary,
+            items=non_blocking_items,
+            suggestions=review.suggestions,
+            praise=review.praise,
+            model_used=review.model_used,
+        )
+        body = _body_formatter.format(body_review, start_number=self._count_existing_items(pr_id))
 
         self._request_reviewer(pr_id)
         self._publish_formal_review(pr_id, review, verdict_event, body, blocking)
