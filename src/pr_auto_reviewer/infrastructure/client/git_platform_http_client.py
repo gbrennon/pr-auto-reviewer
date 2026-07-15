@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 class GitPlatformHttpClient:
+    """HTTP client for GitHub and Forgejo/Codeberg REST APIs.
+
+    Supports per-org token resolution via an optional ``TokenResolver`` and
+    lazy preflight verification via an optional ``PreflightVerifier``.
+    """
     def __init__(self, base_url: str, token: str, platform_mode: str = "forgejo", client_label: str = "", *, token_resolver: TokenResolver | None = None, preflight_verifier: PreflightVerifier | None = None) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = token
@@ -31,7 +36,7 @@ class GitPlatformHttpClient:
         self._role = client_label
         self._token_resolver = token_resolver
         self._preflight_verifier = preflight_verifier
-        self._verified_orgs: set[tuple[str, str]] = set()  # (org, role)
+        self._verified_orgs: set[tuple[str, str]] = set()
         self._rate_tracker = RateLimitTracker(token, platform_mode, client_label or "default")
 
     @property
@@ -42,6 +47,8 @@ class GitPlatformHttpClient:
         return f" [{self._role}/{action}]" if self._role else ""
 
     def _resolve_token_for_repo(self, repo: str | None) -> str:
+        """Return the token that should be used for requests scoped to
+        *repo*, resolving a per-org override when one is configured."""
         if not repo or not self._token_resolver:
             return self._token
         return self._token_resolver.resolve(self._role, repo) or self._token
@@ -64,8 +71,6 @@ class GitPlatformHttpClient:
         if cache_key in self._verified_orgs:
             return
         token = self._resolve_token_for_repo(pr_id.repository)
-        # Only verify when a per-org override was *actually* resolved
-        # (i.e. it differs from the default fallback).
         if token == self._token:
             return
         self._preflight_verifier.verify(
