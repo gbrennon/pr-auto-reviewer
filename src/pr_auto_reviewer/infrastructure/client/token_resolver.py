@@ -19,22 +19,14 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
 from typing import ClassVar
+
+
+from pr_auto_reviewer.infrastructure.client.token_defaults import TokenDefaults
 
 logger = logging.getLogger(__name__)
 
 _ROLES: tuple[str, ...] = ("REVIEWER_USERNAME", "REVIEWER", "OWNER")
-
-
-@dataclass(frozen=True)
-class TokenDefaults:
-    """Default tokens used when no org-specific override is set."""
-
-    owner_token: str = ""
-    reviewer_token: str = ""
-    reviewer_username: str = ""
-
 
 class TokenResolver:
     """Resolves per-org tokens from environment variables.
@@ -54,9 +46,6 @@ class TokenResolver:
         self._env_prefix = self._ENV_PREFIX_TEMPLATE.format(prefix=self._prefix)
         self._scan_env()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def resolve(self, role: str, repo: str) -> str:
         """Return the token for *role* scoped to *repo*'s org.
@@ -86,9 +75,6 @@ class TokenResolver:
 
         return self._defaults.reviewer_username
 
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _extract_org(repo: str) -> str:
