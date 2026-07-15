@@ -3,12 +3,12 @@ from .persistence import JsonFilePullRequestRepository
 from .command_bus import InMemoryCommandBus
 from .context.architecture_detector import ArchitectureDetector
 from .forgejo.changeset_fetcher import ForgejoChangesetFetcher as GitChangesetFetcherAdapter
-from .forgejo.repository_context import ForgejoRepositoryContext as GitRepositoryContextAdapter
+from .github.repository_context import GithubRepositoryContext as GitRepositoryContextAdapter
 from .review_publishers.platform_publisher import PlatformReviewPublisherAdapter as GitReviewPublisherAdapter
-from .forgejo.review_reader import ForgejoReviewReader as GitReviewReaderAdapter
-from .forgejo.comment_reader import ForgejoCommentReader as GitCommentReaderAdapter
-from .forgejo.comment_publisher import ForgejoCommentPublisher as GitCommentPublisherAdapter
-from .forgejo.issue_tracker import ForgejoIssueTracker as GitIssueTrackerAdapter
+from .github.review_reader import GithubReviewReader as GitReviewReaderAdapter
+from .github.comment_reader import GithubCommentReader as GitCommentReaderAdapter
+from .github.comment_publisher import GithubCommentPublisher as GitCommentPublisherAdapter
+from .github.issue_tracker import GithubIssueTracker as GitIssueTrackerAdapter
 from .llm import OllamaLlmAdapter
 from .notifier import LinuxNotifier
 

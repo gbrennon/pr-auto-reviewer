@@ -22,6 +22,9 @@ from pr_auto_reviewer.application.ports.outbound.pull_request_repository import 
     PullRequestRepository,
 )
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
+from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
+    TokenVerifierPort,
+)
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
@@ -48,6 +51,7 @@ class CliRunner:
         review_item_parser: ReviewItemParser,
         pr_repository: PullRequestRepository | None = None,
         notifier: NotifierPort | None = None,
+        token_verifier: TokenVerifierPort | None = None,
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service
@@ -56,6 +60,7 @@ class CliRunner:
         self._review_item_parser = review_item_parser
         self._pr_repository = pr_repository
         self._notifier = notifier
+        self._token_verifier = token_verifier
 
     def run(self, argv: list[str]) -> int:
         """Run the CLI with the given arguments."""
@@ -96,6 +101,10 @@ class CliRunner:
         args = parser.parse_args(argv)
 
         force_mode = args.force or os.environ.get("REVIEW_OUTPUT", "") == "terminal"
+
+        if self._token_verifier:
+            verify_id = PullRequestId(repository=args.repo, number=args.pr)
+            self._token_verifier.verify(verify_id)
 
         if args.verbose:
             print(

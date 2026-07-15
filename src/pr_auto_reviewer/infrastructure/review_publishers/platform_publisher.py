@@ -50,9 +50,6 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
 
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
 
-        if self._client._platform_mode == "forgejo" and verdict_event == "APPROVE":
-            verdict_event = "APPROVED"
-
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "
             "items_count=%d, summary_len=%d, mode=%s",
@@ -174,11 +171,8 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         reviews_path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
         payload: dict[str, object] = {"event": verdict_event, "body": body}
 
-        if self._client._platform_mode == "forgejo":
-            payload["official"] = True
-
         try:
-            pr_info = self._client.get(
+            pr_info = self._owner_client.get(
                 f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
                 repo=pr_id.repository,
             )
@@ -189,7 +183,7 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             ) from exc
 
         try:
-            diff_text = self._client.get_raw(
+            diff_text = self._owner_client.get_raw(
                 f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
                 headers={"Accept": "application/vnd.github.v3.diff"}
                 if self._client._platform_mode == "github"
