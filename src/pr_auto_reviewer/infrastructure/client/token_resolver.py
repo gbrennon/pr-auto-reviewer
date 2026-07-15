@@ -21,8 +21,8 @@ import logging
 import os
 from typing import ClassVar
 
-
 from pr_auto_reviewer.infrastructure.client.token_defaults import TokenDefaults
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,9 @@ class TokenResolver:
             return self._default_for(role)
 
         org_entry = self._org_tokens.get(org)
-        if org_entry and role in org_entry:
-            return org_entry[role]
+        role_upper = role.upper()
+        if org_entry and role_upper in org_entry:
+            return org_entry[role_upper]
 
         return self._default_for(role)
 
