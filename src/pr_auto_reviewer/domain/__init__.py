@@ -23,7 +23,7 @@ from .exceptions import (
     LlmUnavailableError,
     PullRequestNotFoundError,
     ReviewItemNotFoundError,
-    ReviewPublishError,
+    PreflightVerificationError,
 )
 from .services import IssueCommandParser, ReviewItemParser
 
@@ -52,7 +52,7 @@ __all__ = [
     "LlmUnavailableError",
     "PullRequestNotFoundError",
     "ReviewItemNotFoundError",
-    "ReviewPublishError",
+    "PreflightVerificationError",
     "IssueCommandParser",
     "ReviewItemParser",
 ]

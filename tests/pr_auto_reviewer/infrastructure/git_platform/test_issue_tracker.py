@@ -22,7 +22,7 @@ class TestForgejoIssueTracker:
         """HTTP errors become IssueCreationError."""
         monkeypatch.setattr(
             patched_private_client, "post",
-            lambda path, body: (_ for _ in ()).throw(Exception("500 Error"))
+            lambda path, body, *, repo=None: (_ for _ in ()).throw(Exception("500 Error"))
         )
         adapter = ForgejoIssueTracker(patched_private_client)
         with pytest.raises(IssueCreationError):
@@ -30,14 +30,14 @@ class TestForgejoIssueTracker:
 
     def test_create_missing_number_field(self, patched_private_client, monkeypatch):
         """Handles response missing number field."""
-        monkeypatch.setattr(patched_private_client, "post", lambda path, body: {"title": "x"})
+        monkeypatch.setattr(patched_private_client, "post", lambda path, body, *, repo=None: {"title": "x"})
         adapter = ForgejoIssueTracker(patched_private_client)
         issue = adapter.create("o/r", "t", "b")
         assert issue.id == 0
 
     def test_create_string_number_field(self, patched_private_client, monkeypatch):
         """Handles number field as string."""
-        monkeypatch.setattr(patched_private_client, "post", lambda path, body: {"number": "42"})
+        monkeypatch.setattr(patched_private_client, "post", lambda path, body, *, repo=None: {"number": "42"})
         adapter = ForgejoIssueTracker(patched_private_client)
         issue = adapter.create("o/r", "t", "b")
         assert issue.id == 42

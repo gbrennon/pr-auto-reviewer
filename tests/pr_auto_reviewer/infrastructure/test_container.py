@@ -47,3 +47,75 @@ class TestContainer:
         self, _container, attr,
     ):
         assert getattr(_container, attr) is not None
+
+    def test_container_creates_token_resolver_both_mode(self):
+        """TokenResolver is injected into both github and forgejo clients
+        in BOTH platform mode, with correct prefixes."""
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.BOTH,
+            forgejo_owner_token="fj-own",
+            forgejo_reviewer_token="fj-rev",
+            forgejo_reviewer_username="fj-user",
+            github_owner_token="gh-own",
+            github_reviewer_token="gh-rev",
+            github_reviewer_username="gh-user",
+            output_mode="api",
+        )
+        container = Container(config)
+        publisher = container.review_publisher
+
+        gh_adapter = publisher._publishers["github"]
+        assert gh_adapter._client._token_resolver is not None
+        assert gh_adapter._client._token_resolver._prefix == "GITHUB"
+        assert gh_adapter._owner_client._token_resolver is not None
+        assert gh_adapter._owner_client._token_resolver._prefix == "GITHUB"
+
+        fj_adapter = publisher._publishers["forgejo"]
+        assert fj_adapter._client._token_resolver is not None
+        assert fj_adapter._client._token_resolver._prefix == "FORGEJO"
+        assert fj_adapter._owner_client._token_resolver is not None
+        assert fj_adapter._owner_client._token_resolver._prefix == "FORGEJO"
+
+    def test_container_creates_preflight_verifier_both_mode(self):
+        """PreflightVerifier is injected into both client roles in BOTH
+        platform mode."""
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.BOTH,
+            forgejo_owner_token="fj-own",
+            forgejo_reviewer_token="fj-rev",
+            forgejo_reviewer_username="fj-user",
+            github_owner_token="gh-own",
+            github_reviewer_token="gh-rev",
+            github_reviewer_username="gh-user",
+            output_mode="api",
+        )
+        container = Container(config)
+        publisher = container.review_publisher
+
+        gh_adapter = publisher._publishers["github"]
+        assert gh_adapter._client._preflight_verifier is not None
+        assert gh_adapter._owner_client._preflight_verifier is not None
+
+        fj_adapter = publisher._publishers["forgejo"]
+        assert fj_adapter._client._preflight_verifier is not None
+        assert fj_adapter._owner_client._preflight_verifier is not None
+
+    def test_container_creates_token_resolver_single_platform(self):
+        """TokenResolver is injected into http_client with correct prefix
+        in single-platform mode."""
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fake-owner",
+            forgejo_reviewer_token="fake-reviewer",
+            forgejo_reviewer_username="fake-user",
+            github_owner_token="fake-owner",
+            github_reviewer_token="fake-reviewer",
+            github_reviewer_username="fake-user",
+            output_mode="terminal",
+        )
+        container = Container(config)
+        assert container.http_client._token_resolver is not None
+        assert container.http_client._token_resolver._prefix == "FORGEJO"
