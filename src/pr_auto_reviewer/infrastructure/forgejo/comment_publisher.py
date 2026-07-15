@@ -28,7 +28,7 @@ class ForgejoCommentPublisher(CommentPublisherPort):
         )
 
         try:
-            response = self._client.post(path, {"body": body})
+            response = self._client.post(path, {"body": body}, repo=pr_id.repository)
             logger.info("Comment posted on %s response=%s", pr_id, list(response.keys()) if isinstance(response, dict) else "ok")
         except Exception:
             logger.warning(

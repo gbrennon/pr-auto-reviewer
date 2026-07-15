@@ -31,7 +31,7 @@ class FixtureHttpClient:
     def base_url(self) -> str:
         return self._base_url
 
-    def get(self, path: str, **params: Any) -> dict[str, Any]:
+    def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> dict[str, Any]:
         http = self._data["http"]
         if "/issues/" in path and "/comments" in path:
             return http["get_comments"]
@@ -47,14 +47,17 @@ class FixtureHttpClient:
             return result
         return http["get_pull"]
 
-    def get_raw(self, path: str, headers: dict[str, str] | None = None) -> str:
+    def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
         http = self._data["http"]
         if path.endswith(".diff"):
             return http["get_raw_diff"]
         raise RuntimeError(f"No fixture for get_raw: {path}")
 
-    def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
         return {"id": 999, "number": 99, "body": body.get("body", "")}
+
+    def verify_token_for_pr(self, pr_id) -> None:
+        pass
 
 @pytest.fixture(params=["private", "public"])
 def patched_client(integration_data, request):
