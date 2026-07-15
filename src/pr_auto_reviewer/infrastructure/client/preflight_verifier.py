@@ -12,7 +12,7 @@ Both GitHub and Forgejo/Codeberg are supported.  HTTP status codes
 200 / 422 mean *pass*; 401 / 403 mean *fail*.
 """
 
-from __future__ import annotations
+from typing import Any, Callable, ClassVar
 
 import logging
 from typing import ClassVar
@@ -25,25 +25,29 @@ from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 class PreflightVerifier:
     """Verify that a platform token has valid auth + write access.
 
-    The verifier makes two HTTP calls directly (not through
-    ``GitPlatformHttpClient``) so there is no circular dependency.
+    HTTP calls are made via injected callables (defaulting to
+    ``requests.get`` and ``requests.post``) so tests can supply
+    fixture-based responders without monkeypatching.
     """
 
-    _TIMEOUT: ClassVar[int] = 10  # seconds per HTTP call
+    _TIMEOUT: ClassVar[int] = 10
 
-    def __init__(self, base_url: str, platform_mode: str) -> None:
+    def __init__(
+        self, base_url: str, platform_mode: str,
+        *,
+        _http_get: Callable[..., Any] | None = None,
+        _http_post: Callable[..., Any] | None = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._platform = platform_mode.lower()  # "github" | "forgejo"
+        self._platform = platform_mode.lower()
+        self._http_get = _http_get if _http_get is not None else requests.get
+        self._http_post = _http_post if _http_post is not None else requests.post
 
-    # ------------------------------------------------------------------
     def verify(
         self,
         token: str,
@@ -72,15 +76,12 @@ class PreflightVerifier:
             org, repo, role,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _check_auth(self, token: str, org: str, role: str) -> None:
         headers = self._auth_header(token)
         url = f"{self._base_url}/user"
         try:
-            resp = requests.get(url, headers=headers, timeout=self._TIMEOUT)
+            resp = self._http_get(url, headers=headers, timeout=self._TIMEOUT)
         except requests.RequestException as exc:
             raise PreflightVerificationError(
                 platform=self._platform, org=org, role=role,
@@ -104,7 +105,7 @@ class PreflightVerifier:
         url = f"{self._base_url}{path}"
 
         try:
-            resp = requests.post(
+            resp = self._http_post(
                 url, headers=headers, json={"reviewers": []},
                 timeout=self._TIMEOUT,
             )
@@ -119,8 +120,6 @@ class PreflightVerifier:
                 platform=self._platform, org=org, role=role,
                 http_status=resp.status_code, step="write_access",
             )
-        # 200 and 422 both mean pass (422 = PR not found / repo exists but
-        # PR number wrong — still proves write access on the *repo*).
 
     def _auth_header(self, token: str) -> dict[str, str]:
         if self._platform == "github":
