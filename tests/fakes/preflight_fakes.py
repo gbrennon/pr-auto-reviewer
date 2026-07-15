@@ -18,9 +18,19 @@ class FakeResponse:
 
 
 @dataclass
-class FakeHttpCaller:
+class FakeHttpClient:
     responses: list[FakeResponse] = field(default_factory=list)
     calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def get(self, path: str, *, headers: dict[str, str]) -> FakeResponse:
+        self.calls.append({"url": path, "headers": headers})
+        return self.responses.pop(0) if self.responses else FakeResponse(200)
+
+    def post(
+        self, path: str, *, headers: dict[str, str], json: dict[str, Any]
+    ) -> FakeResponse:
+        self.calls.append({"url": path, "headers": headers, "json": json})
+        return self.responses.pop(0) if self.responses else FakeResponse(200)
 
     def __call__(
         self,
@@ -34,3 +44,5 @@ class FakeHttpCaller:
             {"url": url, "headers": headers, "json": json, "timeout": timeout}
         )
         return self.responses.pop(0) if self.responses else FakeResponse(200)
+
+FakeHttpCaller = FakeHttpClient  # backward compat
