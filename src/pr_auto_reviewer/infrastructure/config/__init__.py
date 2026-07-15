@@ -1,5 +1,5 @@
 """Infrastructure config module."""
+from pr_auto_reviewer.infrastructure.config.config import ConfigLoader, load_config
+from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 
-from pr_auto_reviewer.infrastructure.config.config import Config, load_config
-
-__all__ = ["Config", "load_config"]
+__all__ = ["Config", "ConfigLoader", "load_config"]
