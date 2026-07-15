@@ -55,6 +55,7 @@ class PreflightVerifier:
         repo: str,
         pr_number: int,
         role: str = "owner",
+        token_source: str = "",
     ) -> None:
         """Run both preflight checks.  Raises ``PreflightVerificationError``
         on the first failure."""
@@ -63,13 +64,13 @@ class PreflightVerifier:
             "Preflight for %s/%s (%s token): verifying auth…",
             org, repo, role,
         )
-        self._check_auth(token, org, role)
+        self._check_auth(token, org, role, token_source)
 
         logger.debug(
             "Preflight for %s/%s (%s token): verifying write access…",
             org, repo, role,
         )
-        self._check_write_access(token, org, repo, pr_number, role)
+        self._check_write_access(token, org, repo, pr_number, role, token_source)
 
         logger.info(
             "Preflight passed for %s/%s (%s token).",
@@ -77,7 +78,7 @@ class PreflightVerifier:
         )
 
 
-    def _check_auth(self, token: str, org: str, role: str) -> None:
+    def _check_auth(self, token: str, org: str, role: str, token_source: str = "") -> None:
         headers = self._auth_header(token)
         url = f"{self._base_url}/user"
         try:
@@ -85,16 +86,17 @@ class PreflightVerifier:
         except requests.RequestException as exc:
             raise PreflightVerificationError(
                 platform=self._platform, org=org, role=role,
-                http_status=0, step="auth",
+                http_status=0, step="auth", token_source=token_source,
             ) from exc
         if resp.status_code != 200:
             raise PreflightVerificationError(
                 platform=self._platform, org=org, role=role,
                 http_status=resp.status_code, step="auth",
+                token_source=token_source,
             )
 
     def _check_write_access(
-        self, token: str, org: str, repo: str, pr_number: int, role: str,
+        self, token: str, org: str, repo: str, pr_number: int, role: str, token_source: str = "",
     ) -> None:
         headers = self._auth_header(token)
         headers["Content-Type"] = "application/json"
@@ -112,13 +114,14 @@ class PreflightVerifier:
         except requests.RequestException as exc:
             raise PreflightVerificationError(
                 platform=self._platform, org=org, role=role,
-                http_status=0, step="write_access",
+                http_status=0, step="write_access", token_source=token_source,
             ) from exc
 
         if resp.status_code in (401, 403):
             raise PreflightVerificationError(
                 platform=self._platform, org=org, role=role,
                 http_status=resp.status_code, step="write_access",
+                token_source=token_source,
             )
 
     def _auth_header(self, token: str) -> dict[str, str]:
