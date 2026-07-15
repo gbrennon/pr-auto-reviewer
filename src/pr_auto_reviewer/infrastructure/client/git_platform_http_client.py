@@ -73,7 +73,7 @@ class GitPlatformHttpClient:
         token, source_key = self._token_resolver.resolve_source(
             self._role, pr_id.repository
         )
-        if not token or token == self._token:
+        if not token:
             return
         self._preflight_verifier.verify(
             token=token,
