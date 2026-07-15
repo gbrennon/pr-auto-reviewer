@@ -409,7 +409,7 @@ index def456..ghi789 100644
         assert "Nit" in body
         assert "Blocking" not in body
 
-    def test_formal_review_body_includes_all_items(
+    def test_formal_review_body_excludes_blocking_items_includes_non_blocking(
         self, patched_private_client, monkeypatch,
     ):
         post_payloads = []
@@ -438,7 +438,7 @@ index def456..ghi789 100644
         review_calls = [p for p in post_payloads if "/reviews" in p[0]]
         assert len(review_calls) == 1
         body = review_calls[0][1]["body"]
-        assert "Blocking" in body
+        assert "Blocking" not in body
         assert "Nit" in body
 
     def test_request_reviewer_github_success_logs_debug(
