@@ -67,15 +67,27 @@ class TestContainer:
 
         gh_adapter = publisher._publishers["github"]
         assert gh_adapter._client._token_resolver is not None
-        assert gh_adapter._client._token_resolver._prefix == "GITHUB"
+        _token, source = gh_adapter._client._token_resolver.resolve_source(
+            "OWNER", "test-org/repo"
+        )
+        assert source.startswith("GITHUB_")
         assert gh_adapter._owner_client._token_resolver is not None
-        assert gh_adapter._owner_client._token_resolver._prefix == "GITHUB"
+        _token2, source2 = gh_adapter._owner_client._token_resolver.resolve_source(
+            "OWNER", "test-org/repo"
+        )
+        assert source2.startswith("GITHUB_")
 
         fj_adapter = publisher._publishers["forgejo"]
         assert fj_adapter._client._token_resolver is not None
-        assert fj_adapter._client._token_resolver._prefix == "FORGEJO"
+        _token3, source3 = fj_adapter._client._token_resolver.resolve_source(
+            "OWNER", "test-org/repo"
+        )
+        assert source3.startswith("FORGEJO_")
         assert fj_adapter._owner_client._token_resolver is not None
-        assert fj_adapter._owner_client._token_resolver._prefix == "FORGEJO"
+        _token4, source4 = fj_adapter._owner_client._token_resolver.resolve_source(
+            "OWNER", "test-org/repo"
+        )
+        assert source4.startswith("FORGEJO_")
 
     def test_container_creates_preflight_verifier_both_mode(self):
         """PreflightVerifier is injected into both client roles in BOTH
@@ -118,4 +130,7 @@ class TestContainer:
         )
         container = Container(config)
         assert container.http_client._token_resolver is not None
-        assert container.http_client._token_resolver._prefix == "FORGEJO"
+        _token, source = container.http_client._token_resolver.resolve_source(
+            "OWNER", "test-org/repo"
+        )
+        assert source.startswith("FORGEJO_")
