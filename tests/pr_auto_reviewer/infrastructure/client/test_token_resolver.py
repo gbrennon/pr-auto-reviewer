@@ -223,24 +223,20 @@ class TestTokenResolverCaseInsensitivity:
 
         assert resolver.resolve("OWNER", "myorg/repo") == "org-owner-token"
 
-    def test_lowercase_role_resolve_uses_case_insensitive_defaults(
+    def test_lowercase_role_resolves_org_override(
         self, monkeypatch, defaults
     ):
-        """Org-entry lookup is case-sensitive, but _default_for is case-insensitive.
-
-        resolve("owner", ...) won't match the "OWNER" org entry, so it falls
-        back to _default_for("owner") which IS case-insensitive and returns
-        the default owner token.
+        """resolve() normalises the role to uppercase before the org-entry
+        lookup, so lowercase roles match the uppercase keys stored by
+        _scan_env.
         """
         monkeypatch.setenv("GITHUB_TOKEN_myorg_OWNER", "org-owner-token")
         monkeypatch.setenv("GITHUB_TOKEN_myorg_REVIEWER", "org-reviewer-token")
 
         resolver = TokenResolver("GITHUB", defaults)
 
-        # Lowercase role: org entry key is "OWNER", not "owner" → fallback
-        assert resolver.resolve("owner", "myorg/repo") == "default-owner"
-        assert resolver.resolve("reviewer", "myorg/repo") == "default-reviewer"
-        # Uppercase role: hits the org entry
+        assert resolver.resolve("owner", "myorg/repo") == "org-owner-token"
+        assert resolver.resolve("reviewer", "myorg/repo") == "org-reviewer-token"
         assert resolver.resolve("OWNER", "myorg/repo") == "org-owner-token"
         assert resolver.resolve("REVIEWER", "myorg/repo") == "org-reviewer-token"
 
