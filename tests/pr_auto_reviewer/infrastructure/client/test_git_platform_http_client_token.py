@@ -62,6 +62,25 @@ class TestGitPlatformHttpClientTokens:
         finally:
             del os.environ[env_key]
 
+    def test_resolve_token_for_repo_lowercase_client_label(self) -> None:
+        """When the client_label is lowercase (e.g. "owner"), the TokenResolver
+        still matches the uppercase org-entry key and returns the per-org
+        override instead of falling back to the default."""
+        env_key = "GITHUB_TOKEN_my-org_OWNER"
+        os.environ[env_key] = "org-token-456"
+        try:
+            resolver = TokenResolver("GITHUB", TokenDefaults(owner_token="default-owner"))
+            client = GitPlatformHttpClient(
+                "https://api.example.com",
+                "default-owner",
+                client_label="owner",
+                token_resolver=resolver,
+            )
+            result = client._resolve_token_for_repo("my-org/repo")
+            assert result == "org-token-456"
+        finally:
+            del os.environ[env_key]
+
     def test_resolve_token_for_repo_resolver_returns_empty_falls_back(self) -> None:
         """When the resolver returns an empty string, _resolve_token_for_repo
         falls back to the default token."""
