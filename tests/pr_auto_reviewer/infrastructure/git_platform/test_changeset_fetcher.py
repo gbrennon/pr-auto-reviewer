@@ -137,7 +137,7 @@ class TestForgejoChangesetFetcher:
         class FakeGitHubClient:
             _platform_mode = "github"
 
-            def get_raw(self, path, headers=None):
+            def get_raw(self, path, headers=None, *, repo=None):
                 if ".diff" in path:
                     captured_diff_header.update(headers or {})
                     return "diff --git a/x.py b/x.py\n@@ -1,5 +1,5 @@\n-old\n+new\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n"
@@ -161,7 +161,7 @@ class TestForgejoChangesetFetcher:
         class FakeGitHubClient:
             _platform_mode = "github"
 
-            def get_raw(self, path, headers=None):
+            def get_raw(self, path, headers=None, *, repo=None):
                 if ".diff" in path:
                     return "diff --git a/x.py b/x.py\n@@ -1,5 +1,5 @@\n-old line here\n+new line here\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n"
                 if path.startswith("/repos/o/r/contents/x.py?ref="):
@@ -188,7 +188,7 @@ class TestForgejoChangesetFetcher:
         class FakeGitHubClient:
             _platform_mode = "github"
 
-            def get_raw(self, path, headers=None):
+            def get_raw(self, path, headers=None, *, repo=None):
                 if ".diff" in path:
                     return "diff --git a/x.py b/x.py\n@@ -1,5 +1,5 @@\n-old line here\n+new line here\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n context line here\n"
                 if "/contents/" in path:

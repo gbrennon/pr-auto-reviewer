@@ -28,7 +28,7 @@ class ForgejoCommentReader(CommentReaderPort):
 
         path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
         logger.info("Fetching comments for %s", pr_id)
-        raw_comments = self._client.get(path, limit=50)
+        raw_comments = self._client.get(path, limit=50, repo=pr_id.repository)
 
         if isinstance(raw_comments, dict):
             entries: list[dict] = raw_comments.get("data", raw_comments.get("comments", []))

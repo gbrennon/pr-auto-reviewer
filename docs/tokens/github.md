@@ -76,6 +76,33 @@ When the repo belongs to an org:
 
 Fine-grained PATs for org repos may require **org approval** (Settings → Personal access tokens → Pending requests) before they work.
 
+### Per-Org Token Overrides
+
+When reviewing PRs across **multiple organizations**, a single fine-grained PAT
+is scoped to one resource owner. Use per-org overrides to assign different
+tokens per org:
+
+```bash
+# Default tokens (fallback)
+GITHUB_OWNER_TOKEN=github_pat_default_...
+GITHUB_REVIEWER_TOKEN=github_pat_default_...
+GITHUB_REVIEWER_USERNAME=default-bot
+
+# Overrides for org "my-company"
+GITHUB_TOKEN_my-company_OWNER=github_pat_org_scoped_...
+GITHUB_TOKEN_my-company_REVIEWER=github_pat_org_scoped_...
+GITHUB_TOKEN_my-company_REVIEWER_USERNAME=org-bot
+
+# Overrides for org "another-org"
+GITHUB_TOKEN_another-org_OWNER=github_pat_...
+GITHUB_TOKEN_another-org_REVIEWER=github_pat_...
+```
+
+Resolution order per repo: `GITHUB_TOKEN_{org}_OWNER` → `GITHUB_OWNER_TOKEN` → `""`.
+
+When no per-org override is set for an org, the default token is used (backwards
+compatible). Classic PAT users see no behavior change.
+
 ---
 
 ## Pre-Flight Verification
