@@ -40,7 +40,7 @@ class FakeVerifier:
         if self.should_fail:
             raise PreflightVerificationError(
                 platform="test", org=org, role=role, http_status=403, step="auth",
-                token_source=token_source,
+                token_source=token_source, url=f"https://test/{repo}", method="GET",
             )
 
 
