@@ -16,6 +16,9 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPo
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
 )
+from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
+    TokenVerifierPort,
+)
 from pr_auto_reviewer.application.services.process_issue_commands_service import (
     ProcessIssueCommandsService,
 )
@@ -50,6 +53,7 @@ class ApplicationComponents:
     review_item_parser: ReviewItemParser
     cli_runner: CliRunner
     notifier: NotifierPort | None = None
+    token_verifier: TokenVerifierPort | None = None
 
 class CompositionRoot:
     """Wires infrastructure, application and presentation layers.
@@ -87,6 +91,7 @@ class CompositionRoot:
             review_context_factory=c.review_context_factory,
             llm_review=c.llm_review,
             review_publisher=c.review_publisher,
+            token_verifier=c.token_verifier,
         )
 
         review_item_parser = ReviewItemParser()
@@ -112,6 +117,7 @@ class CompositionRoot:
             review_item_parser=review_item_parser,
             pr_repository=c.pr_repository,
             notifier=c.notifier,
+            token_verifier=c.token_verifier,
         )
 
         return ApplicationComponents(
@@ -123,6 +129,7 @@ class CompositionRoot:
             review_item_parser=review_item_parser,
             cli_runner=cli_runner,
             notifier=c.notifier,
+            token_verifier=c.token_verifier,
         )
 
     @property

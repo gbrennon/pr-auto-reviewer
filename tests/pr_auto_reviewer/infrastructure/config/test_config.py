@@ -12,12 +12,12 @@ class TestLoadConfig:
     def _clean_env(self, monkeypatch, tmp_path: Path):
         """Prevent real .env and env vars from leaking into tests."""
         monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.config.config._get_repo_root",
-            lambda: tmp_path,
+            "pr_auto_reviewer.infrastructure.config.repo_root.RepoRoot.path",
+            classmethod(lambda cls: tmp_path),
         )
         monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.config.config.load_dotenv",
-            lambda path, override=True: None,
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {},
         )
         for var in [
             "ENV",
@@ -49,6 +49,10 @@ class TestLoadConfig:
         ]:
             monkeypatch.delenv(var, raising=False)
 
+    def _enter_dev_mode(self, tmp_path: Path) -> None:
+        """Create .env so load_config detects development mode."""
+        (tmp_path / ".env").touch()
+
     def test_defaults_when_no_env_vars(self):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
@@ -71,39 +75,44 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.env == "staging"
 
-    def test_platform_mode_github(self, monkeypatch):
+    def test_platform_mode_github(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("PLATFORM_MODE", "github")
         cfg = load_config()
         assert cfg.platform_mode.value == "github"
 
-    def test_platform_mode_both(self, monkeypatch):
+    def test_platform_mode_both(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("PLATFORM_MODE", "both")
         cfg = load_config()
         assert cfg.platform_mode.value == "both"
 
-    def test_forgejo_mode_env_var_fallback(self, monkeypatch):
+    def test_forgejo_mode_env_var_fallback(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("FORGEJO_MODE", "forgejo")
         cfg = load_config()
         assert cfg.platform_mode.value == "forgejo"
 
-    def test_llm_settings(self, monkeypatch):
+    def test_llm_settings(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("LLM_HOST", "http://llm:8080")
         monkeypatch.setenv("LLM_MODEL", "gpt-4")
         cfg = load_config()
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
-    def test_ollama_fallback_for_llm_host(self, monkeypatch):
+    def test_ollama_fallback_for_llm_host(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("OLLAMA_HOST", "http://ollama:11434")
         cfg = load_config()
         assert cfg.llm_host == "http://ollama:11434"
@@ -114,32 +123,36 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.llm_model is None
 
-    def test_output_mode_file_with_path(self, monkeypatch):
+    def test_output_mode_file_with_path(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("REVIEW_OUTPUT", "file:/tmp/out.md")
         cfg = load_config()
         assert cfg.output_mode == "terminal"
         assert cfg.output_path == "/tmp/out.md"
 
-    def test_output_mode_file_empty_path(self, monkeypatch):
+    def test_output_mode_file_empty_path(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("REVIEW_OUTPUT", "file:")
         cfg = load_config()
         assert cfg.output_mode == "terminal"
         assert cfg.output_path is None
 
-    def test_debug_enabled(self, monkeypatch):
+    def test_debug_enabled(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("DEBUG", "1")
         cfg = load_config()
         assert cfg.debug is True
 
-    def test_numeric_settings(self, monkeypatch):
+    def test_numeric_settings(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("POLL_INTERVAL", "30")
         monkeypatch.setenv("MAX_PROMPT_TOKENS", "4096")
         monkeypatch.setenv("MAX_FILE_CHARS", "2000")
@@ -152,28 +165,40 @@ class TestLoadConfig:
         assert cfg.max_files == 5
         assert cfg.max_structure_lines == 50
 
-    def test_use_compact_template_true(self, monkeypatch):
+    def test_use_compact_template_true(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("USE_COMPACT_TEMPLATE", "true")
         cfg = load_config()
         assert cfg.use_compact_template is True
 
-    def test_use_strict_fragment_selection_true(self, monkeypatch):
+    def test_use_strict_fragment_selection_true(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("USE_STRICT_FRAGMENT_SELECTION", "true")
         cfg = load_config()
         assert cfg.use_strict_fragment_selection is True
 
-    def test_github_settings(self, monkeypatch):
+    def test_github_settings(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
+
+        token_values = {
+            "GITHUB_API_URL": "https://github.example.com",
+            "GITHUB_OWNER_TOKEN": "gh_owner",
+            "GITHUB_REVIEWER_TOKEN": "gh_reviewer",
+            "GITHUB_REVIEWER_USERNAME": "bot",
+            "GITHUB_REVIEW_MODE": "informal",
+        }
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: token_values if ".env" in str(path) else {},
+        )
         monkeypatch.setenv("GITHUB_API_URL", "https://github.example.com")
-        monkeypatch.setenv("GITHUB_OWNER_TOKEN", "gh_owner")
-        monkeypatch.setenv("GITHUB_REVIEWER_TOKEN", "gh_reviewer")
-        monkeypatch.setenv("GITHUB_REVIEWER_USERNAME", "bot")
-        monkeypatch.setenv("GITHUB_REVIEW_MODE", "informal")
+
         cfg = load_config()
         assert cfg.github_api_url == "https://github.example.com"
         assert cfg.github_owner_token == "gh_owner"
@@ -181,13 +206,22 @@ class TestLoadConfig:
         assert cfg.github_reviewer_username == "bot"
         assert cfg.github_review_mode == "informal"
 
-    def test_forgejo_settings_with_host_fallback(self, monkeypatch):
+    def test_forgejo_settings_with_host_fallback(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
+        self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("FORGEJO_HOST", "https://git.example.com")
-        monkeypatch.setenv("FORGEJO_OWNER_TOKEN", "fj_owner")
-        monkeypatch.setenv("FORGEJO_REVIEWER_TOKEN", "fj_reviewer")
-        monkeypatch.setenv("FORGEJO_REVIEWER_USERNAME", "fj_bot")
+
+        token_values = {
+            "FORGEJO_OWNER_TOKEN": "fj_owner",
+            "FORGEJO_REVIEWER_TOKEN": "fj_reviewer",
+            "FORGEJO_REVIEWER_USERNAME": "fj_bot",
+        }
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: token_values if ".env" in str(path) else {},
+        )
+
         cfg = load_config()
         assert cfg.forgejo_api_url == "https://git.example.com/api/v1"
         assert cfg.forgejo_owner_token == "fj_owner"

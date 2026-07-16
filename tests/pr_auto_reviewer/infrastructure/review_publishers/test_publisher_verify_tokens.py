@@ -49,6 +49,8 @@ def _preflight_error() -> PreflightVerificationError:
         role="reviewer",
         http_status=403,
         step="write_access",
+        url="https://codeberg.org/api/v1/repos/test-org/repo/pulls/1/requested_reviewers",
+        method="POST",
     )
 
 

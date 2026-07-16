@@ -70,6 +70,35 @@ if grep -qF "${GREP_PATTERN}" "${RC_FILE}" 2>/dev/null; then
     echo ""
 fi
 
+# ── Apply .env to global config ──────────────────────────────────────────
+CONFIG_DIR="${HOME}/.config/pr-auto-reviewer"
+CONFIG_FILE="${CONFIG_DIR}/config"
+ENV_FILE="${PROJECT_ROOT}/.env"
+ENV_EXAMPLE="${PROJECT_ROOT}/.env.example"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "Warning: .env not found at $ENV_FILE"
+    if [ -f "$ENV_EXAMPLE" ]; then
+        echo "Run: cp .env.example .env and edit it with your tokens, then re-run this script"
+    fi
+elif [ -f "$ENV_EXAMPLE" ] && cmp -s "$ENV_FILE" "$ENV_EXAMPLE"; then
+    echo "Warning: .env appears to be the unmodified example template"
+    echo "Edit $ENV_FILE with your tokens, then re-run this script"
+else
+    mkdir -p "$CONFIG_DIR"
+
+    if [ -f "$CONFIG_FILE" ]; then
+        if ! cmp -s "$ENV_FILE" "$CONFIG_FILE"; then
+            echo "Backing up existing config to $CONFIG_FILE.bak"
+            cp "$CONFIG_FILE" "$CONFIG_FILE.bak"
+        fi
+    fi
+
+    cp "$ENV_FILE" "$CONFIG_FILE"
+    echo "Config applied: $ENV_FILE → $CONFIG_FILE"
+fi
+echo ""
+
 # ── Install CLI in PATH ─────────────────────────────────────────────────────
 if ! command -v uv &>/dev/null; then
     echo "Warning: uv not found — CLI not installed in PATH"
