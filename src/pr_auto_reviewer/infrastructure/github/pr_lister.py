@@ -39,6 +39,7 @@ class GithubPrLister(PrListerPort):
 
                 number = pr.get("number")
                 sha = pr.get("head", {}).get("sha")
+                updated_at = pr.get("updated_at", "") or None
                 title = pr.get("title", "")
                 description = pr.get("body", "")
 
@@ -50,6 +51,7 @@ class GithubPrLister(PrListerPort):
                             title=title,
                             description=description,
                             is_draft=pr.get("draft", False),
+                            updated_at=updated_at,
                         )
                     )
 
@@ -67,9 +69,9 @@ class GithubPrLister(PrListerPort):
                 f"/repos/{repository}/pulls/{pr_number}",
                 repo=repository,
             )
-
             number = pr.get("number")
             sha = pr.get("head", {}).get("sha")
+            updated_at = pr.get("updated_at", "") or None
             title = pr.get("title", "")
             description = pr.get("body", "")
 
@@ -83,6 +85,7 @@ class GithubPrLister(PrListerPort):
                 title=title,
                 description=description,
                 is_draft=pr.get("draft", False),
+                updated_at=updated_at,
             )
 
         except Exception as exc:

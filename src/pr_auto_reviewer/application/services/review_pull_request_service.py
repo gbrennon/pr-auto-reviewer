@@ -61,16 +61,20 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             self._token_verifier.verify(command.pr_id)
 
         diff = self._fetch_diff(command)
+        description = self._augment_description(command.description, pr)
         composed = self._review_context_factory.build(
             command.pr_id, diff,
             pr_title=command.title,
-            pr_description=command.description,
+            pr_description=description,
         )
         review = self._run_llm_review_with_prompt(composed)
         review = self._add_deterministic_findings(review, diff)
 
         self._publish_review(command.pr_id, review)
-        pr = self._record_review(pr, review, command.head_sha)
+        blocking_ids = self._extract_blocking_ids(review)
+        if blocking_ids:
+            pr = pr.with_unresolved_blocking(*blocking_ids)
+        pr = self._record_review(pr, review, command.head_sha, command.updated_at)
         self._persist(pr)
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -102,7 +106,16 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
     def _needs_review(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> bool:
-        return command.force or pr.needs_review(command.head_sha)
+        if command.force:
+            return True
+        if pr.needs_review(command.head_sha):
+            return True
+        if command.updated_at and pr.last_reviewed_at:
+            if command.updated_at > pr.last_reviewed_at:
+                logger.info("PR %s updated_at changed (%s > %s), re-reviewing",
+                            command.pr_id, command.updated_at, pr.last_reviewed_at)
+                return True
+        return False
 
     def _handle_already_reviewed(
         self, command: ReviewPullRequestCommand, pr: PullRequest
@@ -245,6 +258,46 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
 
         return items
 
+
+    def _augment_description(
+        self, description: str | None, pr: PullRequest,
+    ) -> str | None:
+        """Append pending blocking items text when there are unresolved blockers."""
+        if not pr.unresolved_blocking_ids:
+            return description
+        items: list[ReviewItem] = []
+        for review in pr.reviews:
+            for item in review.items:
+                if item.id and item.id in pr.unresolved_blocking_ids:
+                    items.append(item)
+        if not items:
+            return description
+
+        lines = ["\n## Previously Unresolved Blocking Items", ""]
+        for item in items:
+            location = f" ({item.file_path})" if item.file_path else ""
+            lines.append(
+                f"- **#{item.id}** [{item.severity.value}]"
+                f" {item.description}{location}"
+            )
+        lines.append("")
+        lines.append(
+            "Please verify whether these items have been addressed in this update."
+        )
+        pending = "\n".join(lines)
+
+        if description:
+            return description + "\n" + pending
+        return pending
+
+    def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
+        """Return IDs of review items whose severity is blocking."""
+        return [
+            item.id
+            for item in review.items
+            if item.severity.is_blocking and item.id
+        ]
+
     def _publish_review(
         self, pr_id: PullRequestId, review: CodeReview
     ) -> None:
@@ -252,9 +305,10 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         self._review_publisher.publish(pr_id, review)
 
     def _record_review(
-        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha
+        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
+        updated_at: str | None = None,
     ) -> PullRequest:
-        return pr.add_review(review, head_sha)
+        return pr.add_review(review, head_sha, last_reviewed_at=updated_at)
 
     def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)

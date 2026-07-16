@@ -4,7 +4,7 @@ from .command_bus import InMemoryCommandBus
 from .context.architecture_detector import ArchitectureDetector
 from .forgejo.changeset_fetcher import ForgejoChangesetFetcher as GitChangesetFetcherAdapter
 from .github.repository_context import GithubRepositoryContext as GitRepositoryContextAdapter
-from .review_publishers.platform_publisher import PlatformReviewPublisherAdapter as GitReviewPublisherAdapter
+from .github.github_review_publisher import GithubReviewPublisher as GitReviewPublisherAdapter
 from .github.review_reader import GithubReviewReader as GitReviewReaderAdapter
 from .github.comment_reader import GithubCommentReader as GitCommentReaderAdapter
 from .github.comment_publisher import GithubCommentPublisher as GitCommentPublisherAdapter
