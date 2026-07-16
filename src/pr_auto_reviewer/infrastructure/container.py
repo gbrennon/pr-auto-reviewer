@@ -270,14 +270,12 @@ class Container:
                     {
                         "github": GithubReviewPublisher(
                             gb_reviewer,
-                            self._config.github_reviewer_token or "",
                             self._config.github_reviewer_username,
                             owner_client=gb_owner,
                             review_mode=self._config.github_review_mode,
                         ),
                         "forgejo": ForgejoReviewPublisher(
                             fj_reviewer,
-                            self._config.forgejo_reviewer_token or "",
                             self._config.forgejo_reviewer_username,
                             owner_client=fj_owner,
                         ),
@@ -384,14 +382,12 @@ class Container:
                 if is_terminal
                 else GithubReviewPublisher(
                     self._reviewer_client,
-                    reviewer_token,
                     reviewer_username,
                     owner_client=self._http_client,
                 )
                 if is_github
                 else ForgejoReviewPublisher(
                     self._reviewer_client,
-                    reviewer_token,
                     reviewer_username,
                     owner_client=self._http_client,
                 )
