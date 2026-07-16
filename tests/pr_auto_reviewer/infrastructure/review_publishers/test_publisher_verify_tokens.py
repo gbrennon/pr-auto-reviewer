@@ -1,4 +1,4 @@
-"""Tests for PlatformReviewPublisherAdapter._verify_tokens preflight flow."""
+"""Tests for GithubReviewPublisher._verify_tokens preflight flow."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
 from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import (
-    PlatformReviewPublisherAdapter,
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from tests.fixtures.integration_fixtures import FixtureHttpClient, integration_data
 
@@ -64,9 +64,8 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
@@ -91,13 +90,11 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
-
         pr_id = PullRequestId(repository="my-org/my-repo", number=42)
         review = _build_review()
 
@@ -117,13 +114,11 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
             fail_verify=_preflight_error(),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
-
         pr_id = PullRequestId(repository="my-org/my-repo", number=7)
         review = _build_review()
 
@@ -144,9 +139,8 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
