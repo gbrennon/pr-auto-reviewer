@@ -11,16 +11,16 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import (
-    PlatformReviewPublisherAdapter,
-)
-from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
-    ReviewPublishingService,
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
     ReviewBodyFormatter,
 )
-GitReviewPublisherAdapter = PlatformReviewPublisherAdapter
+from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
+    ReviewPublishingService,
+)
+GitReviewPublisherAdapter = GithubReviewPublisher
 format_review_body = ReviewBodyFormatter().format
 
 class TestGitReviewPublisherAdapter:
@@ -265,22 +265,10 @@ index def456..ghi789 100644
         )
         assert result == 0
 
-    def test_request_reviewer_github_422_logs_specific_warning(
-        self, patched_private_client, monkeypatch, caplog,
-    ):
-        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
-        def raise_422(*_a, **_kw):
-            raise Exception("422 Unprocessable Entity")
-        monkeypatch.setattr(patched_private_client, "post", raise_422)
-        service.request_reviewer(PullRequestId(repository="o/r", number=1))
-        assert "422" in caplog.text
-
     def test_request_reviewer_generic_failure_logs_warning(
         self, patched_private_client, monkeypatch, caplog,
     ):
         service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         def raise_500(*_a, **_kw):
             raise Exception("500 boom")
         monkeypatch.setattr(patched_private_client, "post", raise_500)
@@ -291,25 +279,23 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         def raise_err(*_a, **_kw):
             raise Exception("forgejo down")
         monkeypatch.setattr(patched_private_client, "post", raise_err)
         service.request_reviewer(PullRequestId(repository="o/r", number=1))
         assert "Failed to request reviewer" in caplog.text
 
-    def test_publish_comment_forgejo_logs_debug(
+    def test_publish_comment_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
             patched_private_client, "t", "u", owner_client=patched_private_client,
         )
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         caplog.set_level("DEBUG")
         adapter._publishing.publish_comment(
             PullRequestId(repository="o/r", number=1), "test body",
         )
-        assert "Codeberg Comment Response" in caplog.text
+        assert "Comment posted" in caplog.text
 
     def test_publish_comment_handles_post_failure(
         self, patched_private_client, monkeypatch, caplog,
@@ -438,15 +424,14 @@ index def456..ghi789 100644
         assert "Blocking" not in body
         assert "Nit" in body
 
-    def test_request_reviewer_github_success_logs_debug(
+    def test_request_reviewer_success_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
-        """GitHub reviewer request success logs a debug message."""
+        """Reviewer request success logs a debug message."""
         service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         caplog.set_level("DEBUG")
         service.request_reviewer(PullRequestId(repository="o/r", number=1))
-        assert "GitHub Request Reviewer Response" in caplog.text
+        assert "Reviewer request succeeded" in caplog.text
 
     def test_build_inline_comments_skips_suggestion_without_file(
         self, patched_private_client, monkeypatch,

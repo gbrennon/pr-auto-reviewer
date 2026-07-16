@@ -5,7 +5,7 @@ import pytest
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.review_publishers.composite_publisher import (
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
     CompositeReviewPublisher,
 )
 from tests.fixtures.composite_fixtures import RecordingReviewPublisher
