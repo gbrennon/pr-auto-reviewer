@@ -1,156 +1,99 @@
+"""ConfigLoader — loads application configuration with correct environment precedence."""
+
+from __future__ import annotations
+
 import logging
 import os
-from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
+
+from pr_auto_reviewer.infrastructure.config.config_builder import ConfigBuilder
+from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
+from pr_auto_reviewer.infrastructure.config.environment_detector import (
+    EnvironmentDetector,
+)
+from pr_auto_reviewer.infrastructure.config.repo_root import RepoRoot
 
 logger = logging.getLogger(__name__)
 
-from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+_CONFIG_KEYS = [
+    "PLATFORM_MODE", "FORGEJO_MODE",
+    "GITHUB_API_URL", "GITHUB_OWNER_TOKEN", "GITHUB_REVIEWER_TOKEN",
+    "GITHUB_REVIEWER_USERNAME", "GITHUB_REVIEW_MODE",
+    "FORGEJO_API_URL", "FORGEJO_HOST", "FORGEJO_OWNER_TOKEN",
+    "FORGEJO_REVIEWER_TOKEN", "FORGEJO_REVIEWER_USERNAME",
+    "LLM_HOST", "OLLAMA_HOST", "LLM_MODEL", "OLLAMA_MODEL",
+    "REVIEW_OUTPUT", "POLL_INTERVAL", "DEBUG",
+    "MAX_PROMPT_TOKENS", "MAX_FILE_CHARS", "MAX_FILES",
+    "MAX_STRUCTURE_LINES", "USE_COMPACT_TEMPLATE",
+    "USE_STRICT_FRAGMENT_SELECTION", "OLLAMA_TIMEOUT",
+    "PROMPT_MODE",
+]
 
 
-@dataclass
-class Config:
-    env: str
-    platform_mode: GitProvider = GitProvider.FORGEJO
+class ConfigLoader:
+    """Loads configuration with correct precedence for each environment.
 
-    github_api_url: str = "https://api.github.com"
-    forgejo_api_url: str = "https://codeberg.org/api/v1"
+    **Production** (installed via ``make install``):
+        Reads *only* from ``~/.config/pr-auto-reviewer/config``.
+        Environment variables are **ignored entirely**.
 
-    github_owner_token: str = ""
-    github_reviewer_token: str = ""
-    github_reviewer_username: str = ""
-    github_review_mode: str = "formal"
+    **Development** (repo with ``.env`` file):
+        Command-line env vars (e.g. ``make review-force PLATFORM_MODE=github``)
+        override ``.env``, which overrides ``~/.config/pr-auto-reviewer/config``.
+    """
 
-    forgejo_owner_token: str = ""
-    forgejo_reviewer_token: str = ""
-    forgejo_reviewer_username: str = ""
+    def __init__(self) -> None:
+        self._detector = EnvironmentDetector()
+        self._builder = ConfigBuilder()
 
-    llm_host: str = "http://localhost:11434"
-    llm_model: str | None = None
-    poll_interval: int = 60
-    debug: bool = False
-    output_mode: str = "forgejo"
-    output_path: str | None = None
-    fragments_dir: str = ""
-    max_prompt_tokens: int = 9999
-    max_file_chars: int = 3000
-    max_files: int = 10
-    max_structure_lines: int = 100
-    use_compact_template: bool = False
-    use_strict_fragment_selection: bool = False
+    def load(self) -> Config:
+        repo_root = RepoRoot.path()
+        env = self._detector.detect()
 
+        user_config_path = os.path.expanduser("~/.config/pr-auto-reviewer/config")
+        repo_env_path = repo_root / ".env"
 
-def _get_repo_root() -> Path:
-    return Path(__file__).parent.parent.parent.parent.parent
+        if env == "production":
+            return self._load_production(user_config_path)
 
+        return self._load_development(user_config_path, repo_env_path, env)
 
-def _is_installed() -> bool:
-    return not (_get_repo_root() / ".env").exists()
+    def _load_production(self, config_path: str) -> Config:
+        if Path(config_path).exists():
+            values = dotenv_values(config_path)
+            logger.info("Loading production config from %s", config_path)
+        else:
+            logger.warning(
+                "Production config not found at %s; using defaults.", config_path
+            )
+            values = {}
+        return self._builder.build(values, env_name="production")
 
+    def _load_development(
+        self, user_config_path: str, repo_env_path: Path, env: str
+    ) -> Config:
+        _pre_existing = {
+            k: os.environ[k] for k in _CONFIG_KEYS if k in os.environ
+        }
 
-def _normalize_forgejo_api_url(url: str) -> str:
-    if url.endswith("/api/v1"):
-        return url
-    return url.rstrip("/") + "/api/v1"
+        user_cfg = Path(user_config_path)
+        if user_cfg.exists():
+            logger.info("Loading dev user config from %s", user_config_path)
+            load_dotenv(user_cfg, override=False)
+
+        if repo_env_path.exists():
+            logger.info("Loading dev .env from %s", repo_env_path)
+            load_dotenv(repo_env_path, override=True)
+
+        for k, v in _pre_existing.items():
+            os.environ[k] = v
+
+        values = {k: os.environ.get(k, "") for k in _CONFIG_KEYS}
+        return self._builder.build(values, env_name=env)
 
 
 def load_config() -> Config:
-    repo_root = Path(__file__).parent.parent.parent.parent.parent
-    env = os.environ.get("ENV", "").strip()
-
-    if not env:
-        env = "production" if _is_installed() else "development"
-
-    user_config_path = os.path.expanduser("~/.config/pr-auto-reviewer/config")
-    repo_env_path = repo_root / ".env"
-
-    if env == "production":
-        paths = [repo_env_path, user_config_path]
-    else:
-        paths = [user_config_path, repo_env_path]
-
-    for path in paths:
-        if (path if isinstance(path, Path) else Path(path)).exists():
-            load_dotenv(path, override=True)
-
-    platform_mode_raw = (
-        os.environ.get("PLATFORM_MODE") or os.environ.get("FORGEJO_MODE") or "forgejo"
-    ).strip()
-    platform_mode = GitProvider.parse(platform_mode_raw)
-
-    github_api_url = (
-        os.environ.get("GITHUB_API_URL", "").strip() or "https://api.github.com"
-    )
-    forgejo_api_url = (
-        os.environ.get("FORGEJO_API_URL", "").strip()
-        or os.environ.get("FORGEJO_HOST", "").strip()
-        or "https://codeberg.org"
-    )
-    forgejo_api_url = _normalize_forgejo_api_url(forgejo_api_url)
-
-    github_owner_token = os.environ.get("GITHUB_OWNER_TOKEN", "").strip()
-    github_reviewer_token = os.environ.get("GITHUB_REVIEWER_TOKEN", "").strip()
-    github_reviewer_username = os.environ.get("GITHUB_REVIEWER_USERNAME", "").strip()
-    github_review_mode = os.environ.get("GITHUB_REVIEW_MODE", "formal").strip()
-
-    forgejo_owner_token = os.environ.get("FORGEJO_OWNER_TOKEN", "").strip()
-    forgejo_reviewer_token = os.environ.get("FORGEJO_REVIEWER_TOKEN", "").strip()
-    forgejo_reviewer_username = os.environ.get("FORGEJO_REVIEWER_USERNAME", "").strip()
-
-    llm_host = (
-        os.environ.get("LLM_HOST")
-        or os.environ.get("OLLAMA_HOST")
-        or "http://localhost:11434"
-    ).strip()
-    llm_model = (
-        os.environ.get("LLM_MODEL") or os.environ.get("OLLAMA_MODEL") or ""
-    ).strip() or None
-
-    output_mode = os.environ.get("REVIEW_OUTPUT", "").strip()
-    output_path: str | None = None
-    if output_mode.startswith("file:"):
-        output_path = output_mode.removeprefix("file:") or None
-        output_mode = "terminal"
-    elif not output_mode:
-        output_mode = "forgejo"
-
-    poll_interval = int(os.environ.get("POLL_INTERVAL", "60"))
-    debug = os.environ.get("DEBUG", "0").strip() in ("1", "true", "yes")
-    max_prompt_tokens = int(os.environ.get("MAX_PROMPT_TOKENS", "9999"))
-    max_file_chars = int(os.environ.get("MAX_FILE_CHARS", "3000"))
-    max_files = int(os.environ.get("MAX_FILES", "10"))
-    max_structure_lines = int(os.environ.get("MAX_STRUCTURE_LINES", "100"))
-    use_compact_template = (
-        os.environ.get("USE_COMPACT_TEMPLATE", "false").lower() == "true"
-    )
-    use_strict_fragment_selection = (
-        os.environ.get("USE_STRICT_FRAGMENT_SELECTION", "false").lower() == "true"
-    )
-
-    return Config(
-        env=env,
-        platform_mode=platform_mode,
-        github_api_url=github_api_url,
-        forgejo_api_url=forgejo_api_url,
-        github_owner_token=github_owner_token,
-        github_reviewer_token=github_reviewer_token,
-        github_reviewer_username=github_reviewer_username,
-        github_review_mode=github_review_mode,
-        forgejo_owner_token=forgejo_owner_token,
-        forgejo_reviewer_token=forgejo_reviewer_token,
-        forgejo_reviewer_username=forgejo_reviewer_username,
-        llm_host=llm_host,
-        llm_model=llm_model,
-        poll_interval=poll_interval,
-        debug=debug,
-        output_mode=output_mode,
-        output_path=output_path,
-        max_prompt_tokens=max_prompt_tokens,
-        max_file_chars=max_file_chars,
-        max_files=max_files,
-        max_structure_lines=max_structure_lines,
-        use_compact_template=use_compact_template,
-        use_strict_fragment_selection=use_strict_fragment_selection,
-    )
+    """Backward-compatible entry point.  Delegates to ``ConfigLoader``."""
+    return ConfigLoader().load()
