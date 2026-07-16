@@ -8,4 +8,4 @@ class GitHubAuthHeaders:
         return {"Authorization": f"Bearer {token}"}
 
     def write_access_extra_headers(self) -> dict[str, str]:
-        return {"Accept": "application/vnd.github.v3+json"}
+        return {"Accept": "application/vnd.github+json"}
