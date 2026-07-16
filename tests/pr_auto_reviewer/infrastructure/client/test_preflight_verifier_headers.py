@@ -38,7 +38,7 @@ class TestPreflightVerifierHeaders:
             http, GitHubAuthHeaders(), "https://api.example.com", "github"
         )
         verifier.verify("t", "o", "r", 1)
-        assert http.calls[1]["headers"]["Accept"] == "application/vnd.github.v3+json"
+        assert http.calls[1]["headers"]["Accept"] == "application/vnd.github+json"
 
     def test_verify_sends_no_accept_header_for_forgejo_write_check(self) -> None:
         http = FakeHttpClient(responses=[FakeResponse(200), FakeResponse(200)])

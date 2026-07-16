@@ -9,7 +9,7 @@ Preflight verifies two things for each token:
    token lacks write permission on the target repo.
 
 Both checks are side-effect-free — no reviewer is actually requested.
-For GitHub the ``Accept: application/vnd.github.v3+json`` header is
+For GitHub the ``Accept: application/vnd.github+json`` header is
 sent on write-access checks.  For Codeberg/Forgejo the ``token`` prefix
 is used instead of ``Bearer`` and no ``Accept`` header is needed.
 
