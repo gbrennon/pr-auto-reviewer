@@ -93,5 +93,5 @@ class GithubReviewPublisher(ReviewPublisherPort):
             body,
             blocking,
             official=False,
-            diff_headers={"Accept": "application/vnd.github.v3.diff"},
+            diff_headers={"Accept": "application/vnd.github.diff"},
         )
