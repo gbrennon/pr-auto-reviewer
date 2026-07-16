@@ -1,41 +1,36 @@
-"""Unit tests for ComposeReviewPromptAdapter — mocked ports."""
+"""Tests for ComposeReviewPromptAdapter using stub repository."""
+
+from __future__ import annotations
 
 import logging
-from unittest.mock import Mock
 
 import pytest
 
-from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
-    FragmentRepositoryPort,
-)
-from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
-    ComposeReviewPromptAdapter,
-)
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
+from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+    ComposeReviewPromptAdapter,
+)
+from tests.fakes.fragment_repository_fakes import StubFragmentRepository
+
 
 class TestComposeReviewPromptAdapter:
-    """Tests for the infrastructure adapter — all ports mocked."""
+    """Tests for the infrastructure adapter using stub repository."""
 
-    @pytest.fixture
-    def mock_repository(self) -> Mock:
-        """Mock FragmentRepositoryPort."""
-        return Mock(spec=FragmentRepositoryPort)
+    @staticmethod
+    def _make_adapter(
+        by_language: list[PromptFragment] | None = None,
+        universal: list[PromptFragment] | None = None,
+        **kwargs,
+    ) -> tuple[ComposeReviewPromptAdapter, StubFragmentRepository]:
+        """Create an adapter wired to a stub repository with given fragments."""
+        repo = StubFragmentRepository(by_language=by_language, universal=universal)
+        adapter = ComposeReviewPromptAdapter(repository=repo, **kwargs)
+        return adapter, repo
 
-    @pytest.fixture
-    def service(
-        self, mock_repository: Mock,
-    ) -> ComposeReviewPromptAdapter:
-        """Adapter wired with mocked repository, no renderer."""
-        return ComposeReviewPromptAdapter(repository=mock_repository)
-
-    def test_executes_full_composition_workflow(
-        self,
-        service: ComposeReviewPromptAdapter,
-        mock_repository: Mock,
-    ) -> None:
-        """Service should orchestrate selection → composition → result."""
+    def test_executes_full_composition_workflow(self) -> None:
+        """Service should orchestrate selection -> composition -> result."""
         context = ReviewContext(
             language="python",
             file_paths=["src/main.py"],
@@ -57,10 +52,10 @@ class TestComposeReviewPromptAdapter:
             category="architecture",
         )
 
-        mock_repository.find_by_language.return_value = [python_fragment]
-        mock_repository.find_universal.return_value = [universal_fragment]
-
-        result = service.execute(context)
+        adapter, _repo = self._make_adapter(
+            by_language=[python_fragment], universal=[universal_fragment],
+        )
+        result = adapter.execute(context)
 
         assert isinstance(result, ComposedPrompt)
         assert "# SOLID Principles" in result.content
@@ -71,11 +66,7 @@ class TestComposeReviewPromptAdapter:
         assert result.fragments_used == ["solid", "python-errors"]
         assert result.total_tokens > 0
 
-    def test_raises_error_when_no_fragments_selected(
-        self,
-        service: ComposeReviewPromptAdapter,
-        mock_repository: Mock,
-    ) -> None:
+    def test_raises_error_when_no_fragments_selected(self) -> None:
         """Service should raise ValueError when no fragments are available."""
         context = ReviewContext(
             language="unknown-language",
@@ -83,20 +74,14 @@ class TestComposeReviewPromptAdapter:
             diff="+code",
         )
 
-        mock_repository.find_by_language.return_value = []
-        mock_repository.find_universal.return_value = []
-
+        adapter, _repo = self._make_adapter()
         with pytest.raises(
             ValueError,
             match="No fragments found for language: unknown-language",
         ):
-            service.execute(context)
+            adapter.execute(context)
 
-    def test_calls_repository_with_correct_language(
-        self,
-        service: ComposeReviewPromptAdapter,
-        mock_repository: Mock,
-    ) -> None:
+    def test_calls_repository_with_correct_language(self) -> None:
         """Service should pass language from context to repository."""
         context = ReviewContext(
             language="go",
@@ -104,27 +89,22 @@ class TestComposeReviewPromptAdapter:
             diff="+func main() {}",
         )
 
-        mock_repository.find_by_language.return_value = [
-            PromptFragment(
-                id="go-concurrency",
-                content="# Go review",
-                language="go",
-                priority=85,
-                category="concurrency",
-            ),
-        ]
-        mock_repository.find_universal.return_value = []
+        go_fragment = PromptFragment(
+            id="go-concurrency",
+            content="# Go review",
+            language="go",
+            priority=85,
+            category="concurrency",
+        )
 
-        service.execute(context)
+        adapter, repo = self._make_adapter(
+            by_language=[go_fragment], universal=[],
+        )
+        adapter.execute(context)
 
-        mock_repository.find_by_language.assert_called_once_with("go")
+        assert repo.find_by_language_calls == ["go"]
 
-    def test_execute_logs_entry_and_return(
-        self,
-        service: ComposeReviewPromptAdapter,
-        mock_repository: Mock,
-        caplog,
-    ) -> None:
+    def test_execute_logs_entry_and_return(self, caplog) -> None:
         """Entry and return are logged when adapter logging is enabled."""
         caplog.set_level(
             logging.INFO,
@@ -137,20 +117,21 @@ class TestComposeReviewPromptAdapter:
             diff="+def new_function():\n+    pass",
         )
 
-        mock_repository.find_by_language.return_value = [
-            PromptFragment(
-                id="py", content="# Python", language="python",
-                priority=80, category="errors",
-            ),
-        ]
-        mock_repository.find_universal.return_value = [
-            PromptFragment(
-                id="solid", content="# SOLID", language=None,
-                priority=100, category="architecture",
-            ),
-        ]
-
-        service.execute(context)
+        adapter, _repo = self._make_adapter(
+            by_language=[
+                PromptFragment(
+                    id="py", content="# Python", language="python",
+                    priority=80, category="errors",
+                ),
+            ],
+            universal=[
+                PromptFragment(
+                    id="solid", content="# SOLID", language=None,
+                    priority=100, category="architecture",
+                ),
+            ],
+        )
+        adapter.execute(context)
 
         entry = [
             r.message for r in caplog.records
@@ -170,12 +151,8 @@ class TestComposeReviewPromptAdapter:
         assert "chars=" in ret[0]
         assert "tokens=" in ret[0]
 
-    def test_with_budget_constraints_filters_by_token_limit(
-        self, mock_repository: Mock,
-    ) -> None:
+    def test_with_budget_constraints_filters_by_token_limit(self) -> None:
         """When max_tokens is configured, low-priority fragments are dropped."""
-        from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import ComposeReviewPromptAdapter
-
         context = ReviewContext(
             language="python",
             file_paths=["src/main.py"],
@@ -191,23 +168,18 @@ class TestComposeReviewPromptAdapter:
             language="python", priority=80, category="errors",
         )
 
-        mock_repository.find_by_language.return_value = [small_fragment]
-        mock_repository.find_universal.return_value = [large_fragment]
-
-        adapter = ComposeReviewPromptAdapter(
-            repository=mock_repository, max_tokens=1000,
+        adapter, _repo = self._make_adapter(
+            by_language=[small_fragment], universal=[large_fragment],
+            max_tokens=1000,
         )
         result = adapter.execute(context)
 
         assert "# Small" in result.content
         assert "large" not in (result.fragments_used or [])
 
-    def test_with_renderer_uses_renderer_for_substitution(
-        self, mock_repository: Mock,
-    ) -> None:
+    def test_with_renderer_uses_renderer_for_substitution(self) -> None:
         """Renderer receives the raw fragment template with actual diff variables."""
-        from unittest.mock import Mock as StdMock
-        from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import ComposeReviewPromptAdapter
+        from unittest.mock import Mock
 
         context = ReviewContext(
             language="python",
@@ -220,14 +192,12 @@ class TestComposeReviewPromptAdapter:
             language="python", priority=80, category="errors",
         )
 
-        mock_repository.find_by_language.return_value = [fragment]
-        mock_repository.find_universal.return_value = []
-
-        mock_renderer = StdMock()
+        mock_renderer = Mock()
         mock_renderer.render.return_value = "RENDERED_PROMPT"
 
-        adapter = ComposeReviewPromptAdapter(
-            repository=mock_repository, renderer=mock_renderer,
+        adapter, _repo = self._make_adapter(
+            by_language=[fragment], universal=[],
+            renderer=mock_renderer,
         )
         result = adapter.execute(context)
 
@@ -243,12 +213,8 @@ class TestComposeReviewPromptAdapter:
         assert "## Diff" in result.content
         assert "+def f(): pass" in result.content
 
-    def test_diff_appears_inline_within_fragments(
-        self, mock_repository: Mock,
-    ) -> None:
+    def test_diff_appears_inline_within_fragments(self) -> None:
         """Diff is rendered inline inside each fragment, co-located with instructions."""
-        from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import ComposeReviewPromptAdapter
-
         context = ReviewContext(
             language="python",
             file_paths=["src/main.py"],
@@ -260,10 +226,9 @@ class TestComposeReviewPromptAdapter:
             language="python", priority=80, category="errors",
         )
 
-        mock_repository.find_by_language.return_value = [fragment]
-        mock_repository.find_universal.return_value = []
-
-        adapter = ComposeReviewPromptAdapter(repository=mock_repository)
+        adapter, _repo = self._make_adapter(
+            by_language=[fragment], universal=[],
+        )
         result = adapter.execute(context)
 
         assert "# Error Handling" in result.content
@@ -273,9 +238,7 @@ class TestComposeReviewPromptAdapter:
         assert "+    return 42" in result.content
         assert "Full diff is included below" in result.content
 
-    def test_with_repository_context_appends_it(
-        self, mock_repository: Mock,
-    ) -> None:
+    def test_with_repository_context_appends_it(self) -> None:
         """Repository context is appended to the prompt when present."""
         context = ReviewContext(
             language="python",
@@ -289,10 +252,9 @@ class TestComposeReviewPromptAdapter:
             language="python", priority=80, category="errors",
         )
 
-        mock_repository.find_by_language.return_value = [fragment]
-        mock_repository.find_universal.return_value = []
-
-        adapter = ComposeReviewPromptAdapter(repository=mock_repository)
+        adapter, _repo = self._make_adapter(
+            by_language=[fragment], universal=[],
+        )
         result = adapter.execute(context)
 
         assert "Repo Structure" in result.content

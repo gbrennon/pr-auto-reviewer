@@ -56,6 +56,9 @@ from pr_auto_reviewer.infrastructure.forgejo.repository_context import (
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
 )
+from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
+    ForgejoReviewPublisher,
+)
 
 from pr_auto_reviewer.infrastructure.github.comment_publisher import (
     GithubCommentPublisher,
@@ -80,8 +83,8 @@ from pr_auto_reviewer.infrastructure.github.review_reader import (
 )
 
 
-from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import (
-    PlatformReviewPublisherAdapter,
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
@@ -112,7 +115,7 @@ from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
-from pr_auto_reviewer.infrastructure.review_publishers.composite_publisher import (
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
     CompositeReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
@@ -265,16 +268,14 @@ class Container:
                 if is_terminal
                 else CompositeReviewPublisher(
                     {
-                        "github": PlatformReviewPublisherAdapter(
+                        "github": GithubReviewPublisher(
                             gb_reviewer,
-                            self._config.github_reviewer_token or "",
                             self._config.github_reviewer_username,
                             owner_client=gb_owner,
                             review_mode=self._config.github_review_mode,
                         ),
-                        "forgejo": PlatformReviewPublisherAdapter(
+                        "forgejo": ForgejoReviewPublisher(
                             fj_reviewer,
-                            self._config.forgejo_reviewer_token or "",
                             self._config.forgejo_reviewer_username,
                             owner_client=fj_owner,
                         ),
@@ -376,13 +377,17 @@ class Container:
                 if is_github
                 else ForgejoChangesetFetcher(self._http_client)
             )
-
             self._review_publisher: ReviewPublisherPort = (
                 TerminalReviewPublisherAdapter(self._config.output_path)
                 if is_terminal
-                else PlatformReviewPublisherAdapter(
+                else GithubReviewPublisher(
                     self._reviewer_client,
-                    reviewer_token,
+                    reviewer_username,
+                    owner_client=self._http_client,
+                )
+                if is_github
+                else ForgejoReviewPublisher(
+                    self._reviewer_client,
                     reviewer_username,
                     owner_client=self._http_client,
                 )

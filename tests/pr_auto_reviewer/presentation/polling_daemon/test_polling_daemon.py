@@ -182,6 +182,40 @@ class TestPollingDaemon:
         assert dispatched.force is True
         assert dispatched.pr_id.number == 1
 
+    def test_updated_at_passed_through_to_command(
+        self, mock_review_service: MagicMock
+    ) -> None:
+        """OpenPullRequest.updated_at is forwarded to the review command."""
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+        )
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            is_draft=False,
+            updated_at="2025-06-01T12:00:00Z",
+        )
+        repo_lister = MockRepoLister(["owner/repo1"])
+        pr_lister = MockPrLister([open_pr])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=mock_review_service,
+        )
+
+        with patch(
+            "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
+        ) as mock_logger:
+            daemon.start()
+
+        mock_review_service.execute.assert_called_once()
+        dispatched = mock_review_service.execute.call_args[0][0]
+        assert dispatched.updated_at == "2025-06-01T12:00:00Z"
+
     def test_force_pr_mismatched_does_not_set_force(
         self, mock_review_service: MagicMock
     ) -> None:

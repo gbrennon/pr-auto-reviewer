@@ -126,6 +126,8 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                 }
                 for r in pr.reviews
             ],
+            "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
+            "last_reviewed_at": pr.last_reviewed_at,
             "processed_comment_ids": sorted(
                 str(c) for c in pr.processed_comment_ids
             ),
@@ -151,16 +153,19 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             )
             for r in reviews_raw
         )
-
+        unresolved_ids: frozenset[str] = frozenset(
+            raw.get("unresolved_blocking_ids", [])
+        )
         processed_ids: frozenset[CommentId] = frozenset(
             CommentId(str(cid))
             for cid in raw.get("processed_comment_ids", [])
         )
-
         return PullRequest(
             id=pr_id,
             title=raw.get("title", ""),
             head_sha=CommitSha(raw.get("head_sha", "")),
+            unresolved_blocking_ids=unresolved_ids,
+            last_reviewed_at=raw.get("last_reviewed_at"),
             is_draft=raw.get("is_draft", False),
             reviews=reviews,
             processed_comment_ids=processed_ids,

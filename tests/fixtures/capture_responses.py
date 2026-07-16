@@ -16,7 +16,7 @@ from pr_auto_reviewer.infrastructure.forgejo.comment_reader import ForgejoCommen
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import ForgejoCommentPublisher
 from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import ForgejoIssueTracker
 from pr_auto_reviewer.infrastructure.forgejo.repository_context import ForgejoRepositoryContext
-from pr_auto_reviewer.infrastructure.review_publishers.composite_publisher import GitReviewPublisherAdapter
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import GithubReviewPublisher as GitReviewPublisherAdapter
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewReader
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
@@ -156,7 +156,7 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.comment_id import CommentId
 
-rp = GitReviewPublisherAdapter(client, reviewer_token=TOKEN, reviewer_username="gbrennon")
+rp = GitReviewPublisherAdapter(client, reviewer_username="gbrennon")
 rp_fix = {}
 s = scenarios[0]
 pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
