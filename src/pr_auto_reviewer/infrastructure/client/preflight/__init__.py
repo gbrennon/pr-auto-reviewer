@@ -1,5 +1,3 @@
-"""PreflightVerifier — validates a per-org token before first use."""
-
 from pr_auto_reviewer.infrastructure.client.preflight.preflight_verifier import (
     PreflightVerifier,
 )

@@ -14,6 +14,9 @@ from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import (
     PlatformReviewPublisherAdapter,
 )
+from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
+    ReviewPublishingService,
+)
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
     ReviewBodyFormatter,
 )
@@ -115,56 +118,56 @@ index def456..ghi789 100644
 +def added_func():
 +    return 1"""
 
-    def test_find_diff_position_none_file_path(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", None, "code")
+    def test_find_diff_position_none_file_path(self, adapter):
+        result = adapter._publishing.find_diff_position("diff", None, "code")
         assert result is None
 
-    def test_find_diff_position_empty_current_code(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", "f.py", "")
+    def test_find_diff_position_empty_current_code(self, adapter):
+        result = adapter._publishing.find_diff_position("diff", "f.py", "")
         assert result is None
 
-    def test_find_diff_position_empty_snippet(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", "f.py", "\n  \n")
+    def test_find_diff_position_empty_snippet(self, adapter):
+        result = adapter._publishing.find_diff_position("diff", "f.py", "\n  \n")
         assert result is None
 
-    def test_find_diff_position_file_not_found(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_file_not_found(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "nonexistent.py", "some_code"
         )
         assert result is None
 
-    def test_find_diff_position_added_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_added_line(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "src/main.py", "return True"
         )
         assert result is not None
         assert result["new_line"] is not None
         assert result["old_line"] is None
 
-    def test_find_diff_position_removed_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_removed_line(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "src/utils.py", "old_code"
         )
         assert result is not None
         assert result["old_line"] is not None
         assert result["new_line"] is None
 
-    def test_find_diff_position_context_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_context_line(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "src/utils.py", "context_line"
         )
         assert result is not None
         assert result["old_line"] is not None
         assert result["new_line"] is not None
 
-    def test_find_diff_position_snippet_not_found(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_snippet_not_found(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "src/main.py", "nonexistent_function"
         )
         assert result is None
 
-    def test_find_diff_position_in_second_file(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_in_second_file(self, adapter):
+        result = adapter._publishing.find_diff_position(
             self.DIFF, "src/utils.py", "added_func"
         )
         assert result is not None
@@ -257,7 +260,7 @@ index def456..ghi789 100644
         adapter = GitReviewPublisherAdapter(
             patched_private_client, "t", "u", owner_client=patched_private_client,
         )
-        result = adapter._count_existing_items(
+        result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
         )
         assert result == 0
@@ -265,40 +268,34 @@ index def456..ghi789 100644
     def test_request_reviewer_github_422_logs_specific_warning(
         self, patched_private_client, monkeypatch, caplog,
     ):
-        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
-        owner._owner_client = patched_private_client
-        owner._reviewer_username = "bot"
+        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         def raise_422(*_a, **_kw):
             raise Exception("422 Unprocessable Entity")
         monkeypatch.setattr(patched_private_client, "post", raise_422)
-        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        service.request_reviewer(PullRequestId(repository="o/r", number=1))
         assert "422" in caplog.text
 
     def test_request_reviewer_generic_failure_logs_warning(
         self, patched_private_client, monkeypatch, caplog,
     ):
-        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
-        owner._owner_client = patched_private_client
-        owner._reviewer_username = "bot"
+        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         def raise_500(*_a, **_kw):
             raise Exception("500 boom")
         monkeypatch.setattr(patched_private_client, "post", raise_500)
-        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        service.request_reviewer(PullRequestId(repository="o/r", number=1))
         assert "Failed to request reviewer" in caplog.text
 
     def test_request_reviewer_forgejo_failure_logs_warning(
         self, patched_private_client, monkeypatch, caplog,
     ):
-        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
-        owner._owner_client = patched_private_client
-        owner._reviewer_username = "bot"
+        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
         monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         def raise_err(*_a, **_kw):
             raise Exception("forgejo down")
         monkeypatch.setattr(patched_private_client, "post", raise_err)
-        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        service.request_reviewer(PullRequestId(repository="o/r", number=1))
         assert "Failed to request reviewer" in caplog.text
 
     def test_publish_comment_forgejo_logs_debug(
@@ -309,7 +306,7 @@ index def456..ghi789 100644
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         caplog.set_level("DEBUG")
-        adapter._publish_comment(
+        adapter._publishing.publish_comment(
             PullRequestId(repository="o/r", number=1), "test body",
         )
         assert "Codeberg Comment Response" in caplog.text
@@ -323,7 +320,7 @@ index def456..ghi789 100644
         def raise_err(*_a, **_kw):
             raise Exception("post failed")
         monkeypatch.setattr(patched_private_client, "post", raise_err)
-        adapter._publish_comment(
+        adapter._publishing.publish_comment(
             PullRequestId(repository="o/r", number=1), "test body",
         )
         assert "Failed to post comment" in caplog.text
@@ -348,7 +345,7 @@ index def456..ghi789 100644
                 current_code="return True",
             ),
         ]
-        result = adapter._build_inline_comments(diff, items, [])
+        result = adapter._publishing.build_inline_comments(diff, items, [])
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Blocking"
@@ -371,7 +368,7 @@ index def456..ghi789 100644
             ReviewSuggestion(file="src/main.py", current_code="return True",
                              description="Use a constant instead"),
         ]
-        result = adapter._build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Use a constant instead"
@@ -409,7 +406,7 @@ index def456..ghi789 100644
         assert "Nit" in body
         assert "Blocking" not in body
 
-    def test_formal_review_body_includes_all_items(
+    def test_formal_review_body_excludes_blocking_items_includes_non_blocking(
         self, patched_private_client, monkeypatch,
     ):
         post_payloads = []
@@ -438,19 +435,17 @@ index def456..ghi789 100644
         review_calls = [p for p in post_payloads if "/reviews" in p[0]]
         assert len(review_calls) == 1
         body = review_calls[0][1]["body"]
-        assert "Blocking" in body
+        assert "Blocking" not in body
         assert "Nit" in body
 
     def test_request_reviewer_github_success_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
         """GitHub reviewer request success logs a debug message."""
-        owner = GitReviewPublisherAdapter.__new__(GitReviewPublisherAdapter)
-        owner._owner_client = patched_private_client
-        owner._reviewer_username = "bot"
+        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         caplog.set_level("DEBUG")
-        owner._request_reviewer(PullRequestId(repository="o/r", number=1))
+        service.request_reviewer(PullRequestId(repository="o/r", number=1))
         assert "GitHub Request Reviewer Response" in caplog.text
 
     def test_build_inline_comments_skips_suggestion_without_file(
@@ -469,7 +464,7 @@ index def456..ghi789 100644
             ReviewSuggestion(file="", current_code="x", description="no file"),
             ReviewSuggestion(file="f.py", current_code="", description="no code"),
         ]
-        result = adapter._build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
         assert result == []
 
     def test_build_inline_comments_suggestions_github_mode(
@@ -490,7 +485,7 @@ index def456..ghi789 100644
             ReviewSuggestion(file="src/main.py", current_code="return True",
                              description="Use a constant"),
         ]
-        result = adapter._build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Use a constant"

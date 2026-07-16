@@ -66,25 +66,25 @@ class TestContainer:
         publisher = container.review_publisher
 
         gh_adapter = publisher._publishers["github"]
-        assert gh_adapter._client._token_resolver is not None
-        _token, source = gh_adapter._client._token_resolver.resolve_source(
+        assert gh_adapter._publishing._client._token_resolver is not None
+        _token, source = gh_adapter._publishing._client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
         )
         assert source.startswith("GITHUB_")
-        assert gh_adapter._owner_client._token_resolver is not None
-        _token2, source2 = gh_adapter._owner_client._token_resolver.resolve_source(
+        assert gh_adapter._publishing._owner_client._token_resolver is not None
+        _token2, source2 = gh_adapter._publishing._owner_client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
         )
         assert source2.startswith("GITHUB_")
 
         fj_adapter = publisher._publishers["forgejo"]
-        assert fj_adapter._client._token_resolver is not None
-        _token3, source3 = fj_adapter._client._token_resolver.resolve_source(
+        assert fj_adapter._publishing._client._token_resolver is not None
+        _token3, source3 = fj_adapter._publishing._client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
         )
         assert source3.startswith("FORGEJO_")
-        assert fj_adapter._owner_client._token_resolver is not None
-        _token4, source4 = fj_adapter._owner_client._token_resolver.resolve_source(
+        assert fj_adapter._publishing._owner_client._token_resolver is not None
+        _token4, source4 = fj_adapter._publishing._owner_client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
         )
         assert source4.startswith("FORGEJO_")
@@ -107,12 +107,12 @@ class TestContainer:
         publisher = container.review_publisher
 
         gh_adapter = publisher._publishers["github"]
-        assert gh_adapter._client._preflight_verifier is not None
-        assert gh_adapter._owner_client._preflight_verifier is not None
+        assert gh_adapter._publishing._client._preflight_verifier is not None
+        assert gh_adapter._publishing._owner_client._preflight_verifier is not None
 
         fj_adapter = publisher._publishers["forgejo"]
-        assert fj_adapter._client._preflight_verifier is not None
-        assert fj_adapter._owner_client._preflight_verifier is not None
+        assert fj_adapter._publishing._client._preflight_verifier is not None
+        assert fj_adapter._publishing._owner_client._preflight_verifier is not None
 
     def test_container_creates_token_resolver_single_platform(self):
         """TokenResolver is injected into http_client with correct prefix
