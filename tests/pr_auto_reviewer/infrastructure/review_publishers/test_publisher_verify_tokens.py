@@ -1,4 +1,4 @@
-"""Tests for PlatformReviewPublisherAdapter._verify_tokens preflight flow."""
+"""Tests for GithubReviewPublisher._verify_tokens preflight flow."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
 from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.platform_publisher import (
-    PlatformReviewPublisherAdapter,
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from tests.fixtures.integration_fixtures import FixtureHttpClient, integration_data
 
@@ -64,7 +64,7 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
             reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
@@ -91,7 +91,7 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
             reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
@@ -117,7 +117,7 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
             fail_verify=_preflight_error(),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
             reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
@@ -144,7 +144,7 @@ class TestPublisherVerifyTokens:
         owner_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        adapter = PlatformReviewPublisherAdapter(
+        adapter = GithubReviewPublisher(
             client=reviewer_spy,
             reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
