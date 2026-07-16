@@ -115,56 +115,56 @@ index def456..ghi789 100644
 +def added_func():
 +    return 1"""
 
-    def test_find_diff_position_none_file_path(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", None, "code")
+    def test_find_diff_position_none_file_path(self, adapter):
+        result = adapter._find_diff_position("diff", None, "code")
         assert result is None
 
-    def test_find_diff_position_empty_current_code(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", "f.py", "")
+    def test_find_diff_position_empty_current_code(self, adapter):
+        result = adapter._find_diff_position("diff", "f.py", "")
         assert result is None
 
-    def test_find_diff_position_empty_snippet(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position("diff", "f.py", "\n  \n")
+    def test_find_diff_position_empty_snippet(self, adapter):
+        result = adapter._find_diff_position("diff", "f.py", "\n  \n")
         assert result is None
 
-    def test_find_diff_position_file_not_found(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_file_not_found(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "nonexistent.py", "some_code"
         )
         assert result is None
 
-    def test_find_diff_position_added_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_added_line(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "src/main.py", "return True"
         )
         assert result is not None
         assert result["new_line"] is not None
         assert result["old_line"] is None
 
-    def test_find_diff_position_removed_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_removed_line(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "src/utils.py", "old_code"
         )
         assert result is not None
         assert result["old_line"] is not None
         assert result["new_line"] is None
 
-    def test_find_diff_position_context_line(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_context_line(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "src/utils.py", "context_line"
         )
         assert result is not None
         assert result["old_line"] is not None
         assert result["new_line"] is not None
 
-    def test_find_diff_position_snippet_not_found(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_snippet_not_found(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "src/main.py", "nonexistent_function"
         )
         assert result is None
 
-    def test_find_diff_position_in_second_file(self):
-        result = PlatformReviewPublisherAdapter._find_diff_position(
+    def test_find_diff_position_in_second_file(self, adapter):
+        result = adapter._find_diff_position(
             self.DIFF, "src/utils.py", "added_func"
         )
         assert result is not None

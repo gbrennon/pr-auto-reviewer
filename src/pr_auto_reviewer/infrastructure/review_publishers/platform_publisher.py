@@ -286,9 +286,8 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
 
         return comments
 
-    @classmethod
     def _find_diff_position(
-        cls, diff_text: str, file_path: str | None, current_code: str
+        self, diff_text: str, file_path: str | None, current_code: str
     ) -> dict[str, int] | None:
         if not file_path or not current_code:
             return None
