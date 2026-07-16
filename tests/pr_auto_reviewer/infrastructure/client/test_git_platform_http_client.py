@@ -16,9 +16,6 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 class _FakeResponse:
     """Reusable fake requests.Response for monkeypatch injection."""
 
-    status_code: int = 200
-    text: str = ""
-    content: bytes = b""
 
     def __init__(self, *, status_code: int = 200, json_data: Any = None, text: str = "", content: bytes = b"") -> None:
         self.status_code = status_code

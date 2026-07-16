@@ -66,7 +66,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
@@ -93,11 +92,9 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
-
         pr_id = PullRequestId(repository="my-org/my-repo", number=42)
         review = _build_review()
 
@@ -119,11 +116,9 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
-
         pr_id = PullRequestId(repository="my-org/my-repo", number=7)
         review = _build_review()
 
@@ -146,7 +141,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_token="fake-token",
             reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
