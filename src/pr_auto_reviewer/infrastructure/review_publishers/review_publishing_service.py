@@ -179,24 +179,13 @@ class ReviewPublishingService:
                 diff_text, item.file_path, item.current_code,
             )
             if pos_data:
-                if self._client._platform_mode == "github":
-                    comments.append(
-                        {
-                            "path": item.file_path,
-                            "position": pos_data["position"],
-                            "body": item.description,
-                        }
-                    )
-                elif self._client._platform_mode == "forgejo":
-                    line_no = pos_data["new_line"] or pos_data["old_line"]
-                    key = "new_position" if pos_data["new_line"] else "old_position"
-                    comments.append(
-                        {
-                            "path": item.file_path,
-                            "body": item.description,
-                            key: line_no,
-                        }
-                    )
+                comments.append(
+                    {
+                        "path": item.file_path,
+                        "position": pos_data["position"],
+                        "body": item.description,
+                    }
+                )
 
         for s in suggestions:
             s_file = s.file
@@ -206,25 +195,13 @@ class ReviewPublishingService:
             pos_data = self.find_diff_position(diff_text, s_file, s_code)
             if pos_data:
                 s_body = s.description
-                if self._client._platform_mode == "github":
-                    comments.append(
-                        {
-                            "path": s_file,
-                            "position": pos_data["position"],
-                            "body": s_body,
-                        }
-                    )
-                elif self._client._platform_mode == "forgejo":
-                    line_no = pos_data["new_line"] or pos_data["old_line"]
-                    key = "new_position" if pos_data["new_line"] else "old_position"
-                    comments.append(
-                        {
-                            "path": s_file,
-                            "body": s_body,
-                            key: line_no,
-                        }
-                    )
-
+                comments.append(
+                    {
+                        "path": s_file,
+                        "position": pos_data["position"],
+                        "body": s_body,
+                    }
+                )
         return comments
 
     # -- diff position lookup -----------------------------------------------

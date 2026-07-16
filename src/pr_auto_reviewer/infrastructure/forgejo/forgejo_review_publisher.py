@@ -7,26 +7,18 @@ from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
-    ReviewBodyFormatter,
+from pr_auto_reviewer.infrastructure.review_publishers._shared import (
+    _VERDICT_TO_EVENT,
+    _body_formatter,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
 )
 
 logger = logging.getLogger(__name__)
-
-_VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
-    ReviewVerdict.APPROVED: "APPROVE",
-    ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
-    ReviewVerdict.COMMENTED: "COMMENT",
-}
-
-_body_formatter = ReviewBodyFormatter()
 
 
 class ForgejoReviewPublisher(ReviewPublisherPort):
@@ -35,7 +27,6 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
     def __init__(
         self,
         client: GitPlatformHttpClient,
-        reviewer_token: str,
         reviewer_username: str,
         owner_client: GitPlatformHttpClient,
     ) -> None:
@@ -50,7 +41,6 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
 
         if verdict_event == "APPROVE":
             verdict_event = "APPROVED"
-
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "
             "items_count=%d, summary_len=%d",
