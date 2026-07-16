@@ -17,7 +17,6 @@ from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
 )
-
 logger = logging.getLogger(__name__)
 
 _VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
@@ -29,11 +28,8 @@ _VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
 _body_formatter = ReviewBodyFormatter()
 
 
-class PlatformReviewPublisherAdapter(ReviewPublisherPort):
-    """Publishes a ``CodeReview`` as a PR review on the remote platform.
-
-    Composes :class:`ReviewPublishingService` for low-level API operations.
-    """
+class GithubReviewPublisher(ReviewPublisherPort):
+    """Publishes a ``CodeReview`` as a GitHub PR review."""
 
     def __init__(
         self,
@@ -53,9 +49,6 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
         self._publishing.verify_tokens(pr_id)
 
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
-
-        if self._publishing._client._platform_mode == "forgejo" and verdict_event == "APPROVE":
-            verdict_event = "APPROVED"
 
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "
@@ -102,7 +95,21 @@ class PlatformReviewPublisherAdapter(ReviewPublisherPort):
             start_number=self._publishing.count_existing_items(pr_id),
         )
 
-        self._publishing.request_reviewer(pr_id)
+        try:
+            self._publishing.request_reviewer(pr_id)
+        except Exception:
+            logger.warning(
+                "GitHub may have returned 422 for reviewer '%s' on %s "
+                "(token may lack push access)",
+                self._publishing._reviewer_username,
+                pr_id,
+            )
+
         self._publishing.publish_formal_review(
-            pr_id, verdict_event, body, blocking,
+            pr_id,
+            verdict_event,
+            body,
+            blocking,
+            official=False,
+            diff_headers={"Accept": "application/vnd.github.v3.diff"},
         )

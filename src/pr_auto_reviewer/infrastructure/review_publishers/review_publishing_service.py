@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ReviewPublishingService:
     """Handles low-level API operations for publishing reviews to git platforms.
 
-    Composed by :class:`PlatformReviewPublisherAdapter` to keep the adapter
+    Composed by :class:`GithubReviewPublisher` to keep the publisher
     focused on orchestration while this service owns the API mechanics.
     """
 
@@ -81,38 +81,23 @@ class ReviewPublishingService:
                 {"reviewers": [self._reviewer_username]},
                 repo=pr_id.repository,
             )
-            if self._owner_client._platform_mode == "forgejo":
-                logger.debug("Codeberg Request Reviewer Response: %s", resp)
-            elif self._owner_client._platform_mode == "github":
-                logger.debug("GitHub Request Reviewer Response: %s", resp)
-        except Exception as exc:
-            if self._owner_client._platform_mode == "github" and "422" in str(exc):
-                logger.warning(
-                    "GitHub reviewer request failed (422): reviewer '%s' may not have "
-                    "write access to the repository. Add the reviewer as a collaborator "
-                    "with write permissions on GitHub.",
-                    self._reviewer_username,
-                )
-            else:
-                logger.warning(
-                    "Failed to request reviewer '%s' for %s (non-fatal)",
-                    self._reviewer_username,
-                    pr_id,
-                )
+            logger.debug("Reviewer request succeeded: %s", resp)
+        except Exception:
+            logger.warning(
+                "Failed to request reviewer '%s' for %s (non-fatal)",
+                self._reviewer_username,
+                pr_id,
+            )
 
     # -- comment publishing -------------------------------------------------
 
     def publish_comment(self, pr_id: PullRequestId, body: str) -> None:
-        comments_path = (
-            f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
-        )
-        logger.info("Posting comment on %s: %d chars", pr_id, len(body))
+        comments_path = f"/repos/{pr_id.repository}/issues/{pr_id.number}/comments"
         try:
             response = self._client.post(
                 comments_path, {"body": body}, repo=pr_id.repository,
             )
-            if self._client._platform_mode == "forgejo":
-                logger.debug("Codeberg Comment Response: %s", response)
+            logger.debug("Comment posted: %s", response)
         except Exception as exc:
             logger.warning(
                 "Failed to post comment on %s (non-fatal): %s", pr_id, exc,
@@ -126,13 +111,16 @@ class ReviewPublishingService:
         verdict_event: str,
         body: str,
         blocking: list,
+        *,
+        official: bool = False,
+        diff_headers: dict[str, str] | None = None,
     ) -> None:
         """Publish a formal PR review with optional inline comments."""
         reviews_path = (
             f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
         )
         payload: dict[str, object] = {"event": verdict_event, "body": body}
-        if self._client._platform_mode == "forgejo":
+        if official:
             payload["official"] = True
 
         try:
@@ -149,9 +137,7 @@ class ReviewPublishingService:
         try:
             diff_text = self._owner_client.get_raw(
                 f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
-                headers={"Accept": "application/vnd.github.v3.diff"}
-                if self._client._platform_mode == "github"
-                else {},
+                headers=diff_headers or {},
                 repo=pr_id.repository,
             )
             inline = self.build_inline_comments(diff_text, blocking, [])
@@ -166,17 +152,15 @@ class ReviewPublishingService:
             )
 
         try:
-            response = self._client.post(
+            self._client.post(
                 reviews_path, payload, repo=pr_id.repository,
             )
-            if self._client._platform_mode == "forgejo":
-                logger.debug("Codeberg Review Response Body: %s", response)
         except Exception as exc:
             if "403" in str(exc):
                 logger.error(
-                    "GitHub returned 403 Forbidden when publishing review. "
-                    "Ensure the token has 'repo' scope and the reviewer is "
-                    "authorized to post reviews on this repository."
+                    "Received 403 Forbidden when publishing review. "
+                    "Ensure the token has required scopes and the reviewer "
+                    "is authorized to post reviews on this repository."
                 )
             raise ReviewPublishError(
                 f"Failed to publish review for {pr_id}: {exc}",
