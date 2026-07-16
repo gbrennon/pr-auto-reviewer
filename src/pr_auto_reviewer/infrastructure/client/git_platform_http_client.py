@@ -70,8 +70,10 @@ class GitPlatformHttpClient:
         cache_key = (org, role)
         if cache_key in self._verified_orgs:
             return
-        token = self._resolve_token_for_repo(pr_id.repository)
-        if token == self._token:
+        token, source_key = self._token_resolver.resolve_source(
+            self._role, pr_id.repository
+        )
+        if not token:
             return
         self._preflight_verifier.verify(
             token=token,
@@ -79,6 +81,7 @@ class GitPlatformHttpClient:
             repo=pr_id.repository.split("/", 1)[1] if "/" in pr_id.repository else pr_id.repository,
             pr_number=pr_id.number,
             role=role,
+            token_source=source_key,
         )
         self._verified_orgs.add(cache_key)
 

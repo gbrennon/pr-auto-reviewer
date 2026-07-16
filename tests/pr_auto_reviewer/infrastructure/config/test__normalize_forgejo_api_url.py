@@ -1,23 +1,25 @@
-"""Tests for _normalize_forgejo_api_url helper."""
+"""Tests for ForgejoApiUrlNormalizer."""
 
-from pr_auto_reviewer.infrastructure.config.config import _normalize_forgejo_api_url
+from pr_auto_reviewer.infrastructure.config.forgejo_api_url_normalizer import (
+    ForgejoApiUrlNormalizer,
+)
 
 
-class TestNormalizeForgejoApiUrl:
-    def test_preserves_url_with_api_v1_suffix(self):
+class TestForgejoApiUrlNormalizer:
+    def test_normalize_preserves_url_with_api_v1_suffix(self):
         assert (
-            _normalize_forgejo_api_url("https://codeberg.org/api/v1")
+            ForgejoApiUrlNormalizer.normalize("https://codeberg.org/api/v1")
             == "https://codeberg.org/api/v1"
         )
 
-    def test_appends_api_v1_to_plain_host(self):
+    def test_normalize_appends_api_v1_to_plain_host(self):
         assert (
-            _normalize_forgejo_api_url("https://codeberg.org")
+            ForgejoApiUrlNormalizer.normalize("https://codeberg.org")
             == "https://codeberg.org/api/v1"
         )
 
-    def test_appends_api_v1_removing_trailing_slash(self):
+    def test_normalize_appends_api_v1_removing_trailing_slash(self):
         assert (
-            _normalize_forgejo_api_url("https://codeberg.org/")
+            ForgejoApiUrlNormalizer.normalize("https://codeberg.org/")
             == "https://codeberg.org/api/v1"
         )
