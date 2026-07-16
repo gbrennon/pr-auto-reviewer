@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+"""Tests for CompositeReviewPublisher with stub publishers."""
 
 import pytest
 
@@ -10,10 +10,21 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_revie
     CompositeReviewPublisher,
 )
 
+
+class _StubReviewPublisher(ReviewPublisherPort):
+    """Stub publisher that records calls for test assertion."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[PullRequestId, CodeReview]] = []
+
+    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+        self.calls.append((pr_id, review))
+
+
 class TestCompositeReviewPublisher:
     def test_publish_routes_to_correct_platform(self):
-        codeberg_publisher = Mock(spec=ReviewPublisherPort)
-        github_publisher = Mock(spec=ReviewPublisherPort)
+        codeberg_publisher = _StubReviewPublisher()
+        github_publisher = _StubReviewPublisher()
         composite = CompositeReviewPublisher({
             "forgejo": codeberg_publisher,
             "github": github_publisher,
@@ -26,11 +37,13 @@ class TestCompositeReviewPublisher:
         composite.publish(github_pr_id, review)
         composite.publish(codeberg_pr_id, review)
 
-        github_publisher.publish.assert_called_once_with(github_pr_id, review)
-        codeberg_publisher.publish.assert_called_once_with(codeberg_pr_id, review)
+        assert len(github_publisher.calls) == 1
+        assert github_publisher.calls[0] == (github_pr_id, review)
+        assert len(codeberg_publisher.calls) == 1
+        assert codeberg_publisher.calls[0] == (codeberg_pr_id, review)
 
     def test_publish_defaults_to_forgejo_without_prefix(self):
-        codeberg_publisher = Mock(spec=ReviewPublisherPort)
+        codeberg_publisher = _StubReviewPublisher()
         composite = CompositeReviewPublisher({
             "forgejo": codeberg_publisher,
         })
@@ -40,7 +53,8 @@ class TestCompositeReviewPublisher:
 
         composite.publish(pr_id, review)
 
-        codeberg_publisher.publish.assert_called_once_with(pr_id, review)
+        assert len(codeberg_publisher.calls) == 1
+        assert codeberg_publisher.calls[0] == (pr_id, review)
 
     def test_publish_raises_for_unknown_platform(self):
         composite = CompositeReviewPublisher({})

@@ -21,7 +21,7 @@ class TestPullRequest:
         assert pr.title == "Add feature X"
         assert pr.head_sha == sha
         assert pr.is_draft is False
-        assert pr.reviews == ()
+        assert pr.unresolved_blocking_ids == frozenset()
         assert pr.processed_comment_ids == frozenset()
 
     def test_creation_with_draft(self) -> None:
@@ -220,3 +220,140 @@ class TestPullRequest:
         )
         with pytest.raises(Exception):
             pr.head_sha = CommitSha(value="def")
+
+    def test_unresolved_blocking_ids_defaults_to_empty(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        assert pr.unresolved_blocking_ids == frozenset()
+
+    def test_with_unresolved_blocking_adds_ids(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        updated = pr.with_unresolved_blocking("a3f2", "b7d1")
+        assert updated.unresolved_blocking_ids == frozenset({"a3f2", "b7d1"})
+
+    def test_with_unresolved_blocking_does_not_mutate_original(self) -> None:
+        original = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        updated = original.with_unresolved_blocking("a3f2")
+        assert original.unresolved_blocking_ids == frozenset()
+        assert updated.unresolved_blocking_ids == frozenset({"a3f2"})
+
+    def test_with_unresolved_blocking_idempotent(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        pr = pr.with_unresolved_blocking("a3f2")
+        pr = pr.with_unresolved_blocking("a3f2")
+        assert pr.unresolved_blocking_ids == frozenset({"a3f2"})
+
+    def test_with_unresolved_blocking_no_args_returns_self(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        result = pr.with_unresolved_blocking()
+        assert result is pr
+
+    def test_with_resolved_blocking_removes_ids(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+            unresolved_blocking_ids=frozenset({"a3f2", "b7d1", "c9e4"}),
+        )
+        updated = pr.with_resolved_blocking("a3f2", "c9e4")
+        assert updated.unresolved_blocking_ids == frozenset({"b7d1"})
+
+    def test_with_resolved_blocking_does_not_mutate_original(self) -> None:
+        original = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+            unresolved_blocking_ids=frozenset({"a3f2"}),
+        )
+        updated = original.with_resolved_blocking("a3f2")
+        assert original.unresolved_blocking_ids == frozenset({"a3f2"})
+        assert updated.unresolved_blocking_ids == frozenset()
+
+    def test_with_resolved_blocking_idempotent(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+            unresolved_blocking_ids=frozenset({"a3f2"}),
+        )
+        result = pr.with_resolved_blocking("b7d1")
+        assert result.unresolved_blocking_ids == frozenset({"a3f2"})
+
+    def test_with_resolved_blocking_no_args_returns_self(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+            unresolved_blocking_ids=frozenset({"a3f2"}),
+        )
+        result = pr.with_resolved_blocking()
+        assert result is pr
+
+
+class TestPullRequestLastReviewedAt:
+    """Tests for last_reviewed_at timestamp tracking on the PullRequest aggregate."""
+
+    def test_add_review_preserves_last_reviewed_at_when_not_provided(self) -> None:
+        """When last_reviewed_at is None (default), add_review preserves the existing value."""
+        pr = PullRequest(
+            id=PullRequestId(repository="owner/repo", number=42),
+            title="T",
+            head_sha=CommitSha(value="aaa"),
+            last_reviewed_at="2025-01-01T00:00:00Z",
+        )
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
+        result = pr.add_review(review, CommitSha(value="bbb"))
+        assert result.last_reviewed_at == "2025-01-01T00:00:00Z"
+
+    def test_add_review_sets_last_reviewed_at_when_provided(self) -> None:
+        """When last_reviewed_at is provided, add_review updates the timestamp."""
+        pr = PullRequest(
+            id=PullRequestId(repository="owner/repo", number=42),
+            title="T",
+            head_sha=CommitSha(value="aaa"),
+            last_reviewed_at="2025-01-01T00:00:00Z",
+        )
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
+        result = pr.add_review(review, CommitSha(value="bbb"), last_reviewed_at="2025-02-01T00:00:00Z")
+        assert result.last_reviewed_at == "2025-02-01T00:00:00Z"
+
+    def test_new_pr_has_none_last_reviewed_at(self) -> None:
+        """A newly created PullRequest has last_reviewed_at=None by default."""
+        pr = PullRequest(
+            id=PullRequestId(repository="owner/repo", number=42),
+            title="T",
+            head_sha=CommitSha(value="aaa"),
+        )
+        assert pr.last_reviewed_at is None
+
+    def test_needs_review_is_unaffected_by_last_reviewed_at(self) -> None:
+        """needs_review only considers head_sha, not last_reviewed_at."""
+        pr = PullRequest(
+            id=PullRequestId(repository="owner/repo", number=42),
+            title="T",
+            head_sha=CommitSha(value="aaa"),
+            last_reviewed_at="2025-01-01T00:00:00Z",
+        )
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
+        pr = pr.add_review(review, CommitSha(value="aaa"))
+        assert not pr.needs_review(CommitSha(value="aaa"))
+        assert pr.needs_review(CommitSha(value="bbb"))

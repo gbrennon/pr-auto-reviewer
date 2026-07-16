@@ -123,6 +123,7 @@ class PollingDaemon:
             title=pr.title,
             description=pr.description,
             force=force,
+            updated_at=pr.updated_at,
         )
 
         try:

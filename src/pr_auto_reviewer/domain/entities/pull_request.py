@@ -25,27 +25,31 @@ class PullRequest:
     id: PullRequestId
     title: str
     head_sha: CommitSha
+    unresolved_blocking_ids: frozenset[str] = frozenset()
+    last_reviewed_at: str | None = None
     is_draft: bool = False
-    reviews: tuple[CodeReview, ...] = ()
     processed_comment_ids: frozenset[CommentId] = frozenset()
+    reviews: tuple[CodeReview, ...] = ()
 
     def needs_review(self, sha: CommitSha) -> bool:
         """True when sha differs from the last reviewed commit."""
         if not self.reviews:
             return True
         return sha != self.head_sha
-
-    def add_review(self, review: CodeReview, sha: CommitSha) -> PullRequest:
+    def add_review(
+        self, review: CodeReview, sha: CommitSha,
+        last_reviewed_at: str | None = None,
+    ) -> PullRequest:
         """Records a completed review and advances the reviewed sha.
 
-        Returns a new PullRequest with the review appended and head_sha updated.
+        When last_reviewed_at is a string, it updates the timestamp used
+        for re-request review detection.  When None (default), the existing
+        value is preserved.
         """
-        return replace(
-            self,
-            reviews=self.reviews + (review,),
-            head_sha=sha,
-        )
-
+        kwargs: dict = {"reviews": self.reviews + (review,), "head_sha": sha}
+        if last_reviewed_at is not None:
+            kwargs["last_reviewed_at"] = last_reviewed_at
+        return replace(self, **kwargs)
     def mark_comment_processed(self, comment_id: CommentId) -> PullRequest:
         """Records that a command comment was handled.
 
@@ -59,3 +63,30 @@ class PullRequest:
     def is_comment_processed(self, comment_id: CommentId) -> bool:
         """Idempotency guard for command processing."""
         return comment_id in self.processed_comment_ids
+
+
+    def with_unresolved_blocking(self, *item_ids: str) -> PullRequest:
+        """Record that blocking review items remain unresolved.
+
+        Returns a new PullRequest with item_ids added to the unresolved set.
+        Idempotent — adding an already-present ID is a no-op.
+        """
+        if not item_ids:
+            return self
+        return replace(
+            self,
+            unresolved_blocking_ids=self.unresolved_blocking_ids | frozenset(item_ids),
+        )
+
+    def with_resolved_blocking(self, *item_ids: str) -> PullRequest:
+        """Record that previously-blocking review items have been resolved.
+
+        Returns a new PullRequest with item_ids removed from the unresolved set.
+        Idempotent — removing a non-present ID is a no-op.
+        """
+        if not item_ids:
+            return self
+        return replace(
+            self,
+            unresolved_blocking_ids=self.unresolved_blocking_ids - frozenset(item_ids),
+        )
