@@ -64,7 +64,6 @@ def review_publisher(
     """Review publisher adapter."""
     return GitReviewPublisherAdapter(
         http_client,
-        reviewer_token=forgejo_token,
         reviewer_username=user_fixtures.get("login", "gbrennon"),
     )
 

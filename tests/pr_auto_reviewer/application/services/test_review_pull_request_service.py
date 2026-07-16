@@ -154,6 +154,136 @@ class TestReviewPullRequestService:
         assert len(publisher.publish_calls) == 1
         assert len(pr_repo.save_calls) == 1
 
+    def test_re_review_triggered_when_updated_at_is_newer(self):
+        sha = _sha()
+        old_ts = "2025-01-01T00:00:00Z"
+        new_ts = "2025-01-02T00:00:00Z"
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            updated_at=new_ts,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+            last_reviewed_at=old_ts,
+        )
+        existing = existing.add_review(_review(), sha, last_reviewed_at=old_ts)
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(changeset.fetch_calls) == 1
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
+        assert len(publisher.publish_calls) == 1
+        assert len(pr_repo.save_calls) == 1
+
+    def test_no_re_review_when_updated_at_is_older(self):
+        sha = _sha()
+        old_ts = "2025-01-01T00:00:00Z"
+        new_ts = "2025-01-02T00:00:00Z"
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            updated_at=old_ts,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+            last_reviewed_at=new_ts,
+        )
+        existing = existing.add_review(_review(), sha, last_reviewed_at=new_ts)
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(changeset.fetch_calls) == 0
+        assert len(factory.build_calls) == 0
+        assert len(llm.review_prompt_calls) == 0
+        assert len(publisher.publish_calls) == 0
+        assert len(pr_repo.save_calls) == 1
+
+    def test_no_re_review_when_updated_at_is_equal(self):
+        sha = _sha()
+        ts = "2025-01-01T00:00:00Z"
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            updated_at=ts,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+            last_reviewed_at=ts,
+        )
+        existing = existing.add_review(_review(), sha, last_reviewed_at=ts)
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(changeset.fetch_calls) == 0
+        assert len(factory.build_calls) == 0
+        assert len(llm.review_prompt_calls) == 0
+        assert len(publisher.publish_calls) == 0
+        assert len(pr_repo.save_calls) == 1
+
+    def test_no_re_review_when_updated_at_is_none(self):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+            last_reviewed_at="2025-01-01T00:00:00Z",
+        )
+        existing = existing.add_review(
+            _review(), sha, last_reviewed_at="2025-01-01T00:00:00Z",
+        )
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(changeset.fetch_calls) == 0
+        assert len(factory.build_calls) == 0
+        assert len(llm.review_prompt_calls) == 0
+        assert len(publisher.publish_calls) == 0
+        assert len(pr_repo.save_calls) == 1
+
     def test_empty_diff_raises(self):
         pr_repo = StubPullRequestRepository(initial=None)
         changeset = StubChangesetFetcher(
