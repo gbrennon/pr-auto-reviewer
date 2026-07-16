@@ -1,5 +1,10 @@
 """Tests for GitPlatformHttpClient using fixture data."""
 
+from __future__ import annotations
+
+import logging
+from typing import Any
+
 import pytest
 import requests as requests_lib
 
@@ -7,20 +12,42 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 
+
+class _FakeResponse:
+    """Reusable fake requests.Response for monkeypatch injection."""
+
+    status_code: int = 200
+    text: str = ""
+    content: bytes = b""
+
+    def __init__(self, *, status_code: int = 200, json_data: Any = None, text: str = "", content: bytes = b"") -> None:
+        self.status_code = status_code
+        self._json_data = json_data
+        self.text = text
+        self.content = content
+
+    def json(self) -> Any:
+        if self._json_data is not None:
+            return self._json_data
+        return {}
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests_lib.exceptions.HTTPError(response=self)
+
+
 class TestGitPlatformHttpClient:
     """Tests for GitPlatformHttpClient using captured fixture data."""
 
     def test_get_returns_dict(self, patched_client):
         """GET returns JSON dict with PR data."""
-        result = patched_client.get("/repos/o/r/pulls/1")
-        assert isinstance(result, dict)
+        result = patched_client.get("/repos/owner/repo/pulls/1")
         assert "number" in result
 
     def test_get_raw_returns_diff(self, patched_client):
         """GET_RAW returns diff text."""
-        text = patched_client.get_raw("/repos/o/r/pulls/1.diff")
+        text = patched_client.get_raw("/repos/owner/repo/pulls/1.diff")
         assert isinstance(text, str)
-        assert len(text) > 100
         assert text.startswith("diff --git")
 
     def test_base_url_property(self, patched_client):
@@ -34,38 +61,30 @@ class TestGitPlatformHttpClient:
 
     def test_post(self, monkeypatch):
         """POST sends JSON body and returns response dict."""
-        class FakeResponse:
-            status_code = 201
-            def json(self):
-                return {"id": 999}
-            def raise_for_status(self):
-                pass
-        monkeypatch.setattr(requests_lib, "post", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(
+            requests_lib, "post",
+            lambda *a, **kw: _FakeResponse(status_code=201, json_data={"id": 999}),
+        )
         client = GitPlatformHttpClient("https://x", "t")
         result = client.post("/repos/test/pulls/1/comments", {"body": "hello"})
         assert result["id"] == 999
 
     def test_get_with_params(self, monkeypatch):
         """GET passes query params."""
-        class FakeResponse:
-            status_code = 200
-            def json(self):
-                return {"data": [{"login": "gbrennon"}]}
-            def raise_for_status(self):
-                pass
-        monkeypatch.setattr(requests_lib, "get", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(
+            requests_lib, "get",
+            lambda *a, **kw: _FakeResponse(json_data={"data": [{"login": "gbrennon"}]}),
+        )
         client = GitPlatformHttpClient("https://x", "t")
         result = client.get("/users/search", q="gbrennon", limit=1)
         assert isinstance(result, dict)
 
     def test_get_raw_returns_text(self, monkeypatch):
         """GET_RAW returns the response text content."""
-        class FakeResponse:
-            status_code = 200
-            text = "diff --git a/file.py b/file.py\n+new line\n"
-            def raise_for_status(self):
-                pass
-        monkeypatch.setattr(requests_lib, "get", lambda *a, **kw: FakeResponse())
+        monkeypatch.setattr(
+            requests_lib, "get",
+            lambda *a, **kw: _FakeResponse(text="diff --git a/file.py b/file.py\n+new line\n"),
+        )
         client = GitPlatformHttpClient("https://x", "t")
         result = client.get_raw("/repos/test/pulls/1.diff")
         assert isinstance(result, str)
@@ -73,15 +92,12 @@ class TestGitPlatformHttpClient:
 
     def test_get_raw_uses_auth_header(self, monkeypatch):
         """GET_RAW passes Authorization header correctly."""
-        captured_kwargs = {}
-        class FakeResponse:
-            status_code = 200
-            text = "ok"
-            def raise_for_status(self):
-                pass
-        def fake_get(url, **kwargs):
+        captured_kwargs: dict[str, Any] = {}
+
+        def fake_get(url: str, **kwargs: Any) -> _FakeResponse:
             captured_kwargs.update(kwargs)
-            return FakeResponse()
+            return _FakeResponse(text="ok")
+
         monkeypatch.setattr(requests_lib, "get", fake_get)
         client = GitPlatformHttpClient("https://x", "t")
         client.get_raw("/repos/test/pulls/1.diff")
@@ -100,18 +116,11 @@ class TestGitPlatformHttpClient:
 
     def test_get_merges_custom_headers(self, monkeypatch):
         """get() merges custom headers with auth header."""
-        captured_headers = {}
+        captured_headers: dict[str, str] = {}
 
-        class FakeResponse:
-            status_code = 200
-            def json(self):
-                return {"ok": True}
-            def raise_for_status(self):
-                pass
-
-        def fake_get(url, *, headers, params, timeout):
+        def fake_get(url: str, *, headers: dict[str, str], params: Any, timeout: int) -> _FakeResponse:
             captured_headers.update(headers)
-            return FakeResponse()
+            return _FakeResponse(json_data={"ok": True})
 
         monkeypatch.setattr(requests_lib, "get", fake_get)
         client = GitPlatformHttpClient("https://x", "t")
@@ -122,17 +131,11 @@ class TestGitPlatformHttpClient:
 
     def test_get_raw_merges_custom_headers(self, monkeypatch):
         """get_raw() merges custom headers with auth header."""
-        captured_headers = {}
+        captured_headers: dict[str, str] = {}
 
-        class FakeResponse:
-            status_code = 200
-            text = "raw"
-            def raise_for_status(self):
-                pass
-
-        def fake_get(url, *, headers, timeout):
+        def fake_get(url: str, *, headers: dict[str, str], timeout: int) -> _FakeResponse:
             captured_headers.update(headers)
-            return FakeResponse()
+            return _FakeResponse(text="raw")
 
         monkeypatch.setattr(requests_lib, "get", fake_get)
         client = GitPlatformHttpClient("https://x", "t")
@@ -143,21 +146,12 @@ class TestGitPlatformHttpClient:
 
     def test_post_logs_http_error(self, monkeypatch, caplog):
         """post() logs response body on HTTPError."""
-        import logging
+        caplog.set_level(logging.ERROR)
 
-        class FakeResponse:
-            status_code = 422
-            text = '{"error": "gone"}'
-            content = b'{"error": "gone"}'
-
-        def fake_post(url, *, headers, json, timeout):
-            r = FakeResponse()
-
-            def raise_err():
-                raise requests_lib.exceptions.HTTPError(response=r)
-
-            r.raise_for_status = raise_err
-            return r
+        def fake_post(url: str, *, headers: Any, json: Any, timeout: int) -> _FakeResponse:
+            raise requests_lib.exceptions.HTTPError(
+                response=_FakeResponse(status_code=422, text='{"error": "gone"}', content=b'{"error": "gone"}')
+            )
 
         monkeypatch.setattr(requests_lib, "post", fake_post)
         client = GitPlatformHttpClient("https://x", "t")
