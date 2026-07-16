@@ -21,6 +21,7 @@ from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
 from ..ports.outbound.review_context_factory_port import ReviewContextFactoryPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
 from ..ports.outbound.review_publisher_port import ReviewPublisherPort
+from ..ports.outbound.token_verifier_port import TokenVerifierPort
 from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
 
 logger = logging.getLogger(__name__)
@@ -38,12 +39,14 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         review_context_factory: ReviewContextFactoryPort,
         llm_review: LlmReviewPort,
         review_publisher: ReviewPublisherPort,
+        token_verifier: TokenVerifierPort | None = None,
     ) -> None:
         self._pr_repository = pr_repository
         self._changeset_fetcher = changeset_fetcher
         self._review_context_factory = review_context_factory
         self._llm_review = llm_review
         self._review_publisher = review_publisher
+        self._token_verifier = token_verifier
 
     def execute(self, command: ReviewPullRequestCommand) -> None:
         self._log_start(command)
@@ -53,6 +56,9 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         if not self._needs_review(command, pr):
             self._handle_already_reviewed(command, pr)
             return
+
+        if self._token_verifier:
+            self._token_verifier.verify(command.pr_id)
 
         diff = self._fetch_diff(command)
         composed = self._review_context_factory.build(

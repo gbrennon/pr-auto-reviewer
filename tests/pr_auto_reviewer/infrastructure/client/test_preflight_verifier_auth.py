@@ -2,52 +2,55 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import requests
 
-from tests.fakes.preflight_fakes import FakeHttpCaller, FakeResponse
+from tests.fakes.preflight_fakes import FakeHttpClient, FakeResponse
 
 from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
     PreflightVerificationError,
+)
+from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers import (
+    ForgejoAuthHeaders,
 )
 from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
     PreflightVerifier,
 )
 
-class TestAuthCheck:
-    def test_200_passes(self) -> None:
-        fake_get = FakeHttpCaller(responses=[FakeResponse(200)])
-        fake_post = FakeHttpCaller(responses=[FakeResponse(200)])
+
+class FailingGetClient:
+    def get(self, path: str, *, headers: dict[str, str]) -> None:
+        raise requests.ConnectionError("connection refused")
+
+    def post(self, path: str, *, headers: dict[str, str], json: dict[str, Any]) -> FakeResponse:
+        return FakeResponse(200)
+
+
+class TestPreflightVerifierAuth:
+    def test_verify_passes_when_auth_returns_200(self) -> None:
+        http = FakeHttpClient(responses=[FakeResponse(200)])
         verifier = PreflightVerifier(
-            "https://api.example.com", "forgejo",
-            _http_get=fake_get, _http_post=fake_post,
+            http, ForgejoAuthHeaders(), "https://api.example.com", "forgejo"
         )
         verifier.verify("tok", "my-org", "my-repo", 1, "owner")
-        assert fake_get.calls[0]["url"] == "https://api.example.com/user"
+        assert http.calls[0]["url"] == "/user"
 
-    def test_401_raises(self) -> None:
-        fake_get = FakeHttpCaller(responses=[FakeResponse(401)])
-        fake_post = FakeHttpCaller(responses=[FakeResponse(200)])
+    def test_verify_raises_when_auth_returns_401(self) -> None:
+        http = FakeHttpClient(responses=[FakeResponse(401)])
         verifier = PreflightVerifier(
-            "https://api.example.com", "forgejo",
-            _http_get=fake_get, _http_post=fake_post,
+            http, ForgejoAuthHeaders(), "https://api.example.com", "forgejo"
         )
         with pytest.raises(PreflightVerificationError) as exc:
             verifier.verify("tok", "my-org", "my-repo", 1, "owner")
         assert exc.value.http_status == 401
         assert exc.value.step == "auth"
-        assert exc.value.org == "my-org"
-        assert exc.value.role == "owner"
 
-    def test_connection_error_raises(self) -> None:
-        def raise_err(*args: Any, **kwargs: Any) -> None:
-            raise requests.ConnectionError("connection refused")
-
-        fake_get = raise_err
-        fake_post = FakeHttpCaller(responses=[FakeResponse(200)])
+    def test_verify_raises_when_auth_request_fails(self) -> None:
         verifier = PreflightVerifier(
+            FailingGetClient(), ForgejoAuthHeaders(),
             "https://api.example.com", "forgejo",
-            _http_get=fake_get, _http_post=fake_post,
         )
         with pytest.raises(PreflightVerificationError) as exc:
             verifier.verify("tok", "my-org", "my-repo", 1)

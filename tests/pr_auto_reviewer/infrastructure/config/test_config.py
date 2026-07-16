@@ -16,10 +16,6 @@ class TestLoadConfig:
             classmethod(lambda cls: tmp_path),
         )
         monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.config.config.load_dotenv",
-            lambda path, override=True: None,
-        )
-        monkeypatch.setattr(
             "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
             lambda path: {},
         )
@@ -189,11 +185,20 @@ class TestLoadConfig:
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
+
+        token_values = {
+            "GITHUB_API_URL": "https://github.example.com",
+            "GITHUB_OWNER_TOKEN": "gh_owner",
+            "GITHUB_REVIEWER_TOKEN": "gh_reviewer",
+            "GITHUB_REVIEWER_USERNAME": "bot",
+            "GITHUB_REVIEW_MODE": "informal",
+        }
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: token_values if ".env" in str(path) else {},
+        )
         monkeypatch.setenv("GITHUB_API_URL", "https://github.example.com")
-        monkeypatch.setenv("GITHUB_OWNER_TOKEN", "gh_owner")
-        monkeypatch.setenv("GITHUB_REVIEWER_TOKEN", "gh_reviewer")
-        monkeypatch.setenv("GITHUB_REVIEWER_USERNAME", "bot")
-        monkeypatch.setenv("GITHUB_REVIEW_MODE", "informal")
+
         cfg = load_config()
         assert cfg.github_api_url == "https://github.example.com"
         assert cfg.github_owner_token == "gh_owner"
@@ -206,9 +211,17 @@ class TestLoadConfig:
 
         self._enter_dev_mode(tmp_path)
         monkeypatch.setenv("FORGEJO_HOST", "https://git.example.com")
-        monkeypatch.setenv("FORGEJO_OWNER_TOKEN", "fj_owner")
-        monkeypatch.setenv("FORGEJO_REVIEWER_TOKEN", "fj_reviewer")
-        monkeypatch.setenv("FORGEJO_REVIEWER_USERNAME", "fj_bot")
+
+        token_values = {
+            "FORGEJO_OWNER_TOKEN": "fj_owner",
+            "FORGEJO_REVIEWER_TOKEN": "fj_reviewer",
+            "FORGEJO_REVIEWER_USERNAME": "fj_bot",
+        }
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: token_values if ".env" in str(path) else {},
+        )
+
         cfg = load_config()
         assert cfg.forgejo_api_url == "https://git.example.com/api/v1"
         assert cfg.forgejo_owner_token == "fj_owner"

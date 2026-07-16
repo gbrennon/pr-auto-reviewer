@@ -17,7 +17,16 @@ from pr_auto_reviewer.infrastructure.client.token_resolver import (
     TokenDefaults,
     TokenResolver,
 )
-from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
+from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers import (
+    ForgejoAuthHeaders,
+)
+from pr_auto_reviewer.infrastructure.client.preflight.github_auth_headers import (
+    GitHubAuthHeaders,
+)
+from pr_auto_reviewer.infrastructure.client.preflight.requests_http_client import (
+    RequestsHttpClient,
+)
+from pr_auto_reviewer.infrastructure.client.preflight.preflight_verifier import (
     PreflightVerifier,
 )
 from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
@@ -46,6 +55,28 @@ from pr_auto_reviewer.infrastructure.forgejo.repository_context import (
 )
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
+)
+
+from pr_auto_reviewer.infrastructure.github.comment_publisher import (
+    GithubCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.github.comment_reader import (
+    GithubCommentReader,
+)
+from pr_auto_reviewer.infrastructure.github.issue_tracker import (
+    GithubIssueTracker,
+)
+from pr_auto_reviewer.infrastructure.github.pr_lister import (
+    GithubPrLister,
+)
+from pr_auto_reviewer.infrastructure.github.repo_lister import (
+    GithubRepoLister,
+)
+from pr_auto_reviewer.infrastructure.github.repository_context import (
+    GithubRepositoryContext,
+)
+from pr_auto_reviewer.infrastructure.github.review_reader import (
+    GithubReviewReader,
 )
 
 
@@ -90,6 +121,8 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
     CompositeChangesetFetcher,
 )
 
+from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
+
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
 )
@@ -105,6 +138,10 @@ from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
 from pr_auto_reviewer.application.ports.outbound.notifier_port import (
     NotifierPort,
 )
+from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
+    TokenVerifierPort,
+)
+
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
 )
@@ -169,10 +206,16 @@ class Container:
             )
 
             github_preflight = PreflightVerifier(
-                self._config.github_api_url, "github",
+                RequestsHttpClient(self._config.github_api_url),
+                GitHubAuthHeaders(),
+                self._config.github_api_url,
+                "github",
             )
             forgejo_preflight = PreflightVerifier(
-                self._config.forgejo_api_url, "forgejo",
+                RequestsHttpClient(self._config.forgejo_api_url),
+                ForgejoAuthHeaders(),
+                self._config.forgejo_api_url,
+                "forgejo",
             )
 
             gb_owner = GitPlatformHttpClient(
@@ -238,22 +281,25 @@ class Container:
                     }
                 )
             )
-            self._review_reader = ForgejoReviewReader(gb_owner)
-            self._comment_reader = ForgejoCommentReader(gb_owner)
-            self._comment_publisher = ForgejoCommentPublisher(gb_reviewer)
-            self._issue_tracker = ForgejoIssueTracker(gb_owner)
+            self._review_reader = GithubReviewReader(gb_owner)
+            self._comment_reader = GithubCommentReader(gb_owner)
+            self._comment_publisher = GithubCommentPublisher(gb_reviewer)
+            self._issue_tracker = GithubIssueTracker(gb_owner)
 
             self._repo_lister: RepoListerPort = CompositeRepoLister(
                 {
-                    "github": ForgejoRepoLister(gb_owner),
+                    "github": GithubRepoLister(gb_owner),
                     "forgejo": ForgejoRepoLister(fj_owner),
                 }
             )
             self._pr_lister: PrListerPort = CompositePrLister(
                 {
-                    "github": ForgejoPrLister(gb_owner),
+                    "github": GithubPrLister(gb_owner),
                     "forgejo": ForgejoPrLister(fj_owner),
                 }
+            )
+            self._token_verifier = TokenVerifier(
+                gb_owner, gb_reviewer, persist=not is_terminal
             )
         else:
             is_github = self._config.platform_mode == GitProvider.GITHUB
@@ -292,7 +338,10 @@ class Container:
             )
 
             preflight = PreflightVerifier(
-                api_url, "github" if is_github else "forgejo",
+                RequestsHttpClient(api_url),
+                GitHubAuthHeaders() if is_github else ForgejoAuthHeaders(),
+                api_url,
+                "github" if is_github else "forgejo",
             )
 
             self._http_client = GitPlatformHttpClient(
@@ -312,8 +361,15 @@ class Container:
                 token_resolver=resolver,
             )
 
-            self._repository_context: RepositoryContextPort = ForgejoRepositoryContext(
-                self._http_client
+            self._token_verifier = TokenVerifier(
+                self._http_client, self._reviewer_client,
+                persist=not is_terminal,
+            )
+
+            self._repository_context: RepositoryContextPort = (
+                GithubRepositoryContext(self._http_client)
+                if is_github
+                else ForgejoRepositoryContext(self._http_client)
             )
             self._changeset_fetcher: ChangesetFetcherPort = (
                 GithubChangesetFetcher(self._http_client)
@@ -331,20 +387,36 @@ class Container:
                     owner_client=self._http_client,
                 )
             )
-            self._review_reader: ReviewReaderPort = ForgejoReviewReader(
-                self._http_client
+            self._review_reader: ReviewReaderPort = (
+                GithubReviewReader(self._http_client)
+                if is_github
+                else ForgejoReviewReader(self._http_client)
             )
-            self._comment_reader: CommentReaderPort = ForgejoCommentReader(
-                self._http_client
+            self._comment_reader: CommentReaderPort = (
+                GithubCommentReader(self._http_client)
+                if is_github
+                else ForgejoCommentReader(self._http_client)
             )
-            self._comment_publisher: CommentPublisherPort = ForgejoCommentPublisher(
-                self._reviewer_client
+            self._comment_publisher: CommentPublisherPort = (
+                GithubCommentPublisher(self._reviewer_client)
+                if is_github
+                else ForgejoCommentPublisher(self._reviewer_client)
             )
-            self._issue_tracker: IssueTrackerPort = ForgejoIssueTracker(
-                self._http_client
+            self._issue_tracker: IssueTrackerPort = (
+                GithubIssueTracker(self._http_client)
+                if is_github
+                else ForgejoIssueTracker(self._http_client)
             )
-            self._pr_lister: PrListerPort = ForgejoPrLister(self._http_client)
-            self._repo_lister: RepoListerPort = ForgejoRepoLister(self._http_client)
+            self._pr_lister: PrListerPort = (
+                GithubPrLister(self._http_client)
+                if is_github
+                else ForgejoPrLister(self._http_client)
+            )
+            self._repo_lister: RepoListerPort = (
+                GithubRepoLister(self._http_client)
+                if is_github
+                else ForgejoRepoLister(self._http_client)
+            )
 
         self._pr_repository = JsonFilePullRequestRepository(_state_file_path())
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
@@ -452,6 +524,10 @@ class Container:
     @property
     def notifier(self) -> NotifierPort:
         return self._notifier
+
+    @property
+    def token_verifier(self) -> TokenVerifierPort:
+        return self._token_verifier
 
     @property
     def fragment_renderer(self) -> PromptRendererPort:

@@ -139,9 +139,7 @@ class TestGitPlatformHttpClientTokens:
         client.verify_token_for_pr(pr_id)
         assert len(verifier.calls) == 1
 
-    def test_verify_token_for_pr_default_token_skips(self) -> None:
-        """When the resolved token equals the client's default token,
-        preflight verification is skipped entirely."""
+    def test_verify_token_for_pr_verifies_default_token(self) -> None:
         verifier = FakeVerifier()
         resolver = FakeTokenResolver({"my-org/repo": "default-token"})
         client = GitPlatformHttpClient(
@@ -152,7 +150,8 @@ class TestGitPlatformHttpClientTokens:
         )
         pr_id = PullRequestId(repository="my-org/repo", number=1)
         client.verify_token_for_pr(pr_id)
-        assert len(verifier.calls) == 0
+        assert len(verifier.calls) == 1
+        assert verifier.calls[0]["token"] == "default-token"
 
     # ------------------------------------------------------------------
     # _get_auth_header — repo propagation
