@@ -12,35 +12,7 @@ from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewCont
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
-
-
-class _StubFragmentRepository:
-    """Stub repository returning pre-configured fragments and recording calls."""
-
-    def __init__(
-        self,
-        *,
-        by_language: list[PromptFragment] | None = None,
-        universal: list[PromptFragment] | None = None,
-    ) -> None:
-        self._by_language = by_language or []
-        self._universal = universal or []
-        self.find_by_language_calls: list[str] = []
-        self.find_universal_calls: int = 0
-
-    def find_by_language(self, language: str) -> list[PromptFragment]:
-        self.find_by_language_calls.append(language)
-        return [f for f in self._by_language if f.language == language]
-
-    def find_universal(self) -> list[PromptFragment]:
-        self.find_universal_calls += 1
-        return list(self._universal)
-
-    def find_by_id(self, fragment_id: str) -> PromptFragment | None:
-        for f in self._by_language + self._universal:
-            if f.id == fragment_id:
-                return f
-        return None
+from tests.fakes.fragment_repository_fakes import StubFragmentRepository
 
 
 class TestComposeReviewPromptAdapter:
@@ -51,9 +23,9 @@ class TestComposeReviewPromptAdapter:
         by_language: list[PromptFragment] | None = None,
         universal: list[PromptFragment] | None = None,
         **kwargs,
-    ) -> tuple[ComposeReviewPromptAdapter, _StubFragmentRepository]:
+    ) -> tuple[ComposeReviewPromptAdapter, StubFragmentRepository]:
         """Create an adapter wired to a stub repository with given fragments."""
-        repo = _StubFragmentRepository(by_language=by_language, universal=universal)
+        repo = StubFragmentRepository(by_language=by_language, universal=universal)
         adapter = ComposeReviewPromptAdapter(repository=repo, **kwargs)
         return adapter, repo
 

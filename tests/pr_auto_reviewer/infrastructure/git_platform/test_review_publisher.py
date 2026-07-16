@@ -28,7 +28,7 @@ class TestGitReviewPublisherAdapter:
 
     @pytest.fixture
     def adapter(self, patched_private_client):
-        return GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        return GitReviewPublisherAdapter(patched_private_client, "t", patched_private_client)
 
     def test_publish(self, adapter):
         """Publish sends a formal PR review."""
@@ -85,7 +85,7 @@ class TestGitReviewPublisherAdapter:
                 raise Exception("422")
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -185,7 +185,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: self.DIFF)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
             items=[ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
@@ -210,7 +210,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(Exception("diff fetch failed")))
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -226,7 +226,7 @@ index def456..ghi789 100644
             raise Exception("403 Forbidden")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -243,7 +243,7 @@ index def456..ghi789 100644
             raise Exception("500 Internal Server Error")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", "u", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -258,7 +258,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get",
                             lambda path, **kw: (_ for _ in ()).throw(Exception("boom")))
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
@@ -289,7 +289,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         caplog.set_level("DEBUG")
         adapter._publishing.publish_comment(
@@ -301,7 +301,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         def raise_err(*_a, **_kw):
             raise Exception("post failed")
@@ -315,7 +315,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (
@@ -341,7 +341,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         diff = (
@@ -358,8 +358,7 @@ index def456..ghi789 100644
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Use a constant instead"
-        assert "new_position" in result[0] or "old_position" in result[0]
-
+        assert result[0]["position"] == 3
     def test_comment_verdict_filters_blocking_items(
         self, patched_private_client, monkeypatch,
     ):
@@ -369,7 +368,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.COMMENTED, summary="s",
@@ -401,7 +400,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
@@ -438,7 +437,7 @@ index def456..ghi789 100644
     ):
         """Suggestions missing file or code are skipped."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         diff = (
             "diff --git a/f.py b/f.py\n"
@@ -457,7 +456,7 @@ index def456..ghi789 100644
     ):
         """Suggestions build GitHub-style inline comments."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", "u", owner_client=patched_private_client,
+            patched_private_client, "t", owner_client=patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (

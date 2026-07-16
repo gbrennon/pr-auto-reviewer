@@ -7,30 +7,14 @@ from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter imp
     ComposeReviewPromptAdapter,
 )
 
+from tests.fakes.fragment_repository_fakes import StubFragmentRepository
 
-class _StubFragmentRepository:
-    """Stub repository returning pre-configured fragments."""
 
-    def __init__(self, *, by_language: list[PromptFragment] | None = None, universal: list[PromptFragment] | None = None) -> None:
-        self._by_language = by_language or []
-        self._universal = universal or []
-
-    def find_by_language(self, language: str) -> list[PromptFragment]:
-        return [f for f in self._by_language if f.language == language]
-
-    def find_universal(self) -> list[PromptFragment]:
-        return list(self._universal)
-
-    def find_by_id(self, fragment_id: str) -> PromptFragment | None:
-        for f in self._by_language + self._universal:
-            if f.id == fragment_id:
-                return f
-        return None
 
 
 class TestStrictSelection:
     def test_strict_selection_includes_explicit_and_content_matches(self):
-        repo = _StubFragmentRepository(
+        repo = StubFragmentRepository(
             by_language=[
                 PromptFragment(
                     id="lang1",
@@ -84,7 +68,7 @@ class TestStrictSelection:
         u1 = PromptFragment(id="u1", content="alpha", language=None, priority=10, category="misc")
         u2 = PromptFragment(id="u2", content="beta", language=None, priority=20, category="misc")
 
-        repo = _StubFragmentRepository(by_language=[], universal=[u1, u2])
+        repo = StubFragmentRepository(by_language=[], universal=[u1, u2])
 
         context = ReviewContext(language="ruby", file_paths=["a.rb"], diff="+nothing")
 

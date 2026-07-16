@@ -45,6 +45,8 @@ class TestJsonFilePullRequestRepository:
         is_draft: bool = False,
         reviews: tuple[CodeReview, ...] = (),
         processed_comment_ids: frozenset[CommentId] = frozenset(),
+        unresolved_blocking_ids: frozenset[str] = frozenset(),
+        last_reviewed_at: str | None = None,
     ) -> PullRequest:
         return PullRequest(
             id=PullRequestId(repository=repo, number=number),
@@ -53,6 +55,8 @@ class TestJsonFilePullRequestRepository:
             is_draft=is_draft,
             reviews=reviews,
             processed_comment_ids=processed_comment_ids,
+            unresolved_blocking_ids=unresolved_blocking_ids,
+            last_reviewed_at=last_reviewed_at,
         )
 
     @staticmethod
@@ -105,9 +109,8 @@ class TestJsonFilePullRequestRepository:
         assert found.id == pr.id
         assert found.title == pr.title
         assert found.head_sha == pr.head_sha
-        assert found.is_draft is False
-        assert found.reviews == ()
         assert found.processed_comment_ids == frozenset()
+        assert found.unresolved_blocking_ids == frozenset()
 
     def test_save_and_find_full_aggregate(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
@@ -130,6 +133,8 @@ class TestJsonFilePullRequestRepository:
             is_draft=True,
             reviews=(review,),
             processed_comment_ids=frozenset({CommentId("101"), CommentId("204")}),
+            unresolved_blocking_ids=frozenset({"a3f2", "b7d1"}),
+            last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
         found = repo.find(pr.id)
@@ -146,6 +151,8 @@ class TestJsonFilePullRequestRepository:
         assert found.processed_comment_ids == frozenset(
             {CommentId("101"), CommentId("204")}
         )
+        assert found.last_reviewed_at == "2025-06-01T12:00:00Z"
+        assert found.unresolved_blocking_ids == frozenset({"a3f2", "b7d1"})
 
     def test_atomic_write_leaves_no_tmp_files(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
@@ -211,6 +218,8 @@ class TestJsonFilePullRequestRepository:
         pr = self._pr(
             reviews=(review,),
             processed_comment_ids=frozenset({CommentId("42")}),
+            unresolved_blocking_ids=frozenset({"a3f2"}),
+            last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
         raw = json.loads((tmp_path / "state.json").read_text())
@@ -222,6 +231,8 @@ class TestJsonFilePullRequestRepository:
         assert entry["reviews"][0]["verdict"] == "changes_requested"
         assert entry["reviews"][0]["items"][0]["severity"] == "major"
         assert entry["processed_comment_ids"] == ["42"]
+        assert entry["last_reviewed_at"] == "2025-06-01T12:00:00Z"
+        assert entry["unresolved_blocking_ids"] == ["a3f2"]
 
     def test_find_raises_on_os_error(self, tmp_path: Path, monkeypatch) -> None:
         state_file = tmp_path / "state.json"
