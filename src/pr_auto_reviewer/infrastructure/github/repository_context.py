@@ -60,8 +60,8 @@ class GithubRepositoryContext(RepositoryContextPort):
         conventions: str | None = None
         for filename in _CONVENTIONS_FILENAMES:
             try:
-                raw_path = f"/repos/{pr_id.repository}/raw/main/{filename}"
-                conventions = self._client.get_raw(raw_path, repo=pr_id.repository)
+                raw_path = f"/repos/{pr_id.repository}/contents/{filename}?ref=main"
+                conventions = self._client.get_raw(raw_path, headers={"Accept": "application/vnd.github.raw+json"}, repo=pr_id.repository)
                 break
             except Exception:
                 continue

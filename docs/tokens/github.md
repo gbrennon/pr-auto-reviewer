@@ -14,10 +14,15 @@
 | `GET` | `/repos/{o}/{r}/contents/{path}?ref={sha}` | Owner | **Contents: Read** — fetches file contents at a commit |
 | `GET` | `/repos/{o}/{r}/git/trees/{branch}?recursive=1` | Owner | **Contents: Read** — lists the repository file tree |
 | `GET` | `/repos/{o}/{r}/contents/{filename}` | Owner | **Contents: Read** — fetches conventions files |
+| `GET` | `/repos/{o}/{r}/pulls` | Owner | **Pull requests: Read** — lists open PRs |
+| `GET` | `/user/repos` | Owner | **Metadata: Read** — lists repositories |
+| `GET` | `/repos/{o}/{r}/pulls/{n}/reviews` | Reviewer | **Pull requests: Read** — reads existing reviews |
+
 | `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner | **Pull requests: Write** — requests the bot as reviewer |
 | `POST` | `/repos/{o}/{r}/pulls/{n}/reviews` | Reviewer | **Pull requests: Write** — submits the formal review |
 | `POST` | `/repos/{o}/{r}/issues/{n}/comments` | Reviewer | **Issues: Write** — posts a comment on the PR |
 | `GET` | `/repos/{o}/{r}/issues/{n}/comments` | Owner | **Issues: Read** — reads existing comments |
+| `POST` | `/repos/{o}/{r}/issues` | Owner | **Issues: Write** — creates a tracker issue |
 
 
 ---
@@ -67,9 +72,6 @@ Select `repo` scope (full control). No separate issue permission needed — `rep
 2. **Generate new token** → **Classic**
 3. Select scopes: `repo` (full control)
 4. Generate, copy to `GITHUB_OWNER_TOKEN` in `.env`
-| `GET` | `/repos/{o}/{r}/pulls/{n}/reviews` | Owner | **Pull requests: Read** — reads latest review body |
-| `POST` | `/repos/{o}/{r}/issues` | Owner | **Issues: Write** — creates a tracker issue |
-| `GET` | `/user/repos` | Owner | **Metadata: Read** (auto-granted) — lists repositories to watch |
 
 
 ---
@@ -147,7 +149,7 @@ Both checks are side-effect-free — the empty reviewers list triggers no notifi
 | **201** | Write access confirmed |
 | **401** | Token does not exist — revoked, expired, or value is wrong |
 | **403** | Token exists but lacks **Pull requests: Write** permission |
-| **422** | Request body accepted but repo doesn't support the operation — treated as success |
+| **422** | Unprocessable Entity — user is not a collaborator on the repo |
 
 Manual verification:
 
@@ -163,7 +165,7 @@ curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -X POST \
   -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Accept: application/vnd.github.v3+json" \
+  -H "Accept: application/vnd.github+json" \
   -d '{"reviewers":[]}' \
   https://api.github.com/repos/OWNER/REPO/pulls/PR/requested_reviewers
 
@@ -172,9 +174,8 @@ curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -X POST \
   -H "Authorization: Bearer $GITHUB_REVIEWER_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Accept: application/vnd.github.v3+json" \
+  -H "Accept: application/vnd.github+json" \
   -d '{"reviewers":[]}' \
   https://api.github.com/repos/OWNER/REPO/pulls/PR/requested_reviewers
 ```
 > The reviewer token can be the same as the owner token for a single-account setup.
-| `GET` | `/repos/{o}/{r}/pulls` | Owner | **Pull requests: Read** — lists open PRs |
