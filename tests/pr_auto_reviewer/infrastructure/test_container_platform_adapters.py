@@ -1,0 +1,329 @@
+"""Behavior tests for wire_platform_adapters() — verifies PlatformAdapters
+dataclass is populated with the correct adapter instances for each
+platform + output-mode combination."""
+
+from __future__ import annotations
+
+import pytest
+
+from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    wire_platform_clients,
+)
+from pr_auto_reviewer.infrastructure.container._platform_adapters import (
+    PlatformAdapters,
+    wire_platform_adapters,
+)
+from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
+    ForgejoChangesetFetcher,
+)
+from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
+    ForgejoCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.forgejo.comment_reader import (
+    ForgejoCommentReader,
+)
+from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import (
+    ForgejoIssueTracker,
+)
+from pr_auto_reviewer.infrastructure.forgejo.pr_lister import ForgejoPrLister
+from pr_auto_reviewer.infrastructure.forgejo.repo_lister import ForgejoRepoLister
+from pr_auto_reviewer.infrastructure.forgejo.repository_context import (
+    ForgejoRepositoryContext,
+)
+from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
+    ForgejoReviewReader,
+)
+from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
+    ForgejoReviewPublisher,
+)
+from pr_auto_reviewer.infrastructure.github.changeset_fetcher import (
+    GithubChangesetFetcher,
+)
+from pr_auto_reviewer.infrastructure.github.comment_publisher import (
+    GithubCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.github.comment_reader import (
+    GithubCommentReader,
+)
+from pr_auto_reviewer.infrastructure.github.issue_tracker import (
+    GithubIssueTracker,
+)
+from pr_auto_reviewer.infrastructure.github.pr_lister import GithubPrLister
+from pr_auto_reviewer.infrastructure.github.repo_lister import GithubRepoLister
+from pr_auto_reviewer.infrastructure.github.repository_context import (
+    GithubRepositoryContext,
+)
+from pr_auto_reviewer.infrastructure.github.review_reader import (
+    GithubReviewReader,
+)
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
+)
+from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
+    TerminalReviewPublisherAdapter,
+)
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
+    CompositeReviewPublisher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_changeset_fetcher import (
+    CompositeChangesetFetcher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_lister import (
+    CompositeRepoLister,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_lister import (
+    CompositePrLister,
+)
+
+
+# ── parametrized adapter type-check data ──────────────────────────────────
+
+FORGEJO_NON_TERMINAL_TYPES = [
+    ("repository_context", ForgejoRepositoryContext),
+    ("changeset_fetcher", ForgejoChangesetFetcher),
+    ("review_publisher", ForgejoReviewPublisher),
+    ("review_reader", ForgejoReviewReader),
+    ("comment_reader", ForgejoCommentReader),
+    ("comment_publisher", ForgejoCommentPublisher),
+    ("issue_tracker", ForgejoIssueTracker),
+    ("pr_lister", ForgejoPrLister),
+    ("repo_lister", ForgejoRepoLister),
+]
+
+GITHUB_NON_TERMINAL_TYPES = [
+    ("repository_context", GithubRepositoryContext),
+    ("changeset_fetcher", GithubChangesetFetcher),
+    ("review_publisher", GithubReviewPublisher),
+    ("review_reader", GithubReviewReader),
+    ("comment_reader", GithubCommentReader),
+    ("comment_publisher", GithubCommentPublisher),
+    ("issue_tracker", GithubIssueTracker),
+    ("pr_lister", GithubPrLister),
+    ("repo_lister", GithubRepoLister),
+]
+
+BOTH_NON_TERMINAL_TYPES = [
+    ("repository_context", ForgejoRepositoryContext),
+    ("changeset_fetcher", CompositeChangesetFetcher),
+    ("review_publisher", CompositeReviewPublisher),
+    ("review_reader", GithubReviewReader),
+    ("comment_reader", GithubCommentReader),
+    ("comment_publisher", GithubCommentPublisher),
+    ("issue_tracker", GithubIssueTracker),
+    ("pr_lister", CompositePrLister),
+    ("repo_lister", CompositeRepoLister),
+]
+
+
+# ── helpers ───────────────────────────────────────────────────────────────
+
+
+def _forgejo_config(**kwargs: str) -> Config:
+    defaults: dict = {
+        "forgejo_owner_token": "fj-own",
+        "forgejo_reviewer_token": "fj-rev",
+        "forgejo_reviewer_username": "fj-bot",
+    }
+    defaults.update(kwargs)
+    return Config(env="test", platform_mode=GitProvider.FORGEJO, **defaults)
+
+
+def _github_config(**kwargs: str) -> Config:
+    defaults: dict = {
+        "github_owner_token": "gh-own",
+        "github_reviewer_token": "gh-rev",
+        "github_reviewer_username": "gh-bot",
+    }
+    defaults.update(kwargs)
+    return Config(env="test", platform_mode=GitProvider.GITHUB, **defaults)
+
+
+def _both_config(**kwargs: str) -> Config:
+    return Config(
+        env="test",
+        platform_mode=GitProvider.BOTH,
+        forgejo_owner_token="fj-own",
+        forgejo_reviewer_token="fj-rev",
+        forgejo_reviewer_username="fj-bot",
+        github_owner_token="gh-own",
+        github_reviewer_token="gh-rev",
+        github_reviewer_username="gh-bot",
+        **kwargs,
+    )
+
+
+class TestWirePlatformAdapters:
+    """Behavior of wire_platform_adapters(config, clients, is_terminal)."""
+
+    # ── single-platform: forgejo, non-terminal ────────────────────────────
+
+    @pytest.fixture
+    def fj_config(self) -> Config:
+        return _forgejo_config()
+
+    @pytest.fixture
+    def fj_clients(self, fj_config: Config):
+        return wire_platform_clients(fj_config)
+
+    def test_forgejo_returns_platform_adapters(
+        self,
+        fj_config: Config,
+        fj_clients,
+    ) -> None:
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
+        assert isinstance(result, PlatformAdapters)
+        assert result.repository_context._client is fj_clients.http_client
+
+    # The field names below are kept in sync with FORGEJO_NON_TERMINAL_TYPES.
+
+    def test_forgejo_all_fields_non_null(
+        self,
+        fj_config: Config,
+        fj_clients,
+    ) -> None:
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
+
+        for attr, _ in FORGEJO_NON_TERMINAL_TYPES:
+            assert getattr(result, attr) is not None, f"{attr} is None"
+
+    @pytest.mark.parametrize("attr,expected_type", FORGEJO_NON_TERMINAL_TYPES)
+    def test_forgejo_non_terminal_adapter_types(
+        self,
+        fj_config: Config,
+        fj_clients,
+        attr: str,
+        expected_type: type,
+    ) -> None:
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
+        assert isinstance(getattr(result, attr), expected_type)
+
+    # ── single-platform: github, non-terminal ─────────────────────────────
+
+    @pytest.fixture
+    def gh_config(self) -> Config:
+        return _github_config()
+
+    @pytest.fixture
+    def gh_clients(self, gh_config: Config):
+        return wire_platform_clients(gh_config)
+
+    def test_github_returns_platform_adapters(
+        self,
+        gh_config: Config,
+        gh_clients,
+    ) -> None:
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False)
+        assert isinstance(result, PlatformAdapters)
+        assert result.repository_context._client is gh_clients.http_client
+
+    @pytest.mark.parametrize("attr,expected_type", GITHUB_NON_TERMINAL_TYPES)
+    def test_github_non_terminal_adapter_types(
+        self,
+        gh_config: Config,
+        gh_clients,
+        attr: str,
+        expected_type: type,
+    ) -> None:
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False)
+        assert isinstance(getattr(result, attr), expected_type)
+
+    # ── BOTH mode ─────────────────────────────────────────────────────────
+
+    @pytest.fixture
+    def both_config(self) -> Config:
+        return _both_config()
+
+    @pytest.fixture
+    def both_clients(self, both_config: Config):
+        return wire_platform_clients(both_config)
+
+    def test_both_returns_platform_adapters(
+        self,
+        both_config: Config,
+        both_clients,
+    ) -> None:
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False)
+        assert isinstance(result, PlatformAdapters)
+
+    @pytest.mark.parametrize("attr,expected_type", BOTH_NON_TERMINAL_TYPES)
+    def test_both_non_terminal_adapter_types(
+        self,
+        both_config: Config,
+        both_clients,
+        attr: str,
+        expected_type: type,
+    ) -> None:
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False)
+        assert isinstance(getattr(result, attr), expected_type)
+
+    def test_both_adapter_client_identity_and_review_mode(
+        self,
+        both_config: Config,
+        both_clients,
+    ) -> None:
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False)
+
+        # Client identity on non-composite adapters (F4)
+        assert result.repository_context._client is both_clients.forgejo_owner
+        assert result.review_reader._client is both_clients.http_client
+        assert result.comment_reader._client is both_clients.http_client
+        assert result.comment_publisher._client is both_clients.reviewer_client
+        assert result.issue_tracker._client is both_clients.http_client
+
+        # review_mode wiring (F5) — dict key access is regular API, not deep attr chain
+        github_publisher = result.review_publisher._publishers["github"]
+        assert isinstance(github_publisher, GithubReviewPublisher)
+        assert github_publisher._review_mode == "formal"
+
+    def test_both_terminal_mode_all_adapter_types(
+        self,
+        both_config: Config,
+        both_clients,
+    ) -> None:
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=True)
+        assert isinstance(result.review_publisher, TerminalReviewPublisherAdapter)
+        assert isinstance(result.changeset_fetcher, CompositeChangesetFetcher)
+        assert isinstance(result.repo_lister, CompositeRepoLister)
+        assert isinstance(result.pr_lister, CompositePrLister)
+        assert isinstance(result.review_reader, GithubReviewReader)
+        assert isinstance(result.comment_reader, GithubCommentReader)
+        assert isinstance(result.comment_publisher, GithubCommentPublisher)
+        assert isinstance(result.issue_tracker, GithubIssueTracker)
+        assert isinstance(result.repository_context, ForgejoRepositoryContext)
+
+    @pytest.mark.parametrize(
+        "config_fixture,clients_fixture",
+        [
+            ("fj_config", "fj_clients"),
+            ("gh_config", "gh_clients"),
+            ("both_config", "both_clients"),
+        ],
+    )
+    def test_terminal_review_publisher_is_terminal_type(
+        self,
+        request,
+        config_fixture: str,
+        clients_fixture: str,
+    ) -> None:
+        config = request.getfixturevalue(config_fixture)
+        clients = request.getfixturevalue(clients_fixture)
+        result = wire_platform_adapters(config, clients, is_terminal=True)
+        assert isinstance(result.review_publisher, TerminalReviewPublisherAdapter)
+
+    # ── reviewer username ─────────────────────────────────────────────────
+
+    def test_forgejo_publisher_receives_forgejo_username(self) -> None:
+        fj_config = _forgejo_config(forgejo_reviewer_username="my-fj-bot")
+        fj_clients = wire_platform_clients(fj_config)
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
+        assert isinstance(result.review_publisher, ForgejoReviewPublisher)
+        assert result.review_publisher._publishing._reviewer_username == "my-fj-bot"
+
+    def test_github_publisher_receives_github_username(self) -> None:
+        gh_config = _github_config(github_reviewer_username="my-gh-bot")
+        gh_clients = wire_platform_clients(gh_config)
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False)
+        assert isinstance(result.review_publisher, GithubReviewPublisher)
+        assert result.review_publisher._publishing._reviewer_username == "my-gh-bot"
