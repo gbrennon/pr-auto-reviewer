@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
@@ -118,6 +117,7 @@ class CompositionRoot:
             pr_repository=c.pr_repository,
             notifier=c.notifier,
             token_verifier=c.token_verifier,
+            output_mode=c.config.output_mode,
         )
 
         return ApplicationComponents(
@@ -141,20 +141,13 @@ class CompositionRoot:
         return self._container
 
     def run_daemon(self) -> None:
-        config = load_config()
-        poll_interval = int(
-            os.environ.get("POLL_INTERVAL", config.poll_interval),
-        )
-        run_once = os.environ.get("RUN_ONCE", "false").lower() == "true"
-        repos_filter = os.environ.get("REPOS_FILTER")
-        force_pr_str = os.environ.get("FORCE_PR")
-        force_pr = int(force_pr_str) if force_pr_str else None
+        config = self._container.config if hasattr(self, '_container') else load_config()
 
         daemon_config = PollingDaemonConfig(
-            poll_interval_seconds=poll_interval,
-            repos_filter=repos_filter,
-            run_once=run_once,
-            force_pr=force_pr,
+            poll_interval_seconds=config.poll_interval,
+            repos_filter=config.repos_filter or None,
+            run_once=config.run_once,
+            force_pr=config.force_pr,
         )
 
         daemon = PollingDaemon(
