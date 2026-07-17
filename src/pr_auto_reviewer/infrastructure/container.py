@@ -198,6 +198,7 @@ class Container:
                     reviewer_token=self._config.github_reviewer_token,
                     reviewer_username=self._config.github_reviewer_username,
                 ),
+                overrides=self._config.org_token_overrides,
             )
             forgejo_resolver = TokenResolver(
                 "FORGEJO",
@@ -206,6 +207,7 @@ class Container:
                     reviewer_token=self._config.forgejo_reviewer_token,
                     reviewer_username=self._config.forgejo_reviewer_username,
                 ),
+                overrides=self._config.org_token_overrides,
             )
 
             github_preflight = PreflightVerifier(
@@ -336,6 +338,7 @@ class Container:
                     reviewer_token=reviewer_token,
                     reviewer_username=reviewer_username,
                 ),
+                overrides=self._config.org_token_overrides,
             )
 
             preflight = PreflightVerifier(
@@ -427,6 +430,7 @@ class Container:
         self._llm_review: LlmReviewPort = OllamaLlmAdapter(
             self._config.llm_host,
             self._config.llm_model or "code-review:latest",
+            ollama_timeout=self._config.ollama_timeout,
         )
         self._command_bus: CommandBusPort = InMemoryCommandBus()
         self._notifier: NotifierPort = LinuxNotifier(run_command=subprocess.run)

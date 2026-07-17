@@ -31,7 +31,6 @@ from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
 )
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-import os
 from pr_auto_reviewer.presentation.ports import PrListerPort
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 
@@ -52,6 +51,7 @@ class CliRunner:
         pr_repository: PullRequestRepository | None = None,
         notifier: NotifierPort | None = None,
         token_verifier: TokenVerifierPort | None = None,
+        output_mode: str = "forgejo",
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service
@@ -61,6 +61,7 @@ class CliRunner:
         self._pr_repository = pr_repository
         self._notifier = notifier
         self._token_verifier = token_verifier
+        self._output_mode = output_mode
 
     def run(self, argv: list[str]) -> int:
         """Run the CLI with the given arguments."""
@@ -100,7 +101,7 @@ class CliRunner:
         )
         args = parser.parse_args(argv)
 
-        force_mode = args.force or os.environ.get("REVIEW_OUTPUT", "") == "terminal"
+        force_mode = args.force or self._output_mode == "terminal"
 
         if self._token_verifier:
             verify_id = PullRequestId(repository=args.repo, number=args.pr)
