@@ -7,9 +7,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
-from pr_auto_reviewer.infrastructure._platform_clients import wire_platform_clients
-from pr_auto_reviewer.infrastructure._platform_adapters import wire_platform_adapters
-from pr_auto_reviewer.infrastructure._core_services import wire_core_services
+from pr_auto_reviewer.infrastructure.container._platform_clients import wire_platform_clients
+from pr_auto_reviewer.infrastructure.container._platform_adapters import wire_platform_adapters
+from pr_auto_reviewer.infrastructure.container._core_services import wire_core_services
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -37,9 +37,6 @@ from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
     TokenVerifierPort,
 )
 
-from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
-    ComposeReviewPromptPort,
-)
 from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
     FragmentRepositoryPort,
 )
