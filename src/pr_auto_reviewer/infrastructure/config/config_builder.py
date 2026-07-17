@@ -6,6 +6,13 @@ from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.forgejo_api_url_normalizer import (
     ForgejoApiUrlNormalizer,
 )
+from pr_auto_reviewer.infrastructure.config.org_token_entry import OrgTokenEntry
+from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
+    OrgTokenOverrides,
+)
+from pr_auto_reviewer.infrastructure.config.role_suffix_parser import (
+    RoleSuffixParser,
+)
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
@@ -73,6 +80,14 @@ class ConfigBuilder:
             self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
         )
 
+        org_token_overrides = self._parse_org_token_overrides(source)
+        ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
+        run_once = source.get("RUN_ONCE", "").lower() in ("true", "1", "yes")
+        repos_filter = self._get(source, "REPOS_FILTER")
+
+        force_pr_raw = source.get("FORCE_PR", "").strip()
+        force_pr: int | None = int(force_pr_raw) if force_pr_raw else None
+
         return Config(
             env=env_name,
             platform_mode=platform_mode,
@@ -85,9 +100,14 @@ class ConfigBuilder:
             forgejo_owner_token=forgejo_owner_token,
             forgejo_reviewer_token=forgejo_reviewer_token,
             forgejo_reviewer_username=forgejo_reviewer_username,
+            org_token_overrides=org_token_overrides,
             llm_host=llm_host,
             llm_model=llm_model,
+            ollama_timeout=ollama_timeout,
             poll_interval=poll_interval,
+            run_once=run_once,
+            repos_filter=repos_filter,
+            force_pr=force_pr,
             debug=debug,
             output_mode=output_mode,
             output_path=output_path,
@@ -98,6 +118,61 @@ class ConfigBuilder:
             use_compact_template=use_compact_template,
             use_strict_fragment_selection=use_strict_fragment_selection,
         )
+
+    @staticmethod
+    def _parse_org_token_overrides(source: dict[str, str]) -> OrgTokenOverrides:
+        github: dict[str, OrgTokenEntry] = {}
+        forgejo: dict[str, OrgTokenEntry] = {}
+
+        for key, value in source.items():
+            if key.startswith("GITHUB_TOKEN_"):
+                suffix = key[len("GITHUB_TOKEN_"):]
+                org, role = RoleSuffixParser.parse(suffix)
+                if org and role:
+                    entry = github.setdefault(org, OrgTokenEntry())
+                    if role == "OWNER":
+                        github[org] = OrgTokenEntry(
+                            owner_token=value,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER":
+                        github[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=value,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER_USERNAME":
+                        github[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=value,
+                        )
+            elif key.startswith("FORGEJO_TOKEN_"):
+                suffix = key[len("FORGEJO_TOKEN_"):]
+                org, role = RoleSuffixParser.parse(suffix)
+                if org and role:
+                    entry = forgejo.setdefault(org, OrgTokenEntry())
+                    if role == "OWNER":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=value,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=value,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER_USERNAME":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=value,
+                        )
+
+        return OrgTokenOverrides(github=github, forgejo=forgejo)
 
     @classmethod
     def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:

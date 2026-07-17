@@ -3,7 +3,6 @@
 import json
 import logging
 import time
-import os
 from typing import Any
 
 import requests
@@ -40,11 +39,13 @@ class OllamaLlmAdapter(LlmReviewPort):
         max_file_chars: int = 3000,
         max_files: int = 10,
         max_structure_lines: int = 100,
-        use_compact_template: bool = False
+        use_compact_template: bool = False,
+        ollama_timeout: int = 120,
     ) -> None:
 
         self._host = host.rstrip("/")
         self._model = model
+        self._ollama_timeout = ollama_timeout
         self._prompt_builder = PromptBuilder(
             max_tokens=max_tokens,
             max_file_chars=max_file_chars,
@@ -94,7 +95,7 @@ class OllamaLlmAdapter(LlmReviewPort):
     def _call_ollama(self, prompt_text: str) -> CodeReview:
         """Send *prompt_text* to Ollama, parse the response into a CodeReview."""
         prompt_chars = len(prompt_text)
-        timeout = int(os.getenv("OLLAMA_TIMEOUT", 120))
+        timeout = self._ollama_timeout
         review: CodeReview | None = None
         last_response_chars = 0
         last_eval_count: Any = "?"
