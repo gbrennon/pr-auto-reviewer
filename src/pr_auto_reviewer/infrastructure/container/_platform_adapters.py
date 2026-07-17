@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure._platform_clients import (
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
     PlatformClients,
 )
 from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
