@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
+    OrgTokenOverrides,
+)
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
@@ -24,9 +27,15 @@ class Config:
     forgejo_reviewer_token: str = ""
     forgejo_reviewer_username: str = ""
 
+    org_token_overrides: OrgTokenOverrides = field(default_factory=OrgTokenOverrides)
+
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
+    ollama_timeout: int = 120
     poll_interval: int = 60
+    run_once: bool = False
+    repos_filter: str = ""
+    force_pr: int | None = None
     debug: bool = False
     output_mode: str = "forgejo"
     output_path: str | None = None
