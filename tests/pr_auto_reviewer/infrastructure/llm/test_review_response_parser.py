@@ -610,4 +610,3 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser.parse(raw, "m")
-
