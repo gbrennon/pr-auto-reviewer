@@ -252,11 +252,27 @@ class ReviewPublishingService:
                 position += 1
                 continue
 
+            # Skip git diff metadata lines (appear between diff --git and first @@).
+            # They are not part of the patch content and must not count toward position.
+            if line.startswith((
+                "index ",
+                "new file mode ",
+                "deleted file mode ",
+                "old mode ",
+                "new mode ",
+                "similarity index ",
+                "dissimilarity index ",
+                "rename from ",
+                "rename to ",
+                "copy from ",
+                "copy to ",
+            )):
+                continue
+
             if line.startswith(("--- ", "+++ ")):
                 continue
 
             position += 1
-
             if line.startswith("-"):
                 old_line += 1
                 content = line[1:]
