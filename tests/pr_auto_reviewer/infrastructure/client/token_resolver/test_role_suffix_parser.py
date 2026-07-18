@@ -35,3 +35,8 @@ class TestRoleSuffixParser:
         org, role = RoleSuffixParser.parse("")
         assert org == ""
         assert role == ""
+
+    def test_org_name_with_hyphens(self):
+        org, role = RoleSuffixParser.parse("forging-blocks-org_OWNER")
+        assert org == "forging-blocks-org"
+        assert role == "OWNER"
