@@ -14,4 +14,3 @@ class ComposeReviewPromptPort(Protocol):
 
     def execute(self, context: ReviewContext) -> ComposedPrompt:
         ...
-
