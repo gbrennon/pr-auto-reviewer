@@ -11,7 +11,6 @@ class ReviewPullRequestCommand:
     head_sha: CommitSha
     title: str
     description: str = ""
-    updated_at: str | None = None
     review_requested: bool = False
     force: bool = False
     target_branch: str = ""

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 
 from ..commands.review_pull_request_command import ReviewPullRequestCommand
@@ -143,11 +142,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             return True
         if pr.needs_review(command.head_sha):
             return True
-        if command.updated_at and pr.last_reviewed_at:
-            if command.updated_at > pr.last_reviewed_at:
-                logger.info("PR %s updated_at changed (%s > %s), re-reviewing",
-                            command.pr_id, command.updated_at, pr.last_reviewed_at)
-                return True
         if command.review_requested and pr.reviews:
             logger.info("PR %s has been re-requested for review, reviewing again",
                         command.pr_id)
@@ -369,10 +363,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
     def _record_review(
         self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
     ) -> PullRequest:
-        return pr.add_review(
-            review, head_sha,
-            last_reviewed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        )
+        return pr.add_review(review, head_sha)
 
     def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
