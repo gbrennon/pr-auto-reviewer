@@ -48,6 +48,7 @@ class ForgejoPrLister(PrListerPort):
                 target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
+                review_requested = bool(pr.get("requested_reviewers"))
 
                 if number and sha:
                     result.append(
@@ -58,9 +59,11 @@ class ForgejoPrLister(PrListerPort):
                             description=description,
                             is_draft=pr.get("draft", False),
                             updated_at=updated_at,
+                            review_requested=review_requested,
                             target_branch=target_branch,
                         )
                     )
+
 
             logger.debug("Found %d open PRs in %s", len(result), repository)
             pr_summaries = [(p.pr_id.number, p.title[:40], p.head_sha.value[:7]) for p in result]
@@ -87,6 +90,7 @@ class ForgejoPrLister(PrListerPort):
             description = pr.get("body", "")
             target_branch = pr.get("base", {}).get("ref", "")
             updated_at = pr.get("updated_at", "") or None
+            review_requested = bool(pr.get("requested_reviewers"))
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
                 return None
@@ -99,6 +103,7 @@ class ForgejoPrLister(PrListerPort):
                 description=description,
                 is_draft=pr.get("draft", False),
                 updated_at=updated_at,
+                review_requested=review_requested,
                 target_branch=target_branch,
             )
             logger.info("ForgejoPrLister.get_pr return: title='%s' sha=%s", title[:60], sha[:7])
