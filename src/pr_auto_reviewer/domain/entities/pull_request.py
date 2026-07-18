@@ -38,18 +38,13 @@ class PullRequest:
         return sha != self.head_sha
     def add_review(
         self, review: CodeReview, sha: CommitSha,
-        last_reviewed_at: str | None = None,
     ) -> PullRequest:
-        """Records a completed review and advances the reviewed sha.
-
-        When last_reviewed_at is a string, it updates the timestamp used
-        for re-request review detection.  When None (default), the existing
-        value is preserved.
-        """
-        kwargs: dict = {"reviews": self.reviews + (review,), "head_sha": sha}
-        if last_reviewed_at is not None:
-            kwargs["last_reviewed_at"] = last_reviewed_at
-        return replace(self, **kwargs)
+        """Records a completed review and advances the reviewed sha."""
+        return replace(
+            self,
+            reviews=self.reviews + (review,),
+            head_sha=sha,
+        )
     def mark_comment_processed(self, comment_id: CommentId) -> PullRequest:
         """Records that a command comment was handled.
 
