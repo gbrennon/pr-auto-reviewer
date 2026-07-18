@@ -3,6 +3,7 @@ dataclass is populated with the correct adapter instances for each
 platform + output-mode combination."""
 
 from __future__ import annotations
+from typing import cast
 
 import pytest
 
@@ -76,6 +77,21 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_lister import (
     CompositePrLister,
 )
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repository_context import (
+    CompositeRepositoryContext,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_reader import (
+    CompositeReviewReader,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_reader import (
+    CompositeCommentReader,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_publisher import (
+    CompositeCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_issue_tracker import (
+    CompositeIssueTracker,
+)
 
 
 # ── parametrized adapter type-check data ──────────────────────────────────
@@ -103,15 +119,14 @@ GITHUB_NON_TERMINAL_TYPES = [
     ("pr_lister", GithubPrLister),
     ("repo_lister", GithubRepoLister),
 ]
-
 BOTH_NON_TERMINAL_TYPES = [
-    ("repository_context", ForgejoRepositoryContext),
+    ("repository_context", CompositeRepositoryContext),
     ("changeset_fetcher", CompositeChangesetFetcher),
     ("review_publisher", CompositeReviewPublisher),
-    ("review_reader", GithubReviewReader),
-    ("comment_reader", GithubCommentReader),
-    ("comment_publisher", GithubCommentPublisher),
-    ("issue_tracker", GithubIssueTracker),
+    ("review_reader", CompositeReviewReader),
+    ("comment_reader", CompositeCommentReader),
+    ("comment_publisher", CompositeCommentPublisher),
+    ("issue_tracker", CompositeIssueTracker),
     ("pr_lister", CompositePrLister),
     ("repo_lister", CompositeRepoLister),
 ]
@@ -140,7 +155,7 @@ def _github_config(**kwargs: str) -> Config:
     return Config(env="test", platform_mode=GitProvider.GITHUB, **defaults)
 
 
-def _both_config(**kwargs: str) -> Config:
+def _both_config() -> Config:
     return Config(
         env="test",
         platform_mode=GitProvider.BOTH,
@@ -150,7 +165,6 @@ def _both_config(**kwargs: str) -> Config:
         github_owner_token="gh-own",
         github_reviewer_token="gh-rev",
         github_reviewer_username="gh-bot",
-        **kwargs,
     )
 
 
@@ -174,7 +188,7 @@ class TestWirePlatformAdapters:
     ) -> None:
         result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
         assert isinstance(result, PlatformAdapters)
-        assert result.repository_context._client is fj_clients.http_client
+        assert cast(ForgejoRepositoryContext, result.repository_context)._client is fj_clients.http_client
 
     # The field names below are kept in sync with FORGEJO_NON_TERMINAL_TYPES.
 
@@ -216,7 +230,7 @@ class TestWirePlatformAdapters:
     ) -> None:
         result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False)
         assert isinstance(result, PlatformAdapters)
-        assert result.repository_context._client is gh_clients.http_client
+        assert cast(GithubRepositoryContext, result.repository_context)._client is gh_clients.http_client
 
     @pytest.mark.parametrize("attr,expected_type", GITHUB_NON_TERMINAL_TYPES)
     def test_github_non_terminal_adapter_types(
@@ -265,15 +279,25 @@ class TestWirePlatformAdapters:
     ) -> None:
         result = wire_platform_adapters(both_config, both_clients, is_terminal=False)
 
-        # Client identity on non-composite adapters (F4)
-        assert result.repository_context._client is both_clients.forgejo_owner
-        assert result.review_reader._client is both_clients.http_client
-        assert result.comment_reader._client is both_clients.http_client
-        assert result.comment_publisher._client is both_clients.reviewer_client
-        assert result.issue_tracker._client is both_clients.http_client
+        # Client identity on composite adapters — verify inner adapters
+        repo_ctx = cast(CompositeRepositoryContext, result.repository_context)
+        assert isinstance(repo_ctx._contexts["forgejo"], ForgejoRepositoryContext)
+        assert repo_ctx._contexts["forgejo"]._client is both_clients.forgejo_owner
 
-        # review_mode wiring (F5) — dict key access is regular API, not deep attr chain
-        github_publisher = result.review_publisher._publishers["github"]
+        review_reader = cast(CompositeReviewReader, result.review_reader)
+        assert isinstance(review_reader._readers["github"], GithubReviewReader)
+
+        comment_reader = cast(CompositeCommentReader, result.comment_reader)
+        assert isinstance(comment_reader._readers["github"], GithubCommentReader)
+
+        comment_publisher = cast(CompositeCommentPublisher, result.comment_publisher)
+        assert isinstance(comment_publisher._publishers["github"], GithubCommentPublisher)
+
+        issue_tracker = cast(CompositeIssueTracker, result.issue_tracker)
+        assert isinstance(issue_tracker._trackers["github"], GithubIssueTracker)
+
+        review_publisher = cast(CompositeReviewPublisher, result.review_publisher)
+        github_publisher = review_publisher._publishers["github"]
         assert isinstance(github_publisher, GithubReviewPublisher)
         assert github_publisher._review_mode == "formal"
 
@@ -287,11 +311,11 @@ class TestWirePlatformAdapters:
         assert isinstance(result.changeset_fetcher, CompositeChangesetFetcher)
         assert isinstance(result.repo_lister, CompositeRepoLister)
         assert isinstance(result.pr_lister, CompositePrLister)
-        assert isinstance(result.review_reader, GithubReviewReader)
-        assert isinstance(result.comment_reader, GithubCommentReader)
-        assert isinstance(result.comment_publisher, GithubCommentPublisher)
-        assert isinstance(result.issue_tracker, GithubIssueTracker)
-        assert isinstance(result.repository_context, ForgejoRepositoryContext)
+        assert isinstance(result.review_reader, CompositeReviewReader)
+        assert isinstance(result.comment_reader, CompositeCommentReader)
+        assert isinstance(result.comment_publisher, CompositeCommentPublisher)
+        assert isinstance(result.issue_tracker, CompositeIssueTracker)
+        assert isinstance(result.repository_context, CompositeRepositoryContext)
 
     @pytest.mark.parametrize(
         "config_fixture,clients_fixture",
