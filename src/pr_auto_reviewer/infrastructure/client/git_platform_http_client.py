@@ -67,6 +67,9 @@ class GitPlatformHttpClient:
         org = pr_id.repository.split("/", 1)[0]
         if not org:
             return
+        # Strip internal platform prefix (forgejo:, github:) from org for API calls
+        if ":" in org:
+            org = org.split(":", 1)[1]
         role = "owner" if self._role == "owner" else "reviewer"
         cache_key = (org, role)
         if cache_key in self._verified_orgs:
