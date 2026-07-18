@@ -44,6 +44,8 @@ class RateLimitTracker:
             )
 
     def wait_if_needed(self, min_remaining: int = 5) -> None:
+        if self.current.limit == 0:
+            return
         if self.current.remaining >= min_remaining:
             return
         if not self.current.exhausted() and self.current.remaining > 0:
