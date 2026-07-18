@@ -124,6 +124,7 @@ class PollingDaemon:
             description=pr.description,
             force=force,
             updated_at=pr.updated_at,
+            target_branch=pr.target_branch,
         )
 
         try:
