@@ -20,27 +20,6 @@ class PreflightVerificationError(DomainError):
         method: The HTTP method (GET or POST).
     """
 
-    def __init__(
-        self,
-        platform: str,
-        org: str,
-        role: str,
-        http_status: int,
-        step: str,
-        token_source: str = "",
-        url: str = "",
-        method: str = "GET",
-    ) -> None:
-        self.platform = platform
-        self.org = org
-        self.role = role
-        self.http_status = http_status
-        self.step = step
-        self.token_source = token_source
-        self.url = url
-        self.method = method
-        super().__init__(self._build_message())
-
     def _build_message(self) -> str:
         hint = ""
         if self.step == "auth":
@@ -63,3 +42,24 @@ class PreflightVerificationError(DomainError):
             f"({self.role} token, HTTP {self.http_status} during {self.step}): "
             f"{hint}{source_info}{request_info}"
         )
+
+    def __init__(
+        self,
+        platform: str,
+        org: str,
+        role: str,
+        http_status: int,
+        step: str,
+        token_source: str = "",
+        url: str = "",
+        method: str = "GET",
+    ) -> None:
+        self.platform = platform
+        self.org = org
+        self.role = role
+        self.http_status = http_status
+        self.step = step
+        self.token_source = token_source
+        self.url = url
+        self.method = method
+        super().__init__(self._build_message())

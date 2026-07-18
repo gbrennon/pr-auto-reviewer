@@ -14,9 +14,6 @@ class PullRequestId:
     repository: str
     number: int
 
-    def __str__(self) -> str:
-        return f"{self.repository}#{self.number}"
-
     def __post_init__(self) -> None:
         if not self.repository or not isinstance(self.repository, str):
             raise InvalidPullRequestIdError(
@@ -26,3 +23,6 @@ class PullRequestId:
             raise InvalidPullRequestIdError(
                 "number must be a positive integer"
             )
+
+    def __str__(self) -> str:
+        return f"{self.repository}#{self.number}"
