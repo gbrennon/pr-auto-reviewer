@@ -11,10 +11,10 @@ from typing import IO
 
 from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import RateLimitSnapshot
-from pr_auto_reviewer.infrastructure.client.rate_limit_tracker.store import (
+from pr_auto_reviewer.infrastructure.client.rate_limit_tracker.rate_limit_store import (
     RateLimitStore,
 )
-from pr_auto_reviewer.infrastructure.client.rate_limit_tracker.waiter import (
+from pr_auto_reviewer.infrastructure.client.rate_limit_tracker.rate_limit_waiter import (
     RateLimitWaiter,
 )
 
