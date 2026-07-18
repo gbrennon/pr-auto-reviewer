@@ -36,10 +36,10 @@ class RateLimitStore:
             return RateLimitSnapshot()
 
     def save(self, snapshot: RateLimitSnapshot) -> None:
-        """Persist *snapshot* to disk. Silently discards I/O errors."""
+        """Persist *snapshot* to disk. Logs I/O errors if write fails."""
         try:
             self._STORAGE_DIR.mkdir(parents=True, exist_ok=True)
             with open(self._path, "w") as f:
                 json.dump(snapshot.to_dict(), f)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.error("Failed to persist rate limit snapshot to %s: %s", self._path, exc)
