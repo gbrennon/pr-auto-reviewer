@@ -43,13 +43,15 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         diff: PullRequestDiff,
         pr_title: str | None = None,
         pr_description: str | None = None,
+        target_branch: str = "",
     ) -> ComposedPrompt:
         logger.info(
-            "ReviewContextFactory.build(%s, diff=%d chars, pr_title='%s', has_description=%s)",
+            "ReviewContextFactory.build(%s, diff=%d chars, pr_title='%s', has_description=%s, target_branch='%s')",
             pr_id, len(diff.diff_content), (pr_title or "")[:80],
             "yes" if pr_description else "no",
+            target_branch or "main",
         )
-        repo_context = self._repository_context.fetch(pr_id)
+        repo_context = self._repository_context.fetch(pr_id, target_branch=target_branch)
         repo_context = replace(
             repo_context,
             pr_title=pr_title,
