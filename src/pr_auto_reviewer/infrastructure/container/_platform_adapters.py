@@ -133,8 +133,16 @@ def wire_platform_adapters(
         gb_reviewer = clients.reviewer_client
         fj_owner = clients.forgejo_owner
         fj_reviewer = clients.forgejo_reviewer
-        assert fj_owner is not None
-        assert fj_reviewer is not None
+        if fj_owner is None:
+            raise ValueError(
+                "Forgejo owner HTTP client is required in BOTH platform mode "
+                "but was not configured."
+            )
+        if fj_reviewer is None:
+            raise ValueError(
+                "Forgejo reviewer HTTP client is required in BOTH platform mode "
+                "but was not configured."
+            )
 
         return PlatformAdapters(
             repository_context=CompositeRepositoryContext(
