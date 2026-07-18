@@ -63,6 +63,39 @@ class TestForgejoChangesetFetcher:
         diff = adapter.fetch(pr_id, sha)
         assert "deleted.py" not in diff.file_contents
 
+    def test_fetch_excludes_same_path_deletion(self, patched_client, monkeypatch):
+        """Deleted files with same a/ and b/ path (+++ /dev/null in body) are excluded."""
+        call_count = [0]
+
+        def fake_get_raw(path, **kw):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return (
+                    "diff --git a/deleted.py b/deleted.py\n"
+                    "deleted file mode 100644\n"
+                    "--- a/deleted.py\n"
+                    "+++ /dev/null\n"
+                    "@@ -1 +0,0 @@\n"
+                    "-old line\n"
+                    "diff --git a/kept.py b/kept.py\n"
+                    "--- a/kept.py\n"
+                    "+++ b/kept.py\n"
+                    "@@ -0,0 +1 @@\n"
+                    "+new line\n"
+                )
+            if "kept.py" in path:
+                return "new line"
+            raise AssertionError(f"Should not fetch deleted file: {path}")
+
+        monkeypatch.setattr(patched_client, "get_raw", fake_get_raw)
+        adapter = ForgejoChangesetFetcher(patched_client)
+        pr_id = PullRequestId(repository="o/r", number=1)
+        sha = CommitSha("abc123")
+
+        diff = adapter.fetch(pr_id, sha)
+        assert "deleted.py" not in diff.file_contents
+        assert "kept.py" in diff.file_contents
+
     def test_fetch_skips_unreadable_file(self, patched_client, monkeypatch):
         """Unreadable file is silently skipped."""
         call_count = [0]
