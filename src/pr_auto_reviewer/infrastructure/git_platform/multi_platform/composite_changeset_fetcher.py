@@ -13,18 +13,15 @@ class CompositeChangesetFetcher(ChangesetFetcherPort):
         self,
         github_fetcher: ChangesetFetcherPort,
         forgejo_fetcher: ChangesetFetcherPort,
-        default_platform: str = "codeberg",
     ) -> None:
         self._fetchers = {
             "github": github_fetcher,
             "codeberg": forgejo_fetcher,
             "forgejo": forgejo_fetcher,
         }
-        self._default_platform = default_platform
 
     def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
         platform, clean_repo = parse_platform_prefix(pr_id.repository)
-        platform = platform or self._default_platform
         clean_pr_id = PullRequestId(repository=clean_repo, number=pr_id.number)
         fetcher = self._fetchers.get(platform)
         if fetcher is None:

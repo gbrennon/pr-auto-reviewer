@@ -53,9 +53,13 @@ class TokenVerifier(TokenVerifierPort):
         reviewer_client: GitPlatformHttpClient,
         *,
         persist: bool = True,
+        forgejo_owner_client: GitPlatformHttpClient | None = None,
+        forgejo_reviewer_client: GitPlatformHttpClient | None = None,
     ) -> None:
         self._owner_client = owner_client
         self._reviewer_client = reviewer_client
+        self._forgejo_owner_client = forgejo_owner_client
+        self._forgejo_reviewer_client = forgejo_reviewer_client
         self._persist = persist
         self._store_path = Path(
             os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
@@ -67,9 +71,16 @@ class TokenVerifier(TokenVerifierPort):
         if not org:
             return
 
+        owner_client = self._owner_client
+        reviewer_client = self._reviewer_client
+        if org.startswith("forgejo:") and self._forgejo_owner_client is not None:
+            org = org.split(":", 1)[1]  # strip prefix for cache key
+            owner_client = self._forgejo_owner_client
+            reviewer_client = self._forgejo_reviewer_client
+
         for role, client in [
-            ("owner", self._owner_client),
-            ("reviewer", self._reviewer_client),
+            ("owner", owner_client),
+            ("reviewer", reviewer_client),
         ]:
             cache_key = (org, role)
             if cache_key in self._verified:
