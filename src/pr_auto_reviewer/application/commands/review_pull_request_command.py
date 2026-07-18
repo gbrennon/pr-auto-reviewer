@@ -13,3 +13,4 @@ class ReviewPullRequestCommand:
     description: str = ""
     updated_at: str | None = None
     force: bool = False
+    target_branch: str = ""
