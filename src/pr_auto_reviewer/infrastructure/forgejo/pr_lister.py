@@ -11,6 +11,9 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
+    split_repository_prefix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,7 @@ class ForgejoPrLister(PrListerPort):
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         """List all open PRs in the given repository."""
+        _, repository = split_repository_prefix(repository)
         logger.info("Listing open PRs for %s", repository)
         try:
             data = self._client.get(
@@ -69,6 +73,7 @@ class ForgejoPrLister(PrListerPort):
 
     def get_pr(self, repository: str, pr_number: int) -> Optional[OpenPullRequest]:
         """Fetch a single PR by number, regardless of state."""
+        _, repository = split_repository_prefix(repository)
         logger.info("Fetching PR %s #%d", repository, pr_number)
         try:
             pr = self._client.get(
