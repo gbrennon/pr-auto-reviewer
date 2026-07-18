@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 
 from ..commands.review_pull_request_command import ReviewPullRequestCommand
@@ -74,7 +75,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         blocking_ids = self._extract_blocking_ids(review)
         if blocking_ids:
             pr = pr.with_unresolved_blocking(*blocking_ids)
-        pr = self._record_review(pr, review, command.head_sha, command.updated_at)
+        pr = self._record_review(pr, review, command.head_sha)
         self._persist(pr)
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -303,12 +304,13 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
     ) -> None:
         logger.info("Publishing review to platform...")
         self._review_publisher.publish(pr_id, review)
-
     def _record_review(
         self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
-        updated_at: str | None = None,
     ) -> PullRequest:
-        return pr.add_review(review, head_sha, last_reviewed_at=updated_at)
+        return pr.add_review(
+            review, head_sha,
+            last_reviewed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
 
     def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
