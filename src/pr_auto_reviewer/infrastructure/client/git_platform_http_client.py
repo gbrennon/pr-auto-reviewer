@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+import json
+import os
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 import requests
@@ -30,14 +33,17 @@ class GitPlatformHttpClient:
     Supports per-org token resolution via an optional ``TokenResolver`` and
     lazy preflight verification via an optional ``PreflightVerifier``.
     """
-    def __init__(self, base_url: str, token: str, platform_mode: str = "forgejo", client_label: str = "", *, token_resolver: TokenResolver | None = None, preflight_verifier: PreflightVerifier | None = None) -> None:
+    def __init__(self, base_url: str, token: str, platform_mode: str = "forgejo", client_label: str = "", *, token_resolver: TokenResolver | None = None, preflight_verifier: PreflightVerifier | None = None, _verified_cache_path: Path | None = None) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._platform_mode = platform_mode
         self._role = client_label
         self._token_resolver = token_resolver
         self._preflight_verifier = preflight_verifier
-        self._verified_orgs: set[tuple[str, str]] = set()
+        self._verified_cache_path = _verified_cache_path or Path(
+            os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
+        )
+        self._verified_orgs: set[tuple[str, str]] = self._load_verified_cache()
         self._rate_tracker = RateLimitTracker(TokenSlug(token), platform_mode, client_label or "default")
 
     @property
@@ -53,6 +59,40 @@ class GitPlatformHttpClient:
         if not repo or not self._token_resolver:
             return self._token
         return self._token_resolver.resolve(self._role, repo) or self._token
+
+    def _load_verified_cache(self) -> set[tuple[str, str]]:
+        """Load verified (org, role) pairs from the persisted cache file.
+
+        Returns an empty set when the file is missing or malformed -- the
+        cache is best-effort and must never prevent the client from working.
+        """
+        if not self._verified_cache_path.exists():
+            return set()
+        try:
+            data = json.loads(self._verified_cache_path.read_text())
+            return {tuple(pair) for pair in data}
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to load verified token cache: %s", exc)
+            return set()
+
+    def _save_verified_cache(self) -> None:
+        """Persist the current ``_verified_orgs`` set to disk, merged with
+        existing file contents so that writes from different client instances
+        (owner/reviewer) accumulate rather than overwrite each other.
+
+        Best-effort -- write failures are logged but never raised so that
+        a transient disk issue does not block the review pipeline.
+        """
+
+        try:
+            existing = self._load_verified_cache()
+            merged = existing | self._verified_orgs
+            self._verified_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self._verified_cache_path.write_text(
+                json.dumps(sorted(merged))
+            )
+        except OSError as exc:
+            logger.warning("Failed to save verified token cache: %s", exc)
 
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for the per-org token this client
@@ -79,6 +119,8 @@ class GitPlatformHttpClient:
         )
         if not token:
             return
+        self._verified_orgs.add(cache_key)
+        self._save_verified_cache()
         self._preflight_verifier.verify(
             token=token,
             org=org,
@@ -87,7 +129,6 @@ class GitPlatformHttpClient:
             role=role,
             token_source=source_key,
         )
-        self._verified_orgs.add(cache_key)
 
     def _get_auth_header(self, repo: str | None = None) -> dict[str, str]:
         token = self._resolve_token_for_repo(repo)
