@@ -1,0 +1,16 @@
+[Unit]
+Description=PR Auto Reviewer — AI-powered code review daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documents/repos/gbrennon/pr-auto-reviewer
+Environment=ENV=production
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/.local/bin/pr-auto-reviewer watch-prs
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
