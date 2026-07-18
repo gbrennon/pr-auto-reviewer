@@ -240,3 +240,80 @@ class TestForgejoChangesetFetcher:
 
         diff = adapter.fetch(pr_id, sha)
         assert diff.file_contents == {}
+
+    # ── _DELETION_RE (+++ /dev/null) edge-case coverage ──────────────
+
+    def test_fetch_excludes_nested_deletion(self, patched_client, monkeypatch):
+        """Nested paths (src/sub/deleted.py) with +++ /dev/null are excluded."""
+        monkeypatch.setattr(patched_client, "get_raw", lambda path, **kw: (
+            "diff --git a/src/sub/deleted.py b/src/sub/deleted.py\n"
+            "--- a/src/sub/deleted.py\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-old code\n"
+        ))
+        adapter = ForgejoChangesetFetcher(patched_client)
+        pr_id = PullRequestId(repository="o/r", number=1)
+        sha = CommitSha("abc123")
+
+        diff = adapter.fetch(pr_id, sha)
+        assert "src/sub/deleted.py" not in diff.file_contents
+        assert len(diff.file_contents) == 0
+
+    def test_fetch_excludes_multiple_deletions(self, patched_client, monkeypatch):
+        """Multiple +++ /dev/null deletions in one diff are all excluded."""
+        monkeypatch.setattr(patched_client, "get_raw", lambda path, **kw: (
+            "diff --git a/a.py b/a.py\n"
+            "--- a/a.py\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-old a\n"
+            "diff --git a/b.py b/b.py\n"
+            "--- a/b.py\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-old b\n"
+            "diff --git a/c.py b/c.py\n"
+            "--- a/c.py\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-old c\n"
+        ))
+        adapter = ForgejoChangesetFetcher(patched_client)
+        pr_id = PullRequestId(repository="o/r", number=1)
+        sha = CommitSha("abc123")
+
+        diff = adapter.fetch(pr_id, sha)
+        assert len(diff.file_contents) == 0
+
+    def test_fetch_excludes_deletion_with_nonstandard_path(self, patched_client, monkeypatch):
+        """File path with dots and dashes (package-lock.json) with +++ /dev/null is excluded."""
+        call_count = [0]
+
+        def fake_get_raw(path, **kw):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return (
+                    "diff --git a/package-lock.json b/package-lock.json\n"
+                    "--- a/package-lock.json\n"
+                    "+++ /dev/null\n"
+                    "@@ -1 +0,0 @@\n"
+                    "-old lock\n"
+                    "diff --git a/src/utils.py b/src/utils.py\n"
+                    "--- a/src/utils.py\n"
+                    "+++ b/src/utils.py\n"
+                    "@@ -0,0 +1 @@\n"
+                    "+new util\n"
+                )
+            if "utils.py" in path:
+                return "new util"
+            raise AssertionError(f"Should not fetch deleted file: {path}")
+
+        monkeypatch.setattr(patched_client, "get_raw", fake_get_raw)
+        adapter = ForgejoChangesetFetcher(patched_client)
+        pr_id = PullRequestId(repository="o/r", number=1)
+        sha = CommitSha("abc123")
+
+        diff = adapter.fetch(pr_id, sha)
+        assert "package-lock.json" not in diff.file_contents
+        assert "src/utils.py" in diff.file_contents
