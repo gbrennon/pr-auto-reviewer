@@ -71,10 +71,41 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         review = self._run_llm_review_with_prompt(composed)
         review = self._add_deterministic_findings(review, diff)
 
-        self._publish_review(command.pr_id, review)
         blocking_ids = self._extract_blocking_ids(review)
+
+        # Resolve old blocking items no longer flagged in this review
+        if pr.unresolved_blocking_ids:
+            resolved = [
+                id_ for id_ in pr.unresolved_blocking_ids
+                if id_ not in blocking_ids
+            ]
+            if resolved:
+                pr = pr.with_resolved_blocking(*resolved)
+
+        # Track new or persistent blocking items
         if blocking_ids:
             pr = pr.with_unresolved_blocking(*blocking_ids)
+
+        # Guard: don't approve while any blocking issues remain unresolved.
+        # Override the LLM verdict to CHANGES_REQUESTED when old or new
+        # blockers are still open, regardless of what the model returned.
+        if (
+            pr.unresolved_blocking_ids
+            and review.verdict != ReviewVerdict.CHANGES_REQUESTED
+        ):
+            review = CodeReview(
+                verdict=ReviewVerdict.CHANGES_REQUESTED,
+                reason=self._build_unresolved_reason(
+                    pr.unresolved_blocking_ids, review,
+                ),
+                summary=review.summary,
+                items=review.items,
+                suggestions=review.suggestions,
+                praise=review.praise,
+                model_used=review.model_used,
+            )
+
+        self._publish_review(command.pr_id, review)
         pr = self._record_review(pr, review, command.head_sha)
         self._persist(pr)
 
@@ -298,6 +329,32 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             for item in review.items
             if item.severity.is_blocking and item.id
         ]
+
+    def _build_unresolved_reason(
+        self, unresolved_ids: frozenset[str], review: CodeReview,
+    ) -> str:
+        """Build a reason string listing each unresolved blocking item.
+
+        Looks up item details (description, severity, file path) from the
+        current review so the PR author sees exactly what's still blocking.
+        """
+        item_by_id = {item.id: item for item in review.items if item.id}
+        lines = [
+            "This PR cannot be approved because the following blocking "
+            "issues remain unresolved:",
+            "",
+        ]
+        for id_ in sorted(unresolved_ids):
+            item = item_by_id.get(id_)
+            if item is not None:
+                location = f" ({item.file_path})" if item.file_path else ""
+                lines.append(
+                    f"- **#{id_}** [{item.severity.value}]"
+                    f" {item.description}{location}"
+                )
+            else:
+                lines.append(f"- **#{id_}** (details from prior review)")
+        return "\n".join(lines)
 
     def _publish_review(
         self, pr_id: PullRequestId, review: CodeReview
