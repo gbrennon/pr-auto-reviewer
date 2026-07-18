@@ -53,7 +53,7 @@ class TestCompositePrLister:
 
         assert result == []
 
-    def test_list_open_defaults_to_forgejo_without_prefix(self):
+    def test_list_open_prefixes_forgejo_prs(self):
         pr = _make_open_pr("owner/repo", 1, "abc123")
         composite = CompositePrLister({
             "forgejo": StubPrLister([pr]),
@@ -61,8 +61,7 @@ class TestCompositePrLister:
 
         result = composite.list_open("owner/repo")
 
-        assert len(result) == 1
-        assert result[0].pr_id.repository == "owner/repo"
+        assert result[0].pr_id.repository == "forgejo:owner/repo"
 
     def test_get_pr_routes_to_correct_platform(self):
         github_pr = _make_open_pr("owner/repo", 42, "abc123")

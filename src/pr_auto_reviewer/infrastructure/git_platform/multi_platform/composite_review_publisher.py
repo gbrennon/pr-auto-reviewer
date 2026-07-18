@@ -8,8 +8,9 @@ class CompositeReviewPublisher(ReviewPublisherPort):
         self._publishers = publishers
 
     def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
-        platform, _ = split_repository_prefix(pr_id.repository)
+        platform, repo_name = split_repository_prefix(pr_id.repository)
         publisher = self._publishers.get(platform)
         if not publisher:
             raise ValueError(f"No publisher for platform {platform} in {pr_id}")
-        publisher.publish(pr_id, review)
+        clean_id = PullRequestId(repository=repo_name, number=pr_id.number)
+        publisher.publish(clean_id, review)

@@ -38,9 +38,13 @@ class TestCompositeReviewPublisher:
         composite.publish(codeberg_pr_id, review)
 
         assert len(github_publisher.calls) == 1
-        assert github_publisher.calls[0] == (github_pr_id, review)
+        assert github_publisher.calls[0] == (
+            PullRequestId(repository="owner/repo", number=1), review
+        )
         assert len(codeberg_publisher.calls) == 1
-        assert codeberg_publisher.calls[0] == (codeberg_pr_id, review)
+        assert codeberg_publisher.calls[0] == (
+            PullRequestId(repository="org/proj", number=2), review
+        )
 
     def test_publish_defaults_to_forgejo_without_prefix(self):
         codeberg_publisher = _StubReviewPublisher()

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     )
     from pr_auto_reviewer.infrastructure.client.token_resolver import TokenResolver
     from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class GitPlatformHttpClient:
         self._token_resolver = token_resolver
         self._preflight_verifier = preflight_verifier
         self._verified_orgs: set[tuple[str, str]] = set()
-        self._rate_tracker = RateLimitTracker(token, platform_mode, client_label or "default")
+        self._rate_tracker = RateLimitTracker(TokenSlug(token), platform_mode, client_label or "default")
 
     @property
     def base_url(self) -> str:
@@ -66,6 +67,9 @@ class GitPlatformHttpClient:
         org = pr_id.repository.split("/", 1)[0]
         if not org:
             return
+        # Strip internal platform prefix (forgejo:, github:) from org for API calls
+        if ":" in org:
+            org = org.split(":", 1)[1]
         role = "owner" if self._role == "owner" else "reviewer"
         cache_key = (org, role)
         if cache_key in self._verified_orgs:
@@ -92,6 +96,7 @@ class GitPlatformHttpClient:
         return {"Authorization": f"token {token}"}
 
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> dict[str, Any]:
+        self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
         logger.info("GET%s %s params=%s", label, url, params)
@@ -112,6 +117,7 @@ class GitPlatformHttpClient:
         return response.json()
 
     def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
+        self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
         logger.info("GET_RAW%s %s", label, url)
@@ -132,6 +138,7 @@ class GitPlatformHttpClient:
         return response.text
 
     def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
+        self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("write")
         logger.info("POST%s %s body_keys=%s", label, url, list(body.keys()))
