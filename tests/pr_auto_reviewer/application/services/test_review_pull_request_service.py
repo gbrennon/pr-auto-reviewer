@@ -8,6 +8,7 @@ Diff fixtures come from tests/fixtures/diffs/.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -283,6 +284,46 @@ class TestReviewPullRequestService:
         assert len(llm.review_prompt_calls) == 0
         assert len(publisher.publish_calls) == 0
         assert len(pr_repo.save_calls) == 1
+
+
+    def test_record_review_stores_z_suffix_timestamp(self):
+        """Assert _record_review stores strftime format, not isoformat().
+
+        Regression guard: isoformat() produces '+00:00' suffix and
+        microseconds.  The API returns 'Z' suffix.  String comparison
+        fails (Z > .) → infinite re-review loop.  _record_review MUST
+        use strftime("%Y-%m-%dT%H:%M:%SZ") to match the API format.
+        """
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            force=True,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+        )
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        saved = pr_repo.save_calls[-1]
+        ts = saved.last_reviewed_at
+        assert ts is not None
+        # Z suffix, second granularity, no microseconds
+        assert re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', ts), \
+            f"Expected Z-suffix second-granularity, got: {ts}"
+        assert "+00:00" not in ts
+        assert "." not in ts
 
     def test_empty_diff_raises(self):
         pr_repo = StubPullRequestRepository(initial=None)
