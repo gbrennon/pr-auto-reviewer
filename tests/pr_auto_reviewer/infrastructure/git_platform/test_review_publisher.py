@@ -320,6 +320,9 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
+            "index abc1234..def5678 100644\n"
+            "--- a/src/main.py\n"
+            "+++ b/src/main.py\n"
             "@@ -1,3 +1,4 @@\n"
             " unchanged\n"
             "+return True\n"
@@ -346,6 +349,9 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
+            "index abc1234..def5678 100644\n"
+            "--- a/src/main.py\n"
+            "+++ b/src/main.py\n"
             "@@ -1,3 +1,4 @@\n"
             " unchanged\n"
             "+return True\n"
