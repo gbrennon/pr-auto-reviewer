@@ -37,14 +37,14 @@ class GithubRepositoryContext(RepositoryContextPort):
         self._context_serializer = ContextSerializer()
         self._python_version_detector = PythonVersionDetector()
 
-    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
+    def fetch(self, pr_id: PullRequestId, target_branch: str = "") -> RepositoryContext:
         """Return RepositoryContext for the given PR's repository."""
         logger.info("RepositoryContext.fetch(%s)", pr_id)
         architecture_hint = "unknown"
         repository_structure: str | None = None
 
         tree_paths: list[str] = []
-        tree_path = f"/repos/{pr_id.repository}/git/trees/main?recursive=1"
+        tree_path = f"/repos/{pr_id.repository}/git/trees/{target_branch or 'main'}?recursive=1"
         try:
             response = self._client.get(tree_path, repo=pr_id.repository)
             tree_blobs = response.get("tree", [])
@@ -54,7 +54,7 @@ class GithubRepositoryContext(RepositoryContextPort):
             architecture_hint = self._architecture_detector.detect(tree_paths)
         except Exception:
             logger.warning(
-                "Failed to fetch git tree for %s, using defaults", pr_id
+                "Failed to fetch git tree for %s, using defaults", pr_id, exc_info=True
             )
 
         conventions: str | None = None
@@ -62,7 +62,7 @@ class GithubRepositoryContext(RepositoryContextPort):
             if filename not in tree_paths:
                 continue
             try:
-                raw_path = f"/repos/{pr_id.repository}/contents/{filename}?ref=main"
+                raw_path = f"/repos/{pr_id.repository}/contents/{filename}?ref={target_branch or 'main'}"
                 conventions = self._client.get_raw(raw_path, headers={"Accept": "application/vnd.github.raw+json"}, repo=pr_id.repository)
                 break
             except Exception:
