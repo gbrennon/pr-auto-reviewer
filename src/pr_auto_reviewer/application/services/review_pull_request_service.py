@@ -148,6 +148,10 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 logger.info("PR %s updated_at changed (%s > %s), re-reviewing",
                             command.pr_id, command.updated_at, pr.last_reviewed_at)
                 return True
+        if command.review_requested and pr.reviews:
+            logger.info("PR %s has been re-requested for review, reviewing again",
+                        command.pr_id)
+            return True
         return False
 
     def _handle_already_reviewed(
