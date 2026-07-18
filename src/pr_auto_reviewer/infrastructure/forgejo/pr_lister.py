@@ -41,6 +41,7 @@ class ForgejoPrLister(PrListerPort):
                 number = pr.get("number")
                 sha = pr.get("head", {}).get("sha")
                 updated_at = pr.get("updated_at", "") or None
+                target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
 
@@ -53,6 +54,7 @@ class ForgejoPrLister(PrListerPort):
                             description=description,
                             is_draft=pr.get("draft", False),
                             updated_at=updated_at,
+                            target_branch=target_branch,
                         )
                     )
 
@@ -78,6 +80,7 @@ class ForgejoPrLister(PrListerPort):
             sha = pr.get("head", {}).get("sha")
             title = pr.get("title", "")
             description = pr.get("body", "")
+            target_branch = pr.get("base", {}).get("ref", "")
             updated_at = pr.get("updated_at", "") or None
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
@@ -91,6 +94,7 @@ class ForgejoPrLister(PrListerPort):
                 description=description,
                 is_draft=pr.get("draft", False),
                 updated_at=updated_at,
+                target_branch=target_branch,
             )
             logger.info("ForgejoPrLister.get_pr return: title='%s' sha=%s", title[:60], sha[:7])
             return result
