@@ -67,6 +67,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             command.pr_id, diff,
             pr_title=command.title,
             pr_description=description,
+            target_branch=command.target_branch,
         )
         review = self._run_llm_review_with_prompt(composed)
         review = self._add_deterministic_findings(review, diff)
