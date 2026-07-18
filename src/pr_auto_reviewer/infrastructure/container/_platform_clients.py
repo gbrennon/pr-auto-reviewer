@@ -124,7 +124,11 @@ def wire_platform_clients(config: Config) -> PlatformClients:
             http_client=gb_owner,
             reviewer_client=gb_reviewer,
             token_verifier=TokenVerifier(
-                gb_owner, gb_reviewer, persist=not is_terminal
+                gb_owner,
+                gb_reviewer,
+                persist=not is_terminal,
+                forgejo_owner_client=fj_owner,
+                forgejo_reviewer_client=fj_reviewer,
             ),
             forgejo_owner=fj_owner,
             forgejo_reviewer=fj_reviewer,

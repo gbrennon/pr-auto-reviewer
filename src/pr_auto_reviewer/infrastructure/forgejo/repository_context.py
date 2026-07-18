@@ -59,6 +59,8 @@ class ForgejoRepositoryContext(RepositoryContextPort):
 
         conventions: str | None = None
         for filename in _CONVENTIONS_FILENAMES:
+            if filename not in tree_paths:
+                continue
             try:
                 raw_path = f"/repos/{pr_id.repository}/raw/main/{filename}"
                 conventions = self._client.get_raw(raw_path, repo=pr_id.repository)

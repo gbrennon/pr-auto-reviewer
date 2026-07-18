@@ -33,7 +33,7 @@ class TestForgejoRepositoryContext:
     def test_fetch_finds_conventions(self, patched_client, monkeypatch):
         """Fetch finds and reads conventions file."""
         def fake_get(path, **kw):
-            return {"tree": [{"path": "src/main.py"}]}
+            return {"tree": [{"path": "src/main.py"}, {"path": "CONVENTIONS.md"}]}
         def fake_get_raw(path, *, repo=None):
             if "CONVENTIONS.md" in path:
                 return "## Conventions\nFollow these."

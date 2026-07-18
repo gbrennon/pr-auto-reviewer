@@ -20,6 +20,10 @@ _DIFF_FILE_PATH_RE = re.compile(
     r"^\s*diff --git a/(.+?)\s+b/(.+?)$", re.MULTILINE
 )
 
+_DELETION_RE = re.compile(
+    r"^--- a/(\S+).*$\n^\+\+\+ /dev/null$", re.MULTILINE
+)
+
 
 class GithubChangesetFetcher(ChangesetFetcherPort):
     def __init__(self, client: GitPlatformHttpClient) -> None:
@@ -71,6 +75,13 @@ class GithubChangesetFetcher(ChangesetFetcherPort):
             len(file_paths), sorted(file_paths),
             len(deleted_paths), sorted(deleted_paths),
         )
+
+        # Move detected deletions (--- a/FILE / +++ /dev/null) from file_paths to deleted_paths.
+        for match in _DELETION_RE.finditer(raw_diff):
+            deleted_file = match.group(1)
+            if deleted_file in file_paths:
+                file_paths.discard(deleted_file)
+                deleted_paths.add(deleted_file)
 
         file_contents: dict[str, str] = {}
         for file_path in sorted(file_paths):

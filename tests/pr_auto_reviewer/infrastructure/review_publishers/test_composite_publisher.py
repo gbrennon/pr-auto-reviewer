@@ -30,9 +30,9 @@ class TestCompositeReviewPublisher:
         composite.publish(forgejo_pr, review)
 
         assert len(github_pub.publish_calls) == 1
-        assert github_pub.publish_calls[0][0].repository == "github:owner/repo"
+        assert github_pub.publish_calls[0][0].repository == "owner/repo"
         assert len(forgejo_pub.publish_calls) == 1
-        assert forgejo_pub.publish_calls[0][0].repository == "codeberg:org/proj"
+        assert forgejo_pub.publish_calls[0][0].repository == "org/proj"
 
     def test_publish_defaults_to_forgejo_without_prefix(self):
         forgejo_pub = RecordingReviewPublisher()

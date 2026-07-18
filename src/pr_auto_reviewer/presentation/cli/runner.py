@@ -146,6 +146,7 @@ class CliRunner:
             title=pr.title,
             description=pr.description,
             force=args.force,
+            updated_at=pr.updated_at,
         )
 
         try:

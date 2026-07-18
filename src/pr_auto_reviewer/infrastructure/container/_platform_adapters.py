@@ -74,6 +74,11 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
     CompositeRepoLister,
     CompositePrLister,
     CompositeChangesetFetcher,
+    CompositeRepositoryContext,
+    CompositeReviewReader,
+    CompositeCommentReader,
+    CompositeCommentPublisher,
+    CompositeIssueTracker,
 )
 
 if TYPE_CHECKING:
@@ -128,13 +133,27 @@ def wire_platform_adapters(
         gb_reviewer = clients.reviewer_client
         fj_owner = clients.forgejo_owner
         fj_reviewer = clients.forgejo_reviewer
+        if fj_owner is None:
+            raise ValueError(
+                "Forgejo owner HTTP client is required in BOTH platform mode "
+                "but was not configured."
+            )
+        if fj_reviewer is None:
+            raise ValueError(
+                "Forgejo reviewer HTTP client is required in BOTH platform mode "
+                "but was not configured."
+            )
 
         return PlatformAdapters(
-            repository_context=ForgejoRepositoryContext(fj_owner),
+            repository_context=CompositeRepositoryContext(
+                {
+                    "github": GithubRepositoryContext(gb_owner),
+                    "forgejo": ForgejoRepositoryContext(fj_owner),
+                }
+            ),
             changeset_fetcher=CompositeChangesetFetcher(
                 GithubChangesetFetcher(gb_owner),
                 ForgejoChangesetFetcher(fj_owner),
-                default_platform="codeberg",
             ),
             review_publisher=(
                 TerminalReviewPublisherAdapter(config.output_path)
@@ -155,10 +174,30 @@ def wire_platform_adapters(
                     }
                 )
             ),
-            review_reader=GithubReviewReader(gb_owner),
-            comment_reader=GithubCommentReader(gb_owner),
-            comment_publisher=GithubCommentPublisher(gb_reviewer),
-            issue_tracker=GithubIssueTracker(gb_owner),
+            review_reader=CompositeReviewReader(
+                {
+                    "github": GithubReviewReader(gb_owner),
+                    "forgejo": ForgejoReviewReader(fj_owner),
+                }
+            ),
+            comment_reader=CompositeCommentReader(
+                {
+                    "github": GithubCommentReader(gb_owner),
+                    "forgejo": ForgejoCommentReader(fj_owner),
+                }
+            ),
+            comment_publisher=CompositeCommentPublisher(
+                {
+                    "github": GithubCommentPublisher(gb_reviewer),
+                    "forgejo": ForgejoCommentPublisher(fj_reviewer),
+                }
+            ),
+            issue_tracker=CompositeIssueTracker(
+                {
+                    "github": GithubIssueTracker(gb_owner),
+                    "forgejo": ForgejoIssueTracker(fj_owner),
+                }
+            ),
             repo_lister=CompositeRepoLister(
                 {
                     "github": GithubRepoLister(gb_owner),

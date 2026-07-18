@@ -9,6 +9,7 @@ from .repository_context import RepositoryContext
 from .issue_command import IssueCommand
 from .comment_id import CommentId
 from .pr_comment import PrComment
+from .token_slug import TokenSlug
 
 __all__ = [
     "PullRequestId",
@@ -19,7 +20,5 @@ __all__ = [
     "IssueCategory",
     "CodeReview",
     "RepositoryContext",
-    "IssueCommand",
-    "CommentId",
-    "PrComment",
+    "TokenSlug",
 ]
