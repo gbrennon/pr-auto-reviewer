@@ -92,6 +92,7 @@ class GitPlatformHttpClient:
         return {"Authorization": f"token {token}"}
 
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> dict[str, Any]:
+        self._rate_tracker.wait_if_needed()
         url = f"{self._base_url}{path}"
         label = self._label("read")
         logger.info("GET%s %s params=%s", label, url, params)
@@ -112,6 +113,7 @@ class GitPlatformHttpClient:
         return response.json()
 
     def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
+        self._rate_tracker.wait_if_needed()
         url = f"{self._base_url}{path}"
         label = self._label("read")
         logger.info("GET_RAW%s %s", label, url)
@@ -132,6 +134,7 @@ class GitPlatformHttpClient:
         return response.text
 
     def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
+        self._rate_tracker.wait_if_needed()
         url = f"{self._base_url}{path}"
         label = self._label("write")
         logger.info("POST%s %s body_keys=%s", label, url, list(body.keys()))
