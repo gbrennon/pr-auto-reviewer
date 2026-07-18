@@ -125,5 +125,29 @@ if uv tool install --force --reinstall "$PROJECT_ROOT" 2>&1; then
     echo "  ${TOOL_NAME} logs      Follow daemon logs"
     echo "  ${TOOL_NAME} restart   Restart the daemon"
     echo ""
+
+    # ── Install systemd user service ────────────────────────────────────────
+    SERVICE_TEMPLATE="${PROJECT_ROOT}/scripts/${TOOL_NAME}.service"
+    SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+    SERVICE_FILE="${SYSTEMD_USER_DIR}/${TOOL_NAME}.service"
+
+    if [ -f "$SERVICE_TEMPLATE" ]; then
+        mkdir -p "$SYSTEMD_USER_DIR"
+        cp "$SERVICE_TEMPLATE" "$SERVICE_FILE"
+        echo "Service file installed: $SERVICE_FILE"
+
+        systemctl --user daemon-reload
+
+        if systemctl --user is-enabled --quiet "${TOOL_NAME}.service" 2>/dev/null; then
+            echo "Service already enabled; restarting..."
+            systemctl --user restart "${TOOL_NAME}.service"
+        else
+            systemctl --user enable --now "${TOOL_NAME}.service"
+            echo "Service enabled and started."
+        fi
+    else
+        echo "Warning: service template not found at $SERVICE_TEMPLATE"
+    fi
+
     echo "Try: ${TOOL_NAME} --help"
 fi
