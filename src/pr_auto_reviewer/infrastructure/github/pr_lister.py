@@ -47,6 +47,7 @@ class GithubPrLister(PrListerPort):
                 target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
+                review_requested = bool(pr.get("requested_reviewers"))
 
                 if number and sha:
                     result.append(
@@ -57,6 +58,7 @@ class GithubPrLister(PrListerPort):
                             description=description,
                             is_draft=pr.get("draft", False),
                             updated_at=updated_at,
+                            review_requested=review_requested,
                             target_branch=target_branch,
                         )
                     )
@@ -82,6 +84,7 @@ class GithubPrLister(PrListerPort):
             title = pr.get("title", "")
             target_branch = pr.get("base", {}).get("ref", "")
             description = pr.get("body", "")
+            review_requested = bool(pr.get("requested_reviewers"))
 
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
@@ -94,6 +97,7 @@ class GithubPrLister(PrListerPort):
                 description=description,
                 is_draft=pr.get("draft", False),
                 updated_at=updated_at,
+                review_requested=review_requested,
                 target_branch=target_branch,
             )
 
