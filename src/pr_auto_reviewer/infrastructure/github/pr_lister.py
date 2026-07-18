@@ -40,6 +40,7 @@ class GithubPrLister(PrListerPort):
                 number = pr.get("number")
                 sha = pr.get("head", {}).get("sha")
                 updated_at = pr.get("updated_at", "") or None
+                target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
 
@@ -52,6 +53,7 @@ class GithubPrLister(PrListerPort):
                             description=description,
                             is_draft=pr.get("draft", False),
                             updated_at=updated_at,
+                            target_branch=target_branch,
                         )
                     )
 
@@ -73,6 +75,7 @@ class GithubPrLister(PrListerPort):
             sha = pr.get("head", {}).get("sha")
             updated_at = pr.get("updated_at", "") or None
             title = pr.get("title", "")
+            target_branch = pr.get("base", {}).get("ref", "")
             description = pr.get("body", "")
 
             if not number or not sha:
@@ -86,6 +89,7 @@ class GithubPrLister(PrListerPort):
                 description=description,
                 is_draft=pr.get("draft", False),
                 updated_at=updated_at,
+                target_branch=target_branch,
             )
 
         except Exception as exc:
