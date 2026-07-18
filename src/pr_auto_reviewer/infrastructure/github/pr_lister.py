@@ -43,7 +43,6 @@ class GithubPrLister(PrListerPort):
 
                 number = pr.get("number")
                 sha = pr.get("head", {}).get("sha")
-                updated_at = pr.get("updated_at", "") or None
                 target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
@@ -57,7 +56,6 @@ class GithubPrLister(PrListerPort):
                             title=title,
                             description=description,
                             is_draft=pr.get("draft", False),
-                            updated_at=updated_at,
                             review_requested=review_requested,
                             target_branch=target_branch,
                         )
@@ -80,7 +78,6 @@ class GithubPrLister(PrListerPort):
             )
             number = pr.get("number")
             sha = pr.get("head", {}).get("sha")
-            updated_at = pr.get("updated_at", "") or None
             title = pr.get("title", "")
             target_branch = pr.get("base", {}).get("ref", "")
             description = pr.get("body", "")
@@ -96,7 +93,6 @@ class GithubPrLister(PrListerPort):
                 title=title,
                 description=description,
                 is_draft=pr.get("draft", False),
-                updated_at=updated_at,
                 review_requested=review_requested,
                 target_branch=target_branch,
             )
