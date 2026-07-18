@@ -227,3 +227,44 @@ class TestLoadConfig:
         assert cfg.forgejo_owner_token == "fj_owner"
         assert cfg.forgejo_reviewer_token == "fj_reviewer"
         assert cfg.forgejo_reviewer_username == "fj_bot"
+
+
+    def test_load_production_parses_hyphenated_org_token_overrides(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """_load_production reads from a config file parsed by dotenv_values,
+        which accepts hyphenated keys that systemd's EnvironmentFile= would
+        reject.  Verify they reach Config.org_token_overrides intact."""
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+        from pr_auto_reviewer.infrastructure.config.org_token_entry import (
+            OrgTokenEntry,
+        )
+
+        # Ensure Path.exists returns True so _load_production actually
+        # calls dotenv_values (the real ~/.config/… path won't exist in CI).
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.Path.exists",
+            lambda self: True,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {
+                "GITHUB_TOKEN_forging-blocks-org_OWNER": "ghp_org_owner",
+                "GITHUB_TOKEN_forging-blocks-org_REVIEWER": "ghp_org_reviewer",
+                "GITHUB_TOKEN_forging-blocks-org_REVIEWER_USERNAME": "org-reviewer-bot",
+                "FORGEJO_TOKEN_my-other-org_OWNER": "fj_owner_token",
+            },
+        )
+
+        cfg = load_config()
+
+        gh_overrides = cfg.org_token_overrides.github
+        assert "forging-blocks-org" in gh_overrides
+        entry = gh_overrides["forging-blocks-org"]
+        assert entry.owner_token == "ghp_org_owner"
+        assert entry.reviewer_token == "ghp_org_reviewer"
+        assert entry.reviewer_username == "org-reviewer-bot"
+
+        fj_overrides = cfg.org_token_overrides.forgejo
+        assert "my-other-org" in fj_overrides
+        assert fj_overrides["my-other-org"].owner_token == "fj_owner_token"
