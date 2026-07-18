@@ -14,22 +14,20 @@ class CompositePrLister(PrListerPort):
         if not lister:
             return []
         prs = lister.list_open(repo)
-        if platform != "forgejo":
-            return [
-                OpenPullRequest(
-                    pr_id=PullRequestId(
-                        repository=f"{platform}:{pr.pr_id.repository}",
-                        number=pr.pr_id.number,
-                    ),
-                    head_sha=pr.head_sha,
-                    title=pr.title,
-                    description=pr.description,
-                    is_draft=pr.is_draft,
-                    updated_at=pr.updated_at,
-                )
-                for pr in prs
-            ]
-        return prs
+        return [
+            OpenPullRequest(
+                pr_id=PullRequestId(
+                    repository=f"{platform}:{pr.pr_id.repository}",
+                    number=pr.pr_id.number,
+                ),
+                head_sha=pr.head_sha,
+                title=pr.title,
+                description=pr.description,
+                is_draft=pr.is_draft,
+                updated_at=pr.updated_at,
+            )
+            for pr in prs
+        ]
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         platform, repo = split_repository_prefix(repository)
@@ -37,7 +35,7 @@ class CompositePrLister(PrListerPort):
         if not lister:
             return None
         pr = lister.get_pr(repo, pr_number)
-        if pr and platform != "forgejo":
+        if pr:
             return OpenPullRequest(
                 pr_id=PullRequestId(
                     repository=f"{platform}:{pr.pr_id.repository}",
