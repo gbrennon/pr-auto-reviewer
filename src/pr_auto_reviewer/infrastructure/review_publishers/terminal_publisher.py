@@ -25,37 +25,6 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
     def __init__(self, output_path: str | None = None) -> None:
         self._output_path = output_path
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
-        body = _body_formatter.format(review)
-        json_text = self._review_to_json(review)
-
-        output_lines = [
-            f"\n{'=' * 60}",
-            f"  Review for {pr_id}",
-            f"{'=' * 60}\n",
-            "--- HUMAN-READABLE ---",
-            body,
-            "\n--- JSON ---\n",
-            json_text,
-            f"\n{'=' * 60}\n",
-        ]
-        output = "\n".join(output_lines)
-
-        if self._output_path is None:
-            logger.info(
-                "Terminal output for PR %s: verdict=%s, items=%d -> stdout",
-                pr_id,
-                review.verdict.value,
-                len(review.items),
-            )
-            sys.stdout.write(output)
-            sys.stdout.flush()
-        else:
-            dest_path = Path(self._output_path)
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            dest_path.write_text(output)
-            logger.info("Review written to %s", dest_path)
-
     @staticmethod
     def _review_to_json(review: CodeReview) -> str:
         def _convert(item):
@@ -92,3 +61,34 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
             "model_used": review.model_used,
         }
         return json.dumps(data, indent=2, ensure_ascii=False)
+
+    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+        body = _body_formatter.format(review)
+        json_text = self._review_to_json(review)
+
+        output_lines = [
+            f"\n{'=' * 60}",
+            f"  Review for {pr_id}",
+            f"{'=' * 60}\n",
+            "--- HUMAN-READABLE ---",
+            body,
+            "\n--- JSON ---\n",
+            json_text,
+            f"\n{'=' * 60}\n",
+        ]
+        output = "\n".join(output_lines)
+
+        if self._output_path is None:
+            logger.info(
+                "Terminal output for PR %s: verdict=%s, items=%d -> stdout",
+                pr_id,
+                review.verdict.value,
+                len(review.items),
+            )
+            sys.stdout.write(output)
+            sys.stdout.flush()
+        else:
+            dest_path = Path(self._output_path)
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_text(output)
+            logger.info("Review written to %s", dest_path)
