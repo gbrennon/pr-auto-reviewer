@@ -71,41 +71,6 @@ class TokenResolver:
             env_prefix = self._ENV_PREFIX_TEMPLATE.format(prefix=prefix)
             self._scanner = EnvTokenScanner(env_prefix)
 
-    def resolve(self, role: str, repo: str) -> str:
-        """Return the token for *role* scoped to *repo*'s org.
-
-        ``repo`` is a full repository path like ``"my-org/my-repo"``.
-        Falls back to the platform default when no org override is set.
-        """
-        token, _ = self._resolve_with_source(role, repo)
-        return token
-
-    def resolve_source(self, role: str, repo: str) -> tuple[str, str]:
-        """Return ``(token, env_var_key)`` for *role* scoped to *repo*'s org.
-
-        The *env_var_key* is the exact environment variable name that
-        supplied the token (e.g. ``"GITHUB_OWNER_TOKEN"`` or
-        ``"GITHUB_TOKEN_forging-blocks-org_OWNER"``).
-        """
-        return self._resolve_with_source(role, repo)
-
-    def reviewer_username(self, repo: str) -> str:
-        """Return the reviewer username for *repo*'s org."""
-        org = OrgExtractor.from_repo(repo)
-        if not org:
-            return self._defaults.reviewer_username()
-
-        entry = self._org_entry(org)
-        if entry and entry.reviewer_username:
-            return entry.reviewer_username
-
-        org_entry = self._scanner.tokens_by_org().get(org)
-        if org_entry and "REVIEWER_USERNAME" in org_entry:
-            token, _ = org_entry["REVIEWER_USERNAME"]
-            return token
-
-        return self._defaults.reviewer_username()
-
     def _org_entry(self, org: str) -> OrgTokenEntry | None:
         if not self._overrides:
             return None
@@ -146,3 +111,38 @@ class TokenResolver:
             return token, source_key
 
         return self._defaults.token_for(role), self._defaults.source_key_for(role)
+
+    def resolve(self, role: str, repo: str) -> str:
+        """Return the token for *role* scoped to *repo*'s org.
+
+        ``repo`` is a full repository path like ``"my-org/my-repo"``.
+        Falls back to the platform default when no org override is set.
+        """
+        token, _ = self._resolve_with_source(role, repo)
+        return token
+
+    def resolve_source(self, role: str, repo: str) -> tuple[str, str]:
+        """Return ``(token, env_var_key)`` for *role* scoped to *repo*'s org.
+
+        The *env_var_key* is the exact environment variable name that
+        supplied the token (e.g. ``"GITHUB_OWNER_TOKEN"`` or
+        ``"GITHUB_TOKEN_forging-blocks-org_OWNER"``).
+        """
+        return self._resolve_with_source(role, repo)
+
+    def reviewer_username(self, repo: str) -> str:
+        """Return the reviewer username for *repo*'s org."""
+        org = OrgExtractor.from_repo(repo)
+        if not org:
+            return self._defaults.reviewer_username()
+
+        entry = self._org_entry(org)
+        if entry and entry.reviewer_username:
+            return entry.reviewer_username
+
+        org_entry = self._scanner.tokens_by_org().get(org)
+        if org_entry and "REVIEWER_USERNAME" in org_entry:
+            token, _ = org_entry["REVIEWER_USERNAME"]
+            return token
+
+        return self._defaults.reviewer_username()
