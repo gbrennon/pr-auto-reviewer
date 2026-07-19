@@ -34,4 +34,3 @@ class IssueCommandParser:
             comment_id=comment_id,
             item_numbers=numbers,
         )
-

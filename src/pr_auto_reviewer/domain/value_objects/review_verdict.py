@@ -12,4 +12,3 @@ class ReviewVerdict(StrEnum):
     APPROVED = "approved"
     CHANGES_REQUESTED = "changes_requested"
     COMMENTED = "commented"
-
