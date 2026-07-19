@@ -17,6 +17,10 @@ class EnvironmentDetector:
         import os
         self._environ = environ if environ is not None else os.environ
 
+    @classmethod
+    def _is_installed(cls) -> bool:
+        return not (RepoRoot.path() / ".env").exists()
+
     def detect(self) -> str:
         env = self._environ.get("ENV", "").strip()
         if env:
@@ -25,7 +29,3 @@ class EnvironmentDetector:
 
     def is_installed(self) -> bool:
         return self._is_installed()
-
-    @classmethod
-    def _is_installed(cls) -> bool:
-        return not (RepoRoot.path() / ".env").exists()

@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 class PollingDaemon:
     """Polls repositories for open PRs and triggers review operations."""
 
+    def _setup_signal_handlers(self) -> None:
+        def handle_signal(signum: int, frame: object) -> None:
+            logger.info("Shutdown signal received, stopping...")
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
+
     def __init__(
         self,
         config: PollingDaemonConfig,
@@ -41,72 +49,6 @@ class PollingDaemon:
         self._notifier = notifier
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
-
-    def _setup_signal_handlers(self) -> None:
-        def handle_signal(signum: int, frame: object) -> None:
-            logger.info("Shutdown signal received, stopping...")
-            raise KeyboardInterrupt
-
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
-
-    def start(self) -> None:
-        """Start the polling loop."""
-        logger.info(
-            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
-            f"run_once={self._config.run_once})"
-        )
-
-        cycle = 0
-        try:
-            while True:
-                cycle += 1
-                logger.info("=== Cycle #%d ===", cycle)
-                self._run_cycle()
-
-                if self._config.run_once:
-                    break
-
-                time.sleep(self._config.poll_interval_seconds)
-        except KeyboardInterrupt:
-            pass
-
-        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
-
-    def _run_cycle(self) -> None:
-        """Execute one polling cycle."""
-        repos = self._repo_lister.list_repos()
-
-        if not repos:
-            logger.warning("No repositories found")
-            return
-
-        try:
-            for repo in repos:
-                open_prs = self._pr_lister.list_open(repo)
-
-                if self._force_pr is not None:
-                    forced = self._pr_lister.get_pr(repo, self._force_pr)
-                    if forced is not None:
-                        if not any(p.pr_id.number == self._force_pr for p in open_prs):
-                            open_prs.append(forced)
-                            logger.info(
-                                "Force-fetched PR #%d in %s (state-agnostic)",
-                                self._force_pr, repo,
-                            )
-
-                if not open_prs:
-                    logger.debug(f"No open PRs in {repo}")
-                    continue
-
-                for pr in open_prs:
-                    if pr.is_draft:
-                        logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
-                        continue
-
-                    self._process_pr(pr)
-        except LlmUnavailableError:
-            logger.warning("LLM unavailable — cancelling this cycle")
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
@@ -144,3 +86,61 @@ class PollingDaemon:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
         except Exception as e:
             logger.exception("Unexpected error processing PR #%d: %s", pr.pr_id.number, e)
+
+    def _run_cycle(self) -> None:
+        """Execute one polling cycle."""
+        repos = self._repo_lister.list_repos()
+
+        if not repos:
+            logger.warning("No repositories found")
+            return
+
+        try:
+            for repo in repos:
+                open_prs = self._pr_lister.list_open(repo)
+
+                if self._force_pr is not None:
+                    forced = self._pr_lister.get_pr(repo, self._force_pr)
+                    if forced is not None:
+                        if not any(p.pr_id.number == self._force_pr for p in open_prs):
+                            open_prs.append(forced)
+                            logger.info(
+                                "Force-fetched PR #%d in %s (state-agnostic)",
+                                self._force_pr, repo,
+                            )
+
+                if not open_prs:
+                    logger.debug(f"No open PRs in {repo}")
+                    continue
+
+                for pr in open_prs:
+                    if pr.is_draft:
+                        logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
+                        continue
+
+                    self._process_pr(pr)
+        except LlmUnavailableError:
+            logger.warning("LLM unavailable — cancelling this cycle")
+
+    def start(self) -> None:
+        """Start the polling loop."""
+        logger.info(
+            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
+            f"run_once={self._config.run_once})"
+        )
+
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                logger.info("=== Cycle #%d ===", cycle)
+                self._run_cycle()
+
+                if self._config.run_once:
+                    break
+
+                time.sleep(self._config.poll_interval_seconds)
+        except KeyboardInterrupt:
+            pass
+
+        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
