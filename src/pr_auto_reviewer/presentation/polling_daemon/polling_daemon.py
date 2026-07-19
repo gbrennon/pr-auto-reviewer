@@ -123,6 +123,7 @@ class PollingDaemon:
             title=pr.title,
             description=pr.description,
             force=force,
+            review_requested=pr.review_requested,
             target_branch=pr.target_branch,
         )
 
