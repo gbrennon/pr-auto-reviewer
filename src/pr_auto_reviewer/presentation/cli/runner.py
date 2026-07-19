@@ -146,7 +146,6 @@ class CliRunner:
             title=pr.title,
             description=pr.description,
             force=args.force,
-            review_requested=pr.review_requested,
             target_branch=pr.target_branch,
         )
 
