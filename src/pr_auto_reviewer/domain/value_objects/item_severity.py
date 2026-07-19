@@ -2,6 +2,12 @@
 
 from enum import StrEnum
 
+_PROMPT_ALIASES = {
+    "high": "major",
+    "medium": "minor",
+    "low": "info",
+}
+
 class ItemSeverity(StrEnum):
     """Classification of how critical a review finding is."""
 
@@ -38,9 +44,3 @@ class ItemSeverity(StrEnum):
     def prompt_values(cls) -> str:
         """Return the canonical prompt-facing severity list."""
         return "high/medium/info"
-
-_PROMPT_ALIASES = {
-    "high": "major",
-    "medium": "minor",
-    "low": "info",
-}

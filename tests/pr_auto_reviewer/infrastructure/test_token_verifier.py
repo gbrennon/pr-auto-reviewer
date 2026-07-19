@@ -15,7 +15,10 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 )
 
 
-def _client(label: str = "owner") -> GitPlatformHttpClient:
+def _client(
+    label: str = "owner",
+    verified_cache_path: Path | None = None,
+) -> GitPlatformHttpClient:
     resolver = FakeTokenResolver({f"o/r": f"{label}-tok"})
     verifier = FakeVerifier()
     return GitPlatformHttpClient(
@@ -25,13 +28,15 @@ def _client(label: str = "owner") -> GitPlatformHttpClient:
         client_label=label,
         token_resolver=resolver,
         preflight_verifier=verifier,  # pyright: ignore[reportArgumentType]
+        _verified_cache_path=verified_cache_path,
     )
 
 
 class TestTokenVerifierDelegatesToClients:
-    def test_verify_calls_owner_client_preflight(self) -> None:
-        owner = _client("owner")
-        reviewer = _client("reviewer")
+    def test_verify_calls_owner_client_preflight(self, tmp_path: Path) -> None:
+        cache = tmp_path / "verified-tokens.json"
+        owner = _client("owner", verified_cache_path=cache)
+        reviewer = _client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -41,9 +46,10 @@ class TestTokenVerifierDelegatesToClients:
         assert len(owner_preflight.calls) == 1
         assert owner_preflight.calls[0]["role"] == "owner"
 
-    def test_verify_calls_reviewer_client_preflight(self) -> None:
-        owner = _client("owner")
-        reviewer = _client("reviewer")
+    def test_verify_calls_reviewer_client_preflight(self, tmp_path: Path) -> None:
+        cache = tmp_path / "verified-tokens.json"
+        owner = _client("owner", verified_cache_path=cache)
+        reviewer = _client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -55,9 +61,12 @@ class TestTokenVerifierDelegatesToClients:
 
 
 class TestTokenVerifierSkipsWhenCached:
-    def test_verify_skips_on_second_call_within_same_instance(self) -> None:
-        owner = _client("owner")
-        reviewer = _client("reviewer")
+    def test_verify_skips_on_second_call_within_same_instance(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "verified-tokens.json"
+        owner = _client("owner", verified_cache_path=cache)
+        reviewer = _client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -67,9 +76,12 @@ class TestTokenVerifierSkipsWhenCached:
         assert len(owner._preflight_verifier.calls) == 1
         assert len(reviewer._preflight_verifier.calls) == 1
 
-    def test_verify_skips_when_no_org_in_repository(self) -> None:
-        owner = _client("owner")
-        reviewer = _client("reviewer")
+    def test_verify_skips_when_no_org_in_repository(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "verified-tokens.json"
+        owner = _client("owner", verified_cache_path=cache)
+        reviewer = _client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="norepo", number=1)
 
@@ -77,9 +89,12 @@ class TestTokenVerifierSkipsWhenCached:
 
         assert len(owner._preflight_verifier.calls) == 0
 
-    def test_verify_skips_when_repository_starts_with_slash(self) -> None:
-        owner = _client("owner")
-        reviewer = _client("reviewer")
+    def test_verify_skips_when_repository_starts_with_slash(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "verified-tokens.json"
+        owner = _client("owner", verified_cache_path=cache)
+        reviewer = _client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="/repo", number=1)
 
@@ -152,7 +167,10 @@ class TestTokenVerifierPersistence:
 
         verifier.verify(pr_id)
 
-        assert not store.exists()
+        assert store.exists()
+        data = json.loads(store.read_text())
+        assert ["o", "owner"] in data
+        assert ["o", "reviewer"] in data
 
     def test_load_handles_corrupt_json(self, tmp_path: Path, monkeypatch) -> None:
         store = tmp_path / "verified-tokens.json"

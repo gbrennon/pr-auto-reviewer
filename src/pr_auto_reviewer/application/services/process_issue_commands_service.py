@@ -43,10 +43,6 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
         self._issue_command_parser = issue_command_parser
         self._issue_body_builder = issue_body_builder
 
-    def execute(self, command: ProcessIssueCommandsCommand) -> None:
-        pr = self._load_pull_request(command)
-        self._process_comments_for_pull_request(pr)
-
     def _load_pull_request(
         self, command: ProcessIssueCommandsCommand,
     ) -> PullRequest:
@@ -58,25 +54,6 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
             )
         return pr
 
-    def _process_comments_for_pull_request(self, pr: PullRequest) -> None:
-        raw_body = self._fetch_latest_review_body(pr)
-
-        if not raw_body:
-            return
-
-        review_items = self._parse_review_items(raw_body)
-
-        if not review_items:
-            return
-
-        comments = self._fetch_comments(pr)
-
-        if not comments:
-            return
-
-        pr = self._process_each_comment(pr, comments, review_items)
-        self._persist_pull_request(pr)
-
     def _fetch_latest_review_body(self, pr: PullRequest) -> str | None:
         return self._review_reader.get_latest_review(pr.id)
 
@@ -85,35 +62,6 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
 
     def _fetch_comments(self, pr: PullRequest):
         return self._comment_reader.get_comments(pr.id)
-
-    def _process_each_comment(
-        self, pr: PullRequest, comments, review_items: list[ReviewItem],
-    ) -> PullRequest:
-        for comment in comments:
-            if pr.is_comment_processed(comment.id):
-                continue
-
-            cmd = self._issue_command_parser.parse(
-                comment.id.value, comment.body,
-            )
-            if cmd is None:
-                continue
-
-            pr = pr.mark_comment_processed(comment.id)
-            valid, invalid = self._partition_item_numbers(
-                cmd.item_numbers, review_items,
-            )
-            if invalid:
-                self._publish_invalid_items_message(pr, invalid, review_items)
-                continue
-
-            created_issues = self._create_issues_for_valid_items(
-                pr, valid, review_items,
-            )
-
-            if created_issues:
-                self._publish_issues_created_message(pr, created_issues)
-        return pr
 
     @staticmethod
     def _partition_item_numbers(
@@ -164,5 +112,57 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
             pr.id, issues_created_message(created_issues),
         )
 
+    def _process_each_comment(
+        self, pr: PullRequest, comments, review_items: list[ReviewItem],
+    ) -> PullRequest:
+        for comment in comments:
+            if pr.is_comment_processed(comment.id):
+                continue
+
+            cmd = self._issue_command_parser.parse(
+                comment.id.value, comment.body,
+            )
+            if cmd is None:
+                continue
+
+            pr = pr.mark_comment_processed(comment.id)
+            valid, invalid = self._partition_item_numbers(
+                cmd.item_numbers, review_items,
+            )
+            if invalid:
+                self._publish_invalid_items_message(pr, invalid, review_items)
+                continue
+
+            created_issues = self._create_issues_for_valid_items(
+                pr, valid, review_items,
+            )
+
+            if created_issues:
+                self._publish_issues_created_message(pr, created_issues)
+        return pr
+
     def _persist_pull_request(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
+
+    def _process_comments_for_pull_request(self, pr: PullRequest) -> None:
+        raw_body = self._fetch_latest_review_body(pr)
+
+        if not raw_body:
+            return
+
+        review_items = self._parse_review_items(raw_body)
+
+        if not review_items:
+            return
+
+        comments = self._fetch_comments(pr)
+
+        if not comments:
+            return
+
+        pr = self._process_each_comment(pr, comments, review_items)
+        self._persist_pull_request(pr)
+
+    def execute(self, command: ProcessIssueCommandsCommand) -> None:
+        pr = self._load_pull_request(command)
+        self._process_comments_for_pull_request(pr)

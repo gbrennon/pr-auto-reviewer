@@ -25,6 +25,65 @@ class ConfigBuilder:
         env_name: Value for ``Config.env``.
     """
 
+    @staticmethod
+    def _parse_org_token_overrides(source: dict[str, str]) -> OrgTokenOverrides:
+        github: dict[str, OrgTokenEntry] = {}
+        forgejo: dict[str, OrgTokenEntry] = {}
+
+        for key, value in source.items():
+            if key.startswith("GITHUB_TOKEN_"):
+                suffix = key[len("GITHUB_TOKEN_"):]
+                org, role = RoleSuffixParser.parse(suffix)
+                if org and role:
+                    entry = github.setdefault(org, OrgTokenEntry())
+                    if role == "OWNER":
+                        github[org] = OrgTokenEntry(
+                            owner_token=value,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER":
+                        github[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=value,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER_USERNAME":
+                        github[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=value,
+                        )
+            elif key.startswith("FORGEJO_TOKEN_"):
+                suffix = key[len("FORGEJO_TOKEN_"):]
+                org, role = RoleSuffixParser.parse(suffix)
+                if org and role:
+                    entry = forgejo.setdefault(org, OrgTokenEntry())
+                    if role == "OWNER":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=value,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=value,
+                            reviewer_username=entry.reviewer_username,
+                        )
+                    elif role == "REVIEWER_USERNAME":
+                        forgejo[org] = OrgTokenEntry(
+                            owner_token=entry.owner_token,
+                            reviewer_token=entry.reviewer_token,
+                            reviewer_username=value,
+                        )
+
+        return OrgTokenOverrides(github=github, forgejo=forgejo)
+
+    @classmethod
+    def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
+        return source.get(key, default).strip()
+
     def build(self, source: dict[str, str], env_name: str) -> Config:
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
@@ -118,62 +177,3 @@ class ConfigBuilder:
             use_compact_template=use_compact_template,
             use_strict_fragment_selection=use_strict_fragment_selection,
         )
-
-    @staticmethod
-    def _parse_org_token_overrides(source: dict[str, str]) -> OrgTokenOverrides:
-        github: dict[str, OrgTokenEntry] = {}
-        forgejo: dict[str, OrgTokenEntry] = {}
-
-        for key, value in source.items():
-            if key.startswith("GITHUB_TOKEN_"):
-                suffix = key[len("GITHUB_TOKEN_"):]
-                org, role = RoleSuffixParser.parse(suffix)
-                if org and role:
-                    entry = github.setdefault(org, OrgTokenEntry())
-                    if role == "OWNER":
-                        github[org] = OrgTokenEntry(
-                            owner_token=value,
-                            reviewer_token=entry.reviewer_token,
-                            reviewer_username=entry.reviewer_username,
-                        )
-                    elif role == "REVIEWER":
-                        github[org] = OrgTokenEntry(
-                            owner_token=entry.owner_token,
-                            reviewer_token=value,
-                            reviewer_username=entry.reviewer_username,
-                        )
-                    elif role == "REVIEWER_USERNAME":
-                        github[org] = OrgTokenEntry(
-                            owner_token=entry.owner_token,
-                            reviewer_token=entry.reviewer_token,
-                            reviewer_username=value,
-                        )
-            elif key.startswith("FORGEJO_TOKEN_"):
-                suffix = key[len("FORGEJO_TOKEN_"):]
-                org, role = RoleSuffixParser.parse(suffix)
-                if org and role:
-                    entry = forgejo.setdefault(org, OrgTokenEntry())
-                    if role == "OWNER":
-                        forgejo[org] = OrgTokenEntry(
-                            owner_token=value,
-                            reviewer_token=entry.reviewer_token,
-                            reviewer_username=entry.reviewer_username,
-                        )
-                    elif role == "REVIEWER":
-                        forgejo[org] = OrgTokenEntry(
-                            owner_token=entry.owner_token,
-                            reviewer_token=value,
-                            reviewer_username=entry.reviewer_username,
-                        )
-                    elif role == "REVIEWER_USERNAME":
-                        forgejo[org] = OrgTokenEntry(
-                            owner_token=entry.owner_token,
-                            reviewer_token=entry.reviewer_token,
-                            reviewer_username=value,
-                        )
-
-        return OrgTokenOverrides(github=github, forgejo=forgejo)
-
-    @classmethod
-    def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
-        return source.get(key, default).strip()
