@@ -156,12 +156,13 @@ class TestReviewPullRequestService:
         assert len(pr_repo.save_calls) == 1
 
 
-    def test_no_re_review_when_sha_unchanged(self):
+    def test_review_requested_alone_does_not_trigger_review(self):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
             pr_id=_pr_id(),
             head_sha=sha,
             title="Add feature X",
+            review_requested=True,
         )
         existing = PullRequest(
             id=cmd.pr_id, title=cmd.title, head_sha=sha,
@@ -184,6 +185,37 @@ class TestReviewPullRequestService:
         assert len(llm.review_prompt_calls) == 0
         assert len(publisher.publish_calls) == 0
         assert len(pr_repo.save_calls) == 1
+
+    def test_no_re_review_when_review_requested_false(self):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            review_requested=False,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id, title=cmd.title, head_sha=sha,
+        )
+        existing = existing.add_review(_review(), sha)
+        pr_repo = StubPullRequestRepository(initial=existing)
+        changeset = StubChangesetFetcher(
+            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        )
+        factory = StubReviewContextFactory()
+        llm = StubLlmReview(_review())
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            pr_repo, changeset, factory, llm, publisher,
+        ).execute(cmd)
+
+        assert len(changeset.fetch_calls) == 0
+        assert len(factory.build_calls) == 0
+        assert len(llm.review_prompt_calls) == 0
+        assert len(publisher.publish_calls) == 0
+        assert len(pr_repo.save_calls) == 1
+
 
 
     def test_empty_diff_raises(self):
