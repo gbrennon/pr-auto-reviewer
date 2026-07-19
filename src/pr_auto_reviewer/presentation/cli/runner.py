@@ -63,32 +63,6 @@ class CliRunner:
         self._token_verifier = token_verifier
         self._output_mode = output_mode
 
-    def run(self, argv: list[str]) -> int:
-        """Run the CLI with the given arguments."""
-        parser = argparse.ArgumentParser(prog="pr-auto-reviewer")
-        subparsers = parser.add_subparsers(dest="command", required=True)
-
-        subparsers.add_parser("review", help="Force review a specific PR")
-        subparsers.add_parser(
-            "process-commands", help="Process issue commands for a PR"
-        )
-        subparsers.add_parser("list-items", help="List review items for a PR")
-        subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
-
-        args, _unknown = parser.parse_known_args(argv[1:])
-
-        if args.command == "review":
-            return self._run_review(argv[2:])
-        elif args.command == "process-commands":
-            return self._run_process_commands(argv[2:])
-        elif args.command == "list-items":
-            return self._run_list_items(argv[2:])
-        elif args.command == "clean":
-            return self._run_clean()
-        else:
-            parser.print_help()
-            return 1
-
     def _run_review(self, argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog="pr-auto-reviewer review")
         parser.add_argument("--repo", required=True, help="Repository (owner/repo)")
@@ -293,6 +267,32 @@ class CliRunner:
         self._pr_repository.reset()
         print("Review state cleaned. All PRs will be treated as new.")
         return 0
+
+    def run(self, argv: list[str]) -> int:
+        """Run the CLI with the given arguments."""
+        parser = argparse.ArgumentParser(prog="pr-auto-reviewer")
+        subparsers = parser.add_subparsers(dest="command", required=True)
+
+        subparsers.add_parser("review", help="Force review a specific PR")
+        subparsers.add_parser(
+            "process-commands", help="Process issue commands for a PR"
+        )
+        subparsers.add_parser("list-items", help="List review items for a PR")
+        subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
+
+        args, _unknown = parser.parse_known_args(argv[1:])
+
+        if args.command == "review":
+            return self._run_review(argv[2:])
+        elif args.command == "process-commands":
+            return self._run_process_commands(argv[2:])
+        elif args.command == "list-items":
+            return self._run_list_items(argv[2:])
+        elif args.command == "clean":
+            return self._run_clean()
+        else:
+            parser.print_help()
+            return 1
 
 
 def main() -> None:

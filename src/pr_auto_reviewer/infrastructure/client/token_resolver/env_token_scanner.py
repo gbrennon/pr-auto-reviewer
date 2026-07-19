@@ -20,17 +20,6 @@ class EnvTokenScanner:
         environ: Environment dict to scan.  Defaults to ``os.environ``.
     """
 
-    def __init__(
-        self, env_prefix: str, *, environ: dict[str, str] | None = None
-    ) -> None:
-        self._env_prefix = env_prefix
-        self._org_tokens: dict[str, dict[str, tuple[str, str]]] = {}
-        self._scan(environ if environ is not None else os.environ)
-
-    def tokens_by_org(self) -> dict[str, dict[str, tuple[str, str]]]:
-        """Return ``{org: {role: (token, env_var_key)}}``."""
-        return self._org_tokens
-
     def _scan(self, environ: dict[str, str]) -> None:
         for key, value in environ.items():
             if not key.startswith(self._env_prefix):
@@ -47,3 +36,14 @@ class EnvTokenScanner:
                 len(self._org_tokens),
                 sorted(self._org_tokens.keys()),
             )
+
+    def __init__(
+        self, env_prefix: str, *, environ: dict[str, str] | None = None
+    ) -> None:
+        self._env_prefix = env_prefix
+        self._org_tokens: dict[str, dict[str, tuple[str, str]]] = {}
+        self._scan(environ if environ is not None else os.environ)
+
+    def tokens_by_org(self) -> dict[str, dict[str, tuple[str, str]]]:
+        """Return ``{org: {role: (token, env_var_key)}}``."""
+        return self._org_tokens

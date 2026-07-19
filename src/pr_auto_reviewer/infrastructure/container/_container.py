@@ -71,11 +71,6 @@ class Container:
     """Dependency-injection container.  Creates and wires all infrastructure
     adapters based on Config."""
 
-    def __init__(self, config: Config | None = None) -> None:
-        self._config = config or load_config()
-        self._pr_repository: PullRequestRepository = NullPullRequestRepository()
-        self._wire()
-
     def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
         clients = wire_platform_clients(self._config)
@@ -103,6 +98,11 @@ class Container:
         self._fragment_renderer = core.fragment_renderer
         self._fragment_max_tokens = core.fragment_max_tokens
         self._review_context_factory = core.review_context_factory
+
+    def __init__(self, config: Config | None = None) -> None:
+        self._config = config or load_config()
+        self._pr_repository: PullRequestRepository = NullPullRequestRepository()
+        self._wire()
 
     @property
     def config(self) -> Config:
@@ -187,4 +187,3 @@ class Container:
     @property
     def fragment_max_tokens(self) -> int | None:
         return self._fragment_max_tokens
-

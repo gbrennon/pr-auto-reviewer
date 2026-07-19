@@ -117,7 +117,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 len(review.items),
                 (review.summary or "")[:80],
             )
-
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
@@ -189,44 +188,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         )
         return review
 
-    def _add_deterministic_findings(
-        self, review: CodeReview, diff: PullRequestDiff
-    ) -> CodeReview:
-        """Add concrete fallback findings for noisy logging regressions."""
-        log_items = self._find_noisy_info_logs(diff.diff_content)
-        if not log_items:
-            return review
-
-        log_code = {item.current_code for item in log_items}
-        merged_items = log_items + [
-            item for item in review.items
-            if item.current_code not in log_code
-        ]
-        merged_items = self._renumber_items(merged_items[:8])
-
-        summary = review.summary or (
-            "The PR adds diagnostic logging that would be visible during normal "
-            "runs. Request/response and internal workflow details should stay "
-            "behind debug or verbose logging."
-        )
-        praise = review.praise or [
-            ReviewPraise(
-                description=(
-                    "The logging additions are consistently placed around the "
-                    "operations they observe."
-                )
-            )
-        ]
-        return CodeReview(
-            verdict=ReviewVerdict.APPROVED,
-            reason=review.reason,
-            summary=summary,
-            items=merged_items,
-            suggestions=review.suggestions,
-            praise=praise,
-            model_used=review.model_used,
-        )
-
     def _renumber_items(self, items: list[ReviewItem]) -> list[ReviewItem]:
         renumbered: list[ReviewItem] = []
         for number, item in enumerate(items, 1):
@@ -288,6 +249,44 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 break
 
         return items
+
+    def _add_deterministic_findings(
+        self, review: CodeReview, diff: PullRequestDiff
+    ) -> CodeReview:
+        """Add concrete fallback findings for noisy logging regressions."""
+        log_items = self._find_noisy_info_logs(diff.diff_content)
+        if not log_items:
+            return review
+
+        log_code = {item.current_code for item in log_items}
+        merged_items = log_items + [
+            item for item in review.items
+            if item.current_code not in log_code
+        ]
+        merged_items = self._renumber_items(merged_items[:8])
+
+        summary = review.summary or (
+            "The PR adds diagnostic logging that would be visible during normal "
+            "runs. Request/response and internal workflow details should stay "
+            "behind debug or verbose logging."
+        )
+        praise = review.praise or [
+            ReviewPraise(
+                description=(
+                    "The logging additions are consistently placed around the "
+                    "operations they observe."
+                )
+            )
+        ]
+        return CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason=review.reason,
+            summary=summary,
+            items=merged_items,
+            suggestions=review.suggestions,
+            praise=praise,
+            model_used=review.model_used,
+        )
 
 
     def _augment_description(
@@ -367,3 +366,4 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
 
     def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
+

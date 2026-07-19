@@ -29,6 +29,14 @@ class ReviewResponseParser:
         re.IGNORECASE | re.MULTILINE,
     )
 
+    _ITEM_RE_MD = re.compile(
+        r"^\s*[-*]\s*\[(?P<severity>critical|major|minor|info)\]\s*"
+        r"(?P<category>[^(]+?)\s*"
+        r"\((?P<file_path>[^)]*)\)\s*"
+        r"(?P<description>.+)$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
     @staticmethod
     def parse(raw_text: str, model_used: str) -> CodeReview:
         json_text = raw_text.strip()
@@ -702,11 +710,3 @@ class ReviewResponseParser:
                 else:
                     praise.append({"description": content})
         return praise
-
-    _ITEM_RE_MD = re.compile(
-        r"^\s*[-*]\s*\[(?P<severity>critical|major|minor|info)\]\s*"
-        r"(?P<category>[^(]+?)\s*"
-        r"\((?P<file_path>[^)]*)\)\s*"
-        r"(?P<description>.+)$",
-        re.IGNORECASE | re.MULTILINE,
-    )

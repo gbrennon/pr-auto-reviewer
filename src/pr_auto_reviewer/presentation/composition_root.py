@@ -61,13 +61,6 @@ class CompositionRoot:
     fully-wired presentation-layer entry points.
     """
 
-    def __init__(self, config_path: str | None = None) -> None:
-        _ = config_path
-        config = load_config()
-        self._setup_logging(config.debug)
-        self._container = Container(config)
-        self._components = self._wire_components()
-
     @staticmethod
     def _setup_logging(debug: bool) -> None:
         log_level = logging.DEBUG if debug else logging.INFO
@@ -131,6 +124,13 @@ class CompositionRoot:
             notifier=c.notifier,
             token_verifier=c.token_verifier,
         )
+
+    def __init__(self, config_path: str | None = None) -> None:
+        _ = config_path
+        config = load_config()
+        self._setup_logging(config.debug)
+        self._container = Container(config)
+        self._components = self._wire_components()
 
     @property
     def components(self) -> ApplicationComponents:

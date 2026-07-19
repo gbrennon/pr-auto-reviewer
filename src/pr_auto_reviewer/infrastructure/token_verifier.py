@@ -47,6 +47,15 @@ class TokenVerifier(TokenVerifierPort):
             so preflight runs only once across invocations.
     """
 
+    def _load(self) -> set[tuple[str, str]]:
+        if not self._store_path.exists():
+            return set()
+        try:
+            data = json.loads(self._store_path.read_text())
+            return {tuple(pair) for pair in data}
+        except (json.JSONDecodeError, OSError):
+            return set()
+
     def __init__(
         self,
         owner_client: GitPlatformHttpClient,
@@ -65,6 +74,10 @@ class TokenVerifier(TokenVerifierPort):
             os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
         )
         self._verified: set[tuple[str, str]] = self._load() if persist else set()
+
+    def _save(self) -> None:
+        self._store_path.parent.mkdir(parents=True, exist_ok=True)
+        self._store_path.write_text(json.dumps(sorted(self._verified)))
 
     def verify(self, pr_id: PullRequestId) -> None:
         org = pr_id.repository.split("/", 1)[0]
@@ -91,16 +104,3 @@ class TokenVerifier(TokenVerifierPort):
             if self._persist:
                 self._save()
             logger.info("TokenVerifier: %s/%s verified and cached", org, role)
-
-    def _load(self) -> set[tuple[str, str]]:
-        if not self._store_path.exists():
-            return set()
-        try:
-            data = json.loads(self._store_path.read_text())
-            return {tuple(pair) for pair in data}
-        except (json.JSONDecodeError, OSError):
-            return set()
-
-    def _save(self) -> None:
-        self._store_path.parent.mkdir(parents=True, exist_ok=True)
-        self._store_path.write_text(json.dumps(sorted(self._verified)))
