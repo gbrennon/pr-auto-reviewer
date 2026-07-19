@@ -66,20 +66,19 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         self._max_total_chars = max_total_chars
         self._strict_selection = bool(use_strict_selection)
 
-    def execute(self, context: ReviewContext) -> ComposedPrompt:
-        """Execute the composition for *context*."""
-        logger.info(
-            "ComposeReviewPromptAdapter.execute(language=%s, files=%d, diff=%d chars)",
-            context.language, len(context.file_paths), len(context.diff),
-        )
-        fragments = self._select_fragments(context)
+    def _apply_budget_constraints(
+        self, fragments: list[PromptFragment],
+    ) -> list[PromptFragment]:
+        """Greedily select highest-priority fragments that fit the budget."""
+        selected: list[PromptFragment] = []
+        self._budget_manager.reset()
 
-        if not fragments:
-            raise ValueError(
-                f"No fragments found for language: {context.language}",
-            )
+        for fragment in fragments:
+            if self._budget_manager.fits_budget(fragment.content):
+                self._budget_manager.consume(fragment.content)
+                selected.append(fragment)
 
-        return self._compose_prompt(fragments, context)
+        return selected
 
     def _select_fragments(self, context: ReviewContext) -> list[PromptFragment]:
         """Select language-specific + universal fragments, sorted by priority.
@@ -185,19 +184,54 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
 
         return sorted_fragments
 
-    def _apply_budget_constraints(
-        self, fragments: list[PromptFragment],
-    ) -> list[PromptFragment]:
-        """Greedily select highest-priority fragments that fit the budget."""
-        selected: list[PromptFragment] = []
-        self._budget_manager.reset()
+    def _render_fragment(
+        self,
+        fragment: PromptFragment,
+        context: ReviewContext,
+        inline_diff: bool = True,
+    ) -> str:
+        """Render a single fragment with variable substitution.
 
-        for fragment in fragments:
-            if self._budget_manager.fits_budget(fragment.content):
-                self._budget_manager.consume(fragment.content)
-                selected.append(fragment)
+        When *inline_diff* is ``False`` the ``{{ code }}`` / ``{{ diff }}``
+        placeholders are replaced with a short pointer — the real diff is
+        appended once at the end of the prompt by the caller."""
+        diff_content: str
+        if inline_diff:
+            diff_content = context.diff
+        else:
+            diff_content = (
+                "[Full diff is included below — review the "
+                + f"{len(context.diff)}-character diff for issues]"
+            )
 
-        return selected
+        variables: dict[str, str] = {
+            "code": diff_content,
+            "diff": diff_content,
+            "language": context.language,
+            "file_paths": "\n".join(context.file_paths),
+            "repository_context": context.repository_context or "",
+            "issue_category_values": IssueCategory.prompt_values(),
+            "issue_severity_values": ItemSeverity.prompt_values(),
+        }
+
+        if self._renderer is not None:
+            return self._renderer.render(fragment.content, variables)
+
+        content = fragment.content
+        content = content.replace("{{ code }}", diff_content)
+        content = content.replace("{{ diff }}", diff_content)
+        content = content.replace("{{ language }}", context.language)
+        content = content.replace("{{ file_paths }}", variables["file_paths"])
+        content = content.replace(
+            "{{ issue_category_values }}", variables["issue_category_values"],
+        )
+        content = content.replace(
+            "{{ issue_severity_values }}", variables["issue_severity_values"],
+        )
+        content = content.replace(
+            "{{ repository_context }}", context.repository_context or "",
+        )
+        return content
 
     def _compose_prompt(
         self,
@@ -286,51 +320,17 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         )
         return result
 
-    def _render_fragment(
-        self,
-        fragment: PromptFragment,
-        context: ReviewContext,
-        inline_diff: bool = True,
-    ) -> str:
-        """Render a single fragment with variable substitution.
+    def execute(self, context: ReviewContext) -> ComposedPrompt:
+        """Execute the composition for *context*."""
+        logger.info(
+            "ComposeReviewPromptAdapter.execute(language=%s, files=%d, diff=%d chars)",
+            context.language, len(context.file_paths), len(context.diff),
+        )
+        fragments = self._select_fragments(context)
 
-        When *inline_diff* is ``False`` the ``{{ code }}`` / ``{{ diff }}``
-        placeholders are replaced with a short pointer — the real diff is
-        appended once at the end of the prompt by the caller."""
-        diff_content: str
-        if inline_diff:
-            diff_content = context.diff
-        else:
-            diff_content = (
-                "[Full diff is included below — review the "
-                + f"{len(context.diff)}-character diff for issues]"
+        if not fragments:
+            raise ValueError(
+                f"No fragments found for language: {context.language}",
             )
 
-        variables: dict[str, str] = {
-            "code": diff_content,
-            "diff": diff_content,
-            "language": context.language,
-            "file_paths": "\n".join(context.file_paths),
-            "repository_context": context.repository_context or "",
-            "issue_category_values": IssueCategory.prompt_values(),
-            "issue_severity_values": ItemSeverity.prompt_values(),
-        }
-
-        if self._renderer is not None:
-            return self._renderer.render(fragment.content, variables)
-
-        content = fragment.content
-        content = content.replace("{{ code }}", diff_content)
-        content = content.replace("{{ diff }}", diff_content)
-        content = content.replace("{{ language }}", context.language)
-        content = content.replace("{{ file_paths }}", variables["file_paths"])
-        content = content.replace(
-            "{{ issue_category_values }}", variables["issue_category_values"],
-        )
-        content = content.replace(
-            "{{ issue_severity_values }}", variables["issue_severity_values"],
-        )
-        content = content.replace(
-            "{{ repository_context }}", context.repository_context or "",
-        )
-        return content
+        return self._compose_prompt(fragments, context)

@@ -26,6 +26,33 @@ format_review_body = ReviewBodyFormatter().format
 class TestGitReviewPublisherAdapter:
     """Tests for GitReviewPublisherAdapter using captured fixture data."""
 
+    # ---- _find_diff_position tests ----
+
+    DIFF = """diff --git a/src/main.py b/src/main.py
+index abc123..def456 100644
+--- a/src/main.py
++++ b/src/main.py
+@@ -1,3 +1,4 @@
+ def hello():
+     print("Hello")
++    return True
+diff --git a/src/utils.py b/src/utils.py
+index def456..ghi789 100644
+--- a/src/utils.py
++++ b/src/utils.py
+@@ -10,6 +10,7 @@ def helper():
+     pass
+
+ def util():
+-    old_code
++    new_code
+     context_line
+@@ -20,4 +21,5 @@ def another():
+     return 0
++
++def added_func():
++    return 1"""
+
     @pytest.fixture
     def adapter(self, patched_private_client):
         return GitReviewPublisherAdapter(patched_private_client, "t", patched_private_client)
@@ -90,33 +117,6 @@ class TestGitReviewPublisherAdapter:
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         assert len(call_paths) == 2
-
-    # ---- _find_diff_position tests ----
-
-    DIFF = """diff --git a/src/main.py b/src/main.py
-index abc123..def456 100644
---- a/src/main.py
-+++ b/src/main.py
-@@ -1,3 +1,4 @@
- def hello():
-     print("Hello")
-+    return True
-diff --git a/src/utils.py b/src/utils.py
-index def456..ghi789 100644
---- a/src/utils.py
-+++ b/src/utils.py
-@@ -10,6 +10,7 @@ def helper():
-     pass
-
- def util():
--    old_code
-+    new_code
-     context_line
-@@ -20,4 +21,5 @@ def another():
-     return 0
-+
-+def added_func():
-+    return 1"""
 
     def test_find_diff_position_none_file_path(self, adapter):
         result = adapter._publishing.find_diff_position("diff", None, "code")

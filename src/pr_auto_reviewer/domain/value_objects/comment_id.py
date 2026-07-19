@@ -13,11 +13,11 @@ class CommentId:
 
     value: str
 
-    def __str__(self) -> str:
-        return self.value
-
     def __post_init__(self) -> None:
         if not self.value or not isinstance(self.value, str):
             raise InvalidCommentIdError(
                 "CommentId value must be a non-empty string"
             )
+
+    def __str__(self) -> str:
+        return self.value

@@ -17,4 +17,3 @@ class PullRequestRepository(Protocol):
     def reset(self) -> None:
         """Clear all persisted state (all reviewed PR records)."""
         ...
-
