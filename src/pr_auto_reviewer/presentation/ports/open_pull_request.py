@@ -16,5 +16,4 @@ class OpenPullRequest:
     title: str
     description: str = ""
     is_draft: bool = False
-    review_requested: bool = False
     target_branch: str = ""
