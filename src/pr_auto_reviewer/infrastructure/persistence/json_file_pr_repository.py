@@ -29,6 +29,9 @@ from ...application.ports.outbound.pull_request_repository import (
 
 _STATE_KEY_SEPARATOR = "/"
 
+def _make_key(pr_id: PullRequestId) -> str:
+    return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
+
 class JsonFilePullRequestRepository(PullRequestRepository):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
 
@@ -38,6 +41,56 @@ class JsonFilePullRequestRepository(PullRequestRepository):
 
     def __init__(self, file_path: str | Path) -> None:
         self._file_path = Path(file_path)
+
+    def _load(self) -> dict:
+        if not self._file_path.exists():
+            return {"reviewed": {}}
+        try:
+            with open(self._file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            from ...domain.exceptions import RepositoryCorruptedError
+            raise RepositoryCorruptedError(
+                f"State file {self._file_path} is corrupted or unreadable"
+            ) from exc
+
+    def _deserialize(self, pr_id: PullRequestId, raw: dict) -> PullRequest:
+        reviews_raw = raw.get("reviews", [])
+        reviews: tuple[CodeReview, ...] = tuple(
+            CodeReview(
+                verdict=ReviewVerdict(r["verdict"]),
+                summary=r.get("summary", ""),
+                model_used=r.get("model_used", ""),
+                items=[
+                    ReviewItem(
+                        number=i["number"],
+                        severity=ItemSeverity.from_value(i.get("severity")),
+                        category=IssueCategory.from_value(i.get("category")),
+                        file_path=i.get("file_path"),
+                        description=i.get("description", ""),
+                    )
+                    for i in r.get("items", [])
+                ],
+            )
+            for r in reviews_raw
+        )
+        unresolved_ids: frozenset[str] = frozenset(
+            raw.get("unresolved_blocking_ids", [])
+        )
+        processed_ids: frozenset[CommentId] = frozenset(
+            CommentId(str(cid))
+            for cid in raw.get("processed_comment_ids", [])
+        )
+        return PullRequest(
+            id=pr_id,
+            title=raw.get("title", ""),
+            head_sha=CommitSha(raw.get("head_sha", "")),
+            unresolved_blocking_ids=unresolved_ids,
+            last_reviewed_at=raw.get("last_reviewed_at"),
+            is_draft=raw.get("is_draft", False),
+            reviews=reviews,
+            processed_comment_ids=processed_ids,
+        )
 
     def find(self, pr_id: PullRequestId) -> PullRequest | None:
         data = self._load()
@@ -56,36 +109,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             pr.title, pr.head_sha.value[:7], len(pr.reviews),
         )
         return pr
-
-    def save(self, pr: PullRequest) -> None:
-        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
-        data = self._load()
-        reviewed = data.setdefault("reviewed", {})
-
-        key = _make_key(pr.id)
-        reviewed[key] = self._serialize(pr)
-
-        self._save(data)
-
-    def reset(self) -> None:
-        """Clear all persisted state by deleting and recreating the file."""
-        logger.info("Resetting state file %s", self._file_path)
-        if self._file_path.exists():
-            self._file_path.unlink()
-        self._file_path.parent.mkdir(parents=True, exist_ok=True)
-        self._file_path.write_text('{"reviewed":{}}')
-
-    def _load(self) -> dict:
-        if not self._file_path.exists():
-            return {"reviewed": {}}
-        try:
-            with open(self._file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            from ...domain.exceptions import RepositoryCorruptedError
-            raise RepositoryCorruptedError(
-                f"State file {self._file_path} is corrupted or unreadable"
-            ) from exc
 
     def _save(self, data: dict) -> None:
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,43 +156,20 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             ),
         }
 
-    def _deserialize(self, pr_id: PullRequestId, raw: dict) -> PullRequest:
-        reviews_raw = raw.get("reviews", [])
-        reviews: tuple[CodeReview, ...] = tuple(
-            CodeReview(
-                verdict=ReviewVerdict(r["verdict"]),
-                summary=r.get("summary", ""),
-                model_used=r.get("model_used", ""),
-                items=[
-                    ReviewItem(
-                        number=i["number"],
-                        severity=ItemSeverity.from_value(i.get("severity")),
-                        category=IssueCategory.from_value(i.get("category")),
-                        file_path=i.get("file_path"),
-                        description=i.get("description", ""),
-                    )
-                    for i in r.get("items", [])
-                ],
-            )
-            for r in reviews_raw
-        )
-        unresolved_ids: frozenset[str] = frozenset(
-            raw.get("unresolved_blocking_ids", [])
-        )
-        processed_ids: frozenset[CommentId] = frozenset(
-            CommentId(str(cid))
-            for cid in raw.get("processed_comment_ids", [])
-        )
-        return PullRequest(
-            id=pr_id,
-            title=raw.get("title", ""),
-            head_sha=CommitSha(raw.get("head_sha", "")),
-            unresolved_blocking_ids=unresolved_ids,
-            last_reviewed_at=raw.get("last_reviewed_at"),
-            is_draft=raw.get("is_draft", False),
-            reviews=reviews,
-            processed_comment_ids=processed_ids,
-        )
+    def save(self, pr: PullRequest) -> None:
+        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
+        data = self._load()
+        reviewed = data.setdefault("reviewed", {})
 
-def _make_key(pr_id: PullRequestId) -> str:
-    return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
+        key = _make_key(pr.id)
+        reviewed[key] = self._serialize(pr)
+
+        self._save(data)
+
+    def reset(self) -> None:
+        """Clear all persisted state by deleting and recreating the file."""
+        logger.info("Resetting state file %s", self._file_path)
+        if self._file_path.exists():
+            self._file_path.unlink()
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_path.write_text('{"reviewed":{}}')

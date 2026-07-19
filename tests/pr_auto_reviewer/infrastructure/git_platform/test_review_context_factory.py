@@ -170,4 +170,3 @@ class TestReviewContextFactoryBuild:
 
         assert isinstance(result, ComposedPrompt)
         assert compose.execute_calls[0].diff == "+def foo(): pass\n"
-
