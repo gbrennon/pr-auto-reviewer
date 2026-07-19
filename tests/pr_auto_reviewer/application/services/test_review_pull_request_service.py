@@ -156,7 +156,7 @@ class TestReviewPullRequestService:
         assert len(pr_repo.save_calls) == 1
 
 
-    def test_review_requested_alone_does_not_trigger_review(self):
+    def test_re_review_triggered_when_review_requested(self):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
             pr_id=_pr_id(),
@@ -180,10 +180,10 @@ class TestReviewPullRequestService:
             pr_repo, changeset, factory, llm, publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 0
-        assert len(factory.build_calls) == 0
-        assert len(llm.review_prompt_calls) == 0
-        assert len(publisher.publish_calls) == 0
+        assert len(changeset.fetch_calls) == 1
+        assert len(factory.build_calls) == 1
+        assert len(llm.review_prompt_calls) == 1
+        assert len(publisher.publish_calls) == 1
         assert len(pr_repo.save_calls) == 1
 
     def test_no_re_review_when_review_requested_false(self):
