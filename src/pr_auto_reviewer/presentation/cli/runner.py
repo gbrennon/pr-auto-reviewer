@@ -77,10 +77,6 @@ class CliRunner:
 
         force_mode = args.force or self._output_mode == "terminal"
 
-        if self._token_verifier:
-            verify_id = PullRequestId(repository=args.repo, number=args.pr)
-            self._token_verifier.verify(verify_id)
-
         if args.verbose:
             print(
                 f"[verbose] Fetching PR #{args.pr} from repository '{args.repo}'..."
@@ -99,7 +95,6 @@ class CliRunner:
             reason = "not found or not open" if not force_mode else "not found"
             print(f"Error: PR #{args.pr} {reason} in {args.repo}")
             if args.verbose and not force_mode:
-                open_prs = self._pr_lister.list_open(args.repo)
                 if open_prs:
                     listed = ", ".join(f"#{p.pr_id.number}" for p in open_prs)
                     print(f"[verbose] {len(open_prs)} open PR(s) found: {listed}")

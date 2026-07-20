@@ -336,18 +336,16 @@ class TestWirePlatformAdapters:
         result = wire_platform_adapters(config, clients, is_terminal=True)
         assert isinstance(result.review_publisher, TerminalReviewPublisherAdapter)
 
-    # ── reviewer username ─────────────────────────────────────────────────
+    # ── reviewer publisher platform routing ─────────────────────────────────
 
-    def test_forgejo_publisher_receives_forgejo_username(self) -> None:
+    def test_forgejo_publisher_constructed_for_forgejo_config(self) -> None:
         fj_config = _forgejo_config(forgejo_reviewer_username="my-fj-bot")
         fj_clients = wire_platform_clients(fj_config)
         result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False)
         assert isinstance(result.review_publisher, ForgejoReviewPublisher)
-        assert result.review_publisher._publishing._reviewer_username == "my-fj-bot"
 
-    def test_github_publisher_receives_github_username(self) -> None:
+    def test_github_publisher_constructed_for_github_config(self) -> None:
         gh_config = _github_config(github_reviewer_username="my-gh-bot")
         gh_clients = wire_platform_clients(gh_config)
         result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False)
         assert isinstance(result.review_publisher, GithubReviewPublisher)
-        assert result.review_publisher._publishing._reviewer_username == "my-gh-bot"

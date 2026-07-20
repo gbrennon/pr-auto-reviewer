@@ -11,16 +11,18 @@ from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 class MockPrLister(PrListerPort):
     def __init__(self, prs: list[OpenPullRequest]) -> None:
         self._prs = prs
+        self.list_open_call_count = 0
+        self.get_pr_call_count = 0
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
+        self.list_open_call_count += 1
         return self._prs
-
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
+        self.get_pr_call_count += 1
         for p in self._prs:
             if p.pr_id.number == pr_number:
                 return p
         return None
-
 class TestCliRunner:
     """Tests for CliRunner class."""
 
@@ -537,3 +539,40 @@ class TestCliRunner:
             if "[verbose]" in str(c)
         ]
         assert len(verbose_calls) == 0
+
+    def test_run_review_reuses_open_prs_on_invalid_pr(
+        self,
+        mock_review_service: MagicMock,
+        mock_process_commands_service: MagicMock,
+        mock_review_reader: MagicMock,
+        mock_review_item_parser: MagicMock,
+    ) -> None:
+        """Invalid PR number reuses cached open_prs — no duplicate list_open (Bug 2 fix)."""
+        from pr_auto_reviewer.presentation.cli.runner import CliRunner
+
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            is_draft=False,
+        )
+        pr_lister = MockPrLister([open_pr])
+
+        runner = CliRunner(
+            review_service=mock_review_service,
+            process_commands_service=mock_process_commands_service,
+            review_reader=mock_review_reader,
+            pr_lister=pr_lister,
+            review_item_parser=mock_review_item_parser,
+        )
+
+        result = runner._run_review(["--repo", "owner/repo", "--pr", "99"])
+
+        assert result == 1  # error exit code
+        assert pr_lister.list_open_call_count == 1, (
+            f"Expected 1 list_open call, got {pr_lister.list_open_call_count}"
+        )
+        assert pr_lister.get_pr_call_count == 0, (
+            f"Expected 0 get_pr calls (cached list should be sufficient), "
+            f"got {pr_lister.get_pr_call_count}"
+        )
