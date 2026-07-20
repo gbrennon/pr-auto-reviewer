@@ -179,6 +179,89 @@ class TestOllamaLlmAdapter:
         with pytest.raises(Exception):
             adapter.review(sample_diff, sample_context)
 
+
+    def test_retry_succeeds_after_validation_failure(
+        self, monkeypatch, sample_diff: PullRequestDiff,
+        sample_context: RepositoryContext,
+    ) -> None:
+        """Retry loop reprocesses when initial response fails validation.
+
+        Simulates transient LLM quality issues: first response triggers
+        diagnose_failures (empty JSON → missing verdict), correction prompt is
+        built, second response passes validation.
+        """
+        adapter = OllamaLlmAdapter(
+            "http://localhost:11434", "code-review", max_retries=3,
+        )
+
+        call_count = 0
+
+        bad_raw = "{}"
+        good_raw = json.dumps({
+            "verdict": "changes_requested",
+            "issues": [{
+                "file": "src/foo.py",
+                "description": "bad code",
+                "severity": "major",
+                "category": "maintainability",
+                "current_code": "x = 1",
+                "suggested_fix": "x = 2",
+            }],
+        })
+
+        def fake_request_ollama(_prompt_text: str, _timeout: int):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return (bad_raw, 100.0, 10, 0.5)
+            return (good_raw, 100.0, 10, 0.5)
+
+        monkeypatch.setattr(adapter, "_request_ollama", fake_request_ollama)
+        monkeypatch.setattr(adapter, "_dump_prompt_to_file", lambda *_: None)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        result = adapter.review(sample_diff, sample_context)
+
+        assert call_count == 2
+        assert isinstance(result, CodeReview)
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+        assert result.items[0].file_path == "src/foo.py"
+
+    def test_retry_exhausts_attempts_when_all_validations_fail(
+        self, monkeypatch, sample_diff: PullRequestDiff,
+        sample_context: RepositoryContext,
+    ) -> None:
+        """Returns last CodeReview when every retry attempt fails validation.
+
+        The retry loop calls _request_ollama exactly max_retries times.
+        The last parsed CodeReview (with failures) is returned — the caller
+        is responsible for deciding how to handle it.
+        """
+        max_retries = 3
+        adapter = OllamaLlmAdapter(
+            "http://localhost:11434", "code-review", max_retries=max_retries,
+        )
+
+        call_count = 0
+        bad_raw = "{}"
+
+        def fake_request_ollama(_prompt_text: str, _timeout: int):
+            nonlocal call_count
+            call_count += 1
+            return (bad_raw, 100.0, 10, 0.5)
+
+        monkeypatch.setattr(adapter, "_request_ollama", fake_request_ollama)
+        monkeypatch.setattr(adapter, "_dump_prompt_to_file", lambda *_: None)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        result = adapter.review(sample_diff, sample_context)
+
+        assert call_count == max_retries
+        assert isinstance(result, CodeReview)
+        # With empty JSON, parse falls back to markdown which may produce COMMENTED
+        assert result.verdict is not None
+
 class TestPromptBuilder:
     """Tests for PromptBuilder."""
 

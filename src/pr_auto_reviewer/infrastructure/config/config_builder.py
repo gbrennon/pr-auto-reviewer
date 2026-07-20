@@ -84,7 +84,7 @@ class ConfigBuilder:
     def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
         return source.get(key, default).strip()
 
-    def build(self, source: dict[str, str], env_name: str) -> Config:
+    def build(self, source: dict[str, str], env_name: str, llm_max_retries: int = 5) -> Config:
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
             or self._get(source, "FORGEJO_MODE")
@@ -163,6 +163,7 @@ class ConfigBuilder:
             llm_host=llm_host,
             llm_model=llm_model,
             ollama_timeout=ollama_timeout,
+            llm_max_retries=llm_max_retries,
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,

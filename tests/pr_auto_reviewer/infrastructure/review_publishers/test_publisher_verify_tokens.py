@@ -66,7 +66,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
 
@@ -92,7 +91,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
         pr_id = PullRequestId(repository="my-org/my-repo", number=42)
@@ -116,7 +114,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
         pr_id = PullRequestId(repository="my-org/my-repo", number=7)
@@ -141,7 +138,6 @@ class TestPublisherVerifyTokens:
         )
         adapter = GithubReviewPublisher(
             client=reviewer_spy,
-            reviewer_username="reviewer-bot",
             owner_client=owner_spy,
         )
 
@@ -150,3 +146,81 @@ class TestPublisherVerifyTokens:
 
         with pytest.raises(ValueError, match="msg"):
             adapter.publish(pr_id, review)
+
+    def test_publish_does_not_request_reviewer(
+        self, integration_data: dict,
+    ) -> None:
+        """Publisher MUST NOT POST to requested_reviewers endpoint (Bug 4 fix)."""
+        from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
+            ReviewPublishingService,
+        )
+
+        owner_spy = SpyClient(
+            FixtureHttpClient(integration_data["private"], "private"),
+        )
+        reviewer_spy = SpyClient(
+            FixtureHttpClient(integration_data["private"], "private"),
+        )
+        service = ReviewPublishingService(client=reviewer_spy, owner_client=owner_spy)
+
+        pr_id = PullRequestId(repository="owner/repo", number=1)
+        review = _build_review()
+
+        service.publish_formal_review(
+            pr_id,
+            verdict_event="APPROVE",
+            body="LGTM",
+            blocking=review.items,
+            official=False,
+        )
+        service.publish_comment(pr_id, "Summary comment")
+
+        requested_reviewer_posts = [
+            (path, _)
+            for path, _ in reviewer_spy.post_calls
+            if "requested_reviewers" in path
+        ]
+        assert len(requested_reviewer_posts) == 0, (
+            f"No POST to requested_reviewers allowed, got {requested_reviewer_posts}"
+        )
+
+    def test_publish_formal_review_with_diff_avoids_owner_api_calls(
+        self, integration_data: dict,
+    ) -> None:
+        """When diff is provided, publish_formal_review MUST NOT call get/get_raw on owner_client."""
+        from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+        from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+        from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
+            ReviewPublishingService,
+        )
+
+        owner_spy = SpyClient(
+            FixtureHttpClient(integration_data["private"], "private"),
+        )
+        reviewer_spy = SpyClient(
+            FixtureHttpClient(integration_data["private"], "private"),
+        )
+        service = ReviewPublishingService(client=reviewer_spy, owner_client=owner_spy)
+
+        pr_id = PullRequestId(repository="owner/repo", number=1)
+        diff = PullRequestDiff(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123def456"),
+            diff_content="diff --git a/file.py b/file.py\n+print('hello')",
+        )
+
+        service.publish_formal_review(
+            pr_id,
+            verdict_event="APPROVE",
+            body="LGTM",
+            blocking=[],
+            official=False,
+            diff=diff,
+        )
+
+        assert len(owner_spy.get_calls) == 0, (
+            f"Expected 0 get() calls on owner_client when diff is provided, got {owner_spy.get_calls}"
+        )
+        assert len(owner_spy.get_raw_calls) == 0, (
+            f"Expected 0 get_raw() calls on owner_client when diff is provided, got {owner_spy.get_raw_calls}"
+        )

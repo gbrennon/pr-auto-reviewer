@@ -44,9 +44,12 @@ class RateLimitTracker:
         )
 
     def record(self, snapshot: RateLimitSnapshot) -> None:
-        """Record a new rate-limit snapshot and persist it to disk."""
+        """Record a new rate-limit snapshot and persist it (throttled)."""
         self.current = snapshot
-        self._store.save(snapshot)
+        if snapshot.exhausted():
+            self._store.save_urgent(snapshot)
+        else:
+            self._store.save(snapshot)
         status = snapshot.summary()
         logger.info(
             "Rate limit [%s/%s/%s]: %s",

@@ -18,10 +18,10 @@ class RecordingReviewPublisher(ReviewPublisherPort):
     """Real ReviewPublisherPort implementation that records calls for test assertions."""
 
     def __init__(self) -> None:
-        self.publish_calls: list[tuple[PullRequestId, CodeReview]] = []
+        self.publish_calls: list[tuple[PullRequestId, CodeReview, PullRequestDiff | None]] = []
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
-        self.publish_calls.append((pr_id, review))
+    def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
+        self.publish_calls.append((pr_id, review, diff))
 
 
 class RecordingChangesetFetcher(ChangesetFetcherPort):
