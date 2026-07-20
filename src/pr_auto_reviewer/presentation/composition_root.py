@@ -36,6 +36,7 @@ from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
 )
+from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
 logger = logging.getLogger(__name__)
@@ -162,6 +163,13 @@ class CompositionRoot:
 
 def bootstrap() -> ApplicationComponents:
     """Backward-compatible entry point.  Delegates to CompositionRoot."""
+    try:
+        deleted = clean_temp_files()
+        if deleted:
+            logger.info("Cleaned up %d stale temp file(s) on startup", deleted)
+    except Exception:
+        logger.warning("Temp file cleanup failed, continuing", exc_info=True)
+
     root = CompositionRoot()
     return root.components
 
