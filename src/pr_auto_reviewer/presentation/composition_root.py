@@ -29,6 +29,7 @@ from pr_auto_reviewer.application.serializers.issue_body_builder import (
 )
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
+from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
 from pr_auto_reviewer.infrastructure.config import load_config
 from pr_auto_reviewer.infrastructure.container import Container
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
@@ -157,6 +158,7 @@ class CompositionRoot:
             pr_lister=self._components.pr_lister,
             review_service=self._components.review_service,
             notifier=self._components.notifier,
+            update_tracker=RepoUpdateTracker(),
         )
 
         daemon.start()
