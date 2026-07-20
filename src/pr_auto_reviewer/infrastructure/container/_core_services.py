@@ -97,6 +97,7 @@ def wire_core_services(
         config.llm_host,
         config.llm_model or "code-review:latest",
         ollama_timeout=config.ollama_timeout,
+        max_retries=config.llm_max_retries,
     )
     command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
