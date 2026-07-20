@@ -11,6 +11,9 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
+    split_repository_prefix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,7 @@ class ForgejoPrLister(PrListerPort):
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         """List all open PRs in the given repository."""
+        _, repository = split_repository_prefix(repository)
         logger.info("Listing open PRs for %s", repository)
         try:
             data = self._client.get(
@@ -40,9 +44,10 @@ class ForgejoPrLister(PrListerPort):
 
                 number = pr.get("number")
                 sha = pr.get("head", {}).get("sha")
-                updated_at = pr.get("updated_at", "") or None
+                target_branch = pr.get("base", {}).get("ref", "")
                 title = pr.get("title", "")
                 description = pr.get("body", "")
+                review_requested = bool(pr.get("requested_reviewers"))
 
                 if number and sha:
                     result.append(
@@ -52,9 +57,11 @@ class ForgejoPrLister(PrListerPort):
                             title=title,
                             description=description,
                             is_draft=pr.get("draft", False),
-                            updated_at=updated_at,
+                            review_requested=review_requested,
+                            target_branch=target_branch,
                         )
                     )
+
 
             logger.debug("Found %d open PRs in %s", len(result), repository)
             pr_summaries = [(p.pr_id.number, p.title[:40], p.head_sha.value[:7]) for p in result]
@@ -67,6 +74,7 @@ class ForgejoPrLister(PrListerPort):
 
     def get_pr(self, repository: str, pr_number: int) -> Optional[OpenPullRequest]:
         """Fetch a single PR by number, regardless of state."""
+        _, repository = split_repository_prefix(repository)
         logger.info("Fetching PR %s #%d", repository, pr_number)
         try:
             pr = self._client.get(
@@ -78,7 +86,8 @@ class ForgejoPrLister(PrListerPort):
             sha = pr.get("head", {}).get("sha")
             title = pr.get("title", "")
             description = pr.get("body", "")
-            updated_at = pr.get("updated_at", "") or None
+            target_branch = pr.get("base", {}).get("ref", "")
+            review_requested = bool(pr.get("requested_reviewers"))
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
                 return None
@@ -90,7 +99,8 @@ class ForgejoPrLister(PrListerPort):
                 title=title,
                 description=description,
                 is_draft=pr.get("draft", False),
-                updated_at=updated_at,
+                review_requested=review_requested,
+                target_branch=target_branch,
             )
             logger.info("ForgejoPrLister.get_pr return: title='%s' sha=%s", title[:60], sha[:7])
             return result

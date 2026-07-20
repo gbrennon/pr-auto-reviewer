@@ -23,6 +23,7 @@ class ReviewContextFactoryPort(Protocol):
         diff: PullRequestDiff,
         pr_title: str | None = None,
         pr_description: str | None = None,
+        target_branch: str = "",
     ) -> ComposedPrompt:
         """Fetch repo context, build ReviewContext, compose fragments.
 
@@ -31,6 +32,8 @@ class ReviewContextFactoryPort(Protocol):
             diff: The diff to review.
             pr_title: Optional PR title for context.
             pr_description: Optional PR description for context.
+            target_branch: Optional target branch name for tree/raw URL
+                resolution (defaults to \"main\" when empty).
 
         Returns:
             A fully assembled prompt ready for LLM consumption.
