@@ -158,13 +158,14 @@ class TestLoadConfig:
         monkeypatch.setenv("MAX_FILE_CHARS", "2000")
         monkeypatch.setenv("MAX_FILES", "5")
         monkeypatch.setenv("MAX_STRUCTURE_LINES", "50")
+        monkeypatch.setenv("LLM_MAX_RETRIES", "3")
         cfg = load_config()
         assert cfg.poll_interval == 30
         assert cfg.max_prompt_tokens == 4096
         assert cfg.max_file_chars == 2000
         assert cfg.max_files == 5
         assert cfg.max_structure_lines == 50
-
+        assert cfg.llm_max_retries == 3
     def test_use_compact_template_true(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
