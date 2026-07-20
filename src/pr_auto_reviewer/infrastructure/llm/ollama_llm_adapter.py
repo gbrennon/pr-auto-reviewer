@@ -66,7 +66,7 @@ class OllamaLlmAdapter(LlmReviewPort):
         path = f"/tmp/ollama-prompt-try{attempt + 1}-{label}.txt"
         with open(path, "w") as f:
             f.write(prompt_text)
-        logger.info("Try %d/%d — prompt dumped to %s (%d chars)", attempt + 1, self._max_retries, path, len(prompt_text))
+        logger.debug("Try %d/%d — prompt dumped to %s (%d chars)", attempt + 1, self._max_retries, path, len(prompt_text))
 
     def _request_ollama(
         self, prompt_text: str, timeout: int,
