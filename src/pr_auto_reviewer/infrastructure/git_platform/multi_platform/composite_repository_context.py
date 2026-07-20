@@ -28,9 +28,9 @@ class CompositeRepositoryContext(RepositoryContextPort):
             repository=clean_repo, number=pr_id.number,
         )
 
-    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
+    def fetch(self, pr_id: PullRequestId, target_branch: str = "") -> RepositoryContext:
         platform, clean_pr_id = self._dispatch(pr_id)
-        return self._contexts[platform].fetch(clean_pr_id)
+        return self._contexts[platform].fetch(clean_pr_id, target_branch=target_branch)
 
     def build_fragment_context(
         self,

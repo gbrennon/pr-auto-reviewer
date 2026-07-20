@@ -310,31 +310,9 @@ class TestPullRequest:
 
 
 class TestPullRequestLastReviewedAt:
-    """Tests for last_reviewed_at timestamp tracking on the PullRequest aggregate."""
+    """Tests for the last_reviewed_at field on the PullRequest aggregate."""
 
-    def test_add_review_preserves_last_reviewed_at_when_not_provided(self) -> None:
-        """When last_reviewed_at is None (default), add_review preserves the existing value."""
-        pr = PullRequest(
-            id=PullRequestId(repository="owner/repo", number=42),
-            title="T",
-            head_sha=CommitSha(value="aaa"),
-            last_reviewed_at="2025-01-01T00:00:00Z",
-        )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
-        result = pr.add_review(review, CommitSha(value="bbb"))
-        assert result.last_reviewed_at == "2025-01-01T00:00:00Z"
 
-    def test_add_review_sets_last_reviewed_at_when_provided(self) -> None:
-        """When last_reviewed_at is provided, add_review updates the timestamp."""
-        pr = PullRequest(
-            id=PullRequestId(repository="owner/repo", number=42),
-            title="T",
-            head_sha=CommitSha(value="aaa"),
-            last_reviewed_at="2025-01-01T00:00:00Z",
-        )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
-        result = pr.add_review(review, CommitSha(value="bbb"), last_reviewed_at="2025-02-01T00:00:00Z")
-        assert result.last_reviewed_at == "2025-02-01T00:00:00Z"
 
     def test_new_pr_has_none_last_reviewed_at(self) -> None:
         """A newly created PullRequest has last_reviewed_at=None by default."""

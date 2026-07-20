@@ -91,7 +91,7 @@ class StubRepositoryContext(RepositoryContextPort):
             tuple[RepositoryContext, list[str], list[str] | None]
         ] = []
 
-    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
+    def fetch(self, pr_id: PullRequestId, target_branch: str = "") -> RepositoryContext:
         self.fetch_calls.append(pr_id)
         return self._ctx
 
@@ -161,6 +161,7 @@ class StubReviewContextFactory(ReviewContextFactoryPort):
         diff: PullRequestDiff,
         pr_title: str | None = None,
         pr_description: str | None = None,
+        target_branch: str = "",
     ) -> ComposedPrompt:
         self.build_calls.append((pr_id, diff, pr_title, pr_description))
         if self._prompt is not None:
