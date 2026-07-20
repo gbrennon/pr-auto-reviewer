@@ -17,10 +17,12 @@ class _StubRepositoryContext(RepositoryContextPort):
 
     def __init__(self, repo_context: RepositoryContext) -> None:
         self.fetch_calls: list[PullRequestId] = []
+        self.fetch_target_branches: list[str] = []
         self._repo_context = repo_context
 
-    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
+    def fetch(self, pr_id: PullRequestId, target_branch: str = "") -> RepositoryContext:
         self.fetch_calls.append(pr_id)
+        self.fetch_target_branches.append(target_branch)
         return self._repo_context
 
     def build_fragment_context(
@@ -92,3 +94,33 @@ class TestCompositeRepositoryContext:
 
         assert result[0] == "fragment-content"
         assert result[1] == "base-sha-abc"
+
+
+class TestBranchThreading:
+    """Verify target_branch flows from CompositeRepositoryContext.fetch()
+    through to platform-specific adapters."""
+
+    def test_target_branch_passthrough_to_platform(self):
+        stub = _StubRepositoryContext(
+            RepositoryContext(architecture_hint="test-arch")
+        )
+        composite = CompositeRepositoryContext({"forgejo": stub})
+
+        result = composite.fetch(
+            PullRequestId(repository="org/repo", number=3),
+            target_branch="develop",
+        )
+
+        assert result.architecture_hint == "test-arch"
+        assert len(stub.fetch_calls) == 1
+        assert stub.fetch_target_branches == ["develop"]
+
+    def test_target_branch_defaults_to_empty_string(self):
+        stub = _StubRepositoryContext(
+            RepositoryContext(architecture_hint="test-arch")
+        )
+        composite = CompositeRepositoryContext({"forgejo": stub})
+
+        composite.fetch(PullRequestId(repository="org/repo", number=1))
+
+        assert stub.fetch_target_branches == [""]

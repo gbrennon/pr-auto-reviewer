@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 
 from ..commands.review_pull_request_command import ReviewPullRequestCommand
@@ -49,6 +48,75 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         self._review_publisher = review_publisher
         self._token_verifier = token_verifier
 
+    def execute(self, command: ReviewPullRequestCommand) -> None:
+        self._log_start(command)
+
+        pr = self._load_or_create_pull_request(command)
+
+        if not self._needs_review(command, pr):
+            self._handle_already_reviewed(command, pr)
+            return
+
+        if self._token_verifier:
+            self._token_verifier.verify(command.pr_id)
+
+        diff = self._fetch_diff(command)
+        description = self._augment_description(command.description, pr)
+        composed = self._review_context_factory.build(
+            command.pr_id, diff,
+            pr_title=command.title,
+            pr_description=description,
+            target_branch=command.target_branch,
+        )
+        review = self._run_llm_review_with_prompt(composed)
+        review = self._add_deterministic_findings(review, diff)
+
+        blocking_ids = self._extract_blocking_ids(review)
+
+        # Resolve old blocking items no longer flagged in this review
+        if pr.unresolved_blocking_ids:
+            resolved = [
+                id_ for id_ in pr.unresolved_blocking_ids
+                if id_ not in blocking_ids
+            ]
+            if resolved:
+                pr = pr.with_resolved_blocking(*resolved)
+
+        # Track new or persistent blocking items
+        if blocking_ids:
+            pr = pr.with_unresolved_blocking(*blocking_ids)
+
+        # Guard: don't approve while any blocking issues remain unresolved.
+        # Override the LLM verdict to CHANGES_REQUESTED when old or new
+        # blockers are still open, regardless of what the model returned.
+        if (
+            pr.unresolved_blocking_ids
+            and review.verdict != ReviewVerdict.CHANGES_REQUESTED
+        ):
+            review = CodeReview(
+                verdict=ReviewVerdict.CHANGES_REQUESTED,
+                reason=self._build_unresolved_reason(
+                    pr.unresolved_blocking_ids, review,
+                ),
+                summary=review.summary,
+                items=review.items,
+                suggestions=review.suggestions,
+                praise=review.praise,
+                model_used=review.model_used,
+            )
+
+        self._publish_review(command.pr_id, review)
+        pr = self._record_review(pr, review, command.head_sha)
+        self._persist(pr)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "REVIEW COMPLETE | pr=%s verdict=%s items=%d summary='%s'",
+                command.pr_id,
+                review.verdict.value,
+                len(review.items),
+                (review.summary or "")[:80],
+            )
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
@@ -73,11 +141,10 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             return True
         if pr.needs_review(command.head_sha):
             return True
-        if command.updated_at and pr.last_reviewed_at:
-            if command.updated_at > pr.last_reviewed_at:
-                logger.info("PR %s updated_at changed (%s > %s), re-reviewing",
-                            command.pr_id, command.updated_at, pr.last_reviewed_at)
-                return True
+        if command.review_requested and pr.reviews:
+            logger.info("PR %s has been re-requested for review, reviewing again",
+                        command.pr_id)
+            return True
         return False
 
     def _handle_already_reviewed(
@@ -295,79 +362,8 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
     def _record_review(
         self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
     ) -> PullRequest:
-        return pr.add_review(
-            review, head_sha,
-            last_reviewed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        )
+        return pr.add_review(review, head_sha)
 
     def _persist(self, pr: PullRequest) -> None:
         self._pr_repository.save(pr)
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
-        self._log_start(command)
-
-        pr = self._load_or_create_pull_request(command)
-
-        if not self._needs_review(command, pr):
-            self._handle_already_reviewed(command, pr)
-            return
-
-        if self._token_verifier:
-            self._token_verifier.verify(command.pr_id)
-
-        diff = self._fetch_diff(command)
-        description = self._augment_description(command.description, pr)
-        composed = self._review_context_factory.build(
-            command.pr_id, diff,
-            pr_title=command.title,
-            pr_description=description,
-        )
-        review = self._run_llm_review_with_prompt(composed)
-        review = self._add_deterministic_findings(review, diff)
-
-        blocking_ids = self._extract_blocking_ids(review)
-
-        # Resolve old blocking items no longer flagged in this review
-        if pr.unresolved_blocking_ids:
-            resolved = [
-                id_ for id_ in pr.unresolved_blocking_ids
-                if id_ not in blocking_ids
-            ]
-            if resolved:
-                pr = pr.with_resolved_blocking(*resolved)
-
-        # Track new or persistent blocking items
-        if blocking_ids:
-            pr = pr.with_unresolved_blocking(*blocking_ids)
-
-        # Guard: don't approve while any blocking issues remain unresolved.
-        # Override the LLM verdict to CHANGES_REQUESTED when old or new
-        # blockers are still open, regardless of what the model returned.
-        if (
-            pr.unresolved_blocking_ids
-            and review.verdict != ReviewVerdict.CHANGES_REQUESTED
-        ):
-            review = CodeReview(
-                verdict=ReviewVerdict.CHANGES_REQUESTED,
-                reason=self._build_unresolved_reason(
-                    pr.unresolved_blocking_ids, review,
-                ),
-                summary=review.summary,
-                items=review.items,
-                suggestions=review.suggestions,
-                praise=review.praise,
-                model_used=review.model_used,
-            )
-
-        self._publish_review(command.pr_id, review)
-        pr = self._record_review(pr, review, command.head_sha)
-        self._persist(pr)
-
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "REVIEW COMPLETE | pr=%s verdict=%s items=%d summary='%s'",
-                command.pr_id,
-                review.verdict.value,
-                len(review.items),
-                (review.summary or "")[:80],
-            )

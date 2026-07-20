@@ -65,7 +65,8 @@ class PollingDaemon:
             title=pr.title,
             description=pr.description,
             force=force,
-            updated_at=pr.updated_at,
+            review_requested=pr.review_requested,
+            target_branch=pr.target_branch,
         )
 
         try:

@@ -6,7 +6,7 @@ from ....domain.value_objects.pull_request_id import PullRequestId
 from ....domain.value_objects.repository_context import RepositoryContext
 
 class RepositoryContextPort(Protocol):
-    def fetch(self, pr_id: PullRequestId) -> RepositoryContext:
+    def fetch(self, pr_id: PullRequestId, target_branch: str = "") -> RepositoryContext:
         """Return the raw repository context for *pr_id*."""
         ...
 
