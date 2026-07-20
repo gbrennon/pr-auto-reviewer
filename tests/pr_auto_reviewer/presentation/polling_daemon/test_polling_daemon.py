@@ -8,14 +8,14 @@ import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, RepoListerPort, PrListerPort
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
 
 class MockRepoLister(RepoListerPort):
-    def __init__(self, repos: list[str]) -> None:
+    def __init__(self, repos: list[RepoInfo]) -> None:
         self._repos = repos
 
-    def list_repos(self) -> list[str]:
+    def list_repos(self) -> list[RepoInfo]:
         return self._repos
 
 class MockPrLister(PrListerPort):
@@ -50,7 +50,7 @@ class TestPollingDaemon:
     def daemon(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> PollingDaemon:
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([])
         return PollingDaemon(
             config=config,
@@ -82,7 +82,7 @@ class TestPollingDaemon:
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
         """Logs debug when no open PRs in repo."""
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([])
         daemon = PollingDaemon(
             config=config,
@@ -105,7 +105,7 @@ class TestPollingDaemon:
             title="WIP",
             is_draft=True,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([draft_pr])
         daemon = PollingDaemon(
             config=config,
@@ -130,7 +130,7 @@ class TestPollingDaemon:
             title="Fix bug",
             is_draft=False,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([open_pr])
         daemon = PollingDaemon(
             config=config,
@@ -163,7 +163,7 @@ class TestPollingDaemon:
             title="Fix bug",
             is_draft=False,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([open_pr])
         daemon = PollingDaemon(
             config=config,
@@ -199,7 +199,7 @@ class TestPollingDaemon:
             title="Fix bug",
             is_draft=False,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([open_pr])
         daemon = PollingDaemon(
             config=config,
@@ -234,7 +234,7 @@ class TestPollingDaemon:
             title="Fix bug",
             is_draft=False,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([open_pr])
         mock_review_service.execute.side_effect = EmptyDiffError("empty")
 
@@ -277,7 +277,7 @@ class TestPollingDaemon:
             title="Fix bug",
             is_draft=False,
         )
-        repo_lister = MockRepoLister(["owner/repo1"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([open_pr])
         daemon = PollingDaemon(
             config=config,
