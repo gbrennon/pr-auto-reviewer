@@ -590,3 +590,77 @@ class TestReviewPullRequestService:
 
         _pr_id_arg, review, _ = publisher.publish_calls[0]
         assert len(review.items) == 5
+
+    def test_preserves_changes_requested_verdict_when_adding_deterministic_findings(self):
+        """LLM returns CHANGES_REQUESTED + diff triggers noisy-log detection
+        → verdict stays CHANGES_REQUESTED after _add_deterministic_findings."""
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/client.py b/src/client.py\n"
+                "+++ b/src/client.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                '+        logger.info("GET %s params=%s", url, params)\n'
+            ),
+        )
+        llm_review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="Needs work",
+            items=[
+                ReviewItem(
+                    number=1,
+                    severity="blocker",
+                    category="bug",
+                    file_path="src/other.py",
+                    description="Null dereference",
+                    current_code="x = None; x.foo()",
+                    suggested_fix="guard with if x is not None",
+                ),
+                ReviewItem(
+                    number=2,
+                    severity="major",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="Magic number",
+                    current_code="sleep(300)",
+                    suggested_fix="sleep(TIMEOUT)",
+                ),
+                ReviewItem(
+                    number=3,
+                    severity="minor",
+                    category="style",
+                    file_path="src/other.py",
+                    description="Bad variable name",
+                    current_code="x = 1",
+                    suggested_fix="count = 1",
+                ),
+                ReviewItem(
+                    number=4,
+                    severity="minor",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="Unused import",
+                    current_code="import os",
+                    suggested_fix="",
+                ),
+            ],
+        )
+        publisher = StubReviewPublisher()
+
+        ReviewPullRequestService(
+            StubPullRequestRepository(initial=None),
+            StubChangesetFetcher(diff),
+            StubReviewContextFactory(),
+            StubLlmReview(llm_review),
+            publisher,
+        ).execute(cmd)
+
+        _pr_id_arg, review, _diff = publisher.publish_calls[0]
+        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED, (
+            f"Expected CHANGES_REQUESTED but got {review.verdict}"
+        )
+        assert len(review.items) == 5, (
+            f"Expected 5 items (4 LLM + 1 deterministic), got {len(review.items)}"
+        )
