@@ -9,6 +9,7 @@ import time
 from pr_auto_reviewer.application.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
+from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
@@ -128,6 +129,12 @@ class PollingDaemon:
             f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
             f"run_once={self._config.run_once})"
         )
+        try:
+            deleted = clean_temp_files()
+            if deleted:
+                logger.info("Cleaned up %d stale temp file(s)", deleted)
+        except Exception:
+            logger.warning("Temp file cleanup failed, continuing", exc_info=True)
 
         cycle = 0
         try:
