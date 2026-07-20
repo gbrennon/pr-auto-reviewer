@@ -9,6 +9,7 @@ import time
 from pr_auto_reviewer.application.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
+from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
 from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
@@ -17,7 +18,7 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPo
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoListerPort
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
 from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
     PollingDaemonConfig,
 )
@@ -42,12 +43,14 @@ class PollingDaemon:
         pr_lister: PrListerPort,
         review_service: ReviewPullRequestUseCase,
         notifier: NotifierPort | None = None,
+        update_tracker: RepoUpdateTracker | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
         self._pr_lister = pr_lister
         self._review_service = review_service
         self._notifier = notifier
+        self._update_tracker = update_tracker
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
 
@@ -97,21 +100,28 @@ class PollingDaemon:
             return
 
         try:
-            for repo in repos:
-                open_prs = self._pr_lister.list_open(repo)
+            for info in repos:
+                if self._update_tracker and not self._update_tracker.is_stale(info.full_name, info.pushed_at):
+                    logger.debug("Repo %s unchanged since last cycle, skipping", info.full_name)
+                    continue
+
+                if self._update_tracker and info.pushed_at:
+                    self._update_tracker.mark_seen(info.full_name, info.pushed_at)
+
+                open_prs = self._pr_lister.list_open(info.full_name)
 
                 if self._force_pr is not None:
-                    forced = self._pr_lister.get_pr(repo, self._force_pr)
+                    forced = self._pr_lister.get_pr(info.full_name, self._force_pr)
                     if forced is not None:
                         if not any(p.pr_id.number == self._force_pr for p in open_prs):
                             open_prs.append(forced)
                             logger.info(
                                 "Force-fetched PR #%d in %s (state-agnostic)",
-                                self._force_pr, repo,
+                                self._force_pr, info.full_name,
                             )
 
                 if not open_prs:
-                    logger.debug(f"No open PRs in {repo}")
+                    logger.debug(f"No open PRs in {info.full_name}")
                     continue
 
                 for pr in open_prs:
@@ -122,7 +132,6 @@ class PollingDaemon:
                     self._process_pr(pr)
         except LlmUnavailableError:
             logger.warning("LLM unavailable — cancelling this cycle")
-
     def start(self) -> None:
         """Start the polling loop."""
         logger.info(

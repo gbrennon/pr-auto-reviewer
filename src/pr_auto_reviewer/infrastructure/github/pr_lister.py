@@ -30,7 +30,7 @@ class GithubPrLister(PrListerPort):
             data = self._client.get(
                 f"/repos/{repository}/pulls",
                 state="open",
-                limit=20,
+                per_page=100,
                 repo=repository,
             )
 

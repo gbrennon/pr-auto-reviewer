@@ -31,7 +31,7 @@ class ForgejoPrLister(PrListerPort):
             data = self._client.get(
                 f"/repos/{repository}/pulls",
                 state="open",
-                limit=20,
+                limit=100,
                 repo=repository,
             )
 
