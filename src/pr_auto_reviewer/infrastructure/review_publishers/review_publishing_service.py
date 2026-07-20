@@ -29,14 +29,10 @@ class ReviewPublishingService:
     def __init__(
         self,
         client: GitPlatformHttpClient,
-        reviewer_username: str,
         owner_client: GitPlatformHttpClient,
     ) -> None:
         self._client = client
-        self._reviewer_username = reviewer_username
         self._owner_client = owner_client
-
-    # -- token verification -------------------------------------------------
 
     def verify_tokens(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for both reviewer and owner tokens
@@ -71,26 +67,6 @@ class ReviewPublishingService:
             return len(reviews) if isinstance(reviews, list) else 0
         except Exception:
             return 0
-
-    # -- reviewer management ------------------------------------------------
-
-    def request_reviewer(self, pr_id: PullRequestId) -> None:
-        reviewers_path = (
-            f"/repos/{pr_id.repository}/pulls/{pr_id.number}/requested_reviewers"
-        )
-        try:
-            resp = self._owner_client.post(
-                reviewers_path,
-                {"reviewers": [self._reviewer_username]},
-                repo=pr_id.repository,
-            )
-            logger.debug("Reviewer request succeeded: %s", resp)
-        except Exception:
-            logger.warning(
-                "Failed to request reviewer '%s' for %s (non-fatal)",
-                self._reviewer_username,
-                pr_id,
-            )
 
     # -- comment publishing -------------------------------------------------
 
