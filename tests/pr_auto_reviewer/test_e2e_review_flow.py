@@ -9,16 +9,16 @@ import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, RepoListerPort, PrListerPort
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 
 class MockRepoLister(RepoListerPort):
-    def __init__(self, repos: list[str]) -> None:
+    def __init__(self, repos: list[RepoInfo]) -> None:
         self._repos = repos
         self.call_count = 0
 
-    def list_repos(self) -> list[str]:
+    def list_repos(self) -> list[RepoInfo]:
         self.call_count += 1
         return self._repos
 
@@ -48,7 +48,7 @@ class TestPollingDaemonE2E:
         stub_review_service,
     ) -> None:
         """Daemon fetches repos and PRs in a cycle."""
-        repo_lister = MockRepoLister(["repo1", "repo2"])
+        repo_lister = MockRepoLister([RepoInfo("repo1"), RepoInfo("repo2")])
         pr_lister = MockPrLister([])
 
         daemon = PollingDaemon(
@@ -75,7 +75,7 @@ class TestPollingDaemonE2E:
             is_draft=False,
         )
 
-        repo_lister = MockRepoLister(["test/repo"])
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
         pr_lister = MockPrLister([open_pr])
 
         daemon = PollingDaemon(
@@ -102,7 +102,7 @@ class TestPollingDaemonE2E:
             is_draft=True,
         )
 
-        repo_lister = MockRepoLister(["test/repo"])
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
         pr_lister = MockPrLister([draft_pr])
 
         daemon = PollingDaemon(
@@ -142,7 +142,7 @@ class TestPollingDaemonE2E:
         stub_review_service,
     ) -> None:
         """Daemon handles repo with no open PRs."""
-        repo_lister = MockRepoLister(["test/repo"])
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
         pr_lister = MockPrLister([])
 
         daemon = PollingDaemon(
@@ -171,7 +171,7 @@ class TestPollingDaemonE2E:
             is_draft=False,
         )
 
-        repo_lister = MockRepoLister(["owner/repo"])
+        repo_lister = MockRepoLister([RepoInfo("owner/repo")])
         pr_lister = MockPrLister([open_pr])
 
         daemon = PollingDaemon(
@@ -212,8 +212,8 @@ class TestPollingDaemonE2E:
         )
 
         class MultiRepoLister(RepoListerPort):
-            def list_repos(self) -> list[str]:
-                return ["owner/repo1", "owner/repo2"]
+            def list_repos(self) -> list[RepoInfo]:
+                return [RepoInfo("owner/repo1"), RepoInfo("owner/repo2")]
 
         class MultiPrLister(PrListerPort):
             def __init__(self) -> None:
