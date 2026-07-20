@@ -5,6 +5,9 @@ import logging
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
 )
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
+    PullRequestDiff,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -26,16 +29,13 @@ class GithubReviewPublisher(ReviewPublisherPort):
     def __init__(
         self,
         client: GitPlatformHttpClient,
-        reviewer_username: str,
         owner_client: GitPlatformHttpClient,
         review_mode: str = "formal",
     ) -> None:
         self._review_mode = review_mode
-        self._publishing = ReviewPublishingService(
-            client, reviewer_username, owner_client,
-        )
+        self._publishing = ReviewPublishingService(client, owner_client)
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+    def publish(self, pr_id: PullRequestId, review: CodeReview, *, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
@@ -85,7 +85,6 @@ class GithubReviewPublisher(ReviewPublisherPort):
             start_number=self._publishing.count_existing_items(pr_id),
         )
 
-        self._publishing.request_reviewer(pr_id)
 
         self._publishing.publish_formal_review(
             pr_id,
@@ -94,4 +93,5 @@ class GithubReviewPublisher(ReviewPublisherPort):
             blocking,
             official=False,
             diff_headers={"Accept": "application/vnd.github.diff"},
+            diff=diff,
         )

@@ -2,24 +2,23 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
+import re
 from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
-    ReviewBodyFormatter,
-)
+from pr_auto_reviewer.infrastructure.review_publishers._shared import _body_formatter
 
 logger = logging.getLogger(__name__)
-
-_body_formatter = ReviewBodyFormatter()
 
 class TerminalReviewPublisherAdapter(ReviewPublisherPort):
     def __init__(self, output_path: str | None = None) -> None:
@@ -62,7 +61,7 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
         }
         return json.dumps(data, indent=2, ensure_ascii=False)
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+    def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         body = _body_formatter.format(review)
         json_text = self._review_to_json(review)
 

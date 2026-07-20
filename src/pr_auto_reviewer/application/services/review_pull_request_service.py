@@ -105,7 +105,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 model_used=review.model_used,
             )
 
-        self._publish_review(command.pr_id, review)
+        self._publish_review(command.pr_id, review, diff)
         pr = self._record_review(pr, review, command.head_sha)
         self._persist(pr)
 
@@ -355,10 +355,10 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         return "\n".join(lines)
 
     def _publish_review(
-        self, pr_id: PullRequestId, review: CodeReview
+        self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff
     ) -> None:
         logger.info("Publishing review to platform...")
-        self._review_publisher.publish(pr_id, review)
+        self._review_publisher.publish(pr_id, review, diff)
     def _record_review(
         self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
     ) -> PullRequest:

@@ -5,6 +5,9 @@ import logging
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
 )
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
+    PullRequestDiff,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -27,14 +30,11 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
     def __init__(
         self,
         client: GitPlatformHttpClient,
-        reviewer_username: str,
         owner_client: GitPlatformHttpClient,
     ) -> None:
-        self._publishing = ReviewPublishingService(
-            client, reviewer_username, owner_client,
-        )
+        self._publishing = ReviewPublishingService(client, owner_client)
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview) -> None:
+    def publish(self, pr_id: PullRequestId, review: CodeReview, *, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
@@ -85,7 +85,6 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             start_number=self._publishing.count_existing_items(pr_id),
         )
 
-        self._publishing.request_reviewer(pr_id)
         self._publishing.publish_formal_review(
             pr_id,
             verdict_event,
@@ -93,4 +92,5 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             blocking,
             official=True,
             diff_headers=None,
+            diff=diff,
         )

@@ -97,6 +97,7 @@ class TestReviewPullRequestService:
         assert len(factory.build_calls) == 1
         assert len(llm.review_prompt_calls) == 1
         assert len(publisher.publish_calls) == 1
+        assert publisher.publish_calls[0][2] is not None, "diff should be passed to publisher"
         assert len(pr_repo.save_calls) == 1
         assert pr_repo.save_calls[0].head_sha == cmd.head_sha
 
@@ -475,7 +476,7 @@ class TestReviewPullRequestService:
             publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review = publisher.publish_calls[0]
+        _pr_id_arg, review, _ = publisher.publish_calls[0]
         assert len(review.items) == 1
         assert review.items[0].file_path == "src/client.py"
         assert review.items[0].current_code == (
@@ -522,7 +523,7 @@ class TestReviewPullRequestService:
             publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review = publisher.publish_calls[0]
+        _pr_id_arg, review, _ = publisher.publish_calls[0]
         assert len(review.items) == 2
         assert review.items[0].file_path == "src/client.py"
         assert review.items[1].file_path == "src/other.py"
@@ -553,7 +554,7 @@ class TestReviewPullRequestService:
             publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review = publisher.publish_calls[0]
+        _pr_id_arg, review, _ = publisher.publish_calls[0]
         assert len(review.items) == 0
 
     def test_limits_noisy_log_findings_to_five(self):
@@ -587,5 +588,5 @@ class TestReviewPullRequestService:
             publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review = publisher.publish_calls[0]
+        _pr_id_arg, review, _ = publisher.publish_calls[0]
         assert len(review.items) == 5

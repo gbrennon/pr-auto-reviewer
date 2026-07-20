@@ -9,6 +9,9 @@ from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
+    PullRequestDiff,
+)
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -114,6 +117,7 @@ class ReviewPublishingService:
         *,
         official: bool = False,
         diff_headers: dict[str, str] | None = None,
+        diff: PullRequestDiff | None = None,
     ) -> None:
         """Publish a formal PR review with optional inline comments."""
         reviews_path = (
@@ -124,22 +128,28 @@ class ReviewPublishingService:
             payload["official"] = True
 
         try:
-            pr_info = self._owner_client.get(
-                f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
-                repo=pr_id.repository,
-            )
-            payload["commit_id"] = pr_info["head"]["sha"]
+            if diff is not None and diff.head_sha is not None:
+                payload["commit_id"] = diff.head_sha
+            else:
+                pr_info = self._owner_client.get(
+                    f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
+                    repo=pr_id.repository,
+                )
+                payload["commit_id"] = pr_info["head"]["sha"]
         except Exception as exc:
             raise ReviewPublishError(
                 f"Failed to resolve commit_id for formal review of {pr_id}: {exc}",
             ) from exc
 
         try:
-            diff_text = self._owner_client.get_raw(
-                f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
-                headers=diff_headers or {},
-                repo=pr_id.repository,
-            )
+            if diff is not None and diff.diff_content is not None:
+                diff_text = diff.diff_content
+            else:
+                diff_text = self._owner_client.get_raw(
+                    f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
+                    headers=diff_headers or {},
+                    repo=pr_id.repository,
+                )
             inline = self.build_inline_comments(diff_text, blocking, [])
             if inline:
                 payload["comments"] = inline
