@@ -254,3 +254,42 @@ understanding the full publisher flow in
 ```bash
 python -m pytest tests/ -x -q
 ```
+
+## 6. Code Style Rules
+
+### 6.1 No Comments — Self-Documenting Code Only
+
+Comments of any kind are **PROHIBITED** in Python source files. This includes:
+
+- Inline explanatory comments ("Resolve old blocking items...")
+- Section separator comments ("--- single-platform mode ---")
+- Linter/type-checker suppress comments (`# noqa: E501`, `# type: ignore`, `# pyright: ignore`)
+- Linter pragmas (`# fmt: off`, `# isort: skip`)
+- Security waivers (`# nosec`)
+- Any `#` token that is not part of a string literal
+
+**Allowed:**
+- Docstrings (`"""..."""` / `'''...'''`) at module, class, and function level — these are the **only** form of inline documentation
+- Expressive, intention-revealing names for variables, functions, classes, and modules
+
+**What to do when a linter/type-checker flags a line:**
+- Fix the code so the warning is eliminated, rather than suppressing it
+- If `pyright` reports a type error, restructure the code with explicit type narrowing, protocol classes, or proper generics — never silence it with a comment
+- If a line exceeds the length limit, break it across multiple lines or extract intermediate variables
+
+**Pre-existing suppress comments (`# noqa`, `# type: ignore`, etc.) are technical debt** — remove them when touching the containing file.
+
+### 6.2 Classes Only — No Standalone Functions
+
+Standalone functions (functions defined at module level, outside a class) are **PROHIBITED** in Python source files. All behavior MUST live inside classes.
+
+- Module-level `def` → extract into a class as a method (static, class, or instance as appropriate)
+- Nested functions inside other functions → extract into a private method on the enclosing class
+- `lambda` assigned to a variable → use a named method instead
+
+**Allowed:**
+- Methods on classes (instance, static, class, and private)
+- `lambda` expressions passed inline as arguments to higher-order functions (`map`, `filter`, `sorted(key=...)`)
+- `__init__.py` re-exports and `__all__` lists at module level
+
+**Pre-existing standalone functions are technical debt** — convert them to class methods when touching the containing file or when adding new behavior nearby.
