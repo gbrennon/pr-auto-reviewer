@@ -34,7 +34,7 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
     ) -> None:
         self._publishing = ReviewPublishingService(client, owner_client)
 
-    def publish(self, pr_id: PullRequestId, review: CodeReview, *, diff: PullRequestDiff | None = None) -> None:
+    def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
