@@ -24,7 +24,8 @@ class CompositePrLister(PrListerPort):
                 title=pr.title,
                 description=pr.description,
                 is_draft=pr.is_draft,
-                updated_at=pr.updated_at,
+                review_requested=pr.review_requested,
+                target_branch=pr.target_branch,
             )
             for pr in prs
         ]
@@ -45,6 +46,7 @@ class CompositePrLister(PrListerPort):
                 title=pr.title,
                 description=pr.description,
                 is_draft=pr.is_draft,
-                updated_at=pr.updated_at,
+                review_requested=pr.review_requested,
+                target_branch=pr.target_branch,
             )
         return pr
