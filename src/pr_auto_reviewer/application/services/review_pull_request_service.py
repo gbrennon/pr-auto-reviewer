@@ -279,7 +279,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             )
         ]
         return CodeReview(
-            verdict=ReviewVerdict.APPROVED,
+            verdict=review.verdict,
             reason=review.reason,
             summary=summary,
             items=merged_items,
