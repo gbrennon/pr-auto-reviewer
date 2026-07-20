@@ -13,8 +13,9 @@ import pytest
 
 from pr_auto_reviewer.presentation.ports import (
     OpenPullRequest,
-    RepoListerPort,
     PrListerPort,
+    RepoInfo,
+    RepoListerPort,
 )
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemonConfig
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
@@ -77,14 +78,17 @@ def mock_repo_lister(review_flow_fixtures: dict) -> RepoListerPort:
     """Mock RepoListerPort that returns fixture repos."""
 
     class MockRepoLister(RepoListerPort):
-        def __init__(self, repos: list[str]) -> None:
+        def __init__(self, repos: list[RepoInfo]) -> None:
             self._repos = repos
 
-        def list_repos(self) -> list[str]:
+        def list_repos(self) -> list[RepoInfo]:
             return self._repos
 
     repos_data = review_flow_fixtures.get("repos", [])
-    return MockRepoLister([r["full_name"] for r in repos_data])
+    return MockRepoLister([
+        RepoInfo(full_name=r["full_name"], pushed_at=r.get("pushed_at"))
+        for r in repos_data
+    ])
 
 @pytest.fixture
 def mock_pr_lister(review_flow_fixtures: dict) -> PrListerPort:
