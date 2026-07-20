@@ -105,7 +105,7 @@ class ReviewPublishingService:
 
         try:
             if diff is not None and diff.head_sha is not None:
-                payload["commit_id"] = diff.head_sha
+                payload["commit_id"] = str(diff.head_sha)
             else:
                 pr_info = self._owner_client.get(
                     f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
