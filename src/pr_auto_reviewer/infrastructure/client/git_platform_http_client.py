@@ -53,7 +53,7 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        logger.info("GET%s %s params=%s", label, url, params)
+        logger.debug("GET%s %s params=%s", label, url, params)
 
         request_headers = self._get_auth_header(repo)
         if headers:
@@ -74,7 +74,7 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        logger.info("GET_RAW%s %s", label, url)
+        logger.debug("GET_RAW%s %s", label, url)
 
         request_headers = self._get_auth_header(repo)
         if headers:
@@ -95,7 +95,7 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("write")
-        logger.info("POST%s %s body_keys=%s", label, url, list(body.keys()))
+        logger.debug("POST%s %s body_keys=%s", label, url, list(body.keys()))
         response = requests.post(
             url,
             headers={
@@ -186,13 +186,13 @@ class GitPlatformHttpClient:
         status = response.status_code
         body_bytes = getattr(response, "content", b"")
         body_len = len(body_bytes)
-        logger.info("%s%s %s -> HTTP %d (%d bytes)", method, label, url, status, body_len)
+        logger.debug("%s%s %s -> HTTP %d (%d bytes)", method, label, url, status, body_len)
 
-        if logger.isEnabledFor(logging.INFO):
+        if logger.isEnabledFor(logging.DEBUG):
             text = response.text
             if text:
                 truncated = text[:2000]
-                logger.info(
+                logger.debug(
                     "%s%s %s body (%d chars):\n%s",
                     method, label, url, len(text),
                     truncated + ("..." if len(text) > 2000 else ""),
@@ -240,6 +240,6 @@ class GitPlatformHttpClient:
                         f.write(f"{k}: {v}\n")
                 f.write("\n")
                 f.write(response.text)
-            logger.info("%s%s response dumped to %s", method, label, filename)
+            logger.debug("%s%s response dumped to %s", method, label, filename)
         except (OSError, AttributeError):
             pass
