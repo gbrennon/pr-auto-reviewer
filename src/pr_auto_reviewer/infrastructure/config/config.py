@@ -25,6 +25,7 @@ _COMMAND_LINE_KEYS = {
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
     "USE_COMPACT_TEMPLATE", "USE_STRICT_FRAGMENT_SELECTION",
     "OLLAMA_TIMEOUT",
+    "LLM_MAX_RETRIES",
     "GITHUB_API_URL", "GITHUB_REVIEW_MODE",
     "FORGEJO_API_URL", "FORGEJO_HOST",
     "RUN_ONCE", "REPOS_FILTER", "FORCE_PR",
@@ -68,7 +69,8 @@ class ConfigLoader:
                 config_path,
             )
             values = {}
-        return self._builder.build(values, env_name="production")
+        llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
+        return self._builder.build(values, env_name="production", llm_max_retries=llm_max_retries)
 
     def _load_development(
         self, user_config_path: str, repo_env_path: Path, env: str
@@ -90,7 +92,8 @@ class ConfigLoader:
             if key in os.environ:
                 values[key] = os.environ[key]
 
-        return self._builder.build(values, env_name=env)
+        llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
+        return self._builder.build(values, env_name=env, llm_max_retries=llm_max_retries)
 
     def load(self) -> Config:
         repo_root = RepoRoot.path()
