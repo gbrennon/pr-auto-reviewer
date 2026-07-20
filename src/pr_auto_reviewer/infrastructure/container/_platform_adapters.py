@@ -162,13 +162,11 @@ def wire_platform_adapters(
                     {
                         "github": GithubReviewPublisher(
                             gb_reviewer,
-                            config.github_reviewer_username,
                             owner_client=gb_owner,
                             review_mode=config.github_review_mode,
                         ),
                         "forgejo": ForgejoReviewPublisher(
                             fj_reviewer,
-                            config.forgejo_reviewer_username,
                             owner_client=fj_owner,
                         ),
                     }
@@ -216,11 +214,6 @@ def wire_platform_adapters(
     http_client = clients.http_client
     reviewer_client = clients.reviewer_client
 
-    reviewer_username = (
-        config.github_reviewer_username
-        if is_github
-        else config.forgejo_reviewer_username
-    )
 
     return PlatformAdapters(
         repository_context=(
@@ -238,13 +231,11 @@ def wire_platform_adapters(
             if is_terminal
             else GithubReviewPublisher(
                 reviewer_client,
-                reviewer_username,
                 owner_client=http_client,
             )
             if is_github
             else ForgejoReviewPublisher(
                 reviewer_client,
-                reviewer_username,
                 owner_client=http_client,
             )
         ),

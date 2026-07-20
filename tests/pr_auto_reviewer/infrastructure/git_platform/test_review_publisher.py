@@ -55,7 +55,7 @@ index def456..ghi789 100644
 
     @pytest.fixture
     def adapter(self, patched_private_client):
-        return GitReviewPublisherAdapter(patched_private_client, "t", patched_private_client)
+        return GitReviewPublisherAdapter(patched_private_client, patched_private_client)
 
     def test_publish(self, adapter):
         """Publish sends a formal PR review."""
@@ -103,20 +103,18 @@ index def456..ghi789 100644
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
 
-    def test_reviewer_request_failure_non_fatal(self, patched_private_client, monkeypatch):
-        """Reviewer request failure is logged, not raised."""
+    def test_publish_succeeds_with_only_review_post(self, patched_private_client, monkeypatch):
+        """publish() posts review — no longer requests reviewer (Bug 4 fix)."""
         call_paths = []
         def fake_post(path, body, *, repo=None):
             call_paths.append(path)
-            if "requested_reviewers" in path:
-                raise Exception("422")
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
-        assert len(call_paths) == 2
+        assert len(call_paths) == 1
 
     def test_find_diff_position_none_file_path(self, adapter):
         result = adapter._publishing.find_diff_position("diff", None, "code")
@@ -185,7 +183,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: self.DIFF)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
             items=[ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
@@ -210,7 +208,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(Exception("diff fetch failed")))
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -218,15 +216,11 @@ index def456..ghi789 100644
 
     def test_publish_post_review_403_raises(self, patched_private_client, monkeypatch):
         """403 on review post raises ReviewPublishError."""
-        call_count = [0]
         def fake_post(path, body, *, repo=None):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return {"id": 1}
             raise Exception("403 Forbidden")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -235,15 +229,11 @@ index def456..ghi789 100644
 
     def test_publish_non_403_raises_review_publish_error(self, patched_private_client, monkeypatch):
         """Non-403 error on review post raises ReviewPublishError."""
-        call_count = [0]
         def fake_post(path, body, *, repo=None):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return {"id": 1}
             raise Exception("500 Internal Server Error")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, "t", owner_client=patched_private_client)
+        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -258,38 +248,19 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get",
                             lambda path, **kw: (_ for _ in ()).throw(Exception("boom")))
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
         )
         assert result == 0
 
-    def test_request_reviewer_generic_failure_logs_warning(
-        self, patched_private_client, monkeypatch, caplog,
-    ):
-        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        def raise_500(*_a, **_kw):
-            raise Exception("500 boom")
-        monkeypatch.setattr(patched_private_client, "post", raise_500)
-        service.request_reviewer(PullRequestId(repository="o/r", number=1))
-        assert "Failed to request reviewer" in caplog.text
-
-    def test_request_reviewer_forgejo_failure_logs_warning(
-        self, patched_private_client, monkeypatch, caplog,
-    ):
-        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        def raise_err(*_a, **_kw):
-            raise Exception("forgejo down")
-        monkeypatch.setattr(patched_private_client, "post", raise_err)
-        service.request_reviewer(PullRequestId(repository="o/r", number=1))
-        assert "Failed to request reviewer" in caplog.text
 
     def test_publish_comment_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         caplog.set_level("DEBUG")
         adapter._publishing.publish_comment(
@@ -301,7 +272,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         def raise_err(*_a, **_kw):
             raise Exception("post failed")
@@ -315,7 +286,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (
@@ -344,7 +315,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         diff = (
@@ -374,7 +345,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.COMMENTED, summary="s",
@@ -406,7 +377,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
@@ -429,21 +400,13 @@ index def456..ghi789 100644
         assert "Blocking" not in body
         assert "Nit" in body
 
-    def test_request_reviewer_success_logs_debug(
-        self, patched_private_client, monkeypatch, caplog,
-    ):
-        """Reviewer request success logs a debug message."""
-        service = ReviewPublishingService(patched_private_client, "bot", owner_client=patched_private_client)
-        caplog.set_level("DEBUG")
-        service.request_reviewer(PullRequestId(repository="o/r", number=1))
-        assert "Reviewer request succeeded" in caplog.text
 
     def test_build_inline_comments_skips_suggestion_without_file(
         self, patched_private_client, monkeypatch,
     ):
         """Suggestions missing file or code are skipped."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/f.py b/f.py\n"
@@ -462,7 +425,7 @@ index def456..ghi789 100644
     ):
         """Suggestions build GitHub-style inline comments."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, "t", owner_client=patched_private_client,
+            patched_private_client, patched_private_client,
         )
         monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (

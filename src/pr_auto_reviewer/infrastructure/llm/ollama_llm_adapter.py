@@ -41,11 +41,13 @@ class OllamaLlmAdapter(LlmReviewPort):
         max_structure_lines: int = 100,
         use_compact_template: bool = False,
         ollama_timeout: int = 120,
+        max_retries: int = 5,
     ) -> None:
 
         self._host = host.rstrip("/")
         self._model = model
         self._ollama_timeout = ollama_timeout
+        self._max_retries = max_retries
         self._prompt_builder = PromptBuilder(
             max_tokens=max_tokens,
             max_file_chars=max_file_chars,
@@ -64,7 +66,7 @@ class OllamaLlmAdapter(LlmReviewPort):
         path = f"/tmp/ollama-prompt-try{attempt + 1}-{label}.txt"
         with open(path, "w") as f:
             f.write(prompt_text)
-        logger.info("Try %d/3 — prompt dumped to %s (%d chars)", attempt + 1, path, len(prompt_text))
+        logger.debug("Try %d/%d — prompt dumped to %s (%d chars)", attempt + 1, self._max_retries, path, len(prompt_text))
 
     def _request_ollama(
         self, prompt_text: str, timeout: int,
@@ -168,17 +170,17 @@ class OllamaLlmAdapter(LlmReviewPort):
         last_eval_duration = 0.0
         last_response_ms = 0.0
         correction_prompt = None
-        for attempt in range(3):
+        for attempt in range(self._max_retries):
             if attempt > 0:
                 delay = 2 ** (attempt - 1)
                 logger.info(
-                    "Try %d/3 — waiting %ds (previous failures: %s)",
-                    attempt + 1, delay,
+                    "Try %d/%d — waiting %ds (previous failures: %s)",
+                    attempt + 1, self._max_retries, delay,
                     ", ".join(failures[:3]),
                 )
                 time.sleep(delay)
             else:
-                logger.info("Try 1/3 — sending review prompt to Ollama")
+                logger.info("Try 1/%d — sending review prompt to Ollama", self._max_retries)
 
             current_prompt = correction_prompt if correction_prompt else prompt_text
 
@@ -194,20 +196,20 @@ class OllamaLlmAdapter(LlmReviewPort):
 
             review = ReviewResponseParser.parse(raw_text, self._model)
             logger.info(
-                "Try %d/3 — verdict=%s items=%d summary='%s'",
-                attempt + 1,
+                "Try %d/%d — verdict=%s items=%d summary='%s'",
+                attempt + 1, self._max_retries,
                 review.verdict.value, len(review.items),
                 (review.summary or "")[:80],
             )
 
             failures = self._retry_builder.diagnose_failures(review)
             if not failures:
-                logger.info("Try %d/3 — accepted (no failures)", attempt + 1)
+                logger.info("Try %d/%d — accepted (no failures)", attempt + 1, self._max_retries)
                 break
             correction_prompt = self._retry_builder.build_correction_prompt(prompt_text, failures)
-            logger.info("Try %d/3 — rejected with %d failure(s):", attempt + 1, len(failures))
+            logger.info("Try %d/%d — rejected with %d failure(s):", attempt + 1, self._max_retries, len(failures))
             for f in failures:
-                logger.info("Try %d/3 —   → %s", attempt + 1, f)
+                logger.info("Try %d/%d —   → %s", attempt + 1, self._max_retries, f)
 
         if review is None:
             raise LlmUnavailableError("Ollama did not return a parseable review")
