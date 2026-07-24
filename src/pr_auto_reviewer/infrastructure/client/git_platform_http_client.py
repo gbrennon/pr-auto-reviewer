@@ -12,10 +12,12 @@ import requests
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
     RateLimitSnapshot,
 )
+from pr_auto_reviewer.infrastructure.client.http_request_counter import (
+    HttpRequestCounter,
+)
 from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import (
     RateLimitTracker,
 )
-
 if TYPE_CHECKING:
     from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
         PreflightVerifier,
@@ -200,6 +202,7 @@ class GitPlatformHttpClient:
 
         self._capture_rate_limit(getattr(response, "headers", {}))
         self._write_http_log(method, label, url, response)
+        HttpRequestCounter.instance().record(self._base_url)
 
     def _resolve_token_for_repo(self, repo: str | None) -> str:
         """Return the token that should be used for requests scoped to
