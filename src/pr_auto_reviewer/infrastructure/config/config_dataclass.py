@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from dataclasses import dataclass, field
 
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
@@ -47,3 +49,5 @@ class Config:
     max_structure_lines: int = 100
     use_compact_template: bool = False
     use_strict_fragment_selection: bool = False
+    use_local_clone: bool = False
+    local_clone_base_dir: str = str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())

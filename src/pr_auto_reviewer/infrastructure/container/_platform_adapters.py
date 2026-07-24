@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from pr_auto_reviewer.infrastructure.config import Config
@@ -66,6 +66,9 @@ from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
+from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher import (
+    LocalChangesetFetcher,
+)
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
     CompositeReviewPublisher,
@@ -84,6 +87,9 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
 if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
         ChangesetFetcherPort,
+    )
+    from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
+        LocalRepositoryPort,
     )
     from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
         CommentPublisherPort,
@@ -120,14 +126,13 @@ class PlatformAdapters:
     repo_lister: RepoListerPort
     pr_lister: PrListerPort
 
-
 def wire_platform_adapters(
     config: Config,
     clients: PlatformClients,
     is_terminal: bool,
+    local_repository: LocalRepositoryPort | None = None,
 ) -> PlatformAdapters:
     """Build and wire all platform-specific adapters from the given clients."""
-
     if config.platform_mode == GitProvider.BOTH:
         gb_owner = clients.http_client
         gb_reviewer = clients.reviewer_client
@@ -144,6 +149,17 @@ def wire_platform_adapters(
                 "but was not configured."
             )
 
+        if local_repository is not None:
+            changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
+                LocalChangesetFetcher(local_repository, "github"),
+                LocalChangesetFetcher(local_repository, "codeberg"),
+            )
+        else:
+            changeset_fetcher = CompositeChangesetFetcher(
+                GithubChangesetFetcher(gb_owner),
+                ForgejoChangesetFetcher(fj_owner),
+            )
+
         return PlatformAdapters(
             repository_context=CompositeRepositoryContext(
                 {
@@ -151,10 +167,7 @@ def wire_platform_adapters(
                     "forgejo": ForgejoRepositoryContext(fj_owner),
                 }
             ),
-            changeset_fetcher=CompositeChangesetFetcher(
-                GithubChangesetFetcher(gb_owner),
-                ForgejoChangesetFetcher(fj_owner),
-            ),
+            changeset_fetcher=changeset_fetcher,
             review_publisher=(
                 TerminalReviewPublisherAdapter(config.output_path)
                 if is_terminal
@@ -215,17 +228,23 @@ def wire_platform_adapters(
     reviewer_client = clients.reviewer_client
 
 
+    if local_repository is not None:
+        platform_mode = "github" if config.platform_mode == GitProvider.GITHUB else "codeberg"
+        changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, platform_mode)
+    else:
+        changeset_fetcher = (
+            GithubChangesetFetcher(http_client)
+            if is_github
+            else ForgejoChangesetFetcher(http_client)
+        )
+
     return PlatformAdapters(
         repository_context=(
             GithubRepositoryContext(http_client)
             if is_github
             else ForgejoRepositoryContext(http_client)
         ),
-        changeset_fetcher=(
-            GithubChangesetFetcher(http_client)
-            if is_github
-            else ForgejoChangesetFetcher(http_client)
-        ),
+        changeset_fetcher=changeset_fetcher,
         review_publisher=(
             TerminalReviewPublisherAdapter(config.output_path)
             if is_terminal

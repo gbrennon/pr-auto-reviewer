@@ -24,6 +24,7 @@ _COMMAND_LINE_KEYS = {
     "POLL_INTERVAL", "MAX_PROMPT_TOKENS",
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
     "USE_COMPACT_TEMPLATE", "USE_STRICT_FRAGMENT_SELECTION",
+    "USE_LOCAL_CLONE", "LOCAL_CLONE_BASE_DIR",
     "OLLAMA_TIMEOUT",
     "LLM_MAX_RETRIES",
     "GITHUB_API_URL", "GITHUB_REVIEW_MODE",
@@ -41,23 +42,32 @@ _CONFIG_KEYS = list(_COMMAND_LINE_KEYS) + [
 ]
 
 
+
 class ConfigLoader:
     """Loads configuration with correct precedence for each environment.
 
     **Production** (installed via ``make install``):
         Reads *only* from ``~/.config/pr-auto-reviewer/config``.
-        Environment variables are **ignored entirely**.
+        Token values come exclusively from that file.
 
     **Development** (repo with ``.env`` file):
         ``.env`` overrides ``~/.config/pr-auto-reviewer/config``.
         Token values always come from ``.env`` (or user config if not set).
-        Command-line env vars from ``make`` only override non-token settings
-        like ``PLATFORM_MODE``, ``REVIEW_OUTPUT``, ``DEBUG``, etc.
+
+    In **both** environments, command-line env vars from ``make`` or
+    direct export override non-token settings like ``PLATFORM_MODE``,
+    ``REVIEW_OUTPUT``, ``DEBUG``, etc.
     """
 
     def __init__(self) -> None:
         self._detector = EnvironmentDetector()
         self._builder = ConfigBuilder()
+
+    @staticmethod
+    def _merge_command_line_env(values: dict[str, str]) -> None:
+        for key in _COMMAND_LINE_KEYS:
+            if key in os.environ:
+                values[key] = os.environ[key]
 
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
@@ -69,6 +79,7 @@ class ConfigLoader:
                 config_path,
             )
             values = {}
+        self._merge_command_line_env(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         return self._builder.build(values, env_name="production", llm_max_retries=llm_max_retries)
 
@@ -88,9 +99,7 @@ class ConfigLoader:
             logger.info("Loading dev .env from %s", repo_env_path)
             values.update(dotenv_values(repo_env_path))
 
-        for key in _COMMAND_LINE_KEYS:
-            if key in os.environ:
-                values[key] = os.environ[key]
+        self._merge_command_line_env(values)
 
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         return self._builder.build(values, env_name=env, llm_max_retries=llm_max_retries)
