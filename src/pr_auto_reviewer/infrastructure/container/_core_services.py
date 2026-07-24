@@ -79,10 +79,6 @@ class CoreServices:
     review_context_factory: ReviewContextFactoryPort
 
 
-def _state_file_path() -> str:
-    config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")
-    os.makedirs(config_dir, exist_ok=True)
-    return os.path.join(config_dir, "state.json")
 
 
 def wire_core_services(
@@ -91,14 +87,29 @@ def wire_core_services(
 ) -> CoreServices:
     """Build and wire all core (non-platform) services."""
 
-    pr_repository = JsonFilePullRequestRepository(_state_file_path())
-
-    llm_review = OllamaLlmAdapter(
-        config.llm_host,
-        config.llm_model or "code-review:latest",
-        ollama_timeout=config.ollama_timeout,
-        max_retries=config.llm_max_retries,
+    config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")
+    os.makedirs(config_dir, exist_ok=True)
+    pr_repository = JsonFilePullRequestRepository(
+        os.path.join(config_dir, "state.json")
     )
+
+    if config.use_local_clone:
+        from pr_auto_reviewer.infrastructure.llm.ollama_chat_adapter import (
+            OllamaChatAdapter,
+        )
+        llm_review = OllamaChatAdapter(
+            model=config.llm_model or "code-review:latest",
+            host=config.llm_host,
+            ollama_timeout=config.ollama_timeout,
+            max_retries=config.llm_max_retries,
+        )
+    else:
+        llm_review = OllamaLlmAdapter(
+            config.llm_host,
+            config.llm_model or "code-review:latest",
+            ollama_timeout=config.ollama_timeout,
+            max_retries=config.llm_max_retries,
+        )
     command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
 
