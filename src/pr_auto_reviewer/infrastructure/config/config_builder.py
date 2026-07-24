@@ -13,6 +13,7 @@ from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
 from pr_auto_reviewer.infrastructure.config.role_suffix_parser import (
     RoleSuffixParser,
 )
+from pathlib import Path
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
@@ -138,6 +139,10 @@ class ConfigBuilder:
         use_strict_fragment_selection = (
             self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
         )
+        use_local_clone = (
+            self._get(source, "USE_LOCAL_CLONE").lower() == "true"
+        )
+        local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
 
         org_token_overrides = self._parse_org_token_overrides(source)
         ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
@@ -177,4 +182,6 @@ class ConfigBuilder:
             max_structure_lines=max_structure_lines,
             use_compact_template=use_compact_template,
             use_strict_fragment_selection=use_strict_fragment_selection,
+            use_local_clone=use_local_clone,
+            local_clone_base_dir=local_clone_base_dir,
         )
