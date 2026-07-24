@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -78,7 +80,15 @@ class Container:
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        adapters = wire_platform_adapters(self._config, clients, is_terminal)
+        local_repository = None
+        if self._config.use_local_clone:
+            from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
+                LocalGitRepository,
+            )
+            local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        adapters = wire_platform_adapters(
+            self._config, clients, is_terminal, local_repository=local_repository
+        )
         self._repository_context = adapters.repository_context
         self._changeset_fetcher = adapters.changeset_fetcher
         self._review_publisher = adapters.review_publisher
@@ -89,7 +99,9 @@ class Container:
         self._repo_lister = adapters.repo_lister
         self._pr_lister = adapters.pr_lister
 
-        core = wire_core_services(self._config, self._repository_context)
+        core = wire_core_services(
+            self._config, self._repository_context
+        )
         self._pr_repository = core.pr_repository
         self._llm_review = core.llm_review
         self._command_bus = core.command_bus
