@@ -12,6 +12,7 @@ from .pull_request_repository import PullRequestRepository
 from .repository_context_port import RepositoryContextPort
 from .review_publisher_port import ReviewPublisherPort
 from .review_reader_port import ReviewReaderPort
+from .local_repository_port import LocalRepositoryPort
 
 __all__ = [
     "ChangesetFetcherPort",
@@ -22,6 +23,7 @@ __all__ = [
     "FragmentRepositoryPort",
     "IssueTrackerPort",
     "LlmReviewPort",
+    "LocalRepositoryPort",
     "NotifierPort",
     "PromptRendererPort",
     "PullRequestRepository",

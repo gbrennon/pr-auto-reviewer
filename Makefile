@@ -63,10 +63,10 @@ clean reset:  ## Clean state files
 	@uv run python -m pr_auto_reviewer clean
 
 review:  ## Review a PR (REPO=owner/repo PR=N GITHUB_OWNER_TOKEN=... or FORGEJO_OWNER_TOKEN=...)
-	@uv run python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR)
+	@env REVIEW_OUTPUT="$(REVIEW_OUTPUT)" uv run python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR)
 
 review-force:  ## Force to review a PR (REPO=owner/repo PR=N GITHUB_OWNER_TOKEN=... or FORGEJO_OWNER_TOKEN=...)
-	@uv run python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
+	@env REVIEW_OUTPUT="$(REVIEW_OUTPUT)" uv run python -m pr_auto_reviewer review --repo $(REPO) --pr $(PR) --force
 
 
 daemon-once:  ## Run the watcher once

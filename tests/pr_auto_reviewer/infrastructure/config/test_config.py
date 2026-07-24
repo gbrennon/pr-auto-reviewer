@@ -43,9 +43,15 @@ class TestLoadConfig:
             "MAX_PROMPT_TOKENS",
             "MAX_FILE_CHARS",
             "MAX_FILES",
-            "MAX_STRUCTURE_LINES",
             "USE_COMPACT_TEMPLATE",
             "USE_STRICT_FRAGMENT_SELECTION",
+            "MAX_STRUCTURE_LINES",
+            "PROMPT_MODE",
+            "OLLAMA_TIMEOUT",
+            "LLM_MAX_RETRIES",
+            "RUN_ONCE",
+            "REPOS_FILTER",
+            "FORCE_PR",
         ]:
             monkeypatch.delenv(var, raising=False)
 
