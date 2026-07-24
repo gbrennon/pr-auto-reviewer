@@ -11,6 +11,9 @@ from pr_auto_reviewer.application.commands.review_pull_request_command import (
 )
 from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
 from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
+from pr_auto_reviewer.infrastructure.client.http_request_counter import (
+    HttpRequestCounter,
+)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
@@ -73,6 +76,7 @@ class PollingDaemon:
             target_branch=pr.target_branch,
         )
 
+        HttpRequestCounter.instance().reset()
         try:
             self._review_service.execute(command)
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
@@ -90,6 +94,8 @@ class PollingDaemon:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
         except Exception as e:
             logger.exception("Unexpected error processing PR #%d: %s", pr.pr_id.number, e)
+        finally:
+            HttpRequestCounter.instance().log_summary()
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""

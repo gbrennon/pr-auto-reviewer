@@ -33,6 +33,9 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.presentation.ports import PrListerPort
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
+from pr_auto_reviewer.infrastructure.client.http_request_counter import (
+    HttpRequestCounter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +117,12 @@ class CliRunner:
             head_sha=pr.head_sha,
             title=pr.title,
             description=pr.description,
-            force=args.force,
+            force=force_mode,
             review_requested=pr.review_requested,
             target_branch=pr.target_branch,
         )
 
+        HttpRequestCounter.instance().reset()
         try:
             self._review_service.execute(command)
             print(f"Review posted for PR #{args.pr}")
@@ -144,6 +148,8 @@ class CliRunner:
 
                 traceback.print_exc()
             return 1
+        finally:
+            HttpRequestCounter.instance().log_summary()
 
     def _run_process_commands(self, argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog="pr-auto-reviewer process-commands")
