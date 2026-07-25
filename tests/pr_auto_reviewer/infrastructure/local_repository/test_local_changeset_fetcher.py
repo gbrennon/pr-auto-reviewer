@@ -14,7 +14,7 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher import (
     LocalChangesetFetcher,
 )
-
+from tests.fakes.clone_url_resolver_fakes import FakeCloneUrlResolver
 
 class TestLocalChangesetFetcher:
     """Tests for LocalChangesetFetcher using a mocked LocalRepositoryPort."""
@@ -56,7 +56,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         result = fetcher.fetch(pr_id, sha)
 
@@ -76,7 +76,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         fetcher.fetch(pr_id, sha)
 
@@ -91,7 +91,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         with pytest.raises(RuntimeError, match="git diff failed"):
             fetcher.fetch(pr_id, sha)
@@ -105,7 +105,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         result = fetcher.fetch(pr_id, sha)
 
@@ -127,7 +127,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         result = fetcher.fetch(pr_id, sha)
 
@@ -136,17 +136,17 @@ class TestLocalChangesetFetcher:
         assert result.file_contents["src/foo.py"] == "print('hello')"
 
     def test_fetch_platform_mode_affects_clone_url(self) -> None:
-        """The platform_mode controls which _CLONE_URLS template is used."""
+        """The url_resolver controls which clone URL template is used."""
         repo_codeberg = self._make_repo()
         repo_github = self._make_repo()
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
         LocalChangesetFetcher(
-            local_repository=repo_codeberg, platform_mode="codeberg"
+            local_repository=repo_codeberg, url_resolver=FakeCloneUrlResolver("codeberg")  
         ).fetch(pr_id, sha)
         LocalChangesetFetcher(
-            local_repository=repo_github, platform_mode="github"
+            local_repository=repo_github, url_resolver=FakeCloneUrlResolver("github")  
         ).fetch(pr_id, sha)
 
         repo_codeberg.clone.assert_called_once_with(
@@ -163,7 +163,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         result = fetcher.fetch(pr_id, sha)
 
@@ -176,7 +176,7 @@ class TestLocalChangesetFetcher:
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
-        fetcher = LocalChangesetFetcher(local_repository=repo, platform_mode="codeberg")
+        fetcher = LocalChangesetFetcher(local_repository=repo, url_resolver=FakeCloneUrlResolver("codeberg")  )
 
         fetcher.fetch(pr_id, sha)
 
