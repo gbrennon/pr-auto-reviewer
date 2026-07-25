@@ -19,7 +19,7 @@ When the AI posts a review with verdict **Approved**, users can reply with a com
 
 ## Prerequisites
 
-1. A running PR Auto Reviewer setup (or run manually with `bash scripts/watch-prs.sh`)
+1. A running PR Auto Reviewer setup (or run manually with `uv run python -m pr_auto_reviewer process-commands --repo owner/repo --pr N`)
 2. Access to a test repository with at least one open PR
 3. Tokens configured properly
 
@@ -30,26 +30,20 @@ When the AI posts a review with verdict **Approved**, users can reply with a com
 1. Go to your test repository on Codeberg/Forgejo
 2. Create a PR with sufficient code changes (for good AI review suggestions)
 
-### Step 2: Run the Watcher
+### Step 2: Run the Review
 
-Run the watcher in single-cycle mode:
+Run a single review against the PR:
 
 ```bash
-cd /home/gbrennon/Documents/repos/gbrennon/pr-auto-reviewer
-bash scripts/watch-prs.sh -r owner/repo --once
+uv run python -m pr_auto_reviewer task --repo owner/repo --pr N
 ```
 
 **Expected output:**
 ```
-=== Cycle #1 ===
-Repo: owner/repo
-  PR #N: [PR title]
-    -> NEW/UPDATED, analyzing...
-    -> Sending to Ollama...
-    -> Posting review to Codeberg...
-    -> Verdict: Approved
-    -> Review (approved) submitted!
-    -> State updated
+Reviewing PR #N in owner/repo...
+Fetching diff...
+Sending to LLM...
+Review posted — verdict: Approved
 ```
 
 ### Step 3: Verify Review has Numbered Items
@@ -77,22 +71,20 @@ On the PR, add a comment with:
 create issue for 1, 2
 ```
 
-### Step 5: Run Watcher Again
+### Step 5: Process Commands
+
+Run the command processor:
 
 ```bash
-bash scripts/watch-prs.sh -r owner/repo --once
+uv run python -m pr_auto_reviewer process-commands --repo owner/repo --pr N
 ```
 
 **Expected output:**
 ```
-=== Cycle #1 ===
-Repo: owner/repo
-  PR #N: [PR title]
-    -> already reviewed (SHA: ...)
-    -> Checking for issue creation commands...
-    -> Found command in comment X: create issue for 1,2
-    -> Created issue #123 for item 1
-    -> Created issue #124 for item 2
+Processing commands for PR #N in owner/repo...
+Found command in comment X: create issue for 1,2
+Created issue #123 for item 1
+Created issue #124 for item 2
 ```
 
 ### Step 6: Verify Issues Created
@@ -143,10 +135,10 @@ Repo: owner/repo
 
 ### Enable Verbose Logging
 
-Add `-x` to see all commands:
+Set the log level for more detail:
 
 ```bash
-bash -x scripts/watch-prs.sh -r owner/repo --once 2>&1 | less
+uv run python -m pr_auto_reviewer task --repo owner/repo --pr N -v
 ```
 
 ### Check State File

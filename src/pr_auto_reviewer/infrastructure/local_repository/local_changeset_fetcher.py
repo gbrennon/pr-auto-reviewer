@@ -8,6 +8,9 @@ import re
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
 )
+from pr_auto_reviewer.application.ports.outbound.clone_url_resolver_port import (
+    CloneUrlResolverPort,
+)
 from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
     LocalRepositoryPort,
 )
@@ -24,10 +27,6 @@ _DELETION_RE = re.compile(
     r"^--- a/(\S+).*$\n^\+\+\+ /dev/null$", re.MULTILINE
 )
 
-_CLONE_URLS: dict[str, str] = {
-    "codeberg": "https://codeberg.org/{repo}.git",
-    "github": "https://github.com/{repo}.git",
-}
 
 
 class LocalChangesetFetcher(ChangesetFetcherPort):
@@ -36,15 +35,13 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
     def __init__(
         self,
         local_repository: LocalRepositoryPort,
-        platform_mode: str,
+        url_resolver: CloneUrlResolverPort,
     ) -> None:
         self._local_repo = local_repository
-        self._platform_mode = platform_mode
+        self._url_resolver = url_resolver
 
     def fetch(self, pr_id: PullRequestId, sha: CommitSha) -> PullRequestDiff:
-        clone_url = _CLONE_URLS[self._platform_mode].format(
-            repo=pr_id.repository
-        )
+        clone_url = self._url_resolver.resolve(pr_id.repository)
         logger.info(
             "LocalChangesetFetcher cloning %s for PR %s",
             clone_url, pr_id,

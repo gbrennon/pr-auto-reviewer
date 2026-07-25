@@ -19,12 +19,11 @@ class FakeVerifier:
 
     def verify(
         self,
-        *,
         token: str,
         org: str,
         repo: str,
         pr_number: int,
-        role: str,
+        role: str = "owner",
         token_source: str = "",
     ) -> None:
         self.calls.append(

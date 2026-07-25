@@ -51,3 +51,4 @@ class Config:
     use_strict_fragment_selection: bool = False
     use_local_clone: bool = False
     local_clone_base_dir: str = str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
+    clone_protocol: str = "https"
