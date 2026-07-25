@@ -143,6 +143,7 @@ class ConfigBuilder:
             self._get(source, "USE_LOCAL_CLONE").lower() == "true"
         )
         local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
+        clone_protocol = self._get(source, "CLONE_PROTOCOL") or "https"
 
         org_token_overrides = self._parse_org_token_overrides(source)
         ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
@@ -184,4 +185,5 @@ class ConfigBuilder:
             use_strict_fragment_selection=use_strict_fragment_selection,
             use_local_clone=use_local_clone,
             local_clone_base_dir=local_clone_base_dir,
+            clone_protocol=clone_protocol,
         )
