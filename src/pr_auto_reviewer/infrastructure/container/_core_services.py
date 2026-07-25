@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
+from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+    OllamaExploratoryChatAdapter,
+)
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
@@ -98,23 +100,12 @@ def wire_core_services(
         os.path.join(config_dir, "state.json")
     )
 
-    if config.use_local_clone:
-        from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
-            OllamaExploratoryChatAdapter,
-        )
-        llm_review = OllamaExploratoryChatAdapter(
-            model=config.llm_model or "code-review:latest",
-            host=config.llm_host,
-            ollama_timeout=config.ollama_timeout,
-            max_retries=config.llm_max_retries,
-        )
-    else:
-        llm_review = OllamaLlmAdapter(
-            config.llm_host,
-            config.llm_model or "code-review:latest",
-            ollama_timeout=config.ollama_timeout,
-            max_retries=config.llm_max_retries,
-        )
+    llm_review = OllamaExploratoryChatAdapter(
+        model=config.llm_model or "code-review:latest",
+        host=config.llm_host,
+        ollama_timeout=config.ollama_timeout,
+        max_retries=config.llm_max_retries,
+    )
     command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
 
