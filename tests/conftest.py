@@ -3,7 +3,7 @@
 Loads fixture data from tests/fixtures/*.json files.
 """
 
-pytest_plugins = ["tests.fixtures.changeset_fixtures", "tests.fixtures.git_platform_fixtures", "tests.fixtures.integration_fixtures", "tests.fixtures.auto_fixtures"]
+pytest_plugins = ["tests.fixtures.integration_fixtures", "tests.fixtures.auto_fixtures"]
 
 import json
 from pathlib import Path
@@ -11,15 +11,7 @@ from typing import Any
 
 import pytest
 
-from pr_auto_reviewer.presentation.ports import (
-    OpenPullRequest,
-    PrListerPort,
-    RepoInfo,
-    RepoListerPort,
-)
 from pr_auto_reviewer.presentation.polling_daemon import PollingDaemonConfig
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -31,119 +23,14 @@ def load_fixture(name: str) -> dict[str, Any]:
     with open(path) as f:
         return json.load(f)
 
-@pytest.fixture(scope="session")
-def pr_fixtures() -> dict[str, Any]:
-    """PR fixture data (private and public PRs)."""
-    return load_fixture("pr_fixtures")
-
-@pytest.fixture(scope="session")
-def context_fixtures() -> dict[str, Any]:
-    """Repository context fixture data."""
-    return load_fixture("context_fixtures")
-
-@pytest.fixture
-def private_pr_fixtures(pr_fixtures: dict) -> dict:
-    """Fixtures for private PR (gbrennon/pr-auto-reviewer #53)."""
-    return pr_fixtures["private_pr"]
-
-@pytest.fixture
-def public_pr_fixtures(pr_fixtures: dict) -> dict:
-    """Fixtures for public PR (gbrennon/BitPill #95)."""
-    return pr_fixtures["public_pr"]
-
-@pytest.fixture
-def user_fixtures(pr_fixtures: dict) -> dict:
-    """Authenticated user fixture."""
-    return pr_fixtures.get("user", {})
-
-@pytest.fixture
-def review_publisher(
-    http_client: GitPlatformHttpClient,
-    forgejo_token: str,
-    user_fixtures: dict,
-) -> GitReviewPublisherAdapter:
-    """Review publisher adapter."""
-    return GitReviewPublisherAdapter(
-        http_client,
-        reviewer_username=user_fixtures.get("login", "gbrennon"),
-    )
 
 @pytest.fixture(scope="session")
 def review_flow_fixtures() -> dict[str, Any]:
     """Review flow fixture data."""
     return load_fixture("review_flow_fixtures")
 
-@pytest.fixture
-def mock_repo_lister(review_flow_fixtures: dict) -> RepoListerPort:
-    """Mock RepoListerPort that returns fixture repos."""
 
-    class MockRepoLister(RepoListerPort):
-        def __init__(self, repos: list[RepoInfo]) -> None:
-            self._repos = repos
 
-        def list_repos(self) -> list[RepoInfo]:
-            return self._repos
-
-    repos_data = review_flow_fixtures.get("repos", [])
-    return MockRepoLister([
-        RepoInfo(full_name=r["full_name"], pushed_at=r.get("pushed_at"))
-        for r in repos_data
-    ])
-
-@pytest.fixture
-def mock_pr_lister(review_flow_fixtures: dict) -> PrListerPort:
-    """Mock PrListerPort that returns fixture PRs."""
-
-    class MockPrLister(PrListerPort):
-        def __init__(self, prs: list[OpenPullRequest]) -> None:
-            self._prs = prs
-
-        def list_open(self, repository: str) -> list[OpenPullRequest]:
-            return self._prs
-
-        def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
-            for p in self._prs:
-                if p.pr_id.number == pr_number:
-                    return p
-            return None
-
-    prs_data = review_flow_fixtures.get("open_prs", [])
-    prs = []
-    for pr in prs_data:
-        if not pr.get("draft", False):
-            prs.append(
-                OpenPullRequest(
-                    pr_id=PullRequestId(repository=pr["repo"], number=pr["number"]),
-                    head_sha=CommitSha(pr["head"]["sha"]),
-                    title=pr["title"],
-                    is_draft=pr.get("draft", False),
-                )
-            )
-    return MockPrLister(prs)
-
-@pytest.fixture
-def mock_pr_lister_with_drafts(review_flow_fixtures: dict) -> PrListerPort:
-    """Mock PrListerPort that returns fixture PRs including drafts."""
-
-    class MockPrLister(PrListerPort):
-        def __init__(self, prs: list[OpenPullRequest]) -> None:
-            self._prs = prs
-
-        def list_open(self, repository: str) -> list[OpenPullRequest]:
-            return self._prs
-
-    prs_data = review_flow_fixtures.get("open_prs", [])
-    prs = []
-    for pr in prs_data:
-        prs.append(
-            OpenPullRequest(
-                pr_id=PullRequestId(repository=pr["repo"], number=pr["number"]),
-                head_sha=CommitSha(pr["head"]["sha"]),
-                title=pr["title"],
-                is_draft=pr.get("draft", False),
-            )
-        )
-    return MockPrLister(prs)
 
 @pytest.fixture
 def polling_daemon_config() -> PollingDaemonConfig:
@@ -208,25 +95,7 @@ def stub_review_service() -> _StubReviewService:
     """Stub ReviewPullRequestUseCase service."""
     return _StubReviewService()
 
-@pytest.fixture
-def sample_diff_content(review_flow_fixtures: dict) -> str:
-    """Sample diff content from fixtures."""
-    return review_flow_fixtures.get("sample_diff", "")
 
-@pytest.fixture
-def sample_tree_paths(review_flow_fixtures: dict) -> list[str]:
-    """Sample tree paths from fixtures."""
-    return review_flow_fixtures.get("tree_paths", [])
-
-@pytest.fixture
-def sample_llm_response_markdown(review_flow_fixtures: dict) -> str:
-    """Sample LLM response in markdown format."""
-    return review_flow_fixtures.get("llm_responses", {}).get("markdown_format", "")
-
-@pytest.fixture
-def sample_review_items(review_flow_fixtures: dict) -> list[dict]:
-    """Sample review items from fixtures."""
-    return review_flow_fixtures.get("review_items", [])
 
 class _FakeResponse:
     """A minimal fake requests.Response for Ollama adapter tests."""
