@@ -20,6 +20,25 @@ from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import 
 )
 
 
+class _FakeStreamingResponse:
+    """Minimal fake requests.Response with streaming iter_lines."""
+
+    def __init__(self, content: str, *, status_code: int = 200) -> None:
+        self._content = content
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def iter_lines(self, decode_unicode: bool) -> list[str]:
+        """Simulate NDJSON chunks — one chunk for content, then a done marker."""
+        return [
+            json.dumps({"message": {"content": self._content}, "done": False}),
+            json.dumps({"message": {"content": ""}, "done": True}),
+        ]
+
+
+
 def _make_verdict_json(
     verdict: str = "CHANGES_REQUESTED",
     issues: list[dict[str, Any]] | None = None,
@@ -51,24 +70,6 @@ def _make_verdict_json(
 def _make_action_json(action: str, args: str) -> str:
     """Build a JSON tool-call response string."""
     return json.dumps({"action": action, "args": args})
-
-
-class _FakeStreamingResponse:
-    """Minimal fake requests.Response with streaming iter_lines."""
-
-    def __init__(self, content: str, *, status_code: int = 200) -> None:
-        self._content = content
-        self.status_code = status_code
-
-    def raise_for_status(self) -> None:
-        pass
-
-    def iter_lines(self, decode_unicode: bool) -> list[str]:
-        """Simulate NDJSON chunks — one chunk for content, then a done marker."""
-        return [
-            json.dumps({"message": {"content": self._content}, "done": False}),
-            json.dumps({"message": {"content": ""}, "done": True}),
-        ]
 
 
 @pytest.fixture
