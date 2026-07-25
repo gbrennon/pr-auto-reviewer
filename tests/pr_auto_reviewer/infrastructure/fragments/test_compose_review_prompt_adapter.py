@@ -13,6 +13,7 @@ from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter imp
     ComposeReviewPromptAdapter,
 )
 from tests.fakes.fragment_repository_fakes import StubFragmentRepository
+from tests.fakes.prompt_renderer_fakes import FakePromptRenderer
 
 
 class TestComposeReviewPromptAdapter:
@@ -179,7 +180,6 @@ class TestComposeReviewPromptAdapter:
 
     def test_with_renderer_uses_renderer_for_substitution(self) -> None:
         """Renderer receives the raw fragment template with actual diff variables."""
-        from unittest.mock import Mock
 
         context = ReviewContext(
             language="python",
@@ -192,8 +192,7 @@ class TestComposeReviewPromptAdapter:
             language="python", priority=80, category="errors",
         )
 
-        mock_renderer = Mock()
-        mock_renderer.render.return_value = "RENDERED_PROMPT"
+        mock_renderer = FakePromptRenderer(return_value="RENDERED_PROMPT")
 
         adapter, _repo = self._make_adapter(
             by_language=[fragment], universal=[],
@@ -201,8 +200,8 @@ class TestComposeReviewPromptAdapter:
         )
         result = adapter.execute(context)
 
-        assert mock_renderer.render.called
-        call_args = mock_renderer.render.call_args
+        assert mock_renderer.called
+        call_args = mock_renderer.call_args
         template_arg: str = call_args[0][0]
         variables_arg: dict = call_args[0][1]
         assert "{{ diff }}" in template_arg

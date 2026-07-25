@@ -1,13 +1,9 @@
 """Tests for LocalChangesetFetcher orchestration logic."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
-    LocalRepositoryPort,
-)
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
@@ -15,9 +11,10 @@ from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher im
     LocalChangesetFetcher,
 )
 from tests.fakes.clone_url_resolver_fakes import FakeCloneUrlResolver
+from tests.fakes.local_repository_fakes import FakeLocalRepository
 
 class TestLocalChangesetFetcher:
-    """Tests for LocalChangesetFetcher using a mocked LocalRepositoryPort."""
+    """Tests for LocalChangesetFetcher using a FakeLocalRepository."""
 
     def _make_sample_diff(self, with_deletion: bool = False) -> str:
         """Build a sample unified diff with optional deletion header."""
@@ -34,24 +31,25 @@ class TestLocalChangesetFetcher:
             lines.insert(1, "+++ /dev/null")
         return "\n".join(lines)
 
-    def _make_repo(self) -> MagicMock:
-        """Create a fully-stubbed LocalRepositoryPort mock."""
-        repo = MagicMock(spec=LocalRepositoryPort)
-        repo.clone.return_value = Path("/tmp/clone/repo")
-        repo.compute_diff.return_value = self._make_sample_diff()
-        repo.commit_messages.return_value = ["fix: stuff"]
-        repo.resolve_base_sha.return_value = "abc123"
-        repo.read_file.return_value = "print('hello')"
-        return repo
+    def _make_repo(self) -> FakeLocalRepository:
+        """Create a fully-stubbed LocalRepositoryPort fake."""
+        return FakeLocalRepository(
+            clone_return=Path("/tmp/clone/repo"),
+            compute_diff_return=self._make_sample_diff(),
+            commit_messages_return=["fix: stuff"],
+            resolve_base_sha_return="abc123",
+            read_file_return="print('hello')",
+        )
 
     def test_fetch_returns_pull_request_diff_with_correct_fields(self) -> None:
         """Fetch returns a PullRequestDiff carrying all expected fields."""
-        repo = MagicMock(spec=LocalRepositoryPort)
-        repo.clone.return_value = Path("/tmp/clone/repo")
-        repo.compute_diff.return_value = self._make_sample_diff()
-        repo.commit_messages.return_value = ["fix: stuff"]
-        repo.resolve_base_sha.return_value = "abc123"
-        repo.read_file.return_value = "print('hello')"
+        repo = FakeLocalRepository(
+            clone_return=Path("/tmp/clone/repo"),
+            compute_diff_return=self._make_sample_diff(),
+            commit_messages_return=["fix: stuff"],
+            resolve_base_sha_return="abc123",
+            read_file_return="print('hello')",
+        )
 
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
@@ -80,14 +78,12 @@ class TestLocalChangesetFetcher:
 
         fetcher.fetch(pr_id, sha)
 
-        repo.clone.assert_called_once_with(
-            pr_id, "https://codeberg.org/test-org/test-repo.git"
-        )
+        assert repo.clone_calls == [((pr_id, "https://codeberg.org/test-org/test-repo.git"), {})]
 
     def test_fetch_keeps_repo_for_multi_turn(self) -> None:
         """Repository is NOT removed after fetch — clone persists for multi-turn reuse."""
         repo = self._make_repo()
-        repo.compute_diff.side_effect = RuntimeError("git diff failed")
+        repo.compute_diff_return = RuntimeError("git diff failed")
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
@@ -96,12 +92,12 @@ class TestLocalChangesetFetcher:
         with pytest.raises(RuntimeError, match="git diff failed"):
             fetcher.fetch(pr_id, sha)
 
-        repo.remove.assert_not_called()
+        assert len(repo.remove_calls) == 0
 
     def test_fetch_parses_file_paths_from_diff(self) -> None:
         """Non-deleted file paths from the diff are read and returned in file_contents."""
         repo = self._make_repo()
-        repo.compute_diff.return_value = self._make_sample_diff(with_deletion=True)
+        repo.compute_diff_return = self._make_sample_diff(with_deletion=True)
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
@@ -112,18 +108,16 @@ class TestLocalChangesetFetcher:
         assert "deleted.py" not in result.file_contents
         assert "src/foo.py" in result.file_contents
         assert "src/bar.py" in result.file_contents
-        assert repo.read_file.call_count == 2
+        assert len(repo.read_file_calls) == 2
 
     def test_fetch_skips_unreadable_files(self) -> None:
         """Files that raise RuntimeError on read are skipped with a warning."""
         repo = self._make_repo()
 
-        def read_side_effect(repo_path, file_path, ref=None):
-            if file_path == "src/bar.py":
-                raise RuntimeError("permission denied")
-            return "print('hello')"
-
-        repo.read_file.side_effect = read_side_effect
+        repo.read_file_return = [
+            RuntimeError("permission denied"),
+            "print('hello')",
+        ]
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
@@ -149,17 +143,17 @@ class TestLocalChangesetFetcher:
             local_repository=repo_github, url_resolver=FakeCloneUrlResolver("github")  
         ).fetch(pr_id, sha)
 
-        repo_codeberg.clone.assert_called_once_with(
-            pr_id, "https://codeberg.org/test-org/test-repo.git"
-        )
-        repo_github.clone.assert_called_once_with(
-            pr_id, "https://github.com/test-org/test-repo.git"
-        )
+        assert repo_codeberg.clone_calls == [
+            ((pr_id, "https://codeberg.org/test-org/test-repo.git"), {})
+        ]
+        assert repo_github.clone_calls == [
+            ((pr_id, "https://github.com/test-org/test-repo.git"), {})
+        ]
 
     def test_fetch_empty_diff_returns_empty_contents(self) -> None:
         """A diff containing no file-path lines yields an empty file_contents dict."""
         repo = self._make_repo()
-        repo.compute_diff.return_value = "just some header\ndiff --git\nno match here"
+        repo.compute_diff_return = "just some header\ndiff --git\nno match here"
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
 
@@ -168,7 +162,7 @@ class TestLocalChangesetFetcher:
         result = fetcher.fetch(pr_id, sha)
 
         assert result.file_contents == {}
-        repo.read_file.assert_not_called()
+        assert len(repo.read_file_calls) == 0
 
     def test_fetch_passes_pr_head_ref_for_read_file(self) -> None:
         """read_file is called with ref set to the PR head ref (pr-{number})."""
@@ -180,7 +174,7 @@ class TestLocalChangesetFetcher:
 
         fetcher.fetch(pr_id, sha)
 
-        read_file_calls = repo.read_file.call_args_list
+        read_file_calls = repo.read_file_calls
         assert len(read_file_calls) >= 1
-        for call in read_file_calls:
-            assert call.kwargs["ref"] == "pr-42"
+        for call_args, call_kwargs in read_file_calls:
+            assert call_kwargs["ref"] == "pr-42"
