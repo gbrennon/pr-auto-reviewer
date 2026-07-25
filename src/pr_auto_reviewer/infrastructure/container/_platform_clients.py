@@ -4,6 +4,7 @@ GitPlatformHttpClient, TokenVerifier instances."""
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
@@ -49,7 +50,7 @@ class PlatformClients:
     forgejo_reviewer: GitPlatformHttpClient | None = None
 
 
-def wire_platform_clients(config: Config) -> PlatformClients:
+def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None = None, _store_path: Path | None = None) -> PlatformClients:
     """Create all platform-client instances for *config*."""
 
     is_terminal = config.output_mode == "terminal"
@@ -94,6 +95,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
             client_label="owner",
             preflight_verifier=github_preflight,
             token_resolver=github_resolver,
+            _verified_cache_path=_verified_cache_path,
         )
         gb_reviewer = GitPlatformHttpClient(
             config.github_api_url,
@@ -102,6 +104,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
             client_label="reviewer",
             preflight_verifier=github_preflight,
             token_resolver=github_resolver,
+            _verified_cache_path=_verified_cache_path,
         )
         fj_owner = GitPlatformHttpClient(
             config.forgejo_api_url,
@@ -110,6 +113,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
             client_label="owner",
             preflight_verifier=forgejo_preflight,
             token_resolver=forgejo_resolver,
+            _verified_cache_path=_verified_cache_path,
         )
         fj_reviewer = GitPlatformHttpClient(
             config.forgejo_api_url,
@@ -118,6 +122,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
             client_label="reviewer",
             preflight_verifier=forgejo_preflight,
             token_resolver=forgejo_resolver,
+            _verified_cache_path=_verified_cache_path,
         )
 
         return PlatformClients(
@@ -129,6 +134,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
                 persist=not is_terminal,
                 forgejo_owner_client=fj_owner,
                 forgejo_reviewer_client=fj_reviewer,
+                _store_path=_store_path,
             ),
             forgejo_owner=fj_owner,
             forgejo_reviewer=fj_reviewer,
@@ -182,6 +188,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
         client_label="owner",
         preflight_verifier=preflight,
         token_resolver=resolver,
+        _verified_cache_path=_verified_cache_path,
     )
     reviewer_client = GitPlatformHttpClient(
         api_url,
@@ -190,6 +197,7 @@ def wire_platform_clients(config: Config) -> PlatformClients:
         client_label="reviewer",
         preflight_verifier=preflight,
         token_resolver=resolver,
+        _verified_cache_path=_verified_cache_path,
     )
 
     return PlatformClients(
@@ -197,5 +205,6 @@ def wire_platform_clients(config: Config) -> PlatformClients:
         reviewer_client=reviewer_client,
         token_verifier=TokenVerifier(
             http_client, reviewer_client, persist=not is_terminal,
+            _store_path=_store_path,
         ),
     )

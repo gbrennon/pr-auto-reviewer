@@ -64,14 +64,19 @@ class TokenVerifier(TokenVerifierPort):
         persist: bool = True,
         forgejo_owner_client: GitPlatformHttpClient | None = None,
         forgejo_reviewer_client: GitPlatformHttpClient | None = None,
+        _store_path: Path | None = None,
     ) -> None:
         self._owner_client = owner_client
         self._reviewer_client = reviewer_client
         self._forgejo_owner_client = forgejo_owner_client
         self._forgejo_reviewer_client = forgejo_reviewer_client
         self._persist = persist
-        self._store_path = Path(
-            os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
+        self._store_path = (
+            _store_path
+            if _store_path is not None
+            else Path(
+                os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
+            )
         )
         self._verified: set[tuple[str, str]] = self._load() if persist else set()
 

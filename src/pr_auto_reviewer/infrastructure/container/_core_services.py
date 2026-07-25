@@ -84,10 +84,15 @@ class CoreServices:
 def wire_core_services(
     config: Config,
     repository_context: RepositoryContextPort,
+    *,
+    _config_dir: Path | None = None,
 ) -> CoreServices:
     """Build and wire all core (non-platform) services."""
 
-    config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")
+    if _config_dir is not None:
+        config_dir = str(_config_dir)
+    else:
+        config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")
     os.makedirs(config_dir, exist_ok=True)
     pr_repository = JsonFilePullRequestRepository(
         os.path.join(config_dir, "state.json")

@@ -1,10 +1,24 @@
 import pytest
+import os
+from pathlib import Path
 from pr_auto_reviewer.infrastructure.container import Container
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
 class TestContainer:
+
+    @pytest.fixture(autouse=True)
+    def _redirect_config_dir(self, tmp_path: Path, monkeypatch) -> None:
+        config_root = tmp_path / ".config" / "pr-auto-reviewer"
+        config_root.mkdir(parents=True, exist_ok=True)
+        _real_expanduser = os.path.expanduser
+        monkeypatch.setattr(
+            os.path,
+            "expanduser",
+            lambda p, _real=_real_expanduser: str(config_root) if "pr-auto-reviewer" in p else _real(p),
+        )
+        monkeypatch.setattr(os, "makedirs", lambda *a, **kw: None)
 
     @pytest.fixture
     def _fake_config(self) -> Config:
