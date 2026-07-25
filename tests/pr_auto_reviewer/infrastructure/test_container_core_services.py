@@ -3,7 +3,6 @@ dataclass is populated with the correct service instances for a given config."""
 
 from __future__ import annotations
 
-import os
 import pytest
 
 from pr_auto_reviewer.infrastructure.config import Config
@@ -291,12 +290,11 @@ class TestWireCoreServices:
         self,
         forgejo_config: Config,
         repo_context,
+        tmp_path,
     ) -> None:
-        result = wire_core_services(forgejo_config, repo_context)
+        result = wire_core_services(forgejo_config, repo_context, _config_dir=tmp_path)
 
         assert isinstance(result.pr_repository, JsonFilePullRequestRepository)
         state_path = result.pr_repository._file_path
-        assert str(state_path).startswith(
-            os.path.expanduser("~/.config/pr-auto-reviewer")
-        )
+        assert str(state_path).startswith(str(tmp_path))
         assert str(state_path).endswith("state.json")
