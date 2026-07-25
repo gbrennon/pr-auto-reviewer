@@ -1,8 +1,0 @@
-{
-  "private": {
-    "repo": "gbrennon/pr-auto-reviewer",
-    "pr_number": 53,
-    "success": false,
-    "error": "Failed to publish review for gbrennon/pr-auto-reviewer#53: 403 Client Error: Forbidden for url: https://codeberg.org/api/v1/repos/gbrennon/pr-auto-reviewer/pulls/53/reviews"
-  }
-}
