@@ -15,6 +15,7 @@ class ComposedPrompt:
     content: str
     fragments_used: list[str]
     total_tokens: int
+    repo_path: str = ""
 
     def __post_init__(self) -> None:
         """Validate fields after dataclass construction."""

@@ -70,7 +70,3 @@ def patched_private_client(integration_data):
     """Fixture HTTP client with private PR data."""
     return FixtureHttpClient(integration_data["private"], "private")
 
-@pytest.fixture
-def pr_fixture(request):
-    """Parametrized fixture resolving to scenario name."""
-    return request.param if hasattr(request, 'param') else "private"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from dataclasses import replace
 
@@ -33,9 +34,11 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         self,
         repository_context: RepositoryContextPort,
         compose_review_prompt: ComposeReviewPromptPort,
+        local_clone_base_dir: str = "",
     ) -> None:
         self._repository_context = repository_context
         self._compose_review_prompt = compose_review_prompt
+        self._local_clone_base_dir = local_clone_base_dir
 
     def build(
         self,
@@ -80,9 +83,16 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         )
 
         composed = self._compose_review_prompt.execute(review_context)
+        if self._local_clone_base_dir:
+            dir_name = f"{pr_id.repository.replace('/', '_')}_{pr_id.number}"
+            composed = replace(
+                composed,
+                repo_path=str(Path(self._local_clone_base_dir) / dir_name),
+            )
         logger.info(
-            "ReviewContextFactory return: prompt=%d chars tokens=%d fragments=%s",
+            "ReviewContextFactory return: prompt=%d chars tokens=%d fragments=%s repo_path=%s",
             len(composed.content), composed.total_tokens,
             composed.fragments_used,
+            composed.repo_path or "(none)",
         )
         return composed
