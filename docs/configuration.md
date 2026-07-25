@@ -116,7 +116,7 @@ Codeberg always uses formal reviews (``event: "APPROVED"``,
 |----------|---------|-------------|
 | ``POLL_INTERVAL`` | ``60`` | Seconds between PR checks in watch mode |
 | ``RUN_ONCE`` | ``false`` | Run one check cycle and exit |
-| ``REPOS_FILTER`` | — | Comma-separated repo names to watch (empty = all) |
+| ``REPOS_FILTER`` | — | Single ``owner/repo`` to watch (empty = all repos, same as ``-r`` flag) |
 | ``FORCE_PR`` | — | PR number to re-review regardless of state |
 | ``DEBUG`` | ``false`` | Enable debug logging (``1``, ``true``, or ``yes``) |
 | ``ENV`` | ``development`` | Set to ``production`` to load from user config |
