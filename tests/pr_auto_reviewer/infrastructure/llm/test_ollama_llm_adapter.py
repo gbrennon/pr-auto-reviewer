@@ -203,7 +203,7 @@ class TestOllamaLlmAdapter:
                 "file": "src/foo.py",
                 "description": "bad code",
                 "severity": "major",
-                "category": "maintainability",
+                "type": "maintainability",
                 "current_code": "x = 1",
                 "suggested_fix": "x = 2",
             }],
@@ -336,7 +336,7 @@ class TestReviewResponseParser:
             "suggestions": [],
             "praise": []
         })
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert isinstance(result, CodeReview)
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -359,7 +359,7 @@ class TestReviewResponseParser:
             "suggestions": [],
             "praise": []
         })
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
@@ -374,7 +374,7 @@ Looks good
 
 None
 """
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.APPROVED
         assert "Looks good" in result.summary
@@ -396,7 +396,7 @@ None
             "suggestions": [],
             "praise": []
         })
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert len(result.items) == 2
         assert result.items[0].severity == ItemSeverity.CRITICAL
@@ -410,7 +410,7 @@ None
             "suggestions": [],
             "praise": []
         })
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert len(result.items) == 0
         assert result.verdict == ReviewVerdict.COMMENTED
@@ -439,7 +439,7 @@ None
   "praise": []
 }}
 ```'''
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == expected_verdict
         assert len(result.items) == 1
@@ -459,7 +459,7 @@ None
   "praise": []
 }
 ```'''
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
@@ -484,7 +484,7 @@ None
   "praise": []
 }
 ```'''
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 2
@@ -504,7 +504,7 @@ None
             "suggestions": [],
             "praise": []
         })
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
@@ -519,7 +519,7 @@ Code needs work
 
 - [critical] security (auth.py): vulnerability found
 """
-        result = ReviewResponseParser.parse(raw_text, "code-review")
+        result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert "Code needs work" in result.summary

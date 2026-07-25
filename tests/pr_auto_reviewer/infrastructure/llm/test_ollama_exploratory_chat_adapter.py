@@ -12,8 +12,6 @@ import requests as _requests
 
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
@@ -78,15 +76,6 @@ def adapter() -> OllamaExploratoryChatAdapter:
     return OllamaExploratoryChatAdapter(model="phi4", max_retries=2, ollama_timeout=10)
 
 
-@pytest.fixture
-def prompt_no_repo() -> ComposedPrompt:
-    """ComposedPrompt without repo_path — triggers single-pass path."""
-    return ComposedPrompt(
-        content="Review this diff:\n```diff\n+ x = 1\n```",
-        fragments_used=["frag-1"],
-        total_tokens=50,
-    )
-
 
 @pytest.fixture
 def prompt_with_repo(tmp_path: Path) -> ComposedPrompt:
@@ -97,121 +86,6 @@ def prompt_with_repo(tmp_path: Path) -> ComposedPrompt:
         total_tokens=500,
         repo_path=str(tmp_path),
     )
-
-
-class TestSinglePass:
-    """Tests for _single_pass (empty repo_path)."""
-
-    def test_returns_code_review(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Streaming chat response is parsed into a CodeReview."""
-        verdict_json = _make_verdict_json()
-
-        def fake_post(
-            url: str,
-            *,
-            json: dict[str, Any] | None = None,
-            timeout: int | None = None,
-            stream: bool = False,
-            **kwargs: object,
-        ) -> _FakeStreamingResponse:
-            assert "/api/chat" in url
-            assert json is not None
-            assert json["stream"] is True
-            assert json["format"] == "json"
-            assert json["messages"][0]["role"] == "user"
-            assert json["messages"][0]["content"] == prompt_no_repo.content
-            return _FakeStreamingResponse(verdict_json)
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        result = adapter.review_prompt(prompt_no_repo)
-
-        assert isinstance(result, CodeReview)
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
-        assert result.items[0].severity == ItemSeverity.MAJOR
-        assert result.items[0].file_path == "src/foo.py"
-
-    def test_raises_on_empty_response(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError when streaming returns empty content."""
-        def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
-            return _FakeStreamingResponse("")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        with pytest.raises(LlmUnavailableError, match="Empty response"):
-            adapter.review_prompt(prompt_no_repo)
-
-    def test_raises_on_request_error(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError when POST fails."""
-        def fake_post(*args: object, **kwargs: object) -> None:
-            raise _requests.RequestException("Connection refused")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
-            adapter.review_prompt(prompt_no_repo)
-
-    def test_retry_success(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Retries on first failure then returns CodeReview on second attempt."""
-        verdict_json = _make_verdict_json(verdict="APPROVED", issues=[])
-        call_count = 0
-
-        def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise _requests.RequestException("Temporary failure")
-            return _FakeStreamingResponse(verdict_json)
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-        monkeypatch.setattr(_time, "sleep", lambda _: None)
-
-        result = adapter.review_prompt(prompt_no_repo)
-        assert call_count == 2
-        assert result.verdict == ReviewVerdict.APPROVED
-
-    def test_retry_exhaustion(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError after all retries exhausted."""
-        call_count = 0
-
-        def fake_post(*args: object, **kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            raise _requests.RequestException("Fatal error")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-        monkeypatch.setattr(_time, "sleep", lambda _: None)
-
-        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
-            adapter.review_prompt(prompt_no_repo)
-        assert call_count == 2
-
 
 
 
@@ -249,7 +123,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
 
@@ -286,7 +160,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 3
+        assert len(calls) == 5
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_handles_non_json_response(
@@ -320,7 +194,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_raises_on_max_turns_exceeded(
@@ -341,14 +215,14 @@ class TestMultiTurn:
             lambda self, action, args: "file1.py\nfile2.py",
         )
 
-        with pytest.raises(LlmUnavailableError, match="Exceeded max turns"):
+        with pytest.raises(LlmUnavailableError, match="Phase exceeded max turns"):
             adapter.review_prompt(prompt_with_repo)
 
     def test_streaming_accumulates_chunks(
         self,
         monkeypatch: pytest.MonkeyPatch,
         adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
+        prompt_with_repo: ComposedPrompt,
     ) -> None:
         """Multiple streaming chunks are accumulated before parsing."""
 
@@ -368,7 +242,7 @@ class TestMultiTurn:
 
         monkeypatch.setattr(_requests, "post", lambda *a, **kw: _MultiChunkResponse())
 
-        result = adapter.review_prompt(prompt_no_repo)
+        result = adapter.review_prompt(prompt_with_repo)
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
@@ -407,5 +281,234 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+
+    def test_empty_response_recovers_on_next_turn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Single empty response triggers reprompt; next turn succeeds."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse("")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 4
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_empty_response_exhaustion_raises(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Three consecutive empty responses raise LlmUnavailableError."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            return _FakeStreamingResponse("")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        with pytest.raises(
+            LlmUnavailableError, match="empty response 3 consecutive"
+        ):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 3
+
+    def test_empty_response_counter_resets_after_valid(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Non-consecutive empties reset counter; doesn't raise."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx in (1, 3):
+                return _FakeStreamingResponse("")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_unparseable_response_recovers_on_next_turn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Two unparseable responses trigger reprompt; next turn succeeds."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx <= 2:
+                return _FakeStreamingResponse("not valid json {{{")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_unparseable_response_exhaustion_raises(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Three consecutive unparseable responses raise LlmUnavailableError."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            return _FakeStreamingResponse("<html>not json</html>")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        with pytest.raises(
+            LlmUnavailableError, match="unparseable response 3 consecutive"
+        ):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 3
+
+    def test_unparseable_response_counter_resets_after_valid(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Non-consecutive unparseable resets counter; doesn't raise."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse("bad json {{{")
+            if call_idx == 3:
+                return _FakeStreamingResponse("<html>oops</html>")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_raises_on_request_error(
+        self,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+        monkeypatch: Any,
+    ) -> None:
+        call_count = 0
+
+        def fake_post(*args: object, **kwargs: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise _requests.RequestException("Connection refused")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(_time, "sleep", lambda s: None)
+
+        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert call_count == 2
