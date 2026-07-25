@@ -194,7 +194,7 @@ class OllamaLlmAdapter(LlmReviewPort):
             last_eval_duration = eval_duration
             last_response_ms = response_ms
 
-            review = ReviewResponseParser.parse(raw_text, self._model)
+            review = ReviewResponseParser().parse(raw_text, self._model)
             logger.info(
                 "Try %d/%d — verdict=%s items=%d summary='%s'",
                 attempt + 1, self._max_retries,
