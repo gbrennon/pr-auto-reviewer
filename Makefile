@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once
+.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once watch
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -74,6 +74,10 @@ daemon-once:  ## Run the watcher once
 
 daemon:  ## Run the watcher continuously
 	@uv run python -m pr_auto_reviewer watch-prs
+
+watch:  ## Watch a single repo once (REPO=owner/repo)
+	@test -n "$(REPO)" || { echo "REPO is required (owner/repo)"; exit 1; }
+	@uv run python -m pr_auto_reviewer watch-prs --once -r $(REPO)
 
 # ── issue commands ──────────────────────────────────────────────────────────
 

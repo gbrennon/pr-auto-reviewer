@@ -29,14 +29,19 @@ Set `PLATFORM_MODE` in `.env` (`github`, `codeberg`, or `both`).
 ```bash
 # Via uv
 uv run pr-auto-reviewer watch-prs                  # all repos, every 60s
-uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo
-uv run pr-auto-reviewer watch-prs --once           # one cycle and exit
+uv run pr-auto-reviewer watch-prs -r owner/repo    # single repo, every 60s
+uv run pr-auto-reviewer watch-prs --once           # one cycle and exit (all repos)
+uv run pr-auto-reviewer watch-prs --once -r owner/repo  # one cycle, single repo
 
 # Via Make
 make daemon                                         # continuous polling
 make daemon-once                                    # one cycle and exit
-make watch REPO=owner/repo                          # watch single repo once
+make watch REPO=owner/repo                          # one cycle, single repo
 ```
+
+> **Note:** ``-r`` takes a plain ``owner/repo`` string — no platform prefix. In ``PLATFORM_MODE=both``
+> mode, the same filter is applied to both platforms. Use ``REPOS_FILTER`` in ``.env`` as an
+> alternative to the CLI flag.
 
 Missing or invalid tokens are **logged and skipped** — the daemon never stops on auth errors.
 

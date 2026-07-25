@@ -7,7 +7,7 @@ This document outlines what is currently implemented and what is planned.
 ### Core Functionality
 
 - **Automatic PR Detection** — Watches all open PRs across configured platforms (Codeberg and/or GitHub)
-- **Single Repo Watch** - Can watch specific repo with `-r owner/repo`
+- **Single Repo Watch** — ``-r owner/repo`` restricts daemon to one repository (no platform prefix supported; same filter applied to both platforms in ``PLATFORM_MODE=both``)
 - **Draft PR Skipping** - Skips draft PRs automatically
 - **Duplicate Prevention** - Uses SHA-based state to avoid re-reviewing unchanged PRs
 - **AI Code Review** - Sends PR diff to Ollama and receives review
@@ -56,6 +56,7 @@ This document outlines what is currently implemented and what is planned.
 
 ## Not Implemented (Planned)
 
+- **Platform-Prefix Repo Filter** — ``-r github:owner/repo,codeberg:other/repo`` to scope filters per platform in ``PLATFORM_MODE=both``
 - **Per-Repo Config** — Different settings per repository
 - **Review History** — Store and query past reviews
 - **Stats/Dashboard** — Track review patterns
