@@ -105,18 +105,12 @@ class TestTokenVerifierSkipsWhenCached:
 
 class TestTokenVerifierPersistence:
     def test_verify_persists_verified_pairs_when_persist_is_true(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(store)
-            if "verified-tokens" in str(p)
-            else p,
-        )
-        owner = _client("owner")
-        reviewer = _client("reviewer")
-        verifier = TokenVerifier(owner, reviewer, persist=True)
+        owner = _client("owner", verified_cache_path=store)
+        reviewer = _client("reviewer", verified_cache_path=store)
+        verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
@@ -127,22 +121,15 @@ class TestTokenVerifierPersistence:
         assert ["o", "reviewer"] in data
 
     def test_verify_loads_persisted_pairs_and_skips_preflight(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
         store.parent.mkdir(parents=True, exist_ok=True)
         store.write_text(json.dumps([["o", "owner"], ["o", "reviewer"]]))
 
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(store.parent / "verified-tokens.json")
-            if "verified-tokens" in str(p)
-            else p,
-        )
-
-        owner = _client("owner")
-        reviewer = _client("reviewer")
-        verifier = TokenVerifier(owner, reviewer, persist=True)
+        owner = _client("owner", verified_cache_path=store)
+        reviewer = _client("reviewer", verified_cache_path=store)
+        verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
@@ -151,18 +138,12 @@ class TestTokenVerifierPersistence:
         assert len(reviewer._preflight_verifier.calls) == 0
 
     def test_verify_does_not_persist_when_persist_is_false(
-        self, tmp_path: Path, monkeypatch
+        self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(store)
-            if "verified-tokens" in str(p)
-            else p,
-        )
-        owner = _client("owner")
-        reviewer = _client("reviewer")
-        verifier = TokenVerifier(owner, reviewer, persist=False)
+        owner = _client("owner", verified_cache_path=store)
+        reviewer = _client("reviewer", verified_cache_path=store)
+        verifier = TokenVerifier(owner, reviewer, persist=False, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
@@ -172,21 +153,14 @@ class TestTokenVerifierPersistence:
         assert ["o", "owner"] in data
         assert ["o", "reviewer"] in data
 
-    def test_load_handles_corrupt_json(self, tmp_path: Path, monkeypatch) -> None:
+    def test_load_handles_corrupt_json(self, tmp_path: Path) -> None:
         store = tmp_path / "verified-tokens.json"
         store.parent.mkdir(parents=True, exist_ok=True)
         store.write_text("not json")
 
-        monkeypatch.setattr(
-            "os.path.expanduser",
-            lambda p: str(tmp_path / "verified-tokens.json")
-            if "verified-tokens" in str(p)
-            else p,
-        )
-
-        owner = _client("owner")
-        reviewer = _client("reviewer")
-        verifier = TokenVerifier(owner, reviewer, persist=True)
+        owner = _client("owner", verified_cache_path=store)
+        reviewer = _client("reviewer", verified_cache_path=store)
+        verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
