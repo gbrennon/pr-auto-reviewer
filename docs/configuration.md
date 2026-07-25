@@ -60,15 +60,19 @@ with the Git host.
 | ``FORGEJO_HOST`` | — | Legacy alias for ``FORGEJO_API_URL`` |
 | ``USE_LOCAL_CLONE`` | ``false`` | Clone repos locally instead of fetching via API |
 | ``LOCAL_CLONE_BASE_DIR`` | ``~/.cache/pr-auto-reviewer/repos`` | Where clones are stored |
+| ``CLONE_PROTOCOL`` | ``https`` | Protocol for local clones: ``https`` or ``ssh`` |
 
 ``FORGEJO_API_URL`` is normalised automatically: ``https://codeberg.org``
 becomes ``https://codeberg.org/api/v1``.
 Set it to a custom Forgejo instance (e.g. ``https://git.example.com``)
 and the ``/api/v1`` suffix is added only if missing.
-
 ``USE_LOCAL_CLONE`` switches from API-based diff fetching to local ``git``
 operations.  Useful when API rate limits are tight or the host has no
-diff endpoint.
+diff endpoint.  ``CLONE_PROTOCOL`` selects the clone URL format: ``https``
+uses the HTTPS resolver (default), ``ssh`` uses the SSH resolver which
+produces ``git@host:owner/repo.git`` URLs and sets ``GIT_SSH_COMMAND``
+to ``ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new`` on every
+``git`` subprocess call.
 
 ## Review Output
 
