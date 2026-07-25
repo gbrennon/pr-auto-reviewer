@@ -139,6 +139,7 @@ def wire_platform_adapters(
     local_repository: LocalRepositoryPort | None = None,
 ) -> PlatformAdapters:
     """Build and wire all platform-specific adapters from the given clients."""
+    repos_filter = config.repos_filter or None
     if config.platform_mode == GitProvider.BOTH:
         gb_owner = clients.http_client
         gb_reviewer = clients.reviewer_client
@@ -218,8 +219,8 @@ def wire_platform_adapters(
             ),
             repo_lister=CompositeRepoLister(
                 {
-                    "github": GithubRepoLister(gb_owner),
-                    "forgejo": ForgejoRepoLister(fj_owner),
+                    "github": GithubRepoLister(gb_owner, repos_filter=repos_filter),
+                    "forgejo": ForgejoRepoLister(fj_owner, repos_filter=repos_filter),
                 }
             ),
             pr_lister=CompositePrLister(
@@ -296,8 +297,8 @@ def wire_platform_adapters(
             else ForgejoPrLister(http_client)
         ),
         repo_lister=(
-            GithubRepoLister(http_client)
+            GithubRepoLister(http_client, repos_filter=repos_filter)
             if is_github
-            else ForgejoRepoLister(http_client)
+            else ForgejoRepoLister(http_client, repos_filter=repos_filter)
         ),
     )
