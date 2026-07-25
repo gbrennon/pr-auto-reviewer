@@ -9,6 +9,12 @@ from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.container._platform_clients import (
     PlatformClients,
 )
+from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolver import (
+    HttpsCloneUrlResolver,
+)
+from pr_auto_reviewer.infrastructure.clone_url_resolvers.ssh_clone_url_resolver import (
+    SshCloneUrlResolver,
+)
 from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
     ForgejoChangesetFetcher,
 )
@@ -150,9 +156,10 @@ def wire_platform_adapters(
             )
 
         if local_repository is not None:
+            resolver_cls = HttpsCloneUrlResolver if config.clone_protocol == "https" else SshCloneUrlResolver
             changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
-                LocalChangesetFetcher(local_repository, "github"),
-                LocalChangesetFetcher(local_repository, "codeberg"),
+                LocalChangesetFetcher(local_repository, resolver_cls("github")),
+                LocalChangesetFetcher(local_repository, resolver_cls("codeberg")),
             )
         else:
             changeset_fetcher = CompositeChangesetFetcher(
@@ -230,7 +237,12 @@ def wire_platform_adapters(
 
     if local_repository is not None:
         platform_mode = "github" if config.platform_mode == GitProvider.GITHUB else "codeberg"
-        changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, platform_mode)
+        url_resolver = (
+            HttpsCloneUrlResolver(platform_mode)
+            if config.clone_protocol == "https"
+            else SshCloneUrlResolver(platform_mode)
+        )
+        changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, url_resolver)
     else:
         changeset_fetcher = (
             GithubChangesetFetcher(http_client)
