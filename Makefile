@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once capture-fixture
+.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -52,7 +52,7 @@ restart: stop start  ## Restart the daemon
 # ── development ─────────────────────────────────────────────────────────────
 
 bootstrap:  ## Bootstrap the project environment
-	@bash $(SCRIPT_DIR)/bootstrap.sh
+	@uv run python -m pr_auto_reviewer bootstrap
 
 test:  ## Run tests
 	uv run pytest
@@ -77,13 +77,11 @@ daemon:  ## Run the watcher continuously
 
 # ── issue commands ──────────────────────────────────────────────────────────
 
-issues:  ## Create issues from PR comments
-	@bash $(SCRIPT_DIR)/create-issues-from-pr.sh
+issues:  ## Process issue commands (REPO=owner/repo PR=N)
+	@test -n "$(REPO)" || { echo "REPO is required (owner/repo)"; exit 1; }
+	@test -n "$(PR)" || { echo "PR is required (PR number)"; exit 1; }
+	@uv run python -m pr_auto_reviewer process-commands --repo $(REPO) --pr $(PR)
 
 list-items:  ## List review items (REPO=owner/repo PR=N)
 	@uv run python -m pr_auto_reviewer list-items --repo $(REPO) --pr $(PR)
 
-# ── fixtures ────────────────────────────────────────────────────────────────
-
-capture-fixture:  ## Capture test fixtures (REPO=owner/repo PR=N)
-	@bash $(SCRIPT_DIR)/capture-fixture.sh -r $(REPO) -p $(PR)
