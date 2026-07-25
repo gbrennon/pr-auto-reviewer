@@ -99,10 +99,10 @@ def wire_core_services(
     )
 
     if config.use_local_clone:
-        from pr_auto_reviewer.infrastructure.llm.ollama_chat_adapter import (
-            OllamaChatAdapter,
+        from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+            OllamaExploratoryChatAdapter,
         )
-        llm_review = OllamaChatAdapter(
+        llm_review = OllamaExploratoryChatAdapter(
             model=config.llm_model or "code-review:latest",
             host=config.llm_host,
             ollama_timeout=config.ollama_timeout,
@@ -144,6 +144,7 @@ def wire_core_services(
     review_context_factory = ReviewContextFactory(
         repository_context=repository_context,
         compose_review_prompt=prompt_adapter,
+        local_clone_base_dir=config.local_clone_base_dir,
     )
 
     return CoreServices(
