@@ -98,6 +98,7 @@ class TestOllamaChatAdapter:
             raise _requests.RequestException("Connection refused")
 
         monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(_time, "sleep", lambda _: None)
 
         with pytest.raises(LlmUnavailableError, match="Chat request to.*failed"):
             chat_adapter.review_prompt(sample_prompt)

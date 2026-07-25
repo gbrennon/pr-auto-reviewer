@@ -50,7 +50,7 @@ This document outlines what is currently implemented and what is planned.
 ### Advanced
 
 - **Configurable review output** — ``REVIEW_OUTPUT`` controls terminal-only, file, or platform posting
-- **Local clone mode** — ``USE_LOCAL_CLONE`` switches from API to local ``git`` operations
+- **Local clone mode** — ``USE_LOCAL_CLONE`` switches from API to local ``git`` operations; ``CLONE_PROTOCOL`` selects ``https`` (default) or ``ssh``
 - **Prompt fragment system** — Language-specific review guidance via composable fragments
 - **Compact template** — ``USE_COMPACT_TEMPLATE`` reduces prompt size for smaller models
 

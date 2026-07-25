@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -37,13 +38,22 @@ class LocalGitRepository(LocalRepositoryPort):
         else:
             logger.info("Cloning %s into %s (full clone for merge-base)", clone_url, dest)
             self._temp_base_dir.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                ["git", "clone", clone_url, str(dest)],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=300,
-            )
+            try:
+                subprocess.run(
+                    ["git", "clone", clone_url, str(dest)],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=300,
+                    env=self._ssh_env(),
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.error(
+                    "git clone failed for %s: %s", clone_url, exc.stderr.strip()
+                )
+                raise RuntimeError(
+                    f"git clone {clone_url} failed: {exc.stderr.strip()}"
+                ) from exc
 
         pr_ref = f"pull/{pr_id.number}/head"
         try:
@@ -135,9 +145,16 @@ class LocalGitRepository(LocalRepositoryPort):
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=self._ssh_env(),
         )
         if result.returncode != 0:
             raise RuntimeError(
                 f"git {' '.join(args)} failed: {result.stderr.strip()}"
             )
         return result.stdout
+
+    @staticmethod
+    def _ssh_env() -> dict[str, str]:
+        env = os.environ.copy()
+        env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+        return env
