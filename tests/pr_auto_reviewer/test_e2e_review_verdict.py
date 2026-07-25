@@ -1,16 +1,13 @@
 """Integration tests for the review verdict pipeline.
 
 Uses test stubs (not MagicMock) that implement port Protocols.
-Real domain objects throughout — PullRequestDiff, CodeReview.
-Fixture Ollama responses pre-parsed via ReviewResponseParser.
+Real domain objects throughout — PullRequestDiff, CodeReview, ReviewItem.
 """
 
 from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
-
 import pytest
 
 from pr_auto_reviewer.application.commands.review_pull_request_command import (
@@ -28,10 +25,10 @@ from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-    ReviewResponseParser,
-)
 
 from tests.pr_auto_reviewer.application.stubs import (
     StubChangesetFetcher,
@@ -46,9 +43,6 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 def _load_fixture(relative: str) -> str:
     return (FIXTURES / relative).read_text()
 
-def _parsed_review_from_fixture(name: str, model: str = "code-review") -> CodeReview:
-    raw = json.loads(_load_fixture(f"ollama_responses/{name}"))
-    return ReviewResponseParser.parse(raw["response"], model)
 
 class TestReviewVerdict:
     """Verdict tests using stub ports — no MagicMock, no requests.post.
@@ -80,9 +74,9 @@ class TestReviewVerdict:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        review = _parsed_review_from_fixture("shell-with-shebang.json")
-
         fetcher = StubChangesetFetcher(diff)
+
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
         llm_stub = StubLlmReview(review)
         publisher = StubReviewPublisher()
         ctx_factory = StubReviewContextFactory()
@@ -117,7 +111,19 @@ class TestReviewVerdict:
                 ),
             },
         )
-        review = _parsed_review_from_fixture("shell-missing-shebang.json")
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            model_used="code-review",
+            items=[
+                ReviewItem(
+                    number=1,
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.QUALITY,
+                    file_path="scripts/deploy.sh",
+                    description="Missing shebang in deploy script",
+                ),
+            ],
+        )
 
         fetcher = StubChangesetFetcher(diff)
         llm_stub = StubLlmReview(review)
@@ -152,7 +158,7 @@ class TestReviewVerdict:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        review = _parsed_review_from_fixture("shell-with-shebang.json")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
 
         fetcher = StubChangesetFetcher(diff)
         llm_stub = StubLlmReview(review)
