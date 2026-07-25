@@ -7,6 +7,7 @@ from pr_auto_reviewer.application.ports.outbound.clone_url_resolver_port import 
 _SSH_TEMPLATES: dict[str, str] = {
     "codeberg": "git@codeberg.org:{repo}.git",
     "github": "git@github.com:{repo}.git",
+    "forgejo": "git@codeberg.org:{repo}.git",
 }
 
 
