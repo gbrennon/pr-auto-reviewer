@@ -6,7 +6,7 @@ This document outlines what is currently implemented and what is planned.
 
 ### Core Functionality
 
-- **Automatic PR Detection** - Watches all user's Codeberg repos for open PRs
+- **Automatic PR Detection** — Watches all open PRs across configured platforms (Codeberg and/or GitHub)
 - **Single Repo Watch** - Can watch specific repo with `-r owner/repo`
 - **Draft PR Skipping** - Skips draft PRs automatically
 - **Duplicate Prevention** - Uses SHA-based state to avoid re-reviewing unchanged PRs
@@ -16,67 +16,63 @@ This document outlines what is currently implemented and what is planned.
 
 ### Configuration
 
-- **Environment-based Config** - All settings in `.env` file
-- **Hot Reload** - Changes to `.env` detected within ~10 seconds
-- **Manual Reload** - `reload.sh` triggers immediate config reload
-- **Configurable Poll Interval** - Set via `POLL_INTERVAL` env var
-- **Configurable Ollama** - Host and model configurable via env vars
+- **Environment-based Config** — All settings in ``.env`` or user config; see [Configuration](configuration.md) for the full variable reference
+- **Configurable Poll Interval** — Set via ``POLL_INTERVAL`` env var
+- **Configurable LLM** — Host and model configurable via ``LLM_HOST`` / ``LLM_MODEL`` env vars
 
 ### Operations
 
-- **Bootstrap** - Single entry point (`bootstrap.sh`) that handles everything
-- **Daemon Mode** - Runs continuously in background
-- **Single Cycle** - Run once for testing (`--once`)
-- **Locking** - Prevents multiple instances from running
-- **PID Tracking** - Tracks running process for clean shutdown
+- **Bootstrap** — `uv run python -m pr_auto_reviewer bootstrap` sets up repo config
+- **Daemon Mode** — `uv run python -m pr_auto_reviewer daemon start|stop|status`
+- **Single Review** — `uv run python -m pr_auto_reviewer task --repo <org>/<repo> --pr <N>`
+- **Command Processing** — `uv run python -m pr_auto_reviewer process-commands --repo <org>/<repo> --pr <N>`
 
 ### Service Management
 
-- **Autostart System** - Simple service manager for background processes
-- **Start/Stop/Status** - Control running services
-- **Status Check** - View which services are running
+- **systemd Integration** — `scripts/install-service.sh` installs and enables the daemon
+- **Start/Stop/Status** — `systemctl --user` controls the background service
+
 
 ### Code Review Features
 
-- **Verdict System** - AI determines Approved or Changes Requested
-- **Structured Domain Model** - Review output uses typed entities: ReviewItem (issues), ReviewSuggestion, ReviewPraise (not enumerated)
-- **Severity Awareness** - AI identifies critical vs minor issues
-
-## Not Implemented (Planned)
+- **Verdict System** — AI determines Approved, Changes Requested, or Commented based on findings
+- **Structured Domain Model** — Review output uses typed entities (ReviewItem, ReviewSuggestion, ReviewPraise)
+- **Severity Awareness** — AI identifies critical, major, minor, and info-level issues
+- **Inline Comments** — Per-file, per-line annotations in review body
 
 ### GitHub Support
 
-- GitHub PAT integration not tested
-- GitHub API calls not implemented
-- Dual platform support planned but not validated
+- **Full GitHub API integration** — PR diff, file content, commit fetching
+- **Formal reviews** — Approve, request changes, or comment on GitHub PRs
+- **Dual-platform** — ``PLATFORM_MODE=both`` reviews PRs on both GitHub and Codeberg simultaneously
+- **Per-org token overrides** — ``GITHUB_TOKEN_<org>_OWNER`` for multi-org setups
 
-### Advanced Features
+### Advanced
 
-- **Webhook Support** - Currently polling-based; webhooks would be faster
-- **Per-Repo Config** - Different settings per repository
-- **Review History** - Store and query past reviews
-- **Stats/Dashboard** - Track review patterns
-- **Custom Prompts** - User-defined review instructions
-- **Multiple Models** - Choose different models per repo or PR type
-- **PR Size Limits** - Skip or warn on large PRs
+- **Configurable review output** — ``REVIEW_OUTPUT`` controls terminal-only, file, or platform posting
+- **Local clone mode** — ``USE_LOCAL_CLONE`` switches from API to local ``git`` operations
+- **Prompt fragment system** — Language-specific review guidance via composable fragments
+- **Compact template** — ``USE_COMPACT_TEMPLATE`` reduces prompt size for smaller models
 
-### Infrastructure
+## Not Implemented (Planned)
 
-- **Systemd Unit Files** - For native Linux service management
-- **Docker Container** - Containerized deployment
-- **Health Checks** - HTTP endpoint for monitoring
-
-### AI Improvements
-
-- **Caching** - Cache reviews for unchanged files
-- **Parallel Processing** - Review multiple PRs simultaneously
-- **Token Budget** - Truncate diffs to stay within model limits
+- **Per-Repo Config** — Different settings per repository
+- **Review History** — Store and query past reviews
+- **Stats/Dashboard** — Track review patterns
+- **Custom Prompts** — User-defined review instructions
+- **Multiple Models** — Choose different models per repo or PR type
+- **PR Size Limits** — Skip or warn on large PRs
+- **Webhook Support** — Event-driven instead of polling
+- **Docker Container** — Containerized deployment
+- **Health Checks** — HTTP endpoint for monitoring
+- **Caching** — Cache reviews for unchanged files
+- **Parallel Processing** — Review multiple PRs simultaneously
 
 ## Supported Platforms
 
 | Platform | Status |
 |----------|--------|
 | Codeberg | Tested and working |
-| GitHub | Not implemented |
+| GitHub | Implemented |
 | Forgejo | Should work (Codeberg API compatible) |
 | Gitea | Should work (Forgejo fork) |
