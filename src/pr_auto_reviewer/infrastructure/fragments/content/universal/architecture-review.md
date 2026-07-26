@@ -29,11 +29,8 @@ __PREVIOUS_FINDINGS__
 5. Check that composition is used over inheritance where appropriate
 6. Verify immutability conventions (frozen dataclasses, no side-effectful init)
 
-## OUTPUT FORMAT
-
 When done, emit a JSON array of findings — no surrounding text:
 
-```json
 [
   {
     "file": "path/to/file.py",
@@ -44,6 +41,5 @@ When done, emit a JSON array of findings — no surrounding text:
     "suggested_fix": "how to fix it"
   }
 ]
-```
 
 If you find nothing, emit `[]`.
