@@ -7,7 +7,6 @@ from typing import Any
 
 import requests
 from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
-    ResponseFieldNormalizer,
     RetryPromptBuilder,
 )
 
@@ -19,7 +18,7 @@ from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestD
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
-
+from pr_auto_reviewer.infrastructure.llm.retry_orchestrator import RetryOrchestrator
 logger = logging.getLogger(__name__)
 
 _SEP = "=" * 72
@@ -58,8 +57,11 @@ class OllamaLlmAdapter(LlmReviewPort):
         self._compose_review_prompt = compose_review_prompt
         self._fragment_selector = fragment_selector
         self._fragment_composer = fragment_composer
-        self._normalizer = ResponseFieldNormalizer()
         self._retry_builder = RetryPromptBuilder()
+        self._orchestrator = RetryOrchestrator(
+            retry_builder=self._retry_builder,
+            max_retries=self._max_retries,
+        )
 
     def _dump_prompt_to_file(self, prompt_text: str, attempt: int) -> None:
         label = "correction" if attempt > 0 else "initial"
@@ -163,56 +165,22 @@ class OllamaLlmAdapter(LlmReviewPort):
     def _call_ollama(self, prompt_text: str) -> CodeReview:
         """Send *prompt_text* to Ollama, parse the response into a CodeReview."""
         prompt_chars = len(prompt_text)
-        timeout = self._ollama_timeout
-        review: CodeReview | None = None
-        last_response_chars = 0
-        last_eval_count: Any = "?"
-        last_eval_duration = 0.0
-        last_response_ms = 0.0
-        correction_prompt = None
-        for attempt in range(self._max_retries):
-            if attempt > 0:
-                delay = 2 ** (attempt - 1)
-                logger.info(
-                    "Try %d/%d — waiting %ds (previous failures: %s)",
-                    attempt + 1, self._max_retries, delay,
-                    ", ".join(failures[:3]),
-                )
-                time.sleep(delay)
-            else:
-                logger.info("Try 1/%d — sending review prompt to Ollama", self._max_retries)
 
-            current_prompt = correction_prompt if correction_prompt else prompt_text
-
-            self._dump_prompt_to_file(current_prompt, attempt)
-
-            raw_text, response_ms, eval_count, eval_duration = self._request_ollama(
-                current_prompt, timeout,
+        def _execute(p: str) -> str:
+            raw_text, _response_ms, _eval_count, _eval_duration = (
+                self._request_ollama(p, self._ollama_timeout)
             )
-            last_response_chars = len(raw_text)
-            last_eval_count = eval_count
-            last_eval_duration = eval_duration
-            last_response_ms = response_ms
+            return raw_text
 
-            review = ReviewResponseParser().parse(raw_text, self._model)
-            logger.info(
-                "Try %d/%d — verdict=%s items=%d summary='%s'",
-                attempt + 1, self._max_retries,
-                review.verdict.value, len(review.items),
-                (review.summary or "")[:80],
-            )
+        def _parse(raw_text: str) -> CodeReview:
+            return ReviewResponseParser().parse(raw_text, self._model)
 
-            failures = self._retry_builder.diagnose_failures(review)
-            if not failures:
-                logger.info("Try %d/%d — accepted (no failures)", attempt + 1, self._max_retries)
-                break
-            correction_prompt = self._retry_builder.build_correction_prompt(prompt_text, failures)
-            logger.info("Try %d/%d — rejected with %d failure(s):", attempt + 1, self._max_retries, len(failures))
-            for f in failures:
-                logger.info("Try %d/%d —   → %s", attempt + 1, self._max_retries, f)
-
-        if review is None:
-            raise LlmUnavailableError("Ollama did not return a parseable review")
+        review = self._orchestrator.execute_with_correction(
+            execute_fn=_execute,
+            parse_fn=_parse,
+            original_prompt=prompt_text,
+            on_before_attempt=self._dump_prompt_to_file,
+        )
 
         if logger.isEnabledFor(logging.DEBUG) and review.items:
             logger.debug("Review items:")
@@ -228,12 +196,9 @@ class OllamaLlmAdapter(LlmReviewPort):
             logger.debug(
                 "OLLAMA REVIEW SUMMARY | host=%s model=%s | "
                 "prompt=%d chars (~%d tokens) | "
-                "response=%d chars %s eval_tokens %.1fs eval %.0fms wall | "
                 "verdict=%s items=%d summary='%s'",
                 self._host, self._model,
                 prompt_chars, prompt_chars // 4,
-                last_response_chars, last_eval_count,
-                last_eval_duration, last_response_ms,
                 review.verdict.value, len(review.items),
                 (review.summary or "")[:80],
             )
@@ -267,15 +232,3 @@ class OllamaLlmAdapter(LlmReviewPort):
         )
         return self._call_ollama(prompt.content)
 
-    @staticmethod
-    def _looks_like_invalid_review_response(
-        raw_text: str, review: CodeReview,
-    ) -> bool:
-        """Detect model output that attempted review JSON but was not actionable."""
-        if not review.items and '"current_code"' in raw_text:
-            return True
-        try:
-            data = json.loads(raw_text.strip())
-        except json.JSONDecodeError:
-            return False
-        return isinstance(data, dict) and "issues" not in data
