@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 
@@ -162,6 +163,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 "role": "user",
                 "content": (
                     f"Repository path: {repo_path}\n\n"
+                    "Use run_git log or run_git diff to discover what "
+                    "changed, then use read_file to inspect files.\n"
                     "You have access to read_file, search_codebase, "
                     "list_directory, and run_git tools.\n"
                     "When you have completed your review for this phase, "
@@ -240,8 +243,15 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 "content": json.dumps(result),
             })
 
+        fd, dump_path = tempfile.mkstemp(
+            prefix="pr-review-exhausted-",
+            suffix=".json",
+        )
+        with open(fd, "w") as f:
+            json.dump(messages, f, indent=2, default=str)
         raise LlmUnavailableError(
-            f"Phase exceeded max turns ({self._MAX_TURNS}) without a verdict"
+            f"Phase exceeded max turns ({self._MAX_TURNS}) without a verdict. "
+            f"Full conversation dumped to {dump_path}"
         )
 
     def _merge_items(self, items: list[ReviewItem]) -> CodeReview:
@@ -292,36 +302,79 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         """
         items = self._parser.parse_items(content)
         if items:
-            review_items: list[ReviewItem] = []
-            for i, item_dict in enumerate(items, 1):
-                review_item = ReviewItem(
-                    number=i,
-                    severity=str(item_dict.get("severity", "info")),
-                    category=str(
-                        item_dict.get("category", "maintainability")
-                    ),
-                    file_path=str(item_dict.get("file", "")),
-                    description=str(item_dict.get("description", "")),
-                    line=str(item_dict.get("line", "")),
-                    current_code=str(item_dict.get("current_code", "")),
-                    suggested_fix=str(item_dict.get("suggested_fix", "")),
-                )
-                review_items.append(review_item)
-            return review_items
+            return self._build_review_items(items)
 
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
-            logger.debug("Failed to parse turn content as JSON.")
-            return None
-
+            extracted = self._parser._extract_outermost_json(content)
+            if extracted is not None:
+                try:
+                    parsed = json.loads(extracted)
+                except json.JSONDecodeError:
+                    logger.debug("Failed to parse turn content as JSON.")
+                    return None
+            else:
+                logger.debug("Failed to parse turn content as JSON.")
+                return None
         if isinstance(parsed, dict) and "action" in parsed:
-            return {
-                "action": str(parsed["action"]),
-                "args": str(parsed.get("args", "")),
-            }
+            raw_args = parsed.get("args", "")
+            if isinstance(raw_args, list):
+                args = " ".join(str(a) for a in raw_args)
+            elif isinstance(raw_args, dict):
+                args = self._extract_dict_args(
+                    str(parsed["action"]), raw_args
+                )
+            else:
+                args = str(raw_args)
+            return {"action": str(parsed["action"]), "args": args}
+
+        if isinstance(parsed, dict) and "verdict" in parsed:
+            return self._build_review_items(
+                self._parser.parse_items(content)
+            )
 
         return None
+
+    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
+        "read_file": ["file"],
+        "list_directory": ["path"],
+        "search_codebase": ["pattern"],
+        "run_git": ["command"],
+    }
+
+    def _extract_dict_args(
+        self, action: str, raw_args: dict[str, Any]
+    ) -> str:
+        """Extract args from dict-format tool calls the LLM sometimes sends."""
+        for key in self._DICT_ARG_KEYS.get(action, []):
+            if key in raw_args:
+                return str(raw_args[key])
+        for fallback in ("command", "path", "pattern", "file", "query"):
+            if fallback in raw_args:
+                return str(raw_args[fallback])
+        return str(raw_args)
+
+    def _build_review_items(
+        self, item_dicts: list[dict[str, Any]]
+    ) -> list[ReviewItem]:
+        """Construct ReviewItem domain objects from parsed item dicts."""
+        review_items: list[ReviewItem] = []
+        for i, item_dict in enumerate(item_dicts, 1):
+            review_item = ReviewItem(
+                number=i,
+                severity=str(item_dict.get("severity", "info")),
+                category=str(
+                    item_dict.get("category", "maintainability")
+                ),
+                file_path=str(item_dict.get("file", "")),
+                description=str(item_dict.get("description", "")),
+                line=str(item_dict.get("line", "")),
+                current_code=str(item_dict.get("current_code", "")),
+                suggested_fix=str(item_dict.get("suggested_fix", "")),
+            )
+            review_items.append(review_item)
+        return review_items
 
     def _stream_chat(self, messages: list[dict[str, Any]]) -> str:
         """Send chat messages to Ollama and accumulate the streamed response."""
@@ -330,7 +383,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "format": "json",
         }
         for attempt in range(self._max_retries):
             try:
@@ -342,6 +394,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 )
                 http_response.raise_for_status()
                 content_parts: list[str] = []
+                thinking_parts: list[str] = []
                 for line in http_response.iter_lines(decode_unicode=True):
                     if not line:
                         continue
@@ -356,12 +409,18 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                             line,
                         )
                         raise
-                    content_parts.append(
-                        chunk.get("message", {}).get("content", "")
-                    )
+                    message = chunk.get("message", {})
+                    content_parts.append(message.get("content", ""))
+                    thinking_parts.append(message.get("thinking", ""))
                     if chunk.get("done"):
                         break
                 result = "".join(content_parts)
+                if not result:
+                    result = "".join(thinking_parts)
+                    logger.debug(
+                        "No content in response; fell back to %d chars of thinking",
+                        len(result),
+                    )
                 logger.debug(
                     "Chat response: %d chars from %d lines, %d messages",
                     len(result),
