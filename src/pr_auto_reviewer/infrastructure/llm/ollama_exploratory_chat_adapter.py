@@ -47,6 +47,17 @@ _PHASES: list[tuple[str, str]] = [
     ("architecture-review", "Architecture Review"),
 ]
 
+_METHODOLOGY = (
+    "\n## ANTI-HALLUCINATION RULES\n\n"
+    "Before identifying any issue in a file, you MUST read that file first.\n"
+    "Never reference a file path or symbol you have not confirmed exists\n"
+    "via read_file, search_codebase, or list_directory.\n"
+    "Every finding MUST be grounded in code you actually observed.\n"
+    "If the repository appears to be in a language you do not understand,\n"
+    "say so — never fabricate findings in a different language.\n"
+    "After reading each file, describe what you observed before forming judgments.\n"
+)
+
 
 class OllamaExploratoryChatAdapter(LlmReviewPort):
     """Staged multi-phase review using Ollama's chat API with exploration tools.
@@ -85,7 +96,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             raise ValueError(
                 "repo_path is required for staged multi-phase review"
             )
-        return self._run_phases(repo_path.strip())
+        changed_files = self._extract_file_listing(composed.content)
+        return self._run_phases(repo_path.strip(), changed_files)
 
     def review(self, diff: object, context: object) -> CodeReview:
         """Not used in production; raises NotImplementedError."""
@@ -99,15 +111,36 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         path = _PHASE_PROMPT_DIR / f"{phase_id}.md"
         raw = path.read_text()
         return ReviewResponseParser.strip_frontmatter(raw)
+    @staticmethod
+    def _extract_file_listing(composed_content: str) -> list[str]:
+        """Extract changed file paths from the rendered prompt's diff section."""
+        paths: set[str] = set()
+        seen_section = False
+        for line in composed_content.split("\n"):
+            if line.startswith("## Diff"):
+                seen_section = True
+                continue
+            if not seen_section:
+                continue
+            if line.startswith("--- a/") or line.startswith("+++ b/"):
+                raw = line.split(" ", 1)[1] if " " in line else ""
+                if not raw:
+                    continue
+                if raw == "/dev/null":
+                    continue
+                if raw.startswith(("a/", "b/")):
+                    raw = raw[2:]
+                paths.add(raw)
+        return sorted(paths)
 
-    def _run_phases(self, repo_path: str) -> CodeReview:
+    def _run_phases(self, repo_path: str, changed_files: list[str]) -> CodeReview:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
         previous_findings: str = ""
 
         for phase_id, phase_name in _PHASES:
             logger.info("Starting phase: %s", phase_name)
-            phase_prompt = self._load_phase_prompt(phase_id)
+            phase_prompt = _METHODOLOGY + "\n\n" + self._load_phase_prompt(phase_id)
 
             if self._FINDINGS_MARKER in phase_prompt:
                 phase_prompt = phase_prompt.replace(
@@ -120,6 +153,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 system_prompt=phase_prompt,
                 repo_path=repo_path,
                 tool_service=tool_service,
+                changed_files=changed_files,
             )
             all_items.extend(phase_items)
             previous_findings = json.dumps(
@@ -149,19 +183,22 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             )
 
         return self._merge_items(all_items)
-
     def _run_conversation(
         self,
         system_prompt: str,
         repo_path: str,
         tool_service: ExplorationToolService,
+        changed_files: list[str],
     ) -> list[ReviewItem]:
         """Run a single-phase multi-turn conversation with tool access."""
+        file_listing = "\n  - ".join(changed_files) if changed_files else "(none)"
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": (
+                    f"Changed files for this review:\n"
+                    f"  - {file_listing}\n\n"
                     f"Repository path: {repo_path}\n\n"
                     "Use run_git log or run_git diff to discover what "
                     "changed, then use read_file to inspect files.\n"
@@ -204,7 +241,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
             empty_consecutive = 0
 
-            parsed = self._parse_turn(content)
+            parsed = self._parse_turn(content, repo_path)
             if parsed is None:
                 unparseable_consecutive += 1
                 if unparseable_consecutive >= self._MAX_UNPARSEABLE_RESPONSES:
@@ -292,7 +329,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         )
 
     def _parse_turn(
-        self, content: str
+        self, content: str, repo_path: str
     ) -> list[ReviewItem] | dict[str, str] | None:
         """Parse a conversation turn into items or a tool-call dict.
 
@@ -302,7 +339,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         """
         items = self._parser.parse_items(content)
         if items:
-            return self._build_review_items(items)
+            return self._build_review_items(items, repo_path)
 
         try:
             parsed = json.loads(content)
@@ -330,9 +367,17 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             return {"action": str(parsed["action"]), "args": args}
 
         if isinstance(parsed, dict) and "verdict" in parsed:
-            return self._build_review_items(
-                self._parser.parse_items(content)
+            items_data = (
+                parsed.get("items")
+                or parsed.get("issues")
+                or parsed.get("findings")
+                or []
             )
+            if not items_data:
+                logger.warning(
+                    "Verdict present but no items found in parsed response"
+                )
+            return self._build_review_items(items_data, repo_path)
 
         return None
 
@@ -354,24 +399,48 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             if fallback in raw_args:
                 return str(raw_args[fallback])
         return str(raw_args)
-
     def _build_review_items(
-        self, item_dicts: list[dict[str, Any]]
+        self,
+        item_dicts: list[dict[str, Any]],
+        repo_path: str,
     ) -> list[ReviewItem]:
-        """Construct ReviewItem domain objects from parsed item dicts."""
+        """Construct ReviewItem domain objects from parsed item dicts.
+
+        Validates that each ``file_path`` exists in the repository;
+        hallucinated paths are skipped with a warning.
+        """
+        repo_root = Path(repo_path) if repo_path else None
         review_items: list[ReviewItem] = []
-        for i, item_dict in enumerate(item_dicts, 1):
+        for item_dict in item_dicts:
+            file_path = str(item_dict.get("file", ""))
+            if file_path.startswith(("a/", "b/")):
+                file_path = file_path[2:]
+            if repo_root is not None and file_path:
+                if not (repo_root / file_path).exists():
+                    logger.warning(
+                        "Skipping finding for non-existent file: %s",
+                        file_path,
+                    )
+                    continue
+            current_code = str(item_dict.get("current_code", ""))
+            suggested_fix = str(item_dict.get("suggested_fix", ""))
+            if file_path and not current_code and not suggested_fix:
+                logger.warning(
+                    "Skipping finding with no code evidence for file: %s",
+                    file_path,
+                )
+                continue
             review_item = ReviewItem(
-                number=i,
+                number=len(review_items) + 1,
                 severity=str(item_dict.get("severity", "info")),
                 category=str(
                     item_dict.get("category", "maintainability")
                 ),
-                file_path=str(item_dict.get("file", "")),
+                file_path=file_path,
                 description=str(item_dict.get("description", "")),
                 line=str(item_dict.get("line", "")),
-                current_code=str(item_dict.get("current_code", "")),
-                suggested_fix=str(item_dict.get("suggested_fix", "")),
+                current_code=current_code,
+                suggested_fix=suggested_fix,
             )
             review_items.append(review_item)
         return review_items
