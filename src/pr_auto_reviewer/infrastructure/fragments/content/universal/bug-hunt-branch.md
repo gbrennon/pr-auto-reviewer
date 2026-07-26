@@ -34,7 +34,6 @@ __PREVIOUS_FINDINGS__
 
 When done, emit a JSON array of findings — no surrounding text:
 
-```json
 [
   {
     "file": "path/to/file.py",
@@ -42,9 +41,8 @@ When done, emit a JSON array of findings — no surrounding text:
     "category": "bug|security|performance|style|quality",
     "description": "What is wrong and why",
     "current_code": "line of problematic code",
-    "suggested_fix": "how to fix it"
+    "suggested_fix": "how to fix it, including suggested code. it should be in the same approach of the application."
   }
 ]
-```
 
 If you find nothing, emit `[]`.
