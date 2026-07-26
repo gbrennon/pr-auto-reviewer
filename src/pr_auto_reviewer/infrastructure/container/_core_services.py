@@ -13,6 +13,9 @@ from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
+from pr_auto_reviewer.infrastructure.llm.ollama_chat_adapter import (
+    OllamaChatAdapter,
+)
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
@@ -99,12 +102,20 @@ def wire_core_services(
     pr_repository = JsonFilePullRequestRepository(
         os.path.join(config_dir, "state.json")
     )
-
-    llm_review = OllamaExploratoryChatAdapter(
-        model=config.llm_model or "code-review:latest",
-        host=config.llm_host,
-        ollama_timeout=config.ollama_timeout,
-        max_retries=config.llm_max_retries,
+    llm_review: LlmReviewPort = (
+        OllamaExploratoryChatAdapter(
+            model=config.llm_model or "code-review:latest",
+            host=config.llm_host,
+            ollama_timeout=config.ollama_timeout,
+            max_retries=config.llm_max_retries,
+        )
+        if config.use_local_clone
+        else OllamaChatAdapter(
+            model=config.llm_model or "code-review:latest",
+            host=config.llm_host,
+            ollama_timeout=config.ollama_timeout,
+            max_retries=config.llm_max_retries,
+        )
     )
     command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
@@ -135,7 +146,7 @@ def wire_core_services(
     review_context_factory = ReviewContextFactory(
         repository_context=repository_context,
         compose_review_prompt=prompt_adapter,
-        local_clone_base_dir=config.local_clone_base_dir,
+        local_clone_base_dir=config.local_clone_base_dir if config.use_local_clone else "",
     )
 
     return CoreServices(
