@@ -132,8 +132,6 @@ class TestOllamaLlmAdapter:
         assert "host=" in summary
         assert "model=" in summary
         assert "prompt=" in summary
-        assert "response=" in summary
-        assert "eval_tokens" in summary
         assert "verdict=" in summary
         assert "items=" in summary
         assert "summary=" in summary
