@@ -81,6 +81,9 @@ def adapter() -> OllamaExploratoryChatAdapter:
 @pytest.fixture
 def prompt_with_repo(tmp_path: Path) -> ComposedPrompt:
     """ComposedPrompt with repo_path — triggers multi-turn path."""
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src" / "foo.py").write_text("def foo() -> None: ...")
+    (tmp_path / "src" / "a.py").write_text("def a() -> None: ...")
     return ComposedPrompt(
         content="System prompt for exploratory review",
         fragments_used=["system-prompt"],
@@ -680,3 +683,125 @@ class TestMultiTurn:
         assert isinstance(dumped, list)
         assert any("list_directory" in json.dumps(m) for m in dumped)
         Path(written_paths[0]).unlink()
+
+
+class TestExtractFileListing:
+    """Tests for _extract_file_listing static method."""
+
+    def test_extracts_files_from_diff_section(self) -> None:
+        """Parses --- a/path and +++ b/path lines after ## Diff header."""
+        content = "some text\n## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\nmore\n--- a/lib/bar.py\n+++ b/lib/bar.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert result == ["lib/bar.py", "src/foo.py"]
+    def test_skips_dev_null(self) -> None:
+        """Lines with /dev/null are excluded; other paths in the same diff are kept."""
+        content = "## Diff\n--- /dev/null\n+++ b/src/new.py\n--- a/src/old.py\n+++ /dev/null\n--- a/src/keep.py\n+++ b/src/keep.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert "src/keep.py" in result
+        assert "src/new.py" in result
+        assert "src/old.py" in result
+        assert all("/dev/null" not in p for p in result)
+
+    def test_handles_no_diff_section(self) -> None:
+        """Returns empty list when no ## Diff header present."""
+        result = OllamaExploratoryChatAdapter._extract_file_listing("just some text\nno headers\n")
+        assert result == []
+
+    def test_deduplicates_paths(self) -> None:
+        """Same file appearing multiple times yields one entry."""
+        content = "## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\n--- a/src/foo.py\n+++ b/src/foo.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert result == ["src/foo.py"]
+
+
+class TestBuildReviewItemsValidation:
+    """Tests for _build_review_items path validation."""
+
+    def test_real_paths_are_accepted(self, tmp_path: Path) -> None:
+        """Items with existing file paths are kept."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "real.py").write_text("pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "src/real.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"}
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].file_path == "src/real.py"
+
+    def test_hallucinated_paths_are_skipped(self, tmp_path: Path) -> None:
+        """Items referencing non-existent files are dropped with warning."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""}
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 0
+
+    def test_mixed_real_and_hallucinated(self, tmp_path: Path) -> None:
+        """Only valid items survive; numbering is sequential."""
+        (tmp_path / "valid.py").write_text("ok")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "valid.py", "severity": "minor", "category": "style", "description": "ok", "line": "", "current_code": "ok", "suggested_fix": ""},
+            {"file": "fake.py", "severity": "critical", "category": "security", "description": "invented", "line": "", "current_code": "", "suggested_fix": ""},
+            {"file": "valid.py", "severity": "major", "category": "bug", "description": "also ok", "line": "", "current_code": "also ok", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 2
+        assert result[0].number == 1
+        assert result[1].number == 2
+
+    def test_strips_ab_prefix(self, tmp_path: Path) -> None:
+        """File paths with a/ or b/ prefix are normalized before validation."""
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "lib.py").write_text("pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "a/src/lib.py", "severity": "info", "category": "maintainability", "description": "nice", "line": "", "current_code": "pass", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].file_path == "src/lib.py"
+
+    def test_empty_file_path_passes_validation(self, tmp_path: Path) -> None:
+        """Items with empty file_path are not validated (cross-cutting findings)."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "", "severity": "major", "category": "architecture", "description": "global concern", "line": "", "current_code": "", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+
+    def test_nonempty_file_path_with_empty_code_is_skipped(
+        self, tmp_path: Path
+    ) -> None:
+        """Items with a real file path but no code evidence are dropped."""
+        adapter = OllamaExploratoryChatAdapter(
+            model="test", max_retries=1, ollama_timeout=1
+        )
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "empty.py").write_text("")
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/empty.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "hallucinated finding",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "",
+            },
+            {
+                "file": "",
+                "severity": "info",
+                "category": "architecture",
+                "description": "cross-cutting is fine",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "cross-cutting is fine"
