@@ -53,9 +53,13 @@ _METHODOLOGY = (
     "Never reference a file path or symbol you have not confirmed exists\n"
     "via read_file, search_codebase, or list_directory.\n"
     "Every finding MUST be grounded in code you actually observed.\n"
+    "If a tool returns an error (e.g. file not found, permission denied),\n"
+    "do NOT report that error as a finding. Either retry with a corrected\n"
+    "path or skip the file entirely. Tool errors are not code issues.\n"
     "If the repository appears to be in a language you do not understand,\n"
     "say so — never fabricate findings in a different language.\n"
     "After reading each file, describe what you observed before forming judgments.\n"
+    "Only include findings whose evidence comes from code you successfully read.\n"
 )
 
 
@@ -75,6 +79,20 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
     _MAX_EMPTY_RESPONSES = 3
     _MAX_UNPARSEABLE_RESPONSES = 3
     _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
+
+    _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
+        "file not found",
+        "unable to verify",
+        "cannot access",
+        "could not read",
+        "does not exist",
+        "not accessible",
+        "not found in",
+        "could not be found",
+        "unable to locate",
+    )
+
+    _DUPLICATE_SUFFIX = ". This was previously identified but may have additional instances."
 
     def __init__(
         self,
@@ -272,8 +290,19 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 logger.debug("Got verdict at turn %d", turn + 1)
                 return parsed
 
-            result = tool_service.execute(
-                parsed["action"], parsed.get("args", "")
+            action = parsed["action"]
+            args = parsed.get("args", "")
+            logger.debug(
+                "Tool call — action=%s args=%s",
+                action,
+                str(args)[:200],
+            )
+            result = tool_service.execute(action, args)
+            result_truncated = json.dumps(result)[:300]
+            logger.debug(
+                "Tool result (%d chars): %s",
+                len(json.dumps(result)),
+                result_truncated,
             )
             messages.append({
                 "role": "user",
@@ -297,11 +326,14 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         merged: list[ReviewItem] = []
 
         for item in items:
+            desc = item.description
+            if desc.endswith(self._DUPLICATE_SUFFIX):
+                desc = desc[: -len(self._DUPLICATE_SUFFIX)]
             key = (
                 item.file_path or "",
                 str(item.severity),
                 str(item.category),
-                item.description,
+                desc,
             )
             if key in seen:
                 continue
@@ -382,8 +414,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         return None
 
     _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
-        "read_file": ["file"],
-        "list_directory": ["path"],
+        "read_file": ["file", "file_path"],
+        "list_directory": ["path", "directory_path"],
         "search_codebase": ["pattern"],
         "run_git": ["command"],
     }
@@ -395,7 +427,10 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         for key in self._DICT_ARG_KEYS.get(action, []):
             if key in raw_args:
                 return str(raw_args[key])
-        for fallback in ("command", "path", "pattern", "file", "query"):
+        for fallback in (
+            "command", "path", "pattern", "file", "file_path",
+            "directory_path", "query",
+        ):
             if fallback in raw_args:
                 return str(raw_args[fallback])
         return str(raw_args)
@@ -416,12 +451,21 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             if file_path.startswith(("a/", "b/")):
                 file_path = file_path[2:]
             if repo_root is not None and file_path:
-                if not (repo_root / file_path).exists():
+                full_path = repo_root / file_path
+                if not full_path.exists():
                     logger.warning(
                         "Skipping finding for non-existent file: %s",
                         file_path,
                     )
                     continue
+                try:
+                    file_path = str(
+                        full_path.resolve().relative_to(
+                            repo_root.resolve()
+                        )
+                    )
+                except ValueError:
+                    pass
             current_code = str(item_dict.get("current_code", ""))
             suggested_fix = str(item_dict.get("suggested_fix", ""))
             if file_path and not current_code and not suggested_fix:
@@ -430,6 +474,21 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     file_path,
                 )
                 continue
+            description = str(item_dict.get("description", ""))
+            if file_path and not current_code and description:
+                description_lower = description.lower()
+                if any(
+                    pattern in description_lower
+                    for pattern in self._FABRICATED_ERROR_PATTERNS
+                ):
+                    logger.warning(
+                        "Skipping finding with fabricated error narrative "
+                        "for file: %s — %s",
+                        file_path,
+                        description[:80],
+                    )
+                    continue
+
             review_item = ReviewItem(
                 number=len(review_items) + 1,
                 severity=str(item_dict.get("severity", "info")),
