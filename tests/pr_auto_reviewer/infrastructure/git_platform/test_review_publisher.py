@@ -283,12 +283,11 @@ index def456..ghi789 100644
         assert "Failed to post comment" in caplog.text
 
     def test_build_inline_comments_github_mode(
-        self, patched_private_client, monkeypatch,
+        self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
             patched_private_client, patched_private_client,
         )
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
             "index abc1234..def5678 100644\n"
@@ -305,19 +304,20 @@ index def456..ghi789 100644
                 current_code="return True",
             ),
         ]
-        result = adapter._publishing.build_inline_comments(diff, items, [])
+        result = adapter._publishing.build_inline_comments(
+            diff, items, [], platform="github",
+        )
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Blocking"
         assert "position" in result[0]
 
     def test_build_inline_comments_with_suggestions_forgejo(
-        self, patched_private_client, monkeypatch,
+        self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
             patched_private_client, patched_private_client,
         )
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "forgejo")
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
             "index abc1234..def5678 100644\n"
@@ -331,11 +331,14 @@ index def456..ghi789 100644
             ReviewSuggestion(file="src/main.py", current_code="return True",
                              description="Use a constant instead"),
         ]
-        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(
+            diff, [], suggestions, platform="forgejo",
+        )
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Use a constant instead"
-        assert result[0]["position"] == 3
+        assert result[0]["old_position"] == 0
+        assert result[0]["new_position"] == 2
     def test_comment_verdict_filters_blocking_items(
         self, patched_private_client, monkeypatch,
     ):
@@ -417,17 +420,18 @@ index def456..ghi789 100644
             ReviewSuggestion(file="", current_code="x", description="no file"),
             ReviewSuggestion(file="f.py", current_code="", description="no code"),
         ]
-        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(
+            diff, [], suggestions, platform="github",
+        )
         assert result == []
 
     def test_build_inline_comments_suggestions_github_mode(
-        self, patched_private_client, monkeypatch,
+        self, patched_private_client,
     ):
         """Suggestions build GitHub-style inline comments."""
         adapter = GitReviewPublisherAdapter(
             patched_private_client, patched_private_client,
         )
-        monkeypatch.setattr(patched_private_client, "_platform_mode", "github")
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
             "@@ -1,3 +1,4 @@\n"
@@ -438,7 +442,9 @@ index def456..ghi789 100644
             ReviewSuggestion(file="src/main.py", current_code="return True",
                              description="Use a constant"),
         ]
-        result = adapter._publishing.build_inline_comments(diff, [], suggestions)
+        result = adapter._publishing.build_inline_comments(
+            diff, [], suggestions, platform="github",
+        )
         assert len(result) == 1
         assert result[0]["path"] == "src/main.py"
         assert result[0]["body"] == "Use a constant"

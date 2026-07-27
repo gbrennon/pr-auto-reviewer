@@ -91,6 +91,7 @@ class ReviewPublishingService:
         body: str,
         blocking: list,
         *,
+        platform: str = "github",
         official: bool = False,
         diff_headers: dict[str, str] | None = None,
         diff: PullRequestDiff | None = None,
@@ -126,7 +127,9 @@ class ReviewPublishingService:
                     headers=diff_headers or {},
                     repo=pr_id.repository,
                 )
-            inline = self.build_inline_comments(diff_text, blocking, [])
+            inline = self.build_inline_comments(
+                diff_text, blocking, [], platform=platform,
+            )
             if inline:
                 payload["comments"] = inline
                 logger.info(
@@ -155,9 +158,26 @@ class ReviewPublishingService:
     # -- inline comment construction ----------------------------------------
 
     def build_inline_comments(
-        self, diff_text: str, items: list, suggestions: list,
+        self,
+        diff_text: str,
+        items: list,
+        suggestions: list,
+        *,
+        platform: str = "github",
     ) -> list[dict]:
         """Build inline comment payloads from diff positions."""
+        comments: list[dict] = []
+
+        if platform == "forgejo":
+            return self._build_forgejo_inline_comments(
+                diff_text, items, suggestions,
+            )
+        return self._build_github_inline_comments(diff_text, items, suggestions)
+
+    def _build_github_inline_comments(
+        self, diff_text: str, items: list, suggestions: list,
+    ) -> list[dict]:
+        """Build GitHub-style inline comments using diff ``position``."""
         comments: list[dict] = []
 
         for item in items:
@@ -186,6 +206,44 @@ class ReviewPublishingService:
                         "path": s_file,
                         "position": pos_data["position"],
                         "body": s_body,
+                    }
+                )
+        return comments
+
+    def _build_forgejo_inline_comments(
+        self, diff_text: str, items: list, suggestions: list,
+    ) -> list[dict]:
+        """Build Forgejo-style inline comments using ``old_position`` / ``new_position``."""
+        comments: list[dict] = []
+
+        for item in items:
+            pos_data = self.find_diff_position(
+                diff_text, item.file_path, item.current_code,
+            )
+            if pos_data:
+                comments.append(
+                    {
+                        "path": item.file_path,
+                        "body": item.description,
+                        "old_position": pos_data["old_line"] or 0,
+                        "new_position": pos_data["new_line"] or 0,
+                    }
+                )
+
+        for s in suggestions:
+            s_file = s.file
+            s_code = s.current_code
+            if not s_file or not s_code:
+                continue
+            pos_data = self.find_diff_position(diff_text, s_file, s_code)
+            if pos_data:
+                s_body = s.description
+                comments.append(
+                    {
+                        "path": s_file,
+                        "body": s_body,
+                        "old_position": pos_data["old_line"] or 0,
+                        "new_position": pos_data["new_line"] or 0,
                     }
                 )
         return comments

@@ -56,14 +56,16 @@ class LocalGitRepository(LocalRepositoryPort):
                 ) from exc
 
         pr_ref = f"pull/{pr_id.number}/head"
+        pr_branch = f"pr-{pr_id.number}"
         try:
             self._run_git(
                 dest,
                 "fetch",
                 "origin",
-                "+" + pr_ref + f":pr-{pr_id.number}",
+                "+" + pr_ref + f":{pr_branch}",
             )
-            self._pr_refs[dest] = f"pr-{pr_id.number}"
+            self._pr_refs[dest] = pr_branch
+            self._run_git(dest, "checkout", pr_branch)
         except RuntimeError:
             logger.warning(
                 "Could not fetch PR ref %s — PR may be from a fork. "

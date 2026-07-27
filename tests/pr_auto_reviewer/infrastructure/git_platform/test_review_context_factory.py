@@ -170,3 +170,19 @@ class TestReviewContextFactoryBuild:
 
         assert isinstance(result, ComposedPrompt)
         assert compose.execute_calls[0].diff == "+def foo(): pass\n"
+
+    def test_repo_path_strips_platform_prefix(self) -> None:
+        repo_ctx = StubRepositoryContext()
+        compose = _SpyComposeReviewPrompt()
+        pr_id = PullRequestId(repository="forgejo:gbrennon/pr-auto-reviewer", number=112)
+        factory = ReviewContextFactory(
+            repo_ctx, compose, local_clone_base_dir="/tmp/clones",
+        )
+
+        result = factory.build(pr_id, _make_diff())
+
+        assert result.repo_path is not None
+        assert ":" not in result.repo_path, (
+            f"repo_path must not contain colon but got {result.repo_path}"
+        )
+        assert "/tmp/clones/gbrennon_pr-auto-reviewer_112" == result.repo_path
