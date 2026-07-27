@@ -16,7 +16,9 @@ Find architecture violations, SOLID principle breaks, design-pattern misuse, dep
 
 You may use `read_file`, `search_codebase`, `list_directory`, and `run_git` to explore the full repository.
 
-## PREVIOUS PHASE FINDINGS
+
+The findings below are already recorded. Do NOT re-report them. If a file
+appears in the list, only raise new, distinct issues not already covered.
 
 __PREVIOUS_FINDINGS__
 
@@ -37,8 +39,8 @@ When done, emit a JSON array of findings — no surrounding text:
     "severity": "critical|major|minor|info",
     "category": "architecture|solid|convention|design",
     "description": "What violates the architecture and why",
-    "current_code": "line of problematic code",
-    "suggested_fix": "how to fix it"
+    "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
+    "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
   }
 ]
 

@@ -18,7 +18,9 @@ You may use `read_file`, `search_codebase`, `list_directory`, and `run_git` to e
 
 `run_git` accepts read-only subcommands: `log`, `diff`, `show`, `blame`, `branch`, `status`, `ls-files`, `rev-parse`, `rev-list`. Example: `run_git log --oneline -10`.
 
-## PREVIOUS PHASE FINDINGS
+
+The findings below are already recorded. Do NOT re-report them. If a file
+appears in the list, only raise new, distinct issues not already covered.
 
 __PREVIOUS_FINDINGS__
 
@@ -40,8 +42,8 @@ When done, emit a JSON array of findings — no surrounding text:
     "severity": "critical|major|minor|info",
     "category": "bug|security|performance|style|quality",
     "description": "What is wrong and why",
-    "current_code": "line of problematic code",
-    "suggested_fix": "how to fix it, including suggested code. it should be in the same approach of the application."
+    "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
+    "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
   }
 ]
 
