@@ -91,6 +91,7 @@ class GithubReviewPublisher(ReviewPublisherPort):
             verdict_event,
             body,
             blocking,
+            platform="github",
             official=False,
             diff_headers={"Accept": "application/vnd.github.diff"},
             diff=diff,
