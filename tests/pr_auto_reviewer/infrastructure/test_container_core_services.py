@@ -19,8 +19,11 @@ from pr_auto_reviewer.infrastructure.container._platform_adapters import (
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
-    OllamaLlmAdapter,
+from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+    OllamaExploratoryChatAdapter,
+)
+from pr_auto_reviewer.infrastructure.llm.ollama_chat_adapter import (
+    OllamaChatAdapter,
 )
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -39,10 +42,8 @@ from pr_auto_reviewer.infrastructure.context.review_context_factory import (
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
-
 CORE_SERVICES_INSTANCE_TYPES = [
     ("pr_repository", JsonFilePullRequestRepository),
-    ("llm_review", OllamaLlmAdapter),
     ("command_bus", InMemoryCommandBus),
     ("notifier", LinuxNotifier),
     ("fragment_repository", FileSystemFragmentRepository),
@@ -162,7 +163,37 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._ollama_timeout == 300
+        assert result.llm_review._timeout == 300
+
+    def test_exploratory_adapter_wired_when_use_local_clone_true(
+        self,
+        repo_context,
+    ) -> None:
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fj-own",
+            use_local_clone=True,
+        )
+
+        result = wire_core_services(config, repo_context)
+
+        assert isinstance(result.llm_review, OllamaExploratoryChatAdapter)
+
+    def test_chat_adapter_wired_when_use_local_clone_false(
+        self,
+        repo_context,
+    ) -> None:
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fj-own",
+            use_local_clone=False,
+        )
+
+        result = wire_core_services(config, repo_context)
+
+        assert isinstance(result.llm_review, OllamaChatAdapter)
 
     def test_fragment_max_tokens_is_none_when_not_in_config(
         self,

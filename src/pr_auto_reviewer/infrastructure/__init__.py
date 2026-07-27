@@ -9,7 +9,6 @@ from .github.review_reader import GithubReviewReader as GitReviewReaderAdapter
 from .github.comment_reader import GithubCommentReader as GitCommentReaderAdapter
 from .github.comment_publisher import GithubCommentPublisher as GitCommentPublisherAdapter
 from .github.issue_tracker import GithubIssueTracker as GitIssueTrackerAdapter
-from .llm import OllamaLlmAdapter
 from .notifier import LinuxNotifier
 
 __all__ = [
@@ -25,5 +24,4 @@ __all__ = [
     "GitCommentPublisherAdapter",
     "GitIssueTrackerAdapter",
     "LinuxNotifier",
-    "OllamaLlmAdapter",
 ]

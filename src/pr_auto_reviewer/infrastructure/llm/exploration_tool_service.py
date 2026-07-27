@@ -1,4 +1,4 @@
-"""ExplorationToolService — executes file read, search, and list operations against a cloned repo."""
+"""ExplorationToolService — executes file read, search, list, and git operations against a cloned repo."""
 
 from __future__ import annotations
 
@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 _MAX_FILE_BYTES = 100 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
+_GIT_READONLY_SUBCOMMANDS = frozenset({
+    "diff",
+    "log",
+    "show",
+    "branch",
+    "status",
+    "blame",
+    "rev-parse",
+    "rev-list",
+    "ls-tree",
+    "cat-file",
+    "for-each-ref",
+    "ls-files",
+})
 
 
 class ExplorationToolService:
@@ -35,7 +49,7 @@ class ExplorationToolService:
         """Dispatch an operation by name.
 
         Args:
-            operation: One of ``read_file``, ``search_codebase``, ``list_directory``.
+            operation: One of ``read_file``, ``search_codebase``, ``list_directory``, ``run_git``.
             args: Operation-specific arguments string.
 
         Returns:
@@ -47,6 +61,8 @@ class ExplorationToolService:
             return self.search_codebase(args)
         if operation == "list_directory":
             return self.list_directory(args)
+        if operation == "run_git":
+            return self.run_git(args)
         return {"status": "error", "error": f"Unknown operation: {operation}"}
 
     def read_file(self, args: str) -> dict[str, Any]:
@@ -152,6 +168,42 @@ class ExplorationToolService:
             "path": path_str,
             "entries": entries,
             "truncated": len(entries) >= _MAX_DIR_ENTRIES,
+        }
+
+    def run_git(self, args: str) -> dict[str, Any]:
+        """Execute a read-only git subcommand against the repo.
+
+        Args: ``<subcommand> [args...]`` — subcommand must be in the whitelist.
+        """
+        tokens = args.strip().split()
+        if not tokens:
+            return {"status": "error", "error": "Empty git args"}
+        subcommand = tokens[0]
+        if subcommand not in _GIT_READONLY_SUBCOMMANDS:
+            return {
+                "status": "error",
+                "error": f"Git subcommand '{subcommand}' is not allowed. "
+                f"Allowed: {', '.join(sorted(_GIT_READONLY_SUBCOMMANDS))}",
+            }
+        try:
+            result = subprocess.run(
+                ["git", subcommand, *tokens[1:]],
+                capture_output=True,
+                text=True,
+                cwd=str(self._repo_root),
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            return {"status": "error", "error": "Git command timed out"}
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "error": result.stderr.strip() or f"git {subcommand} failed",
+            }
+        return {
+            "status": "ok",
+            "subcommand": subcommand,
+            "output": result.stdout,
         }
 
     def _resolve_safe(self, relative_path: str) -> Path | None:
