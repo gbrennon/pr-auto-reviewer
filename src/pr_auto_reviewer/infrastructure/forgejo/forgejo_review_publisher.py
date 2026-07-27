@@ -90,6 +90,7 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             verdict_event,
             body,
             blocking,
+            platform="forgejo",
             official=True,
             diff_headers=None,
             diff=diff,

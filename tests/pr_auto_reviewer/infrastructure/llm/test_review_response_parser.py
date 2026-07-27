@@ -17,46 +17,46 @@ class TestReviewResponseParser:
 
     def test_parse_plain_json_returns_code_review(self):
         raw = self._load("plain_json.json")
-        result = ReviewResponseParser.parse(raw, "test-model")
+        result = ReviewResponseParser().parse(raw, "test-model")
         assert isinstance(result, CodeReview)
 
     def test_parse_plain_json_extracts_summary(self):
         raw = self._load("plain_json.json")
-        result = ReviewResponseParser.parse(raw, "test-model")
+        result = ReviewResponseParser().parse(raw, "test-model")
         assert result.summary == "Test summary"
 
     def test_parse_plain_json_extracts_issue(self):
         raw = self._load("plain_json.json")
-        result = ReviewResponseParser.parse(raw, "test-model")
+        result = ReviewResponseParser().parse(raw, "test-model")
         assert len(result.items) == 1
         assert result.items[0].file_path == "foo.py"
         assert result.items[0].description == "test issue"
 
     def test_parse_plain_json_high_severity_is_changes_requested(self):
         raw = self._load("plain_json.json")
-        result = ReviewResponseParser.parse(raw, "test-model")
+        result = ReviewResponseParser().parse(raw, "test-model")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_parse_plain_json_sets_model_used(self):
         raw = self._load("plain_json.json")
-        result = ReviewResponseParser.parse(raw, "test-model")
+        result = ReviewResponseParser().parse(raw, "test-model")
         assert result.model_used == "test-model"
 
     def test_parse_code_block_extracts_issues(self):
         raw = self._load("code_block.txt")
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert len(result.items) == 1
         assert result.items[0].file_path == "foo.py"
 
     def test_parse_invalid_json_falls_back_to_markdown(self):
         raw = self._load("invalid_json.txt")
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert isinstance(result, CodeReview)
         assert result.summary == "OOPS: model failed to produce JSON"
 
     def test_parse_empty_response_returns_comment_verdict(self):
         raw = self._load("empty_response.json")
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert isinstance(result, CodeReview)
 
     def test_parse_json_with_critical_issue_returns_changes_requested(self):
@@ -71,13 +71,13 @@ class TestReviewResponseParser:
             "summary": "x",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_parse_json_without_issues_returns_commented(self):
         data = {"issues": [], "summary": "ok"}
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.COMMENTED
 
     def test_parse_json_with_info_only_no_code_returns_commented(self):
@@ -90,7 +90,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.COMMENTED
         assert result.items == []
 
@@ -104,7 +104,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items == []
 
     def test_parse_json_drops_issue_without_file_path(self):
@@ -118,7 +118,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items == []
 
     def test_parse_json_ignores_file_summary_changes_key(self):
@@ -129,7 +129,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items == []
 
     def test_parse_markdown_format_extracts_verdict(self):
@@ -138,7 +138,7 @@ class TestReviewResponseParser:
             "## Summary\nSecurity concerns.\n\n"
             "## Items\nNone"
         )
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_parse_markdown_format_extracts_summary(self):
@@ -147,12 +147,12 @@ class TestReviewResponseParser:
             "## Summary\nLooks good.\n\n"
             "## Items\nNone"
         )
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.summary == "Looks good."
 
     def test_parse_markdown_approved_verdict(self):
         raw = "## Verdict\napproved\n\n## Summary\nok\n\n## Items\nNone"
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
 
     def test_parse_markdown_items_with_severity_and_file(self):
@@ -162,14 +162,14 @@ class TestReviewResponseParser:
             "## Items\n"
             "- [major] security (src/auth.py) Missing password hashing\n"
         )
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert len(result.items) == 1
         assert result.items[0].file_path == "src/auth.py"
         assert result.items[0].category == "security"
 
     def test_parse_response_with_response_field_does_not_crash(self):
         raw = self._load("response_with_response_field.json")
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert isinstance(result, CodeReview)
 
     def test_parse_with_suggestions_preserves_item_count(self):
@@ -188,23 +188,23 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert len(result.items) == 1
 
     def test_parse_when_nested_json_embedded_in_text_then_extracts_and_parses(self):
         raw = 'Some preamble text.\\n{"issues":[],"summary":"nested ok","verdict":"approved"}\\nMore text after.'
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.summary == "nested ok"
 
     def test_parse_when_no_json_and_no_markdown_then_extracts_first_paragraph(self):
         raw = "This is a nice PR that improves code quality significantly. It adds tests and refactors modules."
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert "This is a nice PR" in result.summary
 
     def test_parse_when_no_json_and_no_markdown_and_short_text_then_uses_raw(self):
         raw = "ok"
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.summary == "ok"
 
     def test_extract_outermost_json_when_no_braces_then_returns_none(self):
@@ -253,13 +253,13 @@ class TestReviewResponseParser:
 
     def test_parse_when_extracted_json_is_malformed_then_falls_back_to_markdown(self):
         raw = "Some text with { malformed: json } inside\n\n## Verdict\napproved\n\n## Summary\ngood\n\n## Items\nNone"
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.summary == "good"
 
     def test_parse_when_code_block_has_invalid_json_then_falls_back_to_markdown(self):
         raw = "```json\n{not valid json}\n```\n\n## Verdict\napproved\n\n## Summary\nfallback\n\n## Items\nNone"
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.summary == "fallback"
 
@@ -520,7 +520,7 @@ class TestReviewResponseParser:
             "reasons": ["First reason", "Second reason"],
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert "First reason Second reason" == result.reason
 
     def test_parse_json_with_reasons_string_uses_directly(self):
@@ -531,7 +531,7 @@ class TestReviewResponseParser:
             "reasons": "Single reason string",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.reason == "Single reason string"
 
     def test_parse_json_unknown_severity_triggers_inference(self):
@@ -547,7 +547,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
         assert result.items[0].severity == ItemSeverity.CRITICAL
 
@@ -564,7 +564,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items[0].category == "security"
 
     def test_parse_json_missing_type_triggers_inference(self):
@@ -579,7 +579,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items[0].category == "maintainability"
 
     def test_parse_json_handles_dict_in_description_field(self):
@@ -595,7 +595,7 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
         assert result.items[0].description == "added=1, removed=1"
 
     def test_parse_json_handles_dict_in_details_field(self):
@@ -609,4 +609,4 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser.parse(raw, "m")
+        result = ReviewResponseParser().parse(raw, "m")
