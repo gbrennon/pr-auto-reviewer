@@ -5,6 +5,7 @@ from pathlib import Path
 
 import json
 import time as _time
+import tempfile
 from typing import Any
 
 import pytest
@@ -12,8 +13,6 @@ import requests as _requests
 
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
@@ -78,140 +77,19 @@ def adapter() -> OllamaExploratoryChatAdapter:
     return OllamaExploratoryChatAdapter(model="phi4", max_retries=2, ollama_timeout=10)
 
 
-@pytest.fixture
-def prompt_no_repo() -> ComposedPrompt:
-    """ComposedPrompt without repo_path — triggers single-pass path."""
-    return ComposedPrompt(
-        content="Review this diff:\n```diff\n+ x = 1\n```",
-        fragments_used=["frag-1"],
-        total_tokens=50,
-    )
-
 
 @pytest.fixture
 def prompt_with_repo(tmp_path: Path) -> ComposedPrompt:
     """ComposedPrompt with repo_path — triggers multi-turn path."""
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src" / "foo.py").write_text("def foo() -> None: ...")
+    (tmp_path / "src" / "a.py").write_text("def a() -> None: ...")
     return ComposedPrompt(
         content="System prompt for exploratory review",
         fragments_used=["system-prompt"],
         total_tokens=500,
         repo_path=str(tmp_path),
     )
-
-
-class TestSinglePass:
-    """Tests for _single_pass (empty repo_path)."""
-
-    def test_returns_code_review(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Streaming chat response is parsed into a CodeReview."""
-        verdict_json = _make_verdict_json()
-
-        def fake_post(
-            url: str,
-            *,
-            json: dict[str, Any] | None = None,
-            timeout: int | None = None,
-            stream: bool = False,
-            **kwargs: object,
-        ) -> _FakeStreamingResponse:
-            assert "/api/chat" in url
-            assert json is not None
-            assert json["stream"] is True
-            assert json["format"] == "json"
-            assert json["messages"][0]["role"] == "user"
-            assert json["messages"][0]["content"] == prompt_no_repo.content
-            return _FakeStreamingResponse(verdict_json)
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        result = adapter.review_prompt(prompt_no_repo)
-
-        assert isinstance(result, CodeReview)
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
-        assert result.items[0].severity == ItemSeverity.MAJOR
-        assert result.items[0].file_path == "src/foo.py"
-
-    def test_raises_on_empty_response(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError when streaming returns empty content."""
-        def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
-            return _FakeStreamingResponse("")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        with pytest.raises(LlmUnavailableError, match="Empty response"):
-            adapter.review_prompt(prompt_no_repo)
-
-    def test_raises_on_request_error(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError when POST fails."""
-        def fake_post(*args: object, **kwargs: object) -> None:
-            raise _requests.RequestException("Connection refused")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-
-        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
-            adapter.review_prompt(prompt_no_repo)
-
-    def test_retry_success(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Retries on first failure then returns CodeReview on second attempt."""
-        verdict_json = _make_verdict_json(verdict="APPROVED", issues=[])
-        call_count = 0
-
-        def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise _requests.RequestException("Temporary failure")
-            return _FakeStreamingResponse(verdict_json)
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-        monkeypatch.setattr(_time, "sleep", lambda _: None)
-
-        result = adapter.review_prompt(prompt_no_repo)
-        assert call_count == 2
-        assert result.verdict == ReviewVerdict.APPROVED
-
-    def test_retry_exhaustion(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
-    ) -> None:
-        """Raises LlmUnavailableError after all retries exhausted."""
-        call_count = 0
-
-        def fake_post(*args: object, **kwargs: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            raise _requests.RequestException("Fatal error")
-
-        monkeypatch.setattr(_requests, "post", fake_post)
-        monkeypatch.setattr(_time, "sleep", lambda _: None)
-
-        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
-            adapter.review_prompt(prompt_no_repo)
-        assert call_count == 2
-
 
 
 
@@ -249,9 +127,80 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
+
+
+    def test_handles_list_format_args(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Model sends args as JSON array — adapter joins to space-separated string."""
+        captured_args: list[str] = []
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            json_data: dict[str, Any] = kwargs.get("json", {})
+            calls.append(dict(json_data))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse(
+                    json.dumps({"action": "run_git", "args": ["diff", "--name-only"]})
+                )
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        def fake_execute(self: object, action: str, args: str) -> str:
+            captured_args.append(args)
+            return f"Result for {action} {args}"
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            fake_execute,
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(captured_args) == 1
+        assert captured_args[0] == "diff --name-only"
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+
+    def test_verdict_with_empty_items_valid(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Model emits verdict with no findings — valid response, not unparseable."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            json_data: dict[str, Any] = kwargs.get("json", {})
+            calls.append(dict(json_data))
+            return _FakeStreamingResponse(
+                json.dumps({"verdict": "approved", "items": []})
+            )
+        monkeypatch.setattr(_requests, "post", fake_post)
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_two_tools_then_verdict(
         self,
@@ -286,7 +235,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 3
+        assert len(calls) == 5
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_handles_non_json_response(
@@ -320,7 +269,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
     def test_raises_on_max_turns_exceeded(
@@ -341,14 +290,14 @@ class TestMultiTurn:
             lambda self, action, args: "file1.py\nfile2.py",
         )
 
-        with pytest.raises(LlmUnavailableError, match="Exceeded max turns"):
+        with pytest.raises(LlmUnavailableError, match="Phase exceeded max turns"):
             adapter.review_prompt(prompt_with_repo)
 
     def test_streaming_accumulates_chunks(
         self,
         monkeypatch: pytest.MonkeyPatch,
         adapter: OllamaExploratoryChatAdapter,
-        prompt_no_repo: ComposedPrompt,
+        prompt_with_repo: ComposedPrompt,
     ) -> None:
         """Multiple streaming chunks are accumulated before parsing."""
 
@@ -368,7 +317,7 @@ class TestMultiTurn:
 
         monkeypatch.setattr(_requests, "post", lambda *a, **kw: _MultiChunkResponse())
 
-        result = adapter.review_prompt(prompt_no_repo)
+        result = adapter.review_prompt(prompt_with_repo)
 
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(result.items) == 1
@@ -407,5 +356,518 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 2
+        assert len(calls) == 4
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+
+    def test_empty_response_recovers_on_next_turn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Single empty response triggers reprompt; next turn succeeds."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse("")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 4
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_empty_response_exhaustion_raises(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Three consecutive empty responses raise LlmUnavailableError."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            return _FakeStreamingResponse("")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        with pytest.raises(
+            LlmUnavailableError, match="empty response 3 consecutive"
+        ):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 3
+
+    def test_empty_response_counter_resets_after_valid(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Non-consecutive empties reset counter; doesn't raise."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx in (1, 3):
+                return _FakeStreamingResponse("")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_unparseable_response_recovers_on_next_turn(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Two unparseable responses trigger reprompt; next turn succeeds."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx <= 2:
+                return _FakeStreamingResponse("not valid json {{{")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_unparseable_response_exhaustion_raises(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Three consecutive unparseable responses raise LlmUnavailableError."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            return _FakeStreamingResponse("<html>not json</html>")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        with pytest.raises(
+            LlmUnavailableError, match="unparseable response 3 consecutive"
+        ):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 3
+
+    def test_unparseable_response_counter_resets_after_valid(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Non-consecutive unparseable resets counter; doesn't raise."""
+        calls: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            calls.append(dict(json or {}))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse("bad json {{{")
+            if call_idx == 3:
+                return _FakeStreamingResponse("<html>oops</html>")
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert len(calls) == 5
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+
+    def test_raises_on_request_error(
+        self,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+        monkeypatch: Any,
+    ) -> None:
+        call_count = 0
+
+        def fake_post(*args: object, **kwargs: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise _requests.RequestException("Connection refused")
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(_time, "sleep", lambda s: None)
+
+        with pytest.raises(LlmUnavailableError, match="failed after 2 attempts"):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert call_count == 2
+
+    def test_thinking_fallback_when_content_empty(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """When content chunks are all empty, fall back to thinking chunks."""
+
+        class _ThinkingOnlyResponse:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def iter_lines(self, decode_unicode: bool) -> list[str]:
+                verdict = _make_verdict_json()
+                mid = len(verdict) // 2
+                return [
+                    json.dumps({"message": {"thinking": verdict[:mid]}, "done": False}),
+                    json.dumps({"message": {"thinking": verdict[mid:]}, "done": False}),
+                    json.dumps({"message": {}, "done": True}),
+                ]
+
+        monkeypatch.setattr(_requests, "post", lambda *a, **kw: _ThinkingOnlyResponse())
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+    def test_payload_does_not_include_format_json(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """The _stream_chat payload does NOT include 'format' — natural language allowed."""
+        payloads: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            json: dict[str, Any] | None = None,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            if json is not None:
+                payloads.append(json)
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+
+        adapter.review_prompt(prompt_with_repo)
+
+        assert len(payloads) >= 1
+        assert "format" not in payloads[0]
+
+    def test_dumps_conversation_on_exhaustion(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+        tmp_path: Path,
+    ) -> None:
+        """Max-turns exhaustion dumps conversation to a temp file."""
+
+        _real_mkstemp = tempfile.mkstemp
+        written_paths: list[str] = []
+
+        def fake_mkstemp(prefix: str, suffix: str) -> tuple[int, str]:
+            fd, path = _real_mkstemp(prefix=prefix, suffix=suffix, dir=str(tmp_path))
+            written_paths.append(path)
+            return (fd, path)
+
+
+        def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
+            return _FakeStreamingResponse(
+                _make_action_json("list_directory", ".")
+            )
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "file1.py\nfile2.py",
+        )
+        monkeypatch.setattr(tempfile, "mkstemp", fake_mkstemp)
+
+        with pytest.raises(LlmUnavailableError, match="Phase exceeded max turns"):
+            adapter.review_prompt(prompt_with_repo)
+
+        assert len(written_paths) == 1
+        dumped = json.loads(Path(written_paths[0]).read_text())
+        assert isinstance(dumped, list)
+        assert any("list_directory" in json.dumps(m) for m in dumped)
+        Path(written_paths[0]).unlink()
+
+
+class TestExtractFileListing:
+    """Tests for _extract_file_listing static method."""
+
+    def test_extracts_files_from_diff_section(self) -> None:
+        """Parses --- a/path and +++ b/path lines after ## Diff header."""
+        content = "some text\n## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\nmore\n--- a/lib/bar.py\n+++ b/lib/bar.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert result == ["lib/bar.py", "src/foo.py"]
+    def test_skips_dev_null(self) -> None:
+        """Lines with /dev/null are excluded; other paths in the same diff are kept."""
+        content = "## Diff\n--- /dev/null\n+++ b/src/new.py\n--- a/src/old.py\n+++ /dev/null\n--- a/src/keep.py\n+++ b/src/keep.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert "src/keep.py" in result
+        assert "src/new.py" in result
+        assert "src/old.py" in result
+        assert all("/dev/null" not in p for p in result)
+
+    def test_handles_no_diff_section(self) -> None:
+        """Returns empty list when no ## Diff header present."""
+        result = OllamaExploratoryChatAdapter._extract_file_listing("just some text\nno headers\n")
+        assert result == []
+
+    def test_deduplicates_paths(self) -> None:
+        """Same file appearing multiple times yields one entry."""
+        content = "## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\n--- a/src/foo.py\n+++ b/src/foo.py\n"
+        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        assert result == ["src/foo.py"]
+
+
+class TestBuildReviewItemsValidation:
+    """Tests for _build_review_items path validation."""
+
+    def test_real_paths_are_accepted(self, tmp_path: Path) -> None:
+        """Items with existing file paths are kept."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "real.py").write_text("pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "src/real.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"}
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].file_path == "src/real.py"
+
+    def test_hallucinated_paths_are_skipped(self, tmp_path: Path) -> None:
+        """Items referencing non-existent files are dropped with warning."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""}
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 0
+
+    def test_mixed_real_and_hallucinated(self, tmp_path: Path) -> None:
+        """Only valid items survive; numbering is sequential."""
+        (tmp_path / "valid.py").write_text("ok")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "valid.py", "severity": "minor", "category": "style", "description": "ok", "line": "", "current_code": "ok", "suggested_fix": ""},
+            {"file": "fake.py", "severity": "critical", "category": "security", "description": "invented", "line": "", "current_code": "", "suggested_fix": ""},
+            {"file": "valid.py", "severity": "major", "category": "bug", "description": "also ok", "line": "", "current_code": "also ok", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 2
+        assert result[0].number == 1
+        assert result[1].number == 2
+
+    def test_strips_ab_prefix(self, tmp_path: Path) -> None:
+        """File paths with a/ or b/ prefix are normalized before validation."""
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "lib.py").write_text("pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "a/src/lib.py", "severity": "info", "category": "maintainability", "description": "nice", "line": "", "current_code": "pass", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].file_path == "src/lib.py"
+
+    def test_empty_file_path_passes_validation(self, tmp_path: Path) -> None:
+        """Items with empty file_path are not validated (cross-cutting findings)."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {"file": "", "severity": "major", "category": "architecture", "description": "global concern", "line": "", "current_code": "", "suggested_fix": ""},
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+
+    def test_nonempty_file_path_with_empty_code_is_skipped(
+        self, tmp_path: Path
+    ) -> None:
+        """Items with a real file path but no code evidence are dropped."""
+        adapter = OllamaExploratoryChatAdapter(
+            model="test", max_retries=1, ollama_timeout=1
+        )
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "empty.py").write_text("")
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/empty.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "hallucinated finding",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "",
+            },
+            {
+                "file": "",
+                "severity": "info",
+                "category": "architecture",
+                "description": "cross-cutting is fine",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "cross-cutting is fine"
+
+    def test_fabricated_error_description_skipped(self, tmp_path: Path) -> None:
+        """Findings with error-pattern description and no code evidence are dropped.
+
+        This covers the novel path where suggested_fix is non-empty prose
+        (bypassing the empty-code-evidence check) but current_code is empty
+        AND the description matches fabricated-error patterns.
+        """
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "real.py").write_text("def foo(): pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/real.py",
+                "severity": "info",
+                "category": "quality",
+                "description": "File not found in repository path — unable to verify this module",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "Confirm the file exists and re-run the review",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 0
+
+    def test_error_description_with_code_evidence_not_skipped(
+        self, tmp_path: Path
+    ) -> None:
+        """Legitimate findings mentioning error patterns WITH code are kept."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "handler.py").write_text("try: ...\nexcept: pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/handler.py",
+                "severity": "major",
+                "category": "error_handling",
+                "description": "Bare except clause — file not found errors are silently swallowed",
+                "line": "2",
+                "current_code": "except: pass",
+                "suggested_fix": "except FileNotFoundError as e: logger.error(e)",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "Bare except clause — file not found errors are silently swallowed"
+
+    def test_fabricated_error_cross_cutting_not_affected(
+        self, tmp_path: Path
+    ) -> None:
+        """Cross-cutting findings with error descriptions are kept (no file_path)."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "",
+                "severity": "major",
+                "category": "architecture",
+                "description": "No error handling for file not found cases across the codebase",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "Add centralized file-not-found error handling middleware",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "No error handling for file not found cases across the codebase"

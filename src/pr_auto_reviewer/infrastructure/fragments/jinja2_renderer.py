@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from jinja2 import BaseLoader, Environment, StrictUndefined, TemplateError
+
+logger = logging.getLogger(__name__)
 
 class Jinja2Renderer:
     """Renders prompt templates using the Jinja2 template engine.
@@ -48,6 +51,10 @@ class Jinja2Renderer:
         """
         try:
             jinja_template = self._env.from_string(template)
-            return jinja_template.render(**variables)
+            result = jinja_template.render(**variables)
+            return result
         except TemplateError as exc:
+            logger.exception(
+                "Template rendering failed for template string: %s", template,
+            )
             raise ValueError(f"Template rendering failed: {exc}") from exc

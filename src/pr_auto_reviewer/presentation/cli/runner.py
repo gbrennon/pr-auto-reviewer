@@ -29,6 +29,7 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavaila
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
 )
+from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.presentation.ports import PrListerPort
@@ -138,6 +139,11 @@ class CliRunner:
                 import traceback
 
                 traceback.print_exc()
+            return 1
+        except ReviewPublishError as e:
+            print(f"Error: {e}")
+            if self._notifier:
+                self._notifier.notify_error("Review publish failed", e)
             return 1
         except Exception as e:
             print(f"Error: {e}")
