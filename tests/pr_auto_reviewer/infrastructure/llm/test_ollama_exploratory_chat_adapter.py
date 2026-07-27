@@ -805,3 +805,69 @@ class TestBuildReviewItemsValidation:
         result = adapter._build_review_items(item_dicts, str(tmp_path))
         assert len(result) == 1
         assert result[0].description == "cross-cutting is fine"
+
+    def test_fabricated_error_description_skipped(self, tmp_path: Path) -> None:
+        """Findings with error-pattern description and no code evidence are dropped.
+
+        This covers the novel path where suggested_fix is non-empty prose
+        (bypassing the empty-code-evidence check) but current_code is empty
+        AND the description matches fabricated-error patterns.
+        """
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "real.py").write_text("def foo(): pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/real.py",
+                "severity": "info",
+                "category": "quality",
+                "description": "File not found in repository path — unable to verify this module",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "Confirm the file exists and re-run the review",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 0
+
+    def test_error_description_with_code_evidence_not_skipped(
+        self, tmp_path: Path
+    ) -> None:
+        """Legitimate findings mentioning error patterns WITH code are kept."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "handler.py").write_text("try: ...\nexcept: pass")
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/handler.py",
+                "severity": "major",
+                "category": "error_handling",
+                "description": "Bare except clause — file not found errors are silently swallowed",
+                "line": "2",
+                "current_code": "except: pass",
+                "suggested_fix": "except FileNotFoundError as e: logger.error(e)",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "Bare except clause — file not found errors are silently swallowed"
+
+    def test_fabricated_error_cross_cutting_not_affected(
+        self, tmp_path: Path
+    ) -> None:
+        """Cross-cutting findings with error descriptions are kept (no file_path)."""
+        adapter = OllamaExploratoryChatAdapter(model="test", max_retries=1, ollama_timeout=1)
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "",
+                "severity": "major",
+                "category": "architecture",
+                "description": "No error handling for file not found cases across the codebase",
+                "line": "",
+                "current_code": "",
+                "suggested_fix": "Add centralized file-not-found error handling middleware",
+            },
+        ]
+        result = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].description == "No error handling for file not found cases across the codebase"
