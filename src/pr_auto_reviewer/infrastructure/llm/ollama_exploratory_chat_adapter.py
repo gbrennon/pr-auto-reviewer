@@ -82,8 +82,8 @@ class PhaseResult:
     llm_verdict: str | None = None
     llm_reason: str = ""
     llm_summary: str = ""
-    llm_suggestions: str = ""
-    llm_praise: str = ""
+    llm_suggestions: list[dict[str, str]] = field(default_factory=list)
+    llm_praise: list[dict[str, str]] = field(default_factory=list)
     skip_reasons: list[str] = field(default_factory=list)
 
 
@@ -424,14 +424,17 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
                     summary = last_phase_result.llm_summary
-                if last_phase_result.llm_suggestions:
-                    suggestions = [
-                        ReviewSuggestion(description=last_phase_result.llm_suggestions)
-                    ]
-                if last_phase_result.llm_praise:
-                    praise_list = [
-                        ReviewPraise(description=last_phase_result.llm_praise)
-                    ]
+                for s in last_phase_result.llm_suggestions:
+                    suggestions.append(ReviewSuggestion(
+                        file=s.get("file", ""),
+                        line=s.get("line", ""),
+                        description=s.get("description", ""),
+                    ))
+                for p in last_phase_result.llm_praise:
+                    praise_list.append(ReviewPraise(
+                        file=p.get("file", ""),
+                        description=p.get("description", ""),
+                    ))
 
             return CodeReview(
                 verdict=verdict,
@@ -670,14 +673,17 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 reason = phase_result.llm_reason
             if phase_result.llm_summary:
                 summary = phase_result.llm_summary
-            if phase_result.llm_suggestions:
-                suggestions = [
-                    ReviewSuggestion(description=phase_result.llm_suggestions)
-                ]
-            if phase_result.llm_praise:
-                praise = [
-                    ReviewPraise(description=phase_result.llm_praise)
-                ]
+            for s in phase_result.llm_suggestions:
+                suggestions.append(ReviewSuggestion(
+                    file=s.get("file", ""),
+                    line=s.get("line", ""),
+                    description=s.get("description", ""),
+                ))
+            for p in phase_result.llm_praise:
+                praise.append(ReviewPraise(
+                    file=p.get("file", ""),
+                    description=p.get("description", ""),
+                ))
 
         return CodeReview(
             verdict=verdict,
@@ -728,7 +734,46 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             *init, last = severity_strings
             return f"Found {', '.join(init)}, and {last}."
 
-    def _extract_verdict_metadata(self, content: str) -> dict[str, str]:
+
+    @staticmethod
+    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "line": str(entry.get("line", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "line": "",
+                    "description": entry,
+                })
+        return result
+
+    @staticmethod
+    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "description": entry,
+                })
+        return result
+
+    def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
         """Extract verdict metadata from a JSON block in the content.
 
         Returns any of verdict, reason, summary, suggestions, praise
@@ -751,8 +796,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 "verdict": str(parsed.get("verdict", "")),
                 "reason": str(parsed.get("reason") or parsed.get("summary", "")),
                 "summary": str(parsed.get("summary", "")),
-                "suggestions": str(parsed.get("suggestions", "")),
-                "praise": str(parsed.get("praise", "")),
+                "suggestions": self._normalize_suggestions(parsed.get("suggestions", [])),
+                "praise": self._normalize_praise(parsed.get("praise", [])),
             }
         return {}
     def _parse_turn(self, content: str, repo_path: str
@@ -772,8 +817,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 llm_verdict=metadata.get("verdict") or None,
                 llm_reason=metadata.get("reason", ""),
                 llm_summary=metadata.get("summary", ""),
-                llm_suggestions=metadata.get("suggestions", ""),
-                llm_praise=metadata.get("praise", ""),
+                llm_suggestions=metadata.get("suggestions", []),
+                llm_praise=metadata.get("praise", []),
                 skip_reasons=skip_reasons,
             )
         try:
@@ -813,8 +858,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             llm_verdict = str(parsed.get("verdict", ""))
             llm_reason = str(parsed.get("reason") or parsed.get("summary", ""))
             llm_summary = str(parsed.get("summary", ""))
-            llm_suggestions = str(parsed.get("suggestions", ""))
-            llm_praise = str(parsed.get("praise", ""))
+            llm_suggestions = self._normalize_suggestions(parsed.get("suggestions", []))
+            llm_praise = self._normalize_praise(parsed.get("praise", []))
             review_items, skip_reasons = self._build_review_items(items_data, repo_path)
             return PhaseResult(
                 items=review_items,
