@@ -35,6 +35,9 @@ from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
 )
+from pr_auto_reviewer.infrastructure.review_publishers._shared import (
+    ReasonBuilder,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -658,7 +661,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             else ReviewVerdict.APPROVED
         )
 
-        reason = self._build_reason(merged)
+        reason = ReasonBuilder.build(merged)
         summary = ""
         suggestions: list[ReviewSuggestion] = []
         praise: list[ReviewPraise] = []
@@ -694,45 +697,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             praise=praise,
             model_used=self._model,
         )
-    def _build_reason(self, items: list[ReviewItem]) -> str:
-        """Build an expressive reason string from a list of ReviewItems.
 
-        Groups items by severity, then by category within each severity.
-        Formats the result as a human-readable sentence.
-        """
-        if not items:
-            return "No issues found."
-
-        severity_groups: dict[str, list[ReviewItem]] = {
-            "critical": [],
-            "major": [],
-            "minor": [],
-            "info": [],
-        }
-        for item in items:
-            severity_groups[str(item.severity)].append(item)
-
-        severity_strings: list[str] = []
-        for severity in ("critical", "major", "minor", "info"):
-            group = severity_groups[severity]
-            if not group:
-                continue
-            count = len(group)
-            category_counts: dict[str, int] = {}
-            for item in group:
-                cat = str(item.category)
-                category_counts[cat] = category_counts.get(cat, 0) + 1
-            sorted_cats = sorted(category_counts.items(), key=lambda kv: kv[0])
-            cat_detail = ", ".join(f"{cnt} {cat}" for cat, cnt in sorted_cats)
-            severity_strings.append(f"{count} {severity} ({cat_detail})")
-
-        if len(severity_strings) == 1:
-            return f"Found {severity_strings[0]}."
-        elif len(severity_strings) == 2:
-            return f"Found {severity_strings[0]} and {severity_strings[1]}."
-        else:
-            *init, last = severity_strings
-            return f"Found {', '.join(init)}, and {last}."
 
 
     @staticmethod
