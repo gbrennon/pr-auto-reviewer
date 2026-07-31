@@ -7,14 +7,18 @@ import logging
 import tempfile
 import time
 from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
-
 import requests
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import (
+    ReviewSuggestion,
+)
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
@@ -30,6 +34,9 @@ from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
 )
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
+)
+from pr_auto_reviewer.infrastructure.review_publishers._shared import (
+    ReasonBuilder,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +70,26 @@ _METHODOLOGY = (
 )
 
 
+
+
+@dataclass
+class PhaseResult:
+    """Items and metadata from a single review phase conversation.
+
+    Carries LLM-extracted verdict, reason, summary, suggestions, and
+    praise alongside the validated ReviewItem list so downstream code
+    can populate every CodeReview field.
+    """
+
+    items: list[ReviewItem] = field(default_factory=list)
+    llm_verdict: str | None = None
+    llm_reason: str = ""
+    llm_summary: str = ""
+    llm_suggestions: list[dict[str, str]] = field(default_factory=list)
+    llm_praise: list[dict[str, str]] = field(default_factory=list)
+    skip_reasons: list[str] = field(default_factory=list)
+
+
 class OllamaExploratoryChatAdapter(LlmReviewPort):
     """Staged multi-phase review using Ollama's chat API with exploration tools.
 
@@ -78,6 +105,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
     _MAX_TURNS = 10
     _MAX_EMPTY_RESPONSES = 3
     _MAX_UNPARSEABLE_RESPONSES = 3
+    _MAX_FEEDBACK_ROUNDS = 2
     _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
     _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
@@ -107,15 +135,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         self._max_retries = max_retries
         self._parser = ReviewResponseParser()
 
-    def review_prompt(self, composed: ComposedPrompt) -> CodeReview:
-        """Run all review phases against the composed prompt's repository."""
-        repo_path = composed.repo_path
-        if not repo_path or not repo_path.strip():
-            raise ValueError(
-                "repo_path is required for staged multi-phase review"
-            )
-        changed_files = self._extract_file_listing(composed.content)
-        return self._run_phases(repo_path.strip(), changed_files)
 
     def review(self, diff: object, context: object) -> CodeReview:
         """Not used in production; raises NotImplementedError."""
@@ -151,14 +170,207 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 paths.add(raw)
         return sorted(paths)
 
-    def _run_phases(self, repo_path: str, changed_files: list[str]) -> CodeReview:
-        """Orchestrate all review phases, merging results."""
+    def _run_phases_full_retry(
+        self,
+        repo_path: str,
+        changed_files: list[str],
+    ) -> CodeReview:
+        """Orchestrate all review phases with full-review retry and feedback loop.
+
+        When any phase exhausts all per-phase retries, this method catches the
+        LlmUnavailableError and restarts the entire review sequence from scratch,
+        injecting the valid findings accumulated so far as context.
+
+        After all full-retry attempts, if the result still has zero items,
+        additional feedback rounds feed the prior review output back to the LLM
+        as context for a fresh attempt.
+        """
+        max_full_retries = self._max_retries
+        best_attempt_items: list[ReviewItem] = []
+        result: CodeReview | None = None
+
+        for full_retry in range(max_full_retries):
+            logger.info(
+                "Starting full-review attempt %d/%d",
+                full_retry + 1,
+                max_full_retries,
+            )
+            attempt_items: list[ReviewItem] = []
+            try:
+                result = self._run_phases(repo_path, changed_files, attempt_items)
+                if result.items:
+                    return result
+                best_attempt_items = result.items
+                break
+            except LlmUnavailableError as exc:
+                if not self._is_max_turns_exceeded(exc):
+                    raise
+
+                if attempt_items and len(attempt_items) > len(best_attempt_items):
+                    best_attempt_items = list(attempt_items)
+
+                if full_retry == max_full_retries - 1:
+                    logger.warning(
+                        "All %d full-review attempts exhausted; returning findings from best attempt",
+                        max_full_retries,
+                    )
+                    break
+
+                logger.warning(
+                    "Full-review attempt %d/%d exceeded max turns, restarting entire sequence",
+                    full_retry + 1,
+                    max_full_retries,
+                )
+
+        if result is None:
+            if best_attempt_items:
+                logger.info(
+                    "Returning review with %d accumulated items after %d full retries",
+                    len(best_attempt_items),
+                    max_full_retries,
+                )
+                result = self._merge_items(best_attempt_items)
+            else:
+                logger.warning(
+                    "No findings accumulated after %d full-review attempts",
+                    max_full_retries,
+                )
+                result = CodeReview(
+                    verdict=ReviewVerdict.APPROVED,
+                    reason="No issues found across all review phases.",
+                    model_used=self._model,
+                )
+
+        if not result.items:
+            result = self._run_feedback_loop(repo_path, changed_files, result)
+
+        return result
+
+
+    def _run_feedback_loop(
+        self,
+        repo_path: str,
+        changed_files: list[str],
+        previous_result: CodeReview,
+    ) -> CodeReview:
+        """Re-run phases with the prior review output as feedback context.
+
+        When the LLM returns zero actionable findings, the prior verdict
+        and reason are serialized into a feedback prompt and passed to
+        _run_phases via initial_feedback. This gives the LLM another
+        chance to produce findings with the knowledge that its previous
+        attempt came up empty.
+        """
+        best = previous_result
+        for round_num in range(self._MAX_FEEDBACK_ROUNDS):
+            logger.info(
+                "Feedback round %d/%d: re-running with prior review context",
+                round_num + 1,
+                self._MAX_FEEDBACK_ROUNDS,
+            )
+            prior_skip_reasons = getattr(
+                self, "_last_phase_skip_reasons", None
+            )
+            context = self._build_feedback_context(
+                previous_result, round_num + 1, prior_skip_reasons
+            )
+            try:
+                result = self._run_phases(
+                    repo_path,
+                    changed_files,
+                    initial_feedback=context,
+                )
+            except LlmUnavailableError:
+                logger.warning(
+                    "Feedback round %d: LLM unavailable, returning best result",
+                    round_num + 1,
+                )
+                return best
+            if result.items:
+                logger.info(
+                    "Feedback round %d produced %d items",
+                    round_num + 1,
+                    len(result.items),
+                )
+                return result
+            previous_result = result
+            if len(result.summary or result.reason) > len(best.summary or best.reason):
+                best = result
+        logger.warning(
+            "All %d feedback rounds exhausted; returning best result",
+            self._MAX_FEEDBACK_ROUNDS,
+        )
+        return best
+
+    @staticmethod
+    def _build_feedback_context(
+        result: CodeReview,
+        round_number: int,
+        skip_reasons: list[str] | None = None,
+    ) -> str:
+        """Build a feedback prompt from a zero-item review result.
+
+        Each successive round escalates urgency so the LLM knows this
+        is a repeated failure, not a one-off retry.
+        """
+        escalation = (
+            "This is unusual for a real code change — please re-examine "
+            "the diff more carefully."
+            if round_number == 1
+            else (
+                f"This is your {round_number}{'st' if round_number == 1 else 'nd'} attempt. Every prior attempt "
+                "also found nothing actionable. Re-examine with fresh eyes: "
+                "assume the diff contains issues and dig deeper."
+            )
+        )
+        skip_note = ""
+        if skip_reasons:
+            unique = sorted(set(skip_reasons))
+            skip_note = (
+                "\n\nItems you reported in the previous attempt were dropped "
+                "for these reasons (fix them in this attempt):\n"
+                + "\n".join(f"- {r}" for r in unique)
+            )
+        return (
+            f"## Review Feedback — Attempt #{round_number} Returned No Findings\n\n"
+            "Your previous review of this pull request produced **zero** actionable findings. "
+            f"{escalation}"
+            f"{skip_note}\n\n"
+            f"Previous verdict: **{result.verdict.value}** — "
+            f"{result.summary or result.reason or 'no explanation provided'}\n\n"
+            "Look for genuine issues: bugs, logic errors, security problems, "
+            "performance concerns, API misuse, race conditions, missing edge cases, "
+            "and architectural problems. Only report issues you can confirm by "
+            "reading the affected files.\n\n"
+            "If after careful re-examination you truly find no issues, "
+            "explain why the change is correct."
+        )
+    def _run_phases(
+        self,
+        repo_path: str,
+        changed_files: list[str],
+        accumulated_items: list[ReviewItem] | None = None,
+        initial_feedback: str = "",
+    ) -> CodeReview:
+        """Orchestrate all review phases, merging results.
+
+        If accumulated_items is provided, it is populated in-place as each
+        phase completes so callers can recover partial results after an
+        LlmUnavailableError terminates mid-sequence.
+        """
+
         all_items: list[ReviewItem] = []
+        all_skip_reasons: list[str] = []
+        last_phase_result: PhaseResult | None = None
         previous_findings: str = ""
 
         for phase_id, phase_name in _PHASES:
             logger.info("Starting phase: %s", phase_name)
             phase_prompt = _METHODOLOGY + "\n\n" + self._load_phase_prompt(phase_id)
+
+            if initial_feedback:
+                phase_prompt = initial_feedback + "\n\n" + phase_prompt
+                initial_feedback = ""
 
             if self._FINDINGS_MARKER in phase_prompt:
                 phase_prompt = phase_prompt.replace(
@@ -166,14 +378,18 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     previous_findings or "No findings from prior phases.",
                 )
 
-            tool_service = ExplorationToolService(repo_path)
-            phase_items = self._run_conversation(
-                system_prompt=phase_prompt,
+            phase_result = self._run_phase_with_retry(
+                phase_name=phase_name,
+                phase_prompt=phase_prompt,
                 repo_path=repo_path,
-                tool_service=tool_service,
                 changed_files=changed_files,
             )
-            all_items.extend(phase_items)
+            all_items.extend(phase_result.items)
+            all_skip_reasons.extend(phase_result.skip_reasons)
+            last_phase_result = phase_result
+            if accumulated_items is not None:
+                accumulated_items.clear()
+                accumulated_items.extend(all_items)
             previous_findings = json.dumps(
                 [
                     {
@@ -189,25 +405,109 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             logger.info(
                 "Phase %s complete: %d findings (total: %d)",
                 phase_name,
-                len(phase_items),
+                len(phase_result.items),
                 len(all_items),
             )
 
+        self._last_phase_skip_reasons = all_skip_reasons
         if not all_items:
+            verdict = ReviewVerdict.APPROVED
+            reason = "No issues found across all review phases."
+            summary = ""
+            suggestions: list[ReviewSuggestion] = []
+            praise_list: list[ReviewPraise] = []
+
+            if last_phase_result is not None:
+                if last_phase_result.llm_verdict is not None:
+                    try:
+                        verdict = ReviewVerdict(last_phase_result.llm_verdict)
+                    except ValueError:
+                        pass
+                if last_phase_result.llm_reason:
+                    reason = last_phase_result.llm_reason
+                if last_phase_result.llm_summary:
+                    summary = last_phase_result.llm_summary
+                for s in last_phase_result.llm_suggestions:
+                    suggestions.append(ReviewSuggestion(
+                        file=s.get("file", ""),
+                        line=s.get("line", ""),
+                        description=s.get("description", ""),
+                    ))
+                for p in last_phase_result.llm_praise:
+                    praise_list.append(ReviewPraise(
+                        file=p.get("file", ""),
+                        description=p.get("description", ""),
+                    ))
+
             return CodeReview(
-                verdict=ReviewVerdict.APPROVED,
-                reason="No issues found across all review phases.",
+                verdict=verdict,
+                reason=reason,
+                summary=summary,
+                suggestions=suggestions,
+                praise=praise_list,
                 model_used=self._model,
             )
 
-        return self._merge_items(all_items)
+        return self._merge_items(all_items, last_phase_result)
+
+
+    def review_prompt(self, composed: ComposedPrompt) -> CodeReview:
+        """Run all review phases against the composed prompt's repository."""
+        repo_path = composed.repo_path
+        if not repo_path or not repo_path.strip():
+            raise ValueError(
+                "repo_path is required for staged multi-phase review"
+            )
+        changed_files = self._extract_file_listing(composed.content)
+        return self._run_phases_full_retry(repo_path.strip(), changed_files)
+
+    def review(self, diff: object, context: object) -> CodeReview:
+        """Not used in production; raises NotImplementedError."""
+        raise NotImplementedError(
+            "Use review_prompt(ComposedPrompt) for staged multi-phase review"
+        )
+
+    def _run_phase_with_retry(
+        self,
+        phase_name: str,
+        phase_prompt: str,
+        repo_path: str,
+        changed_files: list[str],
+    ) -> PhaseResult:
+        tool_service = ExplorationToolService(repo_path)
+        for retry in range(self._max_retries):
+            try:
+                return self._run_conversation(
+                    system_prompt=phase_prompt,
+                    repo_path=repo_path,
+                    tool_service=tool_service,
+                    changed_files=changed_files,
+                )
+            except LlmUnavailableError as exc:
+                if not self._is_max_turns_exceeded(exc):
+                    raise
+                if retry == self._max_retries - 1:
+                    raise
+                logger.warning(
+                    "Phase %s exceeded max turns (attempt %d/%d), restarting",
+                    phase_name,
+                    retry + 1,
+                    self._max_retries,
+                )
+                tool_service = ExplorationToolService(repo_path)
+        raise RuntimeError("Unreachable: _max_retries must be >= 1")
+
+    @staticmethod
+    def _is_max_turns_exceeded(exc: LlmUnavailableError) -> bool:
+        return "Phase exceeded max turns" in str(exc)
+
     def _run_conversation(
         self,
         system_prompt: str,
         repo_path: str,
         tool_service: ExplorationToolService,
         changed_files: list[str],
-    ) -> list[ReviewItem]:
+    ) -> PhaseResult:
         """Run a single-phase multi-turn conversation with tool access."""
         file_listing = "\n  - ".join(changed_files) if changed_files else "(none)"
         messages: list[dict[str, Any]] = [
@@ -223,8 +523,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     "You have access to read_file, search_codebase, "
                     "list_directory, and run_git tools.\n"
                     "When you have completed your review for this phase, "
-                    'respond with a JSON object containing "verdict" and '
-                    '"items" keys.\n'
+                    'respond with a JSON object containing "verdict", '
+                    '"reason", "suggestions", "praise", and "items" keys.\n'
                     "For tool calls, respond with a JSON object containing "
                     '"action" and "args" keys.'
                 ),
@@ -252,7 +552,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     "content": (
                         "Your previous response was empty. Please continue "
                         "your analysis or provide your review findings as "
-                        'a JSON object with "verdict" and "items" keys.'
+                        'a JSON object with "verdict", "reason", '
+                        '"suggestions", "praise", and "items" keys.'
                     ),
                 })
                 continue
@@ -277,8 +578,9 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     "content": (
                         "Your previous response was not valid JSON. Please "
                         "respond with a JSON object containing either "
-                        "'action' and 'args' for tool calls, or 'verdict' "
-                        "and 'items' for your final review findings."
+                        "'action' and 'args' for tool calls, or 'verdict', "
+                        "'reason', 'suggestions', 'praise', and 'items' "
+                        "for your final review findings."
                     ),
                 })
                 continue
@@ -286,7 +588,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
             messages.append({"role": "assistant", "content": content})
 
-            if isinstance(parsed, list):
+            if isinstance(parsed, PhaseResult):
                 logger.debug("Got verdict at turn %d", turn + 1)
                 return parsed
 
@@ -320,8 +622,18 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             f"Full conversation dumped to {dump_path}"
         )
 
-    def _merge_items(self, items: list[ReviewItem]) -> CodeReview:
-        """Deduplicate and merge items across phases into a CodeReview."""
+    def _merge_items(
+        self,
+        items: list[ReviewItem],
+        phase_result: PhaseResult | None = None,
+    ) -> CodeReview:
+        """Deduplicate and merge items across phases into a CodeReview.
+
+        When ``phase_result`` is provided, its ``llm_reason`` is used as
+        a fallback when the merged item list is empty, and its
+        ``llm_suggestions`` / ``llm_praise`` are parsed into the
+        corresponding domain entities.
+        """
         seen: set[tuple[str, str, str, str]] = set()
         merged: list[ReviewItem] = []
 
@@ -342,7 +654,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         for i, item in enumerate(merged, 1):
             object.__setattr__(item, "number", i)
-
         has_blocking = any(item.severity.is_blocking for item in merged)
         verdict = (
             ReviewVerdict.CHANGES_REQUESTED
@@ -350,29 +661,131 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             else ReviewVerdict.APPROVED
         )
 
+        reason = ReasonBuilder.build(merged)
+        summary = ""
+        suggestions: list[ReviewSuggestion] = []
+        praise: list[ReviewPraise] = []
+
+        if phase_result is not None:
+            if phase_result.llm_verdict is not None:
+                try:
+                    verdict = ReviewVerdict(phase_result.llm_verdict)
+                except ValueError:
+                    pass
+            if not reason and phase_result.llm_reason:
+                reason = phase_result.llm_reason
+            if phase_result.llm_summary:
+                summary = phase_result.llm_summary
+            for s in phase_result.llm_suggestions:
+                suggestions.append(ReviewSuggestion(
+                    file=s.get("file", ""),
+                    line=s.get("line", ""),
+                    description=s.get("description", ""),
+                ))
+            for p in phase_result.llm_praise:
+                praise.append(ReviewPraise(
+                    file=p.get("file", ""),
+                    description=p.get("description", ""),
+                ))
+
         return CodeReview(
             verdict=verdict,
-            reason=(
-                f"Merged {len(merged)} unique findings from "
-                f"{len(_PHASES)} review phases."
-            ),
+            reason=reason,
+            summary=summary,
             items=merged,
+            suggestions=suggestions,
+            praise=praise,
             model_used=self._model,
         )
 
-    def _parse_turn(
-        self, content: str, repo_path: str
-    ) -> list[ReviewItem] | dict[str, str] | None:
-        """Parse a conversation turn into items or a tool-call dict.
 
-        Returns a list of ``ReviewItem`` when ``parse_items`` succeeds,
+
+    @staticmethod
+    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "line": str(entry.get("line", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "line": "",
+                    "description": entry,
+                })
+        return result
+
+    @staticmethod
+    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "description": entry,
+                })
+        return result
+
+    def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
+        """Extract verdict metadata from a JSON block in the content.
+
+        Returns any of verdict, reason, summary, suggestions, praise
+        found in a top-level JSON object with a ``verdict`` key.
+        Falls back from ``reason`` to ``summary`` when the former is
+        empty.
+        """
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            extracted = self._parser._extract_outermost_json(content)
+            if extracted is None:
+                return {}
+            try:
+                parsed = json.loads(extracted)
+            except json.JSONDecodeError:
+                return {}
+        if isinstance(parsed, dict) and "verdict" in parsed:
+            return {
+                "verdict": str(parsed.get("verdict", "")),
+                "reason": str(parsed.get("reason") or parsed.get("summary", "")),
+                "summary": str(parsed.get("summary", "")),
+                "suggestions": self._normalize_suggestions(parsed.get("suggestions", [])),
+                "praise": self._normalize_praise(parsed.get("praise", [])),
+            }
+        return {}
+    def _parse_turn(self, content: str, repo_path: str
+    ) -> PhaseResult | dict[str, str] | None:
+        """Parse a conversation turn into a ``PhaseResult`` or tool-call dict.
+
+        Returns a ``PhaseResult`` when items or a verdict are present,
         a ``{"action": ..., "args": ...}`` dict for a tool call, or
         ``None`` when the content is not parseable.
         """
         items = self._parser.parse_items(content)
         if items:
-            return self._build_review_items(items, repo_path)
-
+            review_items, skip_reasons = self._build_review_items(items, repo_path)
+            metadata = self._extract_verdict_metadata(content)
+            return PhaseResult(
+                items=review_items,
+                llm_verdict=metadata.get("verdict") or None,
+                llm_reason=metadata.get("reason", ""),
+                llm_summary=metadata.get("summary", ""),
+                llm_suggestions=metadata.get("suggestions", []),
+                llm_praise=metadata.get("praise", []),
+                skip_reasons=skip_reasons,
+            )
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
@@ -386,6 +799,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             else:
                 logger.debug("Failed to parse turn content as JSON.")
                 return None
+        if isinstance(parsed, list):
+            return PhaseResult()
         if isinstance(parsed, dict) and "action" in parsed:
             raw_args = parsed.get("args", "")
             if isinstance(raw_args, list):
@@ -405,12 +820,21 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 or parsed.get("findings")
                 or []
             )
-            if not items_data:
-                logger.warning(
-                    "Verdict present but no items found in parsed response"
-                )
-            return self._build_review_items(items_data, repo_path)
-
+            llm_verdict = str(parsed.get("verdict", ""))
+            llm_reason = str(parsed.get("reason") or parsed.get("summary", ""))
+            llm_summary = str(parsed.get("summary", ""))
+            llm_suggestions = self._normalize_suggestions(parsed.get("suggestions", []))
+            llm_praise = self._normalize_praise(parsed.get("praise", []))
+            review_items, skip_reasons = self._build_review_items(items_data, repo_path)
+            return PhaseResult(
+                items=review_items,
+                llm_verdict=llm_verdict,
+                llm_reason=llm_reason,
+                llm_summary=llm_summary,
+                llm_suggestions=llm_suggestions,
+                llm_praise=llm_praise,
+                skip_reasons=skip_reasons,
+            )
         return None
 
     _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
@@ -438,14 +862,16 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         self,
         item_dicts: list[dict[str, Any]],
         repo_path: str,
-    ) -> list[ReviewItem]:
+    ) -> tuple[list[ReviewItem], list[str]]:
         """Construct ReviewItem domain objects from parsed item dicts.
 
         Validates that each ``file_path`` exists in the repository;
-        hallucinated paths are skipped with a warning.
+        hallucinated paths are skipped with a warning. Returns validated
+        items and a list of human-readable skip reasons for feedback.
         """
         repo_root = Path(repo_path) if repo_path else None
         review_items: list[ReviewItem] = []
+        skip_reasons: list[str] = []
         for item_dict in item_dicts:
             file_path = str(item_dict.get("file", ""))
             if file_path.startswith(("a/", "b/")):
@@ -453,10 +879,9 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             if repo_root is not None and file_path:
                 full_path = repo_root / file_path
                 if not full_path.exists():
-                    logger.warning(
-                        "Skipping finding for non-existent file: %s",
-                        file_path,
-                    )
+                    reason = f"file not found: {file_path}"
+                    logger.warning("Skipping finding — %s", reason)
+                    skip_reasons.append(reason)
                     continue
                 try:
                     file_path = str(
@@ -468,25 +893,41 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     pass
             current_code = str(item_dict.get("current_code", ""))
             suggested_fix = str(item_dict.get("suggested_fix", ""))
-            if file_path and not current_code and not suggested_fix:
-                logger.warning(
-                    "Skipping finding with no code evidence for file: %s",
-                    file_path,
-                )
+            line_str = str(item_dict.get("line", ""))
+            if repo_root is not None and file_path and (line_str or current_code):
+                file_lines = full_path.read_text().splitlines()
+                if line_str:
+                    try:
+                        line_num = int(line_str)
+                        if not (1 <= line_num <= len(file_lines)):
+                            reason = f"line {line_str} out of range in {file_path} ({len(file_lines)} lines)"
+                            logger.warning("Skipping finding — %s", reason)
+                            skip_reasons.append(reason)
+                            continue
+                        if current_code:
+                            actual_line = file_lines[line_num - 1].strip()
+                            if current_code.strip() != actual_line:
+                                reason = f"code mismatch at {file_path}:{line_str}"
+                                logger.warning("Skipping finding — %s", reason)
+                                skip_reasons.append(reason)
+                                continue
+                    except ValueError:
+                        pass
+            if repo_root is not None and file_path and not current_code and not suggested_fix:
+                reason = f"no code evidence in {file_path}"
+                logger.warning("Skipping finding — %s", reason)
+                skip_reasons.append(reason)
                 continue
             description = str(item_dict.get("description", ""))
-            if file_path and not current_code and description:
+            if repo_root is not None and file_path and not current_code and description:
                 description_lower = description.lower()
                 if any(
                     pattern in description_lower
                     for pattern in self._FABRICATED_ERROR_PATTERNS
                 ):
-                    logger.warning(
-                        "Skipping finding with fabricated error narrative "
-                        "for file: %s — %s",
-                        file_path,
-                        description[:80],
-                    )
+                    reason = f"fabricated narrative in {file_path}: {description[:80]}"
+                    logger.warning("Skipping finding — %s", reason)
+                    skip_reasons.append(reason)
                     continue
 
             review_item = ReviewItem(
@@ -502,7 +943,15 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 suggested_fix=suggested_fix,
             )
             review_items.append(review_item)
-        return review_items
+
+        if skip_reasons:
+            logger.info(
+                "%d items parsed, %d skipped: %s",
+                len(item_dicts),
+                len(skip_reasons),
+                ", ".join(skip_reasons),
+            )
+        return review_items, skip_reasons
 
     def _stream_chat(self, messages: list[dict[str, Any]]) -> str:
         """Send chat messages to Ollama and accumulate the streamed response."""
@@ -538,8 +987,14 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                         )
                         raise
                     message = chunk.get("message", {})
-                    content_parts.append(message.get("content", ""))
-                    thinking_parts.append(message.get("thinking", ""))
+                    if isinstance(message, list):
+                        for msg in message:
+                            if isinstance(msg, dict):
+                                content_parts.append(msg.get("content", ""))
+                                thinking_parts.append(msg.get("thinking", ""))
+                    else:
+                        content_parts.append(message.get("content", ""))
+                        thinking_parts.append(message.get("thinking", ""))
                     if chunk.get("done"):
                         break
                 result = "".join(content_parts)

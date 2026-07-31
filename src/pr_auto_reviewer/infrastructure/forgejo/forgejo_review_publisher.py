@@ -16,6 +16,7 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     _VERDICT_TO_EVENT,
     _body_formatter,
+    ReasonBuilder,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
@@ -55,7 +56,7 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             non_blocking_items = [i for i in review.items if not i.severity.is_blocking]
             comment_review = CodeReview(
                 verdict=review.verdict,
-                reason=review.reason,
+                reason=ReasonBuilder.build(non_blocking_items),
                 summary=review.summary,
                 items=non_blocking_items,
                 suggestions=review.suggestions,
@@ -73,7 +74,7 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
         non_blocking_items = [i for i in review.items if not i.severity.is_blocking]
         body_review = CodeReview(
             verdict=review.verdict,
-            reason=review.reason,
+            reason=ReasonBuilder.build(non_blocking_items),
             summary=review.summary,
             items=non_blocking_items,
             suggestions=review.suggestions,
