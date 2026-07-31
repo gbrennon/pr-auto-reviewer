@@ -73,6 +73,9 @@ The verdict is ALWAYS the final message in the conversation. The expanded JSON f
       "suggested_fix": "the corrected code — concrete, real code, not abstract text"
     }
   ],
+  "suggestions": [
+    {"file": "path/to/file.py", "line": "optional line", "description": "Non-blocking improvement suggestion"}
+  ],
   "praise": [
     {"file": "path/to/file.py", "description": "What was done well"}
   ],
