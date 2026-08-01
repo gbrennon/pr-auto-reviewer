@@ -37,19 +37,20 @@ class ExplorationToolService:
     Results are JSON-serializable dicts suitable for injection into chat messages.
     """
 
-    def __init__(self, repo_path: str) -> None:
+    def __init__(self, repo_path: str, changed_files: list[str] | None = None) -> None:
         if not repo_path or not repo_path.strip():
             raise ValueError("repo_path cannot be empty")
         resolved = Path(repo_path).resolve()
         if not resolved.is_dir():
             raise ValueError(f"repo_path is not a directory: {repo_path}")
         self._repo_root = resolved
+        self._changed_files = changed_files or []
 
     def execute(self, operation: str, args: str) -> dict[str, Any]:
         """Dispatch an operation by name.
 
         Args:
-            operation: One of ``read_file``, ``search_codebase``, ``list_directory``, ``run_git``.
+        operations: read_file, search_codebase, list_directory, run_git, get_changed_files
             args: Operation-specific arguments string.
 
         Returns:
@@ -63,6 +64,8 @@ class ExplorationToolService:
             return self.list_directory(args)
         if operation == "run_git":
             return self.run_git(args)
+        if operation == "get_changed_files":
+            return self.get_changed_files()
         return {"status": "error", "error": f"Unknown operation: {operation}"}
 
     def read_file(self, args: str) -> dict[str, Any]:
@@ -205,6 +208,15 @@ class ExplorationToolService:
             "subcommand": subcommand,
             "output": result.stdout,
         }
+
+    def get_changed_files(self) -> dict[str, Any]:
+        """Return the list of files modified in the PR under review.
+
+        Returns:
+            A dict with status ``ok`` and a ``files`` list of
+            repo-relative paths, or ``files`` may be empty.
+        """
+        return {"status": "ok", "files": list(self._changed_files)}
 
     def _resolve_safe(self, relative_path: str) -> Path | None:
         """Resolve a path against the repo root, blocking escapes.
