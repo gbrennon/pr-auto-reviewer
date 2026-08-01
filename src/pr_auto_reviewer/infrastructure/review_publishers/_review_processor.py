@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     _VERDICT_TO_EVENT,
@@ -35,6 +36,7 @@ class ProcessedReview:
     body: str
     blocking_items: list[ReviewItem]
     is_comment_only: bool
+    non_blocking_body: str | None = None
 
 
 class ReviewPublisherProcessor:
@@ -92,11 +94,12 @@ class ReviewPublisherProcessor:
         self, pr_id: PullRequestId, review: CodeReview, verdict_event: str,
     ) -> ProcessedReview:
         blocking = [i for i in review.items if i.severity.is_blocking]
+        non_blocking = [i for i in review.items if not i.severity.is_blocking]
         body_review = CodeReview(
             verdict=review.verdict,
-            reason=ReasonBuilder.build(review.items),
+            reason=ReasonBuilder.build(blocking),
             summary=review.summary,
-            items=review.items,
+            items=blocking,
             suggestions=review.suggestions,
             praise=review.praise,
             model_used=review.model_used,
@@ -105,9 +108,25 @@ class ReviewPublisherProcessor:
             body_review,
             start_number=self._publishing.count_existing_items(pr_id),
         )
+        non_blocking_body: str | None = None
+        if non_blocking:
+            comment_review = CodeReview(
+                verdict=ReviewVerdict.COMMENTED,
+                reason=ReasonBuilder.build(non_blocking),
+                summary="Non-blocking review items",
+                items=non_blocking,
+                suggestions=[],
+                praise=[],
+                model_used=review.model_used,
+            )
+            non_blocking_body = _body_formatter.format(
+                comment_review,
+                start_number=self._publishing.count_existing_items(pr_id) + len(blocking),
+            )
         return ProcessedReview(
             verdict_event=verdict_event,
             body=body,
             blocking_items=blocking,
             is_comment_only=False,
+            non_blocking_body=non_blocking_body,
         )
