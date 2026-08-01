@@ -434,14 +434,10 @@ index def456..ghi789 100644
         review_calls = [p for p in post_payloads if "/reviews" in p[0]]
         comment_calls = [p for p in post_payloads if "/comments" in p[0]]
         assert len(review_calls) == 1
-        assert len(comment_calls) == 1
+        assert len(comment_calls) == 0
         review_body = review_calls[0][1]["body"]
-        comment_body = comment_calls[0][1]["body"]
         assert "Blocking" in review_body
-        assert "Nit" not in review_body
-        assert "Nit" in comment_body
-        assert "Blocking" not in comment_body
-
+        assert "Nit" in review_body
     def test_build_inline_comments_skips_suggestion_without_file(
         self, patched_private_client, monkeypatch,
     ):
