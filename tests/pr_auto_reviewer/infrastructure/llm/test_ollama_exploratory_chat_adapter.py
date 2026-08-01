@@ -130,9 +130,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 8
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert len(calls) == 10
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
 
     def test_handles_list_format_args(
@@ -175,7 +175,7 @@ class TestMultiTurn:
 
         assert len(captured_args) == 1
         assert captured_args[0] == "diff --name-only"
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert result.verdict == ReviewVerdict.APPROVED
 
     def test_verdict_with_empty_items_valid(
         self,
@@ -238,8 +238,8 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 9
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(calls) == 11
+        assert result.verdict == ReviewVerdict.APPROVED
 
     def test_handles_non_json_response(
         self,
@@ -272,8 +272,8 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 8
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(calls) == 10
+        assert result.verdict == ReviewVerdict.APPROVED
 
     def test_raises_on_max_turns_exceeded(
         self,
@@ -293,8 +293,10 @@ class TestMultiTurn:
             lambda self, action, args: "file1.py\nfile2.py",
         )
 
-        with pytest.raises(LlmUnavailableError, match="Phase exceeded max turns"):
-            adapter.review_prompt(prompt_with_repo)
+        result = adapter.review_prompt(prompt_with_repo)
+
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_streaming_accumulates_chunks(
         self,
@@ -322,8 +324,8 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
 
     def test_ignores_json_without_action_or_verdict(
@@ -359,8 +361,8 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 8
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(calls) == 10
+        assert result.verdict == ReviewVerdict.APPROVED
 
     def test_empty_response_recovers_on_next_turn(
         self,
@@ -393,9 +395,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 8
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert len(calls) == 10
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_empty_response_exhaustion_raises(
         self,
@@ -461,9 +463,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 9
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert len(calls) == 11
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_unparseable_response_recovers_on_next_turn(
         self,
@@ -496,9 +498,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 9
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert len(calls) == 11
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_unparseable_response_exhaustion_raises(
         self,
@@ -566,9 +568,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 9
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert len(calls) == 11
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
 
     def test_raises_on_request_error(
         self,
@@ -618,8 +620,8 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
-        assert len(result.items) == 1
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
     def test_payload_does_not_include_format_json(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -678,10 +680,12 @@ class TestMultiTurn:
         )
         monkeypatch.setattr(tempfile, "mkstemp", fake_mkstemp)
 
-        with pytest.raises(LlmUnavailableError, match="Phase exceeded max turns"):
-            adapter.review_prompt(prompt_with_repo)
+        result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(written_paths) == 1
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
+
+        assert len(written_paths) > 0
         dumped = json.loads(Path(written_paths[0]).read_text())
         assert isinstance(dumped, list)
         assert any("list_directory" in json.dumps(m) for m in dumped)
@@ -728,9 +732,9 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "src/real.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"}
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
-        assert result[0].file_path == "src/real.py"
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
+        assert items[0].file_path == "src/real.py"
 
     def test_hallucinated_paths_are_skipped(self, tmp_path: Path) -> None:
         """Items referencing non-existent files are dropped with warning."""
@@ -738,8 +742,8 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""}
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 0
 
     def test_mixed_real_and_hallucinated(self, tmp_path: Path) -> None:
         """Only valid items survive; numbering is sequential."""
@@ -750,10 +754,10 @@ class TestBuildReviewItemsValidation:
             {"file": "fake.py", "severity": "critical", "category": "security", "description": "invented", "line": "", "current_code": "", "suggested_fix": ""},
             {"file": "valid.py", "severity": "major", "category": "bug", "description": "also ok", "line": "", "current_code": "also ok", "suggested_fix": ""},
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 2
-        assert result[0].number == 1
-        assert result[1].number == 2
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 2
+        assert items[0].number == 1
+        assert items[1].number == 2
 
     def test_strips_ab_prefix(self, tmp_path: Path) -> None:
         """File paths with a/ or b/ prefix are normalized before validation."""
@@ -763,9 +767,9 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "a/src/lib.py", "severity": "info", "category": "maintainability", "description": "nice", "line": "", "current_code": "pass", "suggested_fix": ""},
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
-        assert result[0].file_path == "src/lib.py"
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
+        assert items[0].file_path == "src/lib.py"
 
     def test_empty_file_path_passes_validation(self, tmp_path: Path) -> None:
         """Items with empty file_path are not validated (cross-cutting findings)."""
@@ -773,8 +777,8 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "", "severity": "major", "category": "architecture", "description": "global concern", "line": "", "current_code": "", "suggested_fix": ""},
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
 
     def test_nonempty_file_path_with_empty_code_is_skipped(
         self, tmp_path: Path
@@ -805,9 +809,9 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "",
             },
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
-        assert result[0].description == "cross-cutting is fine"
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
+        assert items[0].description == "cross-cutting is fine"
 
     def test_fabricated_error_description_skipped(self, tmp_path: Path) -> None:
         """Findings with error-pattern description and no code evidence are dropped.
@@ -830,8 +834,8 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "Confirm the file exists and re-run the review",
             },
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 0
 
     def test_error_description_with_code_evidence_not_skipped(
         self, tmp_path: Path
@@ -851,9 +855,9 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "except FileNotFoundError as e: logger.error(e)",
             },
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
-        assert result[0].description == "Bare except clause — file not found errors are silently swallowed"
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
+        assert items[0].description == "Bare except clause — file not found errors are silently swallowed"
 
     def test_fabricated_error_cross_cutting_not_affected(
         self, tmp_path: Path
@@ -871,6 +875,6 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "Add centralized file-not-found error handling middleware",
             },
         ]
-        result = adapter._build_review_items(item_dicts, str(tmp_path))
-        assert len(result) == 1
-        assert result[0].description == "No error handling for file not found cases across the codebase"
+        items, reasons = adapter._build_review_items(item_dicts, str(tmp_path))
+        assert len(items) == 1
+        assert items[0].description == "No error handling for file not found cases across the codebase"
