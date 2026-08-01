@@ -46,16 +46,19 @@ class ExplorationToolService:
         self._repo_root = resolved
         self._changed_files = changed_files or []
 
-    def execute(self, operation: str, args: str) -> dict[str, Any]:
+    def execute(self, operation: str, args: str | dict[str, str]) -> dict[str, Any]:
         """Dispatch an operation by name.
 
         Args:
         operations: read_file, search_codebase, list_directory, run_git, get_changed_files
-            args: Operation-specific arguments string.
+            args: Operation-specific arguments string, or a dict with a single key
+                mapping to the argument value (normalized here).
 
         Returns:
             A dict with status and result/error fields.
         """
+        if isinstance(args, dict):
+            args = next(iter(args.values()), "")
         if operation == "read_file":
             return self.read_file(args)
         if operation == "search_codebase":
