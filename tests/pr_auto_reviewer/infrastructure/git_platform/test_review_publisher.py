@@ -405,7 +405,7 @@ index def456..ghi789 100644
         assert "Nit" in body
         assert "Blocking" not in body
 
-    def test_formal_review_body_includes_all_items(
+    def test_formal_review_excludes_non_blocking_from_body(
         self, patched_private_client, monkeypatch,
     ):
         post_payloads = []
@@ -432,11 +432,15 @@ index def456..ghi789 100644
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         review_calls = [p for p in post_payloads if "/reviews" in p[0]]
+        comment_calls = [p for p in post_payloads if "/comments" in p[0]]
         assert len(review_calls) == 1
-        body = review_calls[0][1]["body"]
-        assert "Blocking" in body
-        assert "Nit" in body
-
+        assert len(comment_calls) == 1
+        review_body = review_calls[0][1]["body"]
+        comment_body = comment_calls[0][1]["body"]
+        assert "Blocking" in review_body
+        assert "Nit" not in review_body
+        assert "Nit" in comment_body
+        assert "Blocking" not in comment_body
 
     def test_build_inline_comments_skips_suggestion_without_file(
         self, patched_private_client, monkeypatch,
