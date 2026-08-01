@@ -260,6 +260,10 @@ class ReviewPublishingService:
 
         Returns ``{"position": …, "old_line": …, "new_line": …}`` or
         ``None`` when the snippet cannot be found.
+
+        All non-blank lines of *current_code* must match consecutive
+        content lines in the diff.  Single-line snippets degenerate to
+        the original behaviour.
         """
         if not file_path or not current_code:
             return None
@@ -277,7 +281,7 @@ class ReviewPublishingService:
             return None
         target_snippet = snippet_lines[0]
 
-        for line in lines:
+        for i, line in enumerate(lines):
             if line.startswith("diff --git"):
                 in_target_file = file_path in line
                 position = 0
@@ -296,21 +300,7 @@ class ReviewPublishingService:
                 position += 1
                 continue
 
-            # Skip git diff metadata lines (appear between diff --git and first @@).
-            # They are not part of the patch content and must not count toward position.
-            if line.startswith((
-                "index ",
-                "new file mode ",
-                "deleted file mode ",
-                "old mode ",
-                "new mode ",
-                "similarity index ",
-                "dissimilarity index ",
-                "rename from ",
-                "rename to ",
-                "copy from ",
-                "copy to ",
-            )):
+            if self._is_diff_metadata_line(line):
                 continue
 
             if line.startswith(("--- ", "+++ ")):
@@ -321,29 +311,83 @@ class ReviewPublishingService:
                 old_line += 1
                 content = line[1:]
                 if target_snippet in content:
-                    return {
-                        "position": position,
-                        "old_line": old_line,
-                        "new_line": None,
-                    }
+                    if self._verify_remaining_snippet_lines(
+                        lines, i + 1, snippet_lines[1:]
+                    ):
+                        return {
+                            "position": position,
+                            "old_line": old_line,
+                            "new_line": None,
+                        }
             elif line.startswith("+"):
                 new_line += 1
                 content = line[1:]
                 if target_snippet in content:
-                    return {
-                        "position": position,
-                        "old_line": None,
-                        "new_line": new_line,
-                    }
+                    if self._verify_remaining_snippet_lines(
+                        lines, i + 1, snippet_lines[1:]
+                    ):
+                        return {
+                            "position": position,
+                            "old_line": None,
+                            "new_line": new_line,
+                        }
             else:
                 old_line += 1
                 new_line += 1
                 content = line
                 if target_snippet in content:
-                    return {
-                        "position": position,
-                        "old_line": old_line,
-                        "new_line": new_line,
-                    }
+                    if self._verify_remaining_snippet_lines(
+                        lines, i + 1, snippet_lines[1:]
+                    ):
+                        return {
+                            "position": position,
+                            "old_line": old_line,
+                            "new_line": new_line,
+                        }
 
         return None
+
+    @staticmethod
+    def _is_diff_metadata_line(line: str) -> bool:
+        return line.startswith((
+            "index ",
+            "new file mode ",
+            "deleted file mode ",
+            "old mode ",
+            "new mode ",
+            "similarity index ",
+            "dissimilarity index ",
+            "rename from ",
+            "rename to ",
+            "copy from ",
+            "copy to ",
+        ))
+
+    @staticmethod
+    def _verify_remaining_snippet_lines(
+        lines: list[str],
+        start: int,
+        remaining: list[str],
+    ) -> bool:
+        if not remaining:
+            return True
+        idx = 0
+        for line in lines[start:]:
+            if line.startswith("diff --git"):
+                return False
+            if line.startswith("@@"):
+                continue
+            if ReviewPublishingService._is_diff_metadata_line(line):
+                continue
+            if line.startswith(("--- ", "+++ ")):
+                continue
+            content = line[1:] if line[:1] in ("-", "+") else line
+            if not content.strip():
+                continue
+            if remaining[idx] in content:
+                idx += 1
+                if idx == len(remaining):
+                    return True
+            else:
+                return False
+        return False
