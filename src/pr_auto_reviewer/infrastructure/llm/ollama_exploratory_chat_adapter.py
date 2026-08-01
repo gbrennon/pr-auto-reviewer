@@ -67,6 +67,27 @@ _METHODOLOGY = (
     "say so — never fabricate findings in a different language.\n"
     "After reading each file, describe what you observed before forming judgments.\n"
     "Only include findings whose evidence comes from code you successfully read.\n"
+    "Before reporting a class as missing any method (especially __init__),\n"
+    "read the superclass to verify the method is not inherited. If a class\n"
+    "body is simply 'pass', it inherits all behavior from its parent —\n"
+    "verify before reporting anything missing.\n"
+)
+
+_REASON_GENERATOR_PROMPT = (
+    "You are a final review summarizer. Given the merged findings from "
+    "a multi-phase code review below, write a single concise \"Reason\" "
+    "sentence that concretely describes what the review found.\n\n"
+    "The reason must:\n"
+    "- Be specific: mention actual file names and the nature of each issue\n"
+    "- Be concise: one sentence, ideally 10-30 words\n"
+    "- NOT use abstract phrases like \"X unique findings from Y phases\"\n"
+    "- Use natural language, not bullet points\n\n"
+    "Example good reason:\n"
+    '"Identified 3 issues: a missing shebang line in deploy.sh, an unhandled '
+    'None case in parse_config(), and a hardcoded credential in auth.rs."\n\n'
+    "Findings:\n"
+    "{findings}\n\n"
+    "Write ONLY the reason sentence. No prefixes, labels, or formatting."
 )
 
 
@@ -106,6 +127,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
     _MAX_EMPTY_RESPONSES = 3
     _MAX_UNPARSEABLE_RESPONSES = 3
     _MAX_FEEDBACK_ROUNDS = 2
+    _VERIFY_MAX_TURNS = 5
     _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
     _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
@@ -448,7 +470,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 model_used=self._model,
             )
 
-        return self._merge_items(all_items, last_phase_result)
+        return self._verify_and_rebuild(self._merge_items(all_items, last_phase_result), repo_path, changed_files)
 
 
     def review_prompt(self, composed: ComposedPrompt) -> CodeReview:
@@ -474,7 +496,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         repo_path: str,
         changed_files: list[str],
     ) -> PhaseResult:
-        tool_service = ExplorationToolService(repo_path)
+        tool_service = ExplorationToolService(repo_path, changed_files=changed_files)
         for retry in range(self._max_retries):
             try:
                 return self._run_conversation(
@@ -494,7 +516,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     retry + 1,
                     self._max_retries,
                 )
-                tool_service = ExplorationToolService(repo_path)
+                tool_service = ExplorationToolService(repo_path, changed_files=changed_files)
         raise RuntimeError("Unreachable: _max_retries must be >= 1")
 
     @staticmethod
@@ -518,10 +540,10 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     f"Changed files for this review:\n"
                     f"  - {file_listing}\n\n"
                     f"Repository path: {repo_path}\n\n"
-                    "Use run_git log or run_git diff to discover what "
-                    "changed, then use read_file to inspect files.\n"
+                    "Use get_changed_files to see which files were modified, "
+                    "then use read_file to inspect relevant files.\n"
                     "You have access to read_file, search_codebase, "
-                    "list_directory, and run_git tools.\n"
+                    "list_directory, run_git, and get_changed_files tools.\n"
                     "When you have completed your review for this phase, "
                     'respond with a JSON object containing "verdict", '
                     '"reason", "suggestions", "praise", and "items" keys.\n'
@@ -697,7 +719,375 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             praise=praise,
             model_used=self._model,
         )
+    def _run_verification_conversation(
+        self,
+        system_prompt: str,
+        repo_path: str,
+        tool_service: ExplorationToolService,
+    ) -> list[dict[str, Any]] | None:
+        """Run a multi-turn verification conversation with tool access.
 
+        Returns parsed verification results (list of {finding_index, verified, reason})
+        on success, or None if verification failed to produce parseable output.
+        """
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"Repository path: {repo_path}\n\n"
+                    "Verify each finding above against the ACTUAL source code. "
+                    "Use read_file to inspect files, search_codebase to locate "
+                    "symbols, and list_directory to explore the repository. "
+                    "You have access to read_file, search_codebase, "
+                    "list_directory, run_git, and get_changed_files tools.\n\n"
+                    "For tool calls, respond with a JSON object containing "
+                    "'action' and 'args' keys.\n"
+                    "When verification is complete, respond with a JSON object "
+                    "containing a 'results' array."
+                ),
+            },
+        ]
+
+        empty_consecutive = 0
+        unparseable_consecutive = 0
+        for turn in range(self._VERIFY_MAX_TURNS):
+            logger.debug(
+                "Verify turn %d/%d",
+                turn + 1,
+                self._VERIFY_MAX_TURNS,
+            )
+            content = self._stream_chat(messages)
+            if not content:
+                empty_consecutive += 1
+                if empty_consecutive >= self._MAX_EMPTY_RESPONSES:
+                    logger.warning(
+                        "Verification: %d consecutive empty responses; "
+                        "aborting",
+                        empty_consecutive,
+                    )
+                    return None
+                logger.debug(
+                    "Empty response at verify turn %d; reprompting",
+                    turn + 1,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous response was empty. Please verify "
+                        "each finding and respond with a JSON object "
+                        "containing a 'results' array."
+                    ),
+                })
+                continue
+
+            empty_consecutive = 0
+
+            parsed = self._parse_verify_turn(content)
+            if parsed is None:
+                unparseable_consecutive += 1
+                if (
+                    unparseable_consecutive
+                    >= self._MAX_UNPARSEABLE_RESPONSES
+                ):
+                    logger.warning(
+                        "Verification: %d consecutive unparseable "
+                        "responses; aborting",
+                        unparseable_consecutive,
+                    )
+                    return None
+                logger.debug(
+                    "Unparseable response at verify turn %d; reprompting",
+                    turn + 1,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous response was not valid JSON. "
+                        "Please respond with a JSON object containing "
+                        "either 'action' and 'args' for tool calls, "
+                        "or 'results' for your verification results."
+                    ),
+                })
+                continue
+            unparseable_consecutive = 0
+
+            messages.append({
+                "role": "assistant",
+                "content": content,
+            })
+
+            if isinstance(parsed, list):
+                logger.debug(
+                    "Got verification results at turn %d",
+                    turn + 1,
+                )
+                return parsed
+
+            action = parsed["action"]
+            args = parsed.get("args", "")
+            logger.debug(
+                "Verify tool call — action=%s args=%s",
+                action,
+                str(args)[:200],
+            )
+            result = tool_service.execute(action, args)
+            result_truncated = json.dumps(result)[:300]
+            logger.debug(
+                "Tool result (%d chars): %s",
+                len(json.dumps(result)),
+                result_truncated,
+            )
+            messages.append({
+                "role": "user",
+                "content": json.dumps(result),
+            })
+
+        logger.warning(
+            "Verification exceeded max turns (%d)",
+            self._VERIFY_MAX_TURNS,
+        )
+        return None
+
+
+    def _verify_and_rebuild(
+        self, code_review: CodeReview, repo_path: str, changed_files: list[str]
+    ) -> CodeReview:
+        """Run verification on blocking findings, rebuilding CodeReview if any are dropped."""
+        blocking = [i for i in code_review.items if i.severity.is_blocking]
+        if not blocking:
+            return code_review
+
+        verified_items = self._verify_blocking_findings(
+            code_review.items, repo_path, changed_files
+        )
+        if verified_items is code_review.items:
+            return code_review
+
+        for i, item in enumerate(verified_items, 1):
+            object.__setattr__(item, "number", i)
+
+        has_blocking = any(item.severity.is_blocking for item in verified_items)
+        verdict = (
+            ReviewVerdict.CHANGES_REQUESTED
+            if has_blocking
+            else ReviewVerdict.APPROVED
+        )
+
+        reason = self._generate_reason(verified_items, verdict)
+        return CodeReview(
+            verdict=verdict,
+            reason=reason,
+            items=verified_items,
+            model_used=self._model,
+        )
+
+    def _verify_blocking_findings(
+        self, items: list[ReviewItem], repo_path: str, changed_files: list[str]
+    ) -> list[ReviewItem]:
+        """Verify CRITICAL/MAJOR findings against source code, dropping hallucinations.
+
+        Uses a multi-turn agentic conversation with tool access so the model
+        can read files, search for symbols, and trace inheritance before
+        confirming or rejecting each finding.
+        """
+        blocking = [i for i in items if i.severity.is_blocking]
+        if not blocking:
+            return items
+
+        findings_text = self._format_findings_for_verification(blocking, repo_path)
+        prompt = self._load_phase_prompt("verify-findings")
+        prompt = prompt.replace("{findings}", findings_text)
+
+        tool_service = ExplorationToolService(repo_path=repo_path, changed_files=changed_files)
+        results = self._run_verification_conversation(
+            system_prompt=prompt,
+            repo_path=repo_path,
+            tool_service=tool_service,
+        )
+
+        if results is None:
+            logger.warning(
+                "Verification failed to produce results; preserving all "
+                "%d blocking findings",
+                len(blocking),
+            )
+            return items
+
+        verified_indices: set[int] = set()
+        for r in results:
+            idx = r.get("finding_index")
+            if r.get("verified", False) and isinstance(idx, int):
+                verified_indices.add(idx)
+
+        verified_blocking: list[ReviewItem] = []
+        for i, item in enumerate(blocking):
+            if i not in verified_indices:
+                continue
+            item_current = item.current_code.strip()
+            item_suggested = item.suggested_fix.strip()
+            if item_current == item_suggested and item_current:
+                logger.debug(
+                    "Item %d: current_code == suggested_fix; "
+                    "treating as unverified",
+                    item.number,
+                )
+                continue
+            verified_blocking.append(item)
+
+        dropped = len(blocking) - len(verified_blocking)
+        if dropped == 0:
+            return items
+
+        logger.info(
+            "Verification dropped %d/%d blocking findings as hallucinations",
+            dropped,
+            len(blocking),
+        )
+
+        non_blocking = [i for i in items if not i.severity.is_blocking]
+        return non_blocking + verified_blocking
+
+    def _parse_verify_turn(
+        self, content: str
+    ) -> list[dict[str, Any]] | dict[str, str] | None:
+        """Parse a verification conversation turn into results or a tool-call dict."""
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            extracted = self._parser._extract_outermost_json(content)
+            if extracted is not None:
+                try:
+                    data = json.loads(extracted)
+                except json.JSONDecodeError:
+                    return None
+            else:
+                return None
+
+        if not isinstance(data, dict):
+            return None
+
+        if "results" in data and isinstance(data["results"], list):
+            return data["results"]
+
+        if "action" in data and isinstance(data["action"], str):
+            return data
+
+        return None
+
+    def _format_findings_for_verification(
+        self, items: list[ReviewItem], repo_path: str
+    ) -> str:
+        """Format blocking findings with surrounding file context for verification."""
+        parts: list[str] = []
+        repo_root = Path(repo_path)
+
+        for i, item in enumerate(items):
+            file_content = ""
+            if item.file_path:
+                full_path = repo_root / item.file_path
+                if full_path.exists():
+                    file_content = self._extract_file_context(
+                        full_path, item.current_code
+                    )
+
+            parts.append(
+                f"## Finding {i}\n\n"
+                f"- **File:** `{item.file_path or '(unknown)'}`\n"
+                f"- **Severity:** {item.severity.value}\n"
+                f"- **Category:** {item.category.value}\n"
+                f"- **Description:** {item.description}\n"
+                f"- **Current code:**\n```\n{item.current_code}\n```\n"
+                f"- **Suggested fix:**\n```\n{item.suggested_fix}\n```\n"
+                f"- **File content (surrounding context):**\n```\n{file_content}\n```\n"
+            )
+
+        return "\n\n".join(parts)
+
+    @classmethod
+    def _extract_file_context(cls, file_path: Path, snippet: str) -> str:
+        """Extract surrounding context from a file around a matching code snippet.
+
+        Searches for the first non-blank line of the snippet in the file using
+        whitespace-normalized matching. Falls back to the first 2000 characters
+        of the file if no match is found.
+        """
+        try:
+            file_text = file_path.read_text()
+        except (OSError, UnicodeDecodeError):
+            return "(file could not be read)"
+
+        if not snippet or not snippet.strip():
+            return file_text[:2000]
+
+        snippet_lines = [
+            ln.strip()
+            for ln in snippet.strip().split("\n")
+            if ln.strip()
+        ]
+        if not snippet_lines:
+            return file_text[:2000]
+
+        file_lines = file_text.split("\n")
+        first_snippet_line = snippet_lines[0]
+
+        match_line = None
+        for idx, line in enumerate(file_lines):
+            if line.strip() == first_snippet_line:
+                match_line = idx
+                break
+
+        if match_line is None:
+            for idx, line in enumerate(file_lines):
+                if first_snippet_line in line.strip():
+                    match_line = idx
+                    break
+
+        if match_line is None:
+            return file_text[:2000]
+
+        window_start = max(0, match_line - 10)
+        window_end = min(len(file_lines), match_line + 50)
+        return "\n".join(file_lines[window_start:window_end])
+
+    def _generate_reason(
+        self, merged_items: list[ReviewItem], verdict: ReviewVerdict
+    ) -> str:
+        """Generate a concrete reason sentence from merged findings via LLM.
+
+        Falls back to the default f-string on any error or empty response.
+        """
+        findings_text = "\n".join(
+            f"{i+1}. [{item.file_path or '(unknown)'}] "
+            f"[{item.severity.value}] "
+            f"[{item.category.value}] "
+            f"{item.description}"
+            for i, item in enumerate(merged_items)
+        )
+        prompt = _REASON_GENERATOR_PROMPT.format(findings=findings_text)
+        messages: list[dict[str, str]] = [
+            {
+                "role": "system",
+                "content": "You generate concise code review reason sentences.",
+            },
+            {"role": "user", "content": prompt},
+        ]
+        try:
+            reason = self._stream_chat(messages)
+            reason = reason.strip().strip("\"'")
+            if not reason:
+                return self._default_reason(len(merged_items))
+            return reason
+        except LlmUnavailableError:
+            logger.warning("Failed to generate reason from LLM; using fallback")
+            return self._default_reason(len(merged_items))
+
+    @staticmethod
+    def _default_reason(count: int) -> str:
+        return (
+            f"Merged {count} unique findings from "
+            f"{len(_PHASES)} review phases."
+        )
 
 
     @staticmethod
