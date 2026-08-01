@@ -66,3 +66,6 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             diff_headers=None,
             diff=diff,
         )
+
+        if processed.non_blocking_body:
+            self._publishing.publish_comment(pr_id, processed.non_blocking_body)
