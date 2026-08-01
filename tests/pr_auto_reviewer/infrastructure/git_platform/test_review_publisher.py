@@ -170,7 +170,41 @@ index def456..ghi789 100644
         )
         assert result is not None
         assert result["new_line"] is not None
+    def test_find_diff_position_multi_line_full_match(self, adapter):
+        result = adapter._publishing.find_diff_position(
+            self.DIFF, "src/utils.py",
+            "    return 0\n\ndef added_func():\n    return 1"
+        )
+        assert result is not None
+        assert result["new_line"] is not None
 
+    def test_find_diff_position_multi_line_first_only_matches(self, adapter):
+        result = adapter._publishing.find_diff_position(
+            self.DIFF, "src/utils.py",
+            "    return 0\nnonexistent_hallucinated_code"
+        )
+        assert result is None
+
+    def test_find_diff_position_multi_line_non_consecutive(self, adapter):
+        result = adapter._publishing.find_diff_position(
+            self.DIFF, "src/utils.py",
+            "def util():\n    return 1"
+        )
+        assert result is None
+
+    def test_find_diff_position_multi_line_added_lines(self, adapter):
+        result = adapter._publishing.find_diff_position(
+            self.DIFF, "src/utils.py",
+            "def added_func():\n    return 1"
+        )
+        assert result is not None
+
+    def test_find_diff_position_multi_line_across_file_boundary(self, adapter):
+        result = adapter._publishing.find_diff_position(
+            self.DIFF, "src/main.py",
+            "    return True\ndef added_func():\n    pass"
+        )
+        assert result is None
     # ---- inline comment and error path tests ----
 
     def test_publish_with_items_adds_inline_comments(self, patched_private_client, monkeypatch):
