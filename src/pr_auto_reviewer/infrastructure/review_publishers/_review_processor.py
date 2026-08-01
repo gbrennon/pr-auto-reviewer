@@ -57,21 +57,29 @@ class ReviewPublisherProcessor:
 
     def process(
         self, pr_id: PullRequestId, review: CodeReview,
+        *, split_non_blocking: bool = True,
     ) -> ProcessedReview:
-        """Convert *review* into a ``ProcessedReview`` ready for platform dispatch."""
+        """Convert *review* into a ``ProcessedReview`` ready for platform dispatch.
+
+        When *split_non_blocking* is ``False``, all items stay in the formal
+        review body and *non_blocking_body* is ``None``.
+        """
         verdict_event = _VERDICT_TO_EVENT.get(review.verdict, "COMMENT")
 
         if verdict_event == "COMMENT":
             return self._build_comment_path(pr_id, review)
 
-        return self._build_formal_path(pr_id, review, verdict_event)
+        return self._build_formal_path(
+            pr_id, review, verdict_event,
+            split_non_blocking=split_non_blocking,
+        )
 
     def _build_comment_path(
         self, pr_id: PullRequestId, review: CodeReview,
     ) -> ProcessedReview:
         non_blocking = [i for i in review.items if not i.severity.is_blocking]
         comment_review = CodeReview(
-            verdict=review.verdict,
+            verdict=ReviewVerdict.COMMENTED,
             reason=ReasonBuilder.build(non_blocking),
             summary=review.summary,
             items=non_blocking,
@@ -89,10 +97,33 @@ class ReviewPublisherProcessor:
             blocking_items=[],
             is_comment_only=True,
         )
-
     def _build_formal_path(
         self, pr_id: PullRequestId, review: CodeReview, verdict_event: str,
+        *, split_non_blocking: bool = True,
     ) -> ProcessedReview:
+        if not split_non_blocking:
+            all_items = list(review.items)
+            body_review = CodeReview(
+                verdict=review.verdict,
+                reason=ReasonBuilder.build(all_items),
+                summary=review.summary,
+                items=all_items,
+                suggestions=review.suggestions,
+                praise=review.praise,
+                model_used=review.model_used,
+            )
+            body = _body_formatter.format(
+                body_review,
+                start_number=self._publishing.count_existing_items(pr_id),
+            )
+            return ProcessedReview(
+                verdict_event=verdict_event,
+                body=body,
+                blocking_items=all_items,
+                is_comment_only=False,
+                non_blocking_body=None,
+            )
+
         blocking = [i for i in review.items if i.severity.is_blocking]
         non_blocking = [i for i in review.items if not i.severity.is_blocking]
         body_review = CodeReview(
