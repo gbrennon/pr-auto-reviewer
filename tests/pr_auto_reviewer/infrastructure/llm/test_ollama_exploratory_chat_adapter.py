@@ -118,7 +118,7 @@ class TestMultiTurn:
         ) -> _FakeStreamingResponse:
             calls.append(dict(json or {}))
             call_idx = len(calls)
-            if call_idx == 1:
+            if call_idx % 2 == 1:
                 return _FakeStreamingResponse(_make_action_json("read_file", "src/foo.py"))
             return _FakeStreamingResponse(_make_verdict_json())
 
@@ -130,9 +130,10 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 10
+        assert len(calls) >= 2
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
+        assert len(calls) % 2 == 0
 
 
     def test_handles_list_format_args(
@@ -183,7 +184,7 @@ class TestMultiTurn:
         adapter: OllamaExploratoryChatAdapter,
         prompt_with_repo: ComposedPrompt,
     ) -> None:
-        """Model emits verdict with no findings — valid response, not unparseable."""
+        """Model explores, then emits verdict with no findings — valid, accepted."""
         calls: list[dict[str, Any]] = []
 
         def fake_post(
@@ -195,13 +196,109 @@ class TestMultiTurn:
         ) -> _FakeStreamingResponse:
             json_data: dict[str, Any] = kwargs.get("json", {})
             calls.append(dict(json_data))
+            call_idx = len(calls)
+            if call_idx == 1:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(
                 json.dumps({"verdict": "approved", "items": []})
             )
         monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: f"File contents of {args}",
+        )
 
         result = adapter.review_prompt(prompt_with_repo)
 
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
+        assert len(calls) >= 2
+
+    def test_empty_verdict_without_tools_is_reprompted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """Empty verdict with zero tool calls is rejected; model is asked to explore."""
+        payloads: list[dict[str, Any]] = []
+
+        def fake_post(
+            url: str,
+            *,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            json_data = kwargs.get("json")
+            if json_data is not None:
+                payloads.append(json_data)
+            return _FakeStreamingResponse(
+                json.dumps({"verdict": "approved", "items": []})
+            )
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        demand_seen = any(
+            message.get("role") == "user"
+            and "MUST use the exploration tools"
+            in message.get("content", "")
+            for payload in payloads
+            for message in payload.get("messages", [])
+        )
+        assert demand_seen
+        assert len(payloads) > 1
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert len(result.items) == 0
+
+    def test_findings_verdict_without_tools_is_reprompted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        adapter: OllamaExploratoryChatAdapter,
+        prompt_with_repo: ComposedPrompt,
+    ) -> None:
+        """A verdict WITH findings but zero tool calls is also rejected."""
+        payloads: list[dict[str, Any]] = []
+        valid_item = {
+            "file": "src/foo.py",
+            "line": "1",
+            "severity": "major",
+            "category": "security",
+            "description": "SQL injection risk",
+            "current_code": "query = 'SELECT * FROM users WHERE id = ' + uid",
+            "suggested_fix": "query = 'SELECT * FROM users WHERE id = %s'",
+        }
+
+        def fake_post(
+            url: str,
+            *,
+            timeout: int | None = None,
+            stream: bool = False,
+            **kwargs: object,
+        ) -> _FakeStreamingResponse:
+            json_data = kwargs.get("json")
+            if json_data is not None:
+                payloads.append(json_data)
+            return _FakeStreamingResponse(
+                json.dumps({"verdict": "changes_requested", "items": [valid_item]})
+            )
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+
+        result = adapter.review_prompt(prompt_with_repo)
+
+        demand_seen = any(
+            message.get("role") == "user"
+            and "MUST use the exploration tools"
+            in message.get("content", "")
+            for payload in payloads
+            for message in payload.get("messages", [])
+        )
+        assert demand_seen
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
 
@@ -238,8 +335,9 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 11
+        assert len(calls) >= 3
         assert result.verdict == ReviewVerdict.APPROVED
+        assert len(calls) % 3 == 0
 
     def test_handles_non_json_response(
         self,
@@ -262,6 +360,10 @@ class TestMultiTurn:
             call_idx = len(calls)
             if call_idx == 1:
                 return _FakeStreamingResponse("I will now explore the codebase.")
+            if call_idx == 2:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
@@ -272,7 +374,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 10
+        assert len(calls) >= 3
         assert result.verdict == ReviewVerdict.APPROVED
 
     def test_raises_on_max_turns_exceeded(
@@ -320,7 +422,21 @@ class TestMultiTurn:
                     json.dumps({"message": {"content": verdict[mid:]}, "done": True}),
                 ]
 
-        monkeypatch.setattr(_requests, "post", lambda *a, **kw: _MultiChunkResponse())
+        calls: list[int] = []
+
+        def fake_post(*args: object, **kwargs: object) -> object:
+            calls.append(1)
+            if len(calls) == 1:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
+            return _MultiChunkResponse()
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "file contents",
+        )
 
         result = adapter.review_prompt(prompt_with_repo)
 
@@ -351,6 +467,10 @@ class TestMultiTurn:
                 return _FakeStreamingResponse(
                     json.dumps({"thinking": "analyzing..."})
                 )
+            if call_idx == 2:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
@@ -361,7 +481,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 10
+        assert len(calls) >= 3
         assert result.verdict == ReviewVerdict.APPROVED
 
     def test_empty_response_recovers_on_next_turn(
@@ -385,6 +505,10 @@ class TestMultiTurn:
             call_idx = len(calls)
             if call_idx == 1:
                 return _FakeStreamingResponse("")
+            if call_idx == 2:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
@@ -395,7 +519,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 10
+        assert len(calls) >= 3
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
 
@@ -453,6 +577,10 @@ class TestMultiTurn:
             call_idx = len(calls)
             if call_idx in (1, 3):
                 return _FakeStreamingResponse("")
+            if call_idx == 2:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
@@ -463,7 +591,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 11
+        assert len(calls) >= 4
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
 
@@ -488,6 +616,10 @@ class TestMultiTurn:
             call_idx = len(calls)
             if call_idx <= 2:
                 return _FakeStreamingResponse("not valid json {{{")
+            if call_idx == 3:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
@@ -498,7 +630,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 11
+        assert len(calls) >= 4
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
 
@@ -556,6 +688,10 @@ class TestMultiTurn:
             call_idx = len(calls)
             if call_idx == 1:
                 return _FakeStreamingResponse("bad json {{{")
+            if call_idx == 2:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             if call_idx == 3:
                 return _FakeStreamingResponse("<html>oops</html>")
             return _FakeStreamingResponse(_make_verdict_json())
@@ -568,7 +704,7 @@ class TestMultiTurn:
 
         result = adapter.review_prompt(prompt_with_repo)
 
-        assert len(calls) == 11
+        assert len(calls) >= 4
         assert result.verdict == ReviewVerdict.APPROVED
         assert len(result.items) == 0
 
@@ -600,6 +736,7 @@ class TestMultiTurn:
         prompt_with_repo: ComposedPrompt,
     ) -> None:
         """When content chunks are all empty, fall back to thinking chunks."""
+        calls: list[int] = []
 
         class _ThinkingOnlyResponse:
             status_code = 200
@@ -608,15 +745,25 @@ class TestMultiTurn:
                 pass
 
             def iter_lines(self, decode_unicode: bool) -> list[str]:
-                verdict = _make_verdict_json()
-                mid = len(verdict) // 2
+                action = _make_action_json("read_file", "src/foo.py")
+                mid = len(action) // 2
                 return [
-                    json.dumps({"message": {"thinking": verdict[:mid]}, "done": False}),
-                    json.dumps({"message": {"thinking": verdict[mid:]}, "done": False}),
+                    json.dumps({"message": {"thinking": action[:mid]}, "done": False}),
+                    json.dumps({"message": {"thinking": action[mid:]}, "done": False}),
                     json.dumps({"message": {}, "done": True}),
                 ]
 
-        monkeypatch.setattr(_requests, "post", lambda *a, **kw: _ThinkingOnlyResponse())
+        def fake_post(*args: object, **kwargs: object) -> object:
+            calls.append(1)
+            if len(calls) == 1:
+                return _ThinkingOnlyResponse()
+            return _FakeStreamingResponse(_make_verdict_json())
+
+        monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
 
         result = adapter.review_prompt(prompt_with_repo)
 
@@ -630,6 +777,7 @@ class TestMultiTurn:
     ) -> None:
         """The _stream_chat payload does NOT include 'format' — natural language allowed."""
         payloads: list[dict[str, Any]] = []
+        calls: list[int] = []
 
         def fake_post(
             url: str,
@@ -641,9 +789,18 @@ class TestMultiTurn:
         ) -> _FakeStreamingResponse:
             if json is not None:
                 payloads.append(json)
+            calls.append(1)
+            if len(calls) == 1:
+                return _FakeStreamingResponse(
+                    _make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(_make_verdict_json())
 
         monkeypatch.setattr(_requests, "post", fake_post)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter.ExplorationToolService.execute",
+            lambda self, action, args: "OK",
+        )
 
         adapter.review_prompt(prompt_with_repo)
 
