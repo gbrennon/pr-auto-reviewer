@@ -37,8 +37,14 @@ class TestMultiTurn:
         prompt_with_repo: ComposedPrompt,
     ) -> None:
         """Single tool call followed by verdict."""
+        calls: list[int] = []
 
         def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
+            calls.append(1)
+            if len(calls) == 1:
+                return _FakeStreamingResponse(
+                    TestHelpers.make_action_json("list_directory", ".")
+                )
             return _FakeStreamingResponse(
                 TestHelpers.make_verdict_json("APPROVED", issues=[])
             )
@@ -60,8 +66,14 @@ class TestMultiTurn:
         prompt_with_repo: ComposedPrompt,
     ) -> None:
         """Multiple tool calls followed by verdict."""
+        calls: list[int] = []
 
         def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
+            calls.append(1)
+            if len(calls) == 1:
+                return _FakeStreamingResponse(
+                    TestHelpers.make_action_json("read_file", "src/foo.py")
+                )
             return _FakeStreamingResponse(
                 TestHelpers.make_verdict_json("CHANGES_REQUESTED")
             )
@@ -87,8 +99,14 @@ class TestMultiTurn:
         prompt_with_repo: ComposedPrompt,
     ) -> None:
         """Streaming chunks are accumulated into full response."""
+        calls: list[int] = []
 
         def fake_post(*args: object, **kwargs: object) -> _FakeStreamingResponse:
+            calls.append(1)
+            if len(calls) == 1:
+                return _FakeStreamingResponse(
+                    TestHelpers.make_action_json("list_directory", ".")
+                )
             return _FakeStreamingResponse(
                 TestHelpers.make_verdict_json("APPROVED", issues=[])
             )
