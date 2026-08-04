@@ -31,17 +31,35 @@ __PREVIOUS_FINDINGS__
 5. Check that composition is used over inheritance where appropriate
 6. Verify immutability conventions (frozen dataclasses, no side-effectful init)
 
-When done, emit a JSON array of findings — no surrounding text:
+## OUTPUT FORMAT
 
-[
-  {
-    "file": "path/to/file.py",
-    "severity": "critical|major|minor|info",
-    "category": "architecture|solid|convention|design",
-    "description": "What violates the architecture and why",
-    "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
-    "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
-  }
-]
+While exploring, respond with a tool call:
 
-If you find nothing, emit `[]`.
+```json
+{"action": "read_file|search_codebase|list_directory|run_git", "args": "..."}
+```
+
+When your review is complete, respond with a single JSON object:
+
+```json
+{
+  "verdict": "approved|changes_requested|commented",
+  "reason": "one sentence summarizing what you found",
+  "items": [
+    {
+      "file": "path/to/file.py",
+      "severity": "critical|major|minor|info",
+      "category": "architecture|solid|convention|design",
+      "description": "What violates the architecture and why",
+      "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
+      "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
+    }
+  ],
+  "suggestions": [],
+  "praise": []
+}
+```
+
+You MUST inspect the changed files with `read_file` before concluding. If you
+find nothing after inspection, return a verdict of `approved` with an empty
+`items` array and a reason describing what you inspected.

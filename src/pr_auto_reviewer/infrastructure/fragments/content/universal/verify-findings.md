@@ -27,21 +27,24 @@ A finding is likely hallucinated if:
 
 ## OUTPUT FORMAT
 
-Emit a JSON array of verification results — no surrounding text:
+Respond with a single JSON object containing a `results` array — no surrounding text:
 
-[
-  {
-    "file": "path/to/file.py",
-    "original_description": "the original finding's description",
-    "verdict": "confirmed|refuted|uncertain",
-    "explanation": "why the finding is confirmed, refuted, or uncertain — be specific about what you found in the code"
-  }
-]
+{
+  "results": [
+    {
+      "finding_index": 0,
+      "verified": true,
+      "reasoning": "File exists at src/module.py:42, current_code matches verbatim, callee returns Result so ? is valid"
+    }
+  ]
+}
 
 **Rules:**
-- Only include findings that are blocking (critical or major severity)
-- If you cannot confirm or refute with certainty, use "uncertain" — do not guess
-- If a file or code snippet does not exist, set verdict to "refuted"
+- `finding_index` — zero-based index matching the finding's position in the numbered list above (first finding = 0, second = 1, etc.)
+- `verified` — `true` if the finding's current_code matches actual source AND the suggestion is technically sound; `false` if the code doesn't exist, doesn't match, or the suggestion is invalid; use `false` for uncertain findings (fail safe — only confirmed findings survive)
+- `reasoning` — brief explanation of what you found in the actual code and why it confirms or refutes the finding
+- Include every blocking finding in the results array; do not skip items
+- Only findings with `"verified": true` will be kept; everything else will be dropped
 
 ## FINDINGS TO VERIFY
 
