@@ -71,6 +71,9 @@ _METHODOLOGY = (
     "read the superclass to verify the method is not inherited. If a class\n"
     "body is simply 'pass', it inherits all behavior from its parent —\n"
     "verify before reporting anything missing.\n"
+    "Never emit a final verdict until you have inspected at least one changed\n"
+    "file with the exploration tools; a verdict with zero tool calls is\n"
+    "rejected and you will be asked to explore.\n"
 )
 
 _REASON_GENERATOR_PROMPT = (
@@ -555,6 +558,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         empty_consecutive = 0
         unparseable_consecutive = 0
+        tool_calls = 0
         for turn in range(self._MAX_TURNS):
             logger.debug("Turn %d/%d", turn + 1, self._MAX_TURNS)
             content = self._stream_chat(messages)
@@ -611,8 +615,24 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             messages.append({"role": "assistant", "content": content})
 
             if isinstance(parsed, PhaseResult):
-                logger.debug("Got verdict at turn %d", turn + 1)
-                return parsed
+                if tool_calls > 0:
+                    logger.debug("Got verdict at turn %d", turn + 1)
+                    return parsed
+                logger.debug(
+                    "Verdict at turn %d with no tool exploration; demanding exploration",
+                    turn + 1,
+                )
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "You reached a verdict without inspecting the repository. "
+                        "Before concluding, you MUST use the exploration tools "
+                        "(read_file, search_codebase, list_directory, run_git) "
+                        "to inspect the changed files. Do that now, then provide "
+                        "your final JSON verdict."
+                    ),
+                })
+                continue
 
             action = parsed["action"]
             args = parsed.get("args", "")
@@ -622,6 +642,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 str(args)[:200],
             )
             result = tool_service.execute(action, args)
+            tool_calls += 1
             result_truncated = json.dumps(result)[:300]
             logger.debug(
                 "Tool result (%d chars): %s",
