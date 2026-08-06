@@ -107,6 +107,11 @@ class LocalGitRepository(LocalRepositoryPort):
         effective_ref = self._pr_refs.get(repo_path, ref)
         return self._run_git(repo_path, "show", f"{effective_ref}:{file_path}")
 
+    def list_tree(self, repo_path: Path, ref: str = "HEAD") -> list[str]:
+        effective_ref = self._pr_refs.get(repo_path, ref)
+        output = self._run_git(repo_path, "ls-tree", "-r", "--name-only", effective_ref)
+        return [line for line in output.splitlines() if line.strip()]
+
 
     def resolve_base_sha(self, repo_path: Path, pr_number: int) -> str:
         """Determine the merge-base for a PR using the default branch.

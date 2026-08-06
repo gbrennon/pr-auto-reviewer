@@ -139,9 +139,6 @@ class ConfigBuilder:
         use_strict_fragment_selection = (
             self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
         )
-        use_local_clone = (
-            self._get(source, "USE_LOCAL_CLONE").lower() == "true"
-        )
         local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
         clone_protocol = self._get(source, "CLONE_PROTOCOL") or "https"
 
@@ -183,7 +180,6 @@ class ConfigBuilder:
             max_structure_lines=max_structure_lines,
             use_compact_template=use_compact_template,
             use_strict_fragment_selection=use_strict_fragment_selection,
-            use_local_clone=use_local_clone,
             local_clone_base_dir=local_clone_base_dir,
             clone_protocol=clone_protocol,
         )

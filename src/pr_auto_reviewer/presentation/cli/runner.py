@@ -86,8 +86,8 @@ class CliRunner:
                 f"[verbose] Fetching PR #{args.pr} from repository '{args.repo}'..."
             )
 
+        open_prs: list = []
         if force_mode:
-            # Force/terminal mode: fetch PR directly regardless of state (open/closed/merged)
             pr = self._pr_lister.get_pr(args.repo, args.pr)
             if args.verbose and pr:
                 print(f"[verbose] Force-fetching PR #{args.pr} (state-agnostic, found: {pr is not None})")

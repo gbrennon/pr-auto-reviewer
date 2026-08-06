@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pr_auto_reviewer.infrastructure.config import Config
@@ -14,9 +14,6 @@ from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolve
 )
 from pr_auto_reviewer.infrastructure.clone_url_resolvers.ssh_clone_url_resolver import (
     SshCloneUrlResolver,
-)
-from pr_auto_reviewer.infrastructure.forgejo.changeset_fetcher import (
-    ForgejoChangesetFetcher,
 )
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
     ForgejoCommentPublisher,
@@ -33,17 +30,11 @@ from pr_auto_reviewer.infrastructure.forgejo.pr_lister import (
 from pr_auto_reviewer.infrastructure.forgejo.repo_lister import (
     ForgejoRepoLister,
 )
-from pr_auto_reviewer.infrastructure.forgejo.repository_context import (
-    ForgejoRepositoryContext,
-)
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
 )
 from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
     ForgejoReviewPublisher,
-)
-from pr_auto_reviewer.infrastructure.github.changeset_fetcher import (
-    GithubChangesetFetcher,
 )
 from pr_auto_reviewer.infrastructure.github.comment_publisher import (
     GithubCommentPublisher,
@@ -60,9 +51,6 @@ from pr_auto_reviewer.infrastructure.github.pr_lister import (
 from pr_auto_reviewer.infrastructure.github.repo_lister import (
     GithubRepoLister,
 )
-from pr_auto_reviewer.infrastructure.github.repository_context import (
-    GithubRepositoryContext,
-)
 from pr_auto_reviewer.infrastructure.github.review_reader import (
     GithubReviewReader,
 )
@@ -74,6 +62,9 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
 )
 from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher import (
     LocalChangesetFetcher,
+)
+from pr_auto_reviewer.infrastructure.local_repository.local_repository_context import (
+    LocalRepositoryContext,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
@@ -136,7 +127,7 @@ def wire_platform_adapters(
     config: Config,
     clients: PlatformClients,
     is_terminal: bool,
-    local_repository: LocalRepositoryPort | None = None,
+    local_repository: LocalRepositoryPort,
 ) -> PlatformAdapters:
     """Build and wire all platform-specific adapters from the given clients."""
     repos_filter = config.repos_filter or None
@@ -156,23 +147,17 @@ def wire_platform_adapters(
                 "but was not configured."
             )
 
-        if local_repository is not None:
-            resolver_cls = HttpsCloneUrlResolver if config.clone_protocol == "https" else SshCloneUrlResolver
-            changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
-                LocalChangesetFetcher(local_repository, resolver_cls("github")),
-                LocalChangesetFetcher(local_repository, resolver_cls("codeberg")),
-            )
-        else:
-            changeset_fetcher = CompositeChangesetFetcher(
-                GithubChangesetFetcher(gb_owner),
-                ForgejoChangesetFetcher(fj_owner),
-            )
+        resolver_cls = HttpsCloneUrlResolver if config.clone_protocol == "https" else SshCloneUrlResolver
+        changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
+            LocalChangesetFetcher(local_repository, resolver_cls("github")),
+            LocalChangesetFetcher(local_repository, resolver_cls("codeberg")),
+        )
 
         return PlatformAdapters(
             repository_context=CompositeRepositoryContext(
                 {
-                    "github": GithubRepositoryContext(gb_owner),
-                    "forgejo": ForgejoRepositoryContext(fj_owner),
+                    "github": LocalRepositoryContext(local_repository),
+                    "forgejo": LocalRepositoryContext(local_repository),
                 }
             ),
             changeset_fetcher=changeset_fetcher,
@@ -236,27 +221,16 @@ def wire_platform_adapters(
     reviewer_client = clients.reviewer_client
 
 
-    if local_repository is not None:
-        platform_mode = "github" if config.platform_mode == GitProvider.GITHUB else "codeberg"
-        url_resolver = (
-            HttpsCloneUrlResolver(platform_mode)
-            if config.clone_protocol == "https"
-            else SshCloneUrlResolver(platform_mode)
-        )
-        changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, url_resolver)
-    else:
-        changeset_fetcher = (
-            GithubChangesetFetcher(http_client)
-            if is_github
-            else ForgejoChangesetFetcher(http_client)
-        )
+    platform_mode = "github" if config.platform_mode == GitProvider.GITHUB else "codeberg"
+    url_resolver = (
+        HttpsCloneUrlResolver(platform_mode)
+        if config.clone_protocol == "https"
+        else SshCloneUrlResolver(platform_mode)
+    )
+    changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, url_resolver)
 
     return PlatformAdapters(
-        repository_context=(
-            GithubRepositoryContext(http_client)
-            if is_github
-            else ForgejoRepositoryContext(http_client)
-        ),
+        repository_context=LocalRepositoryContext(local_repository),
         changeset_fetcher=changeset_fetcher,
         review_publisher=(
             TerminalReviewPublisherAdapter(config.output_path)

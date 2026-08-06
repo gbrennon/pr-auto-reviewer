@@ -15,7 +15,6 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import GitP
 from pr_auto_reviewer.infrastructure.forgejo.comment_reader import ForgejoCommentReader
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import ForgejoCommentPublisher
 from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import ForgejoIssueTracker
-from pr_auto_reviewer.infrastructure.forgejo.repository_context import ForgejoRepositoryContext
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import GithubReviewPublisher as GitReviewPublisherAdapter
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewReader
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
@@ -103,7 +102,6 @@ for s in scenarios:
 save_json("review_reader_fixtures.json", rr_fix)
 
 print("4. Repository context ...")
-rc = ForgejoRepositoryContext(client)
 rc_fix = {}
 for s in scenarios:
     L = s["label"]

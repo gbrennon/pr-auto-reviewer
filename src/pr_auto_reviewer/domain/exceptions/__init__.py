@@ -26,5 +26,6 @@ __all__ = [
     "IssueCreationError",
     "RepositoryCorruptedError",
     "LlmResponseMalformedError",
+    "ReviewItemNotFoundError",
     "PreflightVerificationError",
 ]
