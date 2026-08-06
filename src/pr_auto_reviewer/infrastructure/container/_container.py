@@ -80,12 +80,10 @@ class Container:
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        local_repository = None
-        if self._config.use_local_clone:
-            from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
-                LocalGitRepository,
-            )
-            local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
+            LocalGitRepository,
+        )
+        local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
         adapters = wire_platform_adapters(
             self._config, clients, is_terminal, local_repository=local_repository
         )
