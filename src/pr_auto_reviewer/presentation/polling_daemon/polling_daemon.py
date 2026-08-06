@@ -21,7 +21,7 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPo
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoListerPort
 from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
     PollingDaemonConfig,
 )

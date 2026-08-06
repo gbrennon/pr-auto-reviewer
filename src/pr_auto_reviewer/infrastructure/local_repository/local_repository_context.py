@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
     LocalRepositoryPort,
