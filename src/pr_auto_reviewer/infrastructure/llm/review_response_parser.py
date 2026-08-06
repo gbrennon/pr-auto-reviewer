@@ -8,7 +8,10 @@ import re
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 logger = logging.getLogger(__name__)
@@ -47,7 +50,7 @@ class ReviewResponseParser:
             summary = first_para if first_para else content.strip()[:500]
         items_data = ReviewResponseParser._parse_markdown_items(content)
         return CodeReview(
-            verdict=str(verdict),
+            verdict=verdict,
             reason="",
             summary=summary,
             items=items_data,
@@ -68,8 +71,8 @@ class ReviewResponseParser:
             items.append(
                 ReviewItem(
                     number=i,
-                    severity=severity_raw,
-                    category=category_raw,
+                    severity=ItemSeverity.from_value(severity_raw),
+                    category=IssueCategory.from_value(category_raw),
                     file_path=file_path.strip(),
                     description=description.strip(),
                     line="",
@@ -168,8 +171,8 @@ class ReviewResponseParser:
                 category_value = ReviewResponseParser._infer_type(description, severity_value)
             review_item = ReviewItem(
                 number=i,
-                severity=severity_value,
-                category=category_value,
+                severity=ItemSeverity.from_value(severity_value),
+                category=IssueCategory.from_value(category_value),
                 file_path=str(item_dict.get("file", "")),
                 description=description,
                 line=str(item_dict.get("line", "")),
@@ -187,11 +190,24 @@ class ReviewResponseParser:
             summary=str(data.get("summary", "")),
             items=items,
             suggestions=[
-                str(s) for s in data.get("suggestions", [])
+                ReviewSuggestion(description=str(s)) if isinstance(s, str)
+                else ReviewSuggestion(
+                    description=str(s.get("description", "")),
+                    file=str(s.get("file", "")),
+                    line=str(s.get("line", "")),
+                    current_code=str(s.get("current_code", "")),
+                    suggested_code=str(s.get("suggested_code", "")),
+                )
+                for s in data.get("suggestions", [])
                 if isinstance(s, (str, dict))
             ],
             praise=[
-                str(p) for p in data.get("praise", [])
+                ReviewPraise(description=str(p)) if isinstance(p, str)
+                else ReviewPraise(
+                    description=str(p.get("description", "")),
+                    file=str(p.get("file", "")),
+                )
+                for p in data.get("praise", [])
                 if isinstance(p, (str, dict))
             ],
             model_used=model,
@@ -200,7 +216,7 @@ class ReviewResponseParser:
     @classmethod
     def _empty_review(cls, model: str, *, reason: str) -> CodeReview:
         return CodeReview(
-            verdict="COMMENTED",
+            verdict=ReviewVerdict.COMMENTED,
             reason=reason,
             summary="",
             items=[],
@@ -212,7 +228,7 @@ class ReviewResponseParser:
     @classmethod
     def _resolve_verdict(cls, 
         explicit: str | None, items: list[ReviewItem],
-    ) -> str:
+    ) -> ReviewVerdict:
         if explicit:
             value = explicit.strip().lower()
             if "changes" in value or "request" in value:
@@ -221,7 +237,7 @@ class ReviewResponseParser:
                 return ReviewVerdict.APPROVED
             if "commented" in value:
                 return ReviewVerdict.COMMENTED
-            return explicit
+            return ReviewVerdict(explicit)
         return ReviewResponseParser._determine_verdict(items)
 
     @classmethod
@@ -237,7 +253,7 @@ class ReviewResponseParser:
         return ""
 
     @classmethod
-    def _determine_verdict(cls, items: list[ReviewItem]) -> str:
+    def _determine_verdict(cls, items: list[ReviewItem]) -> ReviewVerdict:
         for item in items:
             if item.severity in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR):
                 return ReviewVerdict.CHANGES_REQUESTED
