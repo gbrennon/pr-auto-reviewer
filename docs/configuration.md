@@ -58,7 +58,6 @@ with the Git host.
 | ``GITHUB_API_URL`` | ``https://api.github.com`` | GitHub API base URL (set for Enterprise) |
 | ``FORGEJO_API_URL`` | ``https://codeberg.org`` | Forgejo/Codeberg API base URL (``/api/v1`` appended automatically) |
 | ``FORGEJO_HOST`` | — | Legacy alias for ``FORGEJO_API_URL`` |
-| ``USE_LOCAL_CLONE`` | ``false`` | Clone repos locally instead of fetching via API |
 | ``LOCAL_CLONE_BASE_DIR`` | ``~/.cache/pr-auto-reviewer/repos`` | Where clones are stored |
 | ``CLONE_PROTOCOL`` | ``https`` | Protocol for local clones: ``https`` or ``ssh`` |
 
@@ -66,7 +65,6 @@ with the Git host.
 becomes ``https://codeberg.org/api/v1``.
 Set it to a custom Forgejo instance (e.g. ``https://git.example.com``)
 and the ``/api/v1`` suffix is added only if missing.
-``USE_LOCAL_CLONE`` switches from API-based diff fetching to local ``git``
 operations.  Useful when API rate limits are tight or the host has no
 diff endpoint.  ``CLONE_PROTOCOL`` selects the clone URL format: ``https``
 uses the HTTPS resolver (default), ``ssh`` uses the SSH resolver which
@@ -196,4 +194,3 @@ USE_STRICT_FRAGMENT_SELECTION=true
 ### Feature Flags
 
 - ``USE_STRICT_FRAGMENT_SELECTION`` (default: ``false``) — Set to ``true`` to only include fragments strictly related to files changed in the PR.
-- ``USE_LOCAL_CLONE`` (default: ``false``) — Clone repos locally and use ``git`` instead of API fetches.
