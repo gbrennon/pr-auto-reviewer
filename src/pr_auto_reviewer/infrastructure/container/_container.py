@@ -6,7 +6,6 @@ from pathlib import Path
 
 import logging
 
-logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.container._platform_clients import wire_platform_clients
@@ -67,6 +66,7 @@ from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
+logger = logging.getLogger(__name__)
 
 
 class Container:

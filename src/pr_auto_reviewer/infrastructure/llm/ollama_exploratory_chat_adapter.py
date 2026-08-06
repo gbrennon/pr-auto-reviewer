@@ -486,11 +486,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         changed_files = self._extract_file_listing(composed.content)
         return self._run_phases_full_retry(repo_path.strip(), changed_files)
 
-    def review(self, diff: object, context: object) -> CodeReview:
-        """Not used in production; raises NotImplementedError."""
-        raise NotImplementedError(
-            "Use review_prompt(ComposedPrompt) for staged multi-phase review"
-        )
 
     def _run_phase_with_retry(
         self,

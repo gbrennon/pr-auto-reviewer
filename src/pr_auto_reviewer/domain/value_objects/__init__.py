@@ -20,5 +20,8 @@ __all__ = [
     "IssueCategory",
     "CodeReview",
     "RepositoryContext",
+    "IssueCommand",
+    "CommentId",
+    "PrComment",
     "TokenSlug",
 ]
