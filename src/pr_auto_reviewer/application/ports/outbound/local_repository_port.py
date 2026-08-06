@@ -45,6 +45,15 @@ class LocalRepositoryPort(Protocol):
         """Read the full contents of a file at a given ref."""
         ...
 
+    def list_tree(
+        self, repo_path: Path, ref: str = "HEAD",
+    ) -> list[str]:
+        """List all files tracked at a given ref.
+
+        Returns a list of relative file paths.
+        """
+        ...
+
 
     @property
     def last_clone_path(self) -> Path | None:

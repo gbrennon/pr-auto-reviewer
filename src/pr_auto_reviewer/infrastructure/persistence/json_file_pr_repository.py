@@ -12,7 +12,6 @@ import os
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -26,6 +25,7 @@ from ...domain.value_objects.comment_id import CommentId
 from ...application.ports.outbound.pull_request_repository import (
     PullRequestRepository,
 )
+logger = logging.getLogger(__name__)
 
 _STATE_KEY_SEPARATOR = "/"
 

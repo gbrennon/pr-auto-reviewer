@@ -6,7 +6,6 @@ from pathlib import Path
 
 import logging
 
-logger = logging.getLogger(__name__)
 
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.container._platform_clients import wire_platform_clients
@@ -67,6 +66,7 @@ from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
+logger = logging.getLogger(__name__)
 
 
 class Container:
@@ -80,12 +80,10 @@ class Container:
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        local_repository = None
-        if self._config.use_local_clone:
-            from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
-                LocalGitRepository,
-            )
-            local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
+            LocalGitRepository,
+        )
+        local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
         adapters = wire_platform_adapters(
             self._config, clients, is_terminal, local_repository=local_repository
         )
