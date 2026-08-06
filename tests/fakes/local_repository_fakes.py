@@ -19,11 +19,12 @@ class FakeLocalRepository:
     def __init__(
         self,
         clone_return: Path | None = None,
-        compute_diff_return: str = "",
+        compute_diff_return: str | BaseException = "",
         commit_messages_return: list[str] | None = None,
         resolve_base_sha_return: str = "abc123",
-        read_file_return: str | list = "",
+        read_file_return: str | list | BaseException = "",
         last_clone_path_return: Path | None = None,
+        list_tree_return: list[str] | BaseException | None = None,
     ) -> None:
         self.clone_return = clone_return or Path("/tmp/clone/repo")
         self.compute_diff_return = compute_diff_return
@@ -31,6 +32,7 @@ class FakeLocalRepository:
         self.resolve_base_sha_return = resolve_base_sha_return
         self.read_file_return = read_file_return
         self._last_clone_path = last_clone_path_return
+        self.list_tree_return = list_tree_return or ["src/main.py", "src/utils.py", "CONVENTIONS.md"]
 
         self.clone_calls: list[tuple[tuple, dict]] = []
         self.remove_calls: list[tuple[tuple, dict]] = []
@@ -38,6 +40,7 @@ class FakeLocalRepository:
         self.commit_messages_calls: list[tuple[tuple, dict]] = []
         self.resolve_base_sha_calls: list[tuple[tuple, dict]] = []
         self.read_file_calls: list[tuple[tuple, dict]] = []
+        self.list_tree_calls: list[tuple[tuple, dict]] = []
 
         self._read_file_idx = 0
 
@@ -77,8 +80,18 @@ class FakeLocalRepository:
             if isinstance(result, BaseException):
                 raise result
             return result
+        if isinstance(self.read_file_return, BaseException):
+            raise self.read_file_return
         return self.read_file_return
 
     @property
     def last_clone_path(self) -> Path | None:
         return self._last_clone_path
+
+    def list_tree(
+        self, repo_path: Path, ref: str = "HEAD",
+    ) -> list[str]:
+        self.list_tree_calls.append(((repo_path,), {"ref": ref}))
+        if isinstance(self.list_tree_return, BaseException):
+            raise self.list_tree_return
+        return self.list_tree_return

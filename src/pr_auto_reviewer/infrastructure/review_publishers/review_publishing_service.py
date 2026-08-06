@@ -166,7 +166,6 @@ class ReviewPublishingService:
         platform: str = "github",
     ) -> list[dict]:
         """Build inline comment payloads from diff positions."""
-        comments: list[dict] = []
 
         if platform == "forgejo":
             return self._build_forgejo_inline_comments(

@@ -39,7 +39,7 @@ class GithubReviewPublisher(ReviewPublisherPort):
     def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
-        processed = self._processor.process(pr_id, review, split_non_blocking=False)
+        processed = self._processor.process(pr_id, review)
 
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "

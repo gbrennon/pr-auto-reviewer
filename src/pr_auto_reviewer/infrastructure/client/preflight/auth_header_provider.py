@@ -6,6 +6,12 @@ from typing import Protocol
 
 
 class AuthHeaderProvider(Protocol):
+    """Platform-specific auth header strategy for preflight token verification.
+
+    Implementations provide the ``Authorization`` header format and any
+    extra headers required for write-access checks (e.g. GitHub's
+    ``Accept`` header).
+    """
     def auth_header(self, token: str) -> dict[str, str]:
         """Return the ``Authorization`` header for *token*."""
         ...
