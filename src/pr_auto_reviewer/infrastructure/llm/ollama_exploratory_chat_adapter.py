@@ -26,6 +26,8 @@ from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
 )
@@ -476,14 +478,14 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         return self._verify_and_rebuild(self._merge_items(all_items, last_phase_result), repo_path, changed_files)
 
 
-    def review_prompt(self, composed: ComposedPrompt) -> CodeReview:
+    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
         """Run all review phases against the composed prompt's repository."""
-        repo_path = composed.repo_path
+        repo_path = prompt.repo_path
         if not repo_path or not repo_path.strip():
             raise ValueError(
                 "repo_path is required for staged multi-phase review"
             )
-        changed_files = self._extract_file_listing(composed.content)
+        changed_files = self._extract_file_listing(prompt.content)
         return self._run_phases_full_retry(repo_path.strip(), changed_files)
 
 
@@ -1282,6 +1284,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             file_path = str(item_dict.get("file", ""))
             if file_path.startswith(("a/", "b/")):
                 file_path = file_path[2:]
+            full_path: Path | None = None
             if repo_root is not None and file_path:
                 full_path = repo_root / file_path
                 if not full_path.exists():
@@ -1300,7 +1303,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             current_code = str(item_dict.get("current_code", ""))
             suggested_fix = str(item_dict.get("suggested_fix", ""))
             line_str = str(item_dict.get("line", ""))
-            if repo_root is not None and file_path and (line_str or current_code):
+            if full_path is not None and file_path and (line_str or current_code):
                 file_lines = full_path.read_text().splitlines()
                 if line_str:
                     try:
@@ -1338,9 +1341,9 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
             review_item = ReviewItem(
                 number=len(review_items) + 1,
-                severity=str(item_dict.get("severity", "info")),
-                category=str(
-                    item_dict.get("category", "maintainability")
+                severity=ItemSeverity(str(item_dict.get("severity", "info"))),
+                category=IssueCategory.from_value(
+                    str(item_dict.get("category", "maintainability"))
                 ),
                 file_path=file_path,
                 description=str(item_dict.get("description", "")),
