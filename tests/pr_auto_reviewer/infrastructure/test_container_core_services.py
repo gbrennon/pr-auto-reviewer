@@ -131,7 +131,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._host == "http://custom-llm:9999"
+        assert result.llm_review._chat_client._host == "http://custom-llm:9999"
 
     def test_llm_review_uses_config_llm_model(
         self,
@@ -146,7 +146,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._model == "custom-model:v2"
+        assert result.llm_review._chat_client._model == "custom-model:v2"
 
     def test_llm_review_defaults_to_code_review_when_no_model(
         self,
@@ -155,7 +155,7 @@ class TestWireCoreServices:
     ) -> None:
         result = wire_core_services(forgejo_config, repo_context)
 
-        assert result.llm_review._model == "code-review:latest"
+        assert result.llm_review._chat_client._model == "code-review:latest"
 
     def test_llm_review_uses_config_ollama_timeout(
         self,
@@ -170,7 +170,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._timeout == 300
+        assert result.llm_review._chat_client._timeout == 300
 
     def test_fragment_max_tokens_is_none_when_not_in_config(
         self,
