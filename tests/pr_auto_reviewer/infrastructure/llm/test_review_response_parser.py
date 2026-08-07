@@ -208,10 +208,10 @@ class TestReviewResponseParser:
         assert result.summary == "ok"
 
     def test_extract_outermost_json_when_no_braces_then_returns_none(self):
-        assert ReviewResponseParser._extract_outermost_json("no braces here") is None
+        assert ReviewResponseParser.extract_outermost_json("no braces here") is None
 
     def test_extract_outermost_json_when_nested_braces_then_returns_outermost(self):
-        result = ReviewResponseParser._extract_outermost_json('{"a": {"b": 1}}')
+        result = ReviewResponseParser.extract_outermost_json('{"a": {"b": 1}}')
         assert result is not None
         assert result.startswith("{")
         assert result.endswith("}")
