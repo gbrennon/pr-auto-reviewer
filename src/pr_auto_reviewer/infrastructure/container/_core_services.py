@@ -9,9 +9,35 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
-    OllamaExploratoryChatAdapter,
+from pr_auto_reviewer.application.services.agent_conversation_service import (
+    AgentConversationService,
+)
+from pr_auto_reviewer.application.services.finding_aggregator import (
+    FindingAggregator,
+)
+from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
+    MultiPhaseReviewOrchestrator,
+)
+from pr_auto_reviewer.application.services.turn_parser import TurnParser
+from pr_auto_reviewer.application.services.finding_verifier import (
+    FindingVerifier,
+)
+from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.infrastructure.llm.ollama_agent_adapter import (
+    OllamaAgentAdapter,
+)
+from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
+    OllamaChatClient,
+)
+from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
+    ExplorationToolService,
+)
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+from pr_auto_reviewer.infrastructure.review_publishers._shared import (
+    ReasonBuilder,
 )
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
@@ -36,6 +62,56 @@ from pr_auto_reviewer.infrastructure.context.review_context_factory import (
 )
 
 logger = logging.getLogger(__name__)
+
+_PHASE_PROMPT_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "fragments"
+    / "content"
+    / "universal"
+)
+
+_PHASES: list[tuple[str, str]] = [
+    ("bug-hunt-diff", "Bug Hunt — Diff"),
+    ("bug-hunt-branch", "Bug Hunt — Branch"),
+    ("architecture-review", "Architecture Review"),
+]
+
+_METHODOLOGY = (
+    "\n## ANTI-HALLUCINATION RULES\n\n"
+    "Before identifying any issue in a file, you MUST read that file first.\n"
+    "Never reference a file path or symbol you have not confirmed exists\n"
+    "via read_file, search_codebase, or list_directory.\n"
+    "Every finding MUST be grounded in code you actually observed.\n"
+    "If a tool returns an error (e.g. file not found, permission denied),\n"
+    "do NOT report that error as a finding. Either retry with a corrected\n"
+    "path or skip the file entirely. Tool errors are not code issues.\n"
+    "If the repository appears to be in a language you do not understand,\n"
+    "say so — never fabricate findings in a different language.\n"
+    "After reading each file, describe what you observed before forming judgments.\n"
+    "Only include findings whose evidence comes from code you successfully read.\n"
+    "Before reporting a class as missing any method (especially __init__),\n"
+    "read the superclass to verify the method is not inherited. If a class\n"
+    "body is simply 'pass', it inherits all behavior from its parent —\n"
+    "verify before reporting anything missing.\n"
+    "Never emit a final verdict until you have inspected at least one changed\n"
+    "file with the exploration tools; a verdict with zero tool calls is\n"
+    "rejected and you will be asked to explore.\n"
+)
+
+
+def _build_review_plan() -> ReviewPlan:
+    """Load phase prompts from disk and build a ``ReviewPlan``."""
+    phases: list[ReviewPhase] = []
+    for phase_id, phase_name in _PHASES:
+        path = _PHASE_PROMPT_DIR / f"{phase_id}.md"
+        raw = path.read_text()
+        prompt = ReviewResponseParser.strip_frontmatter(raw)
+        phases.append(ReviewPhase(
+            phase_id=phase_id,
+            phase_name=phase_name,
+            system_prompt=prompt,
+        ))
+    return ReviewPlan(phases=tuple(phases), methodology=_METHODOLOGY)
 
 if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
@@ -99,11 +175,42 @@ def wire_core_services(
     pr_repository = JsonFilePullRequestRepository(
         os.path.join(config_dir, "state.json")
     )
-    llm_review: LlmReviewPort = OllamaExploratoryChatAdapter(
+    chat_client = OllamaChatClient(
         model=config.llm_model or "code-review:latest",
         host=config.llm_host,
-        ollama_timeout=config.ollama_timeout,
+        timeout=config.ollama_timeout,
         max_retries=config.llm_max_retries,
+    )
+    turn_parser = TurnParser(ReviewResponseParser())
+    conversation_service = AgentConversationService(
+        chat_port=chat_client,
+        turn_parser=turn_parser,
+    )
+    verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
+    verify_prompt = ReviewResponseParser.strip_frontmatter(
+        verify_prompt_path.read_text()
+    )
+    verifier = FindingVerifier(
+        chat_port=chat_client,
+        verify_prompt=verify_prompt,
+        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
+            repo_path, changed_files=changed_files
+        ),
+    )
+    aggregator = FindingAggregator(ReasonBuilder())
+    orchestrator = MultiPhaseReviewOrchestrator(
+        conversation_service=conversation_service,
+        aggregator=aggregator,
+        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
+            repo_path, changed_files=changed_files
+        ),
+        verifier=verifier,
+    )
+    plan = _build_review_plan()
+    llm_review: LlmReviewPort = OllamaAgentAdapter(
+        chat_client=chat_client,
+        orchestrator=orchestrator,
+        plan=plan,
     )
     command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
