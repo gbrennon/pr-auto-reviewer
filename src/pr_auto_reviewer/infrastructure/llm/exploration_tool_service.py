@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.agent.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
@@ -70,6 +72,21 @@ class ExplorationToolService:
         if operation == "get_changed_files":
             return self.get_changed_files()
         return {"status": "error", "error": f"Unknown operation: {operation}"}
+
+    def execute_tool(self, tool_call: ToolCall) -> ToolResult:
+        """Execute a ``ToolCall`` and return a ``ToolResult``.
+
+        Delegates to the existing ``execute()`` method, mapping the
+        dict return value to a ``ToolResult``.
+        """
+        operation = tool_call.tool_name
+        args = tool_call.arguments.get("args", "")
+        result = self.execute(operation, args)
+        return ToolResult(
+            status=result.get("status", "error"),
+            data=result if result.get("status") == "ok" else None,
+            error=result.get("error"),
+        )
 
     def read_file(self, args: str) -> dict[str, Any]:
         """Read a file (or line range) relative to the repo root.
