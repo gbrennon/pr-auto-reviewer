@@ -32,7 +32,7 @@ class ReviewResponseParser:
             return self._code_review_from_dict(data, model)
         except (json.JSONDecodeError, ValueError):
             logger.debug("parse: JSON decode failed, trying text extraction")
-        extracted = self._extract_outermost_json(cleaned)
+        extracted = self.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
                 data = json.loads(extracted)
@@ -262,7 +262,7 @@ class ReviewResponseParser:
         return ReviewVerdict.COMMENTED
 
     @classmethod
-    def _extract_outermost_json(cls, text: str) -> str | None:
+    def extract_outermost_json(cls, text: str) -> str | None:
         brace_level = 0
         start = -1
         for i, ch in enumerate(text):
@@ -441,7 +441,7 @@ class ReviewResponseParser:
                 return []
         except (json.JSONDecodeError, ValueError):
             logger.debug("parse_items: JSON parse failed, trying text extraction")
-        extracted = ReviewResponseParser._extract_outermost_json(cleaned)
+        extracted = ReviewResponseParser.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
                 data = json.loads(extracted)

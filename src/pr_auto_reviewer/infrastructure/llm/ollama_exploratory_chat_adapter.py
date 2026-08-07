@@ -1,4 +1,14 @@
-"""Staged multi-phase code review via Ollama chat API with exploration tools."""
+"""DEPRECATED: Staged multi-phase code review via Ollama chat API with exploration tools.
+
+This adapter has been replaced by the agentic review architecture:
+- OllamaAgentAdapter (infrastructure/llm/ollama_agent_adapter.py)
+- AgentConversationService (application/services/agent_conversation_service.py)
+- MultiPhaseReviewOrchestrator (application/services/multi_phase_review_orchestrator.py)
+- TurnParser (application/services/turn_parser.py)
+- FindingAggregator (application/services/finding_aggregator.py)
+
+Kept for backward compatibility with existing tests. Do NOT add new features.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +17,11 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, ClassVar
 import requests
 
+from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
@@ -94,26 +105,6 @@ _REASON_GENERATOR_PROMPT = (
     "{findings}\n\n"
     "Write ONLY the reason sentence. No prefixes, labels, or formatting."
 )
-
-
-
-
-@dataclass
-class PhaseResult:
-    """Items and metadata from a single review phase conversation.
-
-    Carries LLM-extracted verdict, reason, summary, suggestions, and
-    praise alongside the validated ReviewItem list so downstream code
-    can populate every CodeReview field.
-    """
-
-    items: list[ReviewItem] = field(default_factory=list)
-    llm_verdict: str | None = None
-    llm_reason: str = ""
-    llm_summary: str = ""
-    llm_suggestions: list[dict[str, str]] = field(default_factory=list)
-    llm_praise: list[dict[str, str]] = field(default_factory=list)
-    skip_reasons: list[str] = field(default_factory=list)
 
 
 class OllamaExploratoryChatAdapter(LlmReviewPort):
@@ -973,7 +964,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
-            extracted = self._parser._extract_outermost_json(content)
+            extracted = self._parser.extract_outermost_json(content)
             if extracted is not None:
                 try:
                     data = json.loads(extracted)
@@ -1157,7 +1148,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
-            extracted = self._parser._extract_outermost_json(content)
+            extracted = self._parser.extract_outermost_json(content)
             if extracted is None:
                 return {}
             try:
@@ -1197,7 +1188,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
-            extracted = self._parser._extract_outermost_json(content)
+            extracted = self._parser.extract_outermost_json(content)
             if extracted is not None:
                 try:
                     parsed = json.loads(extracted)
