@@ -6,7 +6,7 @@ One-off review against a pull request on **GitHub** or **Codeberg**.
 
 ```bash
 cp .env.example .env   # edit .env with your tokens
-uv run pr-auto-reviewer review --repo owner/repo --pr <number>
+uv run python -m pr_auto_reviewer review --repo owner/repo --pr <number>
 ```
 
 ## Environment
