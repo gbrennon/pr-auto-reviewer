@@ -11,8 +11,8 @@ This document outlines what is currently implemented and what is planned.
 - **Draft PR Skipping** - Skips draft PRs automatically
 - **Duplicate Prevention** - Uses SHA-based state to avoid re-reviewing unchanged PRs
 - **AI Code Review** - Sends PR diff to Ollama and receives review
-- **Review Posting** - Submits formal review (approve/request_changes) with inline diff comments
-- **Comment Review** - Non-blocking items posted as single comment on PR (COMMENTED verdict)
+- **Review Posting** — Submits formal review (approve/request_changes) with inline diff comments. Forgejo splits non-blocking items (MINOR/INFO) into a separate comment; GitHub keeps all items in the formal review.
+- **Comment Review** — COMMENTED verdict path: all items posted as a single comment on the PR (no formal review)
 
 ### Configuration
 
@@ -23,8 +23,8 @@ This document outlines what is currently implemented and what is planned.
 ### Operations
 
 - **Bootstrap** — `uv run python -m pr_auto_reviewer bootstrap` sets up repo config
-- **Daemon Mode** — `uv run python -m pr_auto_reviewer daemon start|stop|status`
-- **Single Review** — `uv run python -m pr_auto_reviewer task --repo <org>/<repo> --pr <N>`
+- **Daemon Mode** — `uv run python -m pr_auto_reviewer start|stop|status`
+- **Single Review** — `uv run python -m pr_auto_reviewer review --repo <org>/<repo> --pr <N>`
 - **Command Processing** — `uv run python -m pr_auto_reviewer process-commands --repo <org>/<repo> --pr <N>`
 
 ### Service Management
