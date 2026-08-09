@@ -193,7 +193,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 if tool_calls > 0:
                     logger.debug("Got verdict at turn %d", turn + 1)
                     phase_result = self._build_phase_result(
-                        parsed, repo_path
+                        parsed, repo_path, changed_files
                     )
                     self._publish(ConversationCompletedEvent(
                         phase_result=phase_result
@@ -258,13 +258,13 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _build_phase_result(
-        self, parsed: TurnParseResult, repo_path: str
+        self, parsed: TurnParseResult, repo_path: str, changed_files: list[str]
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
         metadata = parsed.metadata or {}
         review_items, skip_reasons = ReviewItemFactory().create(
-            raw_items, repo_path
+            raw_items, repo_path, changed_files
         )
         return PhaseResult(
             items=review_items,
