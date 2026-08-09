@@ -142,5 +142,5 @@ Both modes produce good reviews. The choice is a tradeoff between comprehensiven
 ## Implementation reference
 
 - **Flag parsing**: `src/pr_auto_reviewer/infrastructure/config/config.py` — `use_strict_fragment_selection` field
-- **Selection logic**: `src/pr_auto_reviewer/infrastructure/fragments/compose_review_prompt_adapter.py` — `_select_fragments()` method (line 84)
+- **Selection logic**: `src/pr_auto_reviewer/infrastructure/fragments/compose_review_prompt_adapter.py` — `_select_fragments()` method (line 83)
 - **Fragment metadata**: YAML front matter in `src/pr_auto_reviewer/infrastructure/fragments/content/**/*.md`

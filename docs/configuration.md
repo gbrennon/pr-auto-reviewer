@@ -3,7 +3,7 @@
 All configuration via environment variables, loaded from three sources
 (lower number = higher priority):
 
-1. **Shell environment** — ``make`` targets and direct exports
+1. **Shell environment** — direct exports
 2. **Project ``.env``** — repo root for dev/manual mode
 3. **User config** —
    ``~/.config/pr-auto-reviewer/config`` for production/service mode
@@ -151,6 +151,9 @@ is always available as the default.
 
 ## Generating Tokens
 
+For comprehensive token setup guides including scopes, permissions,
+and platform-specific details, see `docs/tokens/ <tokens/>`_.
+
 ### GitHub
 
 **Classic PAT:**
@@ -181,14 +184,27 @@ For both platforms, create a separate account for the bot and generate a token w
 ## Example .env
 
 ```bash
+# --- Single-platform: GitHub ---
 PLATFORM_MODE=github
 GITHUB_OWNER_TOKEN=ghp_your_github_token
 GITHUB_REVIEWER_TOKEN=ghp_your_reviewer_token
 GITHUB_REVIEWER_USERNAME=code-reviewer-bot
+
+# --- Single-platform: Codeberg ---
+# PLATFORM_MODE=codeberg
+# FORGEJO_OWNER_TOKEN=fc_your_codeberg_token
+# FORGEJO_REVIEWER_TOKEN=fc_your_reviewer_token
+# FORGEJO_REVIEWER_USERNAME=code-reviewer-bot
+
+# --- Review output ---
+REVIEW_OUTPUT=terminal
+
+# --- LLM ---
 LLM_MODEL=code-review
 LLM_HOST=http://localhost:11434
+
+# --- Daemon ---
 POLL_INTERVAL=60
-USE_STRICT_FRAGMENT_SELECTION=true
 ```
 
 ### Feature Flags
