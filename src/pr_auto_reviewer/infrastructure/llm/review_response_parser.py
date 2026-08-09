@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -81,6 +82,72 @@ class ReviewResponseParser:
                 )
             )
         return items
+
+    _IMPROVEMENT_SECTION = re.compile(
+        r"(?:###|####|\*\*)\s*[^\w]*(?:\*\*)?\s*(?:Key\s+)?(?:Potential\s+(?:Issues\s+and\s+)?Improvements?|Issues(?:\s+(?:Found|and\s+Improvements))?|Problems?|Concerns?|Considerations?\s+for\s+Robustness|Recommendations?|Suggestions?|Findings|Observations|Action\s+Items).*?\n+(.*?)(?=\n###\s|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _H4_ITEM = re.compile(
+        r"^####\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+
+    _NUMBERED_ITEM = re.compile(
+        r"^\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BULLET_ITEM = re.compile(
+        r"^[-*]\s+\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BACKTICK_PATH = re.compile(r"`([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)`")
+
+    @classmethod
+    def _parse_prose_items(cls, content: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for match in cls._IMPROVEMENT_SECTION.finditer(content):
+            section_body = match.group(1)
+            section_items: list[dict[str, Any]] = []
+            for item_match in cls._H4_ITEM.finditer(section_body):
+                title = item_match.group(1).strip().rstrip("*:").strip()
+                if len(title) > 10:
+                    section_items.append(cls._make_prose_item(title, section_body, item_match.start()))
+            if not section_items:
+                for item_match in cls._NUMBERED_ITEM.finditer(section_body):
+                    title = item_match.group(1).strip().rstrip("*:").strip()
+                    if len(title) > 10:
+                        section_items.append(cls._make_prose_item(title, section_body, item_match.start()))
+            if not section_items:
+                for item_match in cls._BULLET_ITEM.finditer(section_body):
+                    title = item_match.group(1).strip().rstrip("*:").strip()
+                    if len(title) > 10:
+                        section_items.append(cls._make_prose_item(title, section_body, item_match.start()))
+            items.extend(section_items)
+        return items
+
+    @classmethod
+    def _make_prose_item(cls, title: str, section_body: str, match_start: int) -> dict[str, Any]:
+        context_end = min(match_start + 500, len(section_body))
+        context = section_body[match_start:context_end]
+        file_path = ""
+        path_match = cls._BACKTICK_PATH.search(context)
+        if path_match:
+            candidate = path_match.group(1)
+            if "." in candidate and not candidate.startswith("`"):
+                file_path = candidate
+        return {
+            "file": file_path,
+            "severity": "minor",
+            "category": "maintainability",
+            "description": title,
+            "line": "",
+            "current_code": "",
+            "suggested_fix": "",
+        }
 
     @classmethod
     def _extract_verdict_md(cls, raw_text: str) -> ReviewVerdict:
@@ -179,9 +246,7 @@ class ReviewResponseParser:
                 current_code=str(item_dict.get("current_code", "")),
                 suggested_fix=str(item_dict.get("suggested_fix", "")),
             )
-            if not review_item.file_path:
-                continue
-            if not review_item.current_code and not review_item.suggested_fix:
+            if not review_item.file_path and not review_item.description:
                 continue
             items.append(review_item)
         return CodeReview(
@@ -416,7 +481,12 @@ class ReviewResponseParser:
             re.DOTALL,
         )
         if code_block_match:
-            cleaned = code_block_match.group(1).strip()
+            extracted = code_block_match.group(1).strip()
+            try:
+                json.loads(extracted)
+                cleaned = extracted
+            except (json.JSONDecodeError, ValueError):
+                pass
         try:
             data = json.loads(cleaned)
             if isinstance(data, list):
@@ -440,7 +510,7 @@ class ReviewResponseParser:
                     return fallback
                 return []
         except (json.JSONDecodeError, ValueError):
-            logger.debug("parse_items: JSON parse failed, trying text extraction")
+            pass
         extracted = ReviewResponseParser.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
@@ -455,6 +525,30 @@ class ReviewResponseParser:
                     return fallback
             except (json.JSONDecodeError, ValueError):
                 pass
+        logger.debug("parse_items: JSON and extraction failed, trying markdown fallback")
+        markdown_items = ReviewResponseParser._parse_markdown_items(cleaned)
+        if markdown_items:
+            return [
+                {
+                    "file": item.file_path,
+                    "severity": item.severity.value,
+                    "category": item.category.value,
+                    "description": item.description,
+                    "line": item.line,
+                    "current_code": item.current_code,
+                    "suggested_fix": item.suggested_fix,
+                }
+                for item in markdown_items
+            ]
+        prose_items = ReviewResponseParser._parse_prose_items(cleaned)
+        if prose_items:
+            logger.info("parse_items: extracted %d items via prose parser", len(prose_items))
+            return prose_items
+        logger.warning(
+            "parse_items: all parsers failed — dumping raw content (%d chars) to /tmp/parse_items_failed.txt",
+            len(raw_text),
+        )
+        Path("/tmp/parse_items_failed.txt").write_text(raw_text)
         return []
 
     @classmethod

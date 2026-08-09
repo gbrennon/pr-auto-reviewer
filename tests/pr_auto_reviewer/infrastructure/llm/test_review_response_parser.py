@@ -80,7 +80,7 @@ class TestReviewResponseParser:
         result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.COMMENTED
 
-    def test_parse_json_with_info_only_no_code_returns_commented(self):
+    def test_parse_json_keeps_item_with_file_and_description(self):
         data = {
             "issues": [
                 {"file": "x.py", "line": "1",
@@ -91,10 +91,11 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
-        assert result.verdict == ReviewVerdict.COMMENTED
-        assert result.items == []
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
+        assert result.items[0].description == "minor"
 
-    def test_parse_json_drops_issue_without_concrete_code(self):
+    def test_parse_json_keeps_item_with_description_even_without_code(self):
         data = {
             "issues": [
                 {"file": "x.py", "line": "1",
@@ -105,9 +106,10 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
-        assert result.items == []
+        assert len(result.items) == 1
+        assert result.items[0].description == "abstract issue"
 
-    def test_parse_json_drops_issue_without_file_path(self):
+    def test_parse_json_keeps_item_with_description_even_without_file_path(self):
         data = {
             "issues": [
                 {"line": "1", "severity": "medium", "type": "quality",
@@ -119,7 +121,8 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
-        assert result.items == []
+        assert len(result.items) == 1
+        assert result.items[0].description == "missing file"
 
     def test_parse_json_ignores_file_summary_changes_key(self):
         data = {
