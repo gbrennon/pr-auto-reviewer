@@ -51,6 +51,9 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     ReasonBuilder,
 )
+from pr_auto_reviewer.domain.services.review_item_factory import (
+    ReviewItemFactory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,17 +129,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
     _VERIFY_MAX_TURNS = 5
     _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
-    _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
-        "file not found",
-        "unable to verify",
-        "cannot access",
-        "could not read",
-        "does not exist",
-        "not accessible",
-        "not found in",
-        "could not be found",
-        "unable to locate",
-    )
 
     _DUPLICATE_SUFFIX = ". This was previously identified but may have additional instances."
 
@@ -1174,7 +1166,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         """
         items = self._parser.parse_items(content)
         if items:
-            review_items, skip_reasons = self._build_review_items(items, repo_path)
+            review_items, skip_reasons = ReviewItemFactory().create(items, repo_path)
             metadata = self._extract_verdict_metadata(content)
             return PhaseResult(
                 items=review_items,
@@ -1224,7 +1216,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             llm_summary = str(parsed.get("summary", ""))
             llm_suggestions = self._normalize_suggestions(parsed.get("suggestions", []))
             llm_praise = self._normalize_praise(parsed.get("praise", []))
-            review_items, skip_reasons = self._build_review_items(items_data, repo_path)
+            review_items, skip_reasons = ReviewItemFactory().create(items_data, repo_path)
             return PhaseResult(
                 items=review_items,
                 llm_verdict=llm_verdict,
@@ -1257,101 +1249,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             if fallback in raw_args:
                 return str(raw_args[fallback])
         return str(raw_args)
-    def _build_review_items(
-        self,
-        item_dicts: list[dict[str, Any]],
-        repo_path: str,
-    ) -> tuple[list[ReviewItem], list[str]]:
-        """Construct ReviewItem domain objects from parsed item dicts.
-
-        Validates that each ``file_path`` exists in the repository;
-        hallucinated paths are skipped with a warning. Returns validated
-        items and a list of human-readable skip reasons for feedback.
-        """
-        repo_root = Path(repo_path) if repo_path else None
-        review_items: list[ReviewItem] = []
-        skip_reasons: list[str] = []
-        for item_dict in item_dicts:
-            file_path = str(item_dict.get("file", ""))
-            if file_path.startswith(("a/", "b/")):
-                file_path = file_path[2:]
-            full_path: Path | None = None
-            if repo_root is not None and file_path:
-                full_path = repo_root / file_path
-                if not full_path.exists():
-                    reason = f"file not found: {file_path}"
-                    logger.warning("Skipping finding — %s", reason)
-                    skip_reasons.append(reason)
-                    continue
-                try:
-                    file_path = str(
-                        full_path.resolve().relative_to(
-                            repo_root.resolve()
-                        )
-                    )
-                except ValueError:
-                    pass
-            current_code = str(item_dict.get("current_code", ""))
-            suggested_fix = str(item_dict.get("suggested_fix", ""))
-            line_str = str(item_dict.get("line", ""))
-            if full_path is not None and file_path and (line_str or current_code):
-                file_lines = full_path.read_text().splitlines()
-                if line_str:
-                    try:
-                        line_num = int(line_str)
-                        if not (1 <= line_num <= len(file_lines)):
-                            reason = f"line {line_str} out of range in {file_path} ({len(file_lines)} lines)"
-                            logger.warning("Skipping finding — %s", reason)
-                            skip_reasons.append(reason)
-                            continue
-                        if current_code:
-                            actual_line = file_lines[line_num - 1].strip()
-                            if current_code.strip() != actual_line:
-                                reason = f"code mismatch at {file_path}:{line_str}"
-                                logger.warning("Skipping finding — %s", reason)
-                                skip_reasons.append(reason)
-                                continue
-                    except ValueError:
-                        pass
-            if repo_root is not None and file_path and not current_code and not suggested_fix:
-                reason = f"no code evidence in {file_path}"
-                logger.warning("Skipping finding — %s", reason)
-                skip_reasons.append(reason)
-                continue
-            description = str(item_dict.get("description", ""))
-            if repo_root is not None and file_path and not current_code and description:
-                description_lower = description.lower()
-                if any(
-                    pattern in description_lower
-                    for pattern in self._FABRICATED_ERROR_PATTERNS
-                ):
-                    reason = f"fabricated narrative in {file_path}: {description[:80]}"
-                    logger.warning("Skipping finding — %s", reason)
-                    skip_reasons.append(reason)
-                    continue
-
-            review_item = ReviewItem(
-                number=len(review_items) + 1,
-                severity=ItemSeverity(str(item_dict.get("severity", "info"))),
-                category=IssueCategory.from_value(
-                    str(item_dict.get("category", "maintainability"))
-                ),
-                file_path=file_path,
-                description=str(item_dict.get("description", "")),
-                line=str(item_dict.get("line", "")),
-                current_code=current_code,
-                suggested_fix=suggested_fix,
-            )
-            review_items.append(review_item)
-
-        if skip_reasons:
-            logger.info(
-                "%d items parsed, %d skipped: %s",
-                len(item_dicts),
-                len(skip_reasons),
-                ", ".join(skip_reasons),
-            )
-        return review_items, skip_reasons
 
     def _stream_chat(self, messages: list[dict[str, Any]]) -> str:
         """Send chat messages to Ollama and accumulate the streamed response."""
