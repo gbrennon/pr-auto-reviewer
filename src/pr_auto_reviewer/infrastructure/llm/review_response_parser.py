@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -80,6 +81,59 @@ class ReviewResponseParser:
                     suggested_fix="",
                 )
             )
+        return items
+
+    _IMPROVEMENT_SECTION = re.compile(
+        r"(?:###|\*\*)\s*[^\w]*(?:\*\*)?\s*(?:Potential\s+Improvements?|Issues|Problems?|Concerns?|Considerations?\s+for\s+Robustness|Recommendations?|Suggestions?)\s*(?:\*\*)?[^\w]*\s*\n+(.*?)(?=\n(?:###|\*\*|---)|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _NUMBERED_ITEM = re.compile(
+        r"^\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BULLET_ITEM = re.compile(
+        r"^[-*]\s+\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    @classmethod
+    def _parse_prose_items(cls, content: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for match in cls._IMPROVEMENT_SECTION.finditer(content):
+            section_body = match.group(1)
+            section_items: list[dict[str, Any]] = []
+            for item_match in cls._NUMBERED_ITEM.finditer(section_body):
+                title = item_match.group(1).strip().rstrip("*:").strip()
+                if len(title) > 10:
+                    section_items.append(
+                        {
+                            "file": "",
+                            "severity": "minor",
+                            "category": "maintainability",
+                            "description": title,
+                            "line": "",
+                            "current_code": "",
+                            "suggested_fix": "",
+                        }
+                    )
+            if not section_items:
+                for item_match in cls._BULLET_ITEM.finditer(section_body):
+                    title = item_match.group(1).strip().rstrip("*:").strip()
+                    if len(title) > 10:
+                        section_items.append(
+                            {
+                                "file": "",
+                                "severity": "minor",
+                                "category": "maintainability",
+                                "description": title,
+                                "line": "",
+                                "current_code": "",
+                                "suggested_fix": "",
+                            }
+                        )
+            items.extend(section_items)
         return items
 
     @classmethod
@@ -440,7 +494,7 @@ class ReviewResponseParser:
                     return fallback
                 return []
         except (json.JSONDecodeError, ValueError):
-            logger.debug("parse_items: JSON parse failed, trying text extraction")
+            pass
         extracted = ReviewResponseParser.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
@@ -455,6 +509,30 @@ class ReviewResponseParser:
                     return fallback
             except (json.JSONDecodeError, ValueError):
                 pass
+        logger.debug("parse_items: JSON and extraction failed, trying markdown fallback")
+        markdown_items = ReviewResponseParser._parse_markdown_items(cleaned)
+        if markdown_items:
+            return [
+                {
+                    "file": item.file_path,
+                    "severity": item.severity.value,
+                    "category": item.category.value,
+                    "description": item.description,
+                    "line": item.line,
+                    "current_code": item.current_code,
+                    "suggested_fix": item.suggested_fix,
+                }
+                for item in markdown_items
+            ]
+        prose_items = ReviewResponseParser._parse_prose_items(cleaned)
+        if prose_items:
+            logger.info("parse_items: extracted %d items via prose parser", len(prose_items))
+            return prose_items
+        logger.warning(
+            "parse_items: all parsers failed — dumping raw content (%d chars) to /tmp/parse_items_failed.txt",
+            len(raw_text),
+        )
+        Path("/tmp/parse_items_failed.txt").write_text(raw_text)
         return []
 
     @classmethod
