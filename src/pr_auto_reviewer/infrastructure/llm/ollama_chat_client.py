@@ -61,6 +61,7 @@ class OllamaChatClient(AgentChatPort):
                     stream=True,
                 )
                 http_response.raise_for_status()
+                http_response.encoding = "utf-8"
                 content_parts: list[str] = []
                 thinking_parts: list[str] = []
                 for line in http_response.iter_lines(decode_unicode=True):
@@ -70,13 +71,13 @@ class OllamaChatClient(AgentChatPort):
                         chunk: dict[str, Any] = json.loads(line)
                     except json.JSONDecodeError:
                         logger.warning(
-                            "Failed to parse streaming line as JSON "
+                            "Skipping unparseable streaming line "
                             "(attempt %d/%d): %.300s",
                             attempt + 1,
                             self._max_retries,
                             line,
                         )
-                        raise
+                        continue
                     message = chunk.get("message", {})
                     if isinstance(message, list):
                         for msg in message:
@@ -106,13 +107,6 @@ class OllamaChatClient(AgentChatPort):
                     len(messages),
                 )
                 return result
-            except json.JSONDecodeError:
-                if attempt == self._max_retries - 1:
-                    raise LlmUnavailableError(
-                        f"LLM chat API returned unparseable streaming "
-                        f"response after {self._max_retries} attempts"
-                    )
-                time.sleep(2**attempt)
             except requests.RequestException as exc:
                 if attempt == self._max_retries - 1:
                     raise LlmUnavailableError(
