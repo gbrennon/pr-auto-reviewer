@@ -35,6 +35,7 @@ class ReviewItemFactory:
         self,
         item_dicts: list[dict[str, Any]],
         repo_path: str,
+        changed_files: list[str] | None = None,
     ) -> tuple[list[ReviewItem], list[str]]:
         """Construct ReviewItem domain objects from parsed item dicts.
 
@@ -44,7 +45,9 @@ class ReviewItemFactory:
         repo_root = Path(repo_path) if repo_path else None
         review_items: list[ReviewItem] = []
         skip_reasons: list[str] = []
-
+        default_file = (
+            changed_files[0] if changed_files and len(changed_files) == 1 else ""
+        )
         for item_dict in item_dicts:
             if not isinstance(item_dict, dict):
                 logger.warning("Skipping non-dict item: %s", str(item_dict)[:200])
@@ -52,6 +55,8 @@ class ReviewItemFactory:
             file_path = str(item_dict.get("file", ""))
             if file_path.startswith(("a/", "b/")):
                 file_path = file_path[2:]
+            if not file_path and default_file:
+                file_path = default_file
             full_path: Path | None = None
             if repo_root is not None and file_path:
                 full_path = repo_root / file_path
