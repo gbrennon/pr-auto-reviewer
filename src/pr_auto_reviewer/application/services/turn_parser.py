@@ -44,6 +44,7 @@ class TurnParser(ParseReviewTurnUseCase):
         caller can validate items against the repository.
         """
         items = self._parser.parse_items(content)
+        logger.debug("_parse: parse_items returned %d items", len(items))
         if items:
             metadata = self._extract_verdict_metadata(content)
             return TurnParseResult(
@@ -54,6 +55,7 @@ class TurnParser(ParseReviewTurnUseCase):
 
         parsed = self._parse_json(content)
         if parsed is None:
+            logger.debug("Unparseable content (first 2000 chars): %s", content[:2000])
             return TurnParseResult(kind="unparseable")
 
         if isinstance(parsed, dict) and "action" in parsed:
