@@ -1166,7 +1166,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         """
         items = self._parser.parse_items(content)
         if items:
-            review_items, skip_reasons = ReviewItemFactory().create(items, repo_path)
+            review_items, skip_reasons = ReviewItemFactory().create(items, repo_path, [])
             metadata = self._extract_verdict_metadata(content)
             return PhaseResult(
                 items=review_items,
@@ -1216,7 +1216,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             llm_summary = str(parsed.get("summary", ""))
             llm_suggestions = self._normalize_suggestions(parsed.get("suggestions", []))
             llm_praise = self._normalize_praise(parsed.get("praise", []))
-            review_items, skip_reasons = ReviewItemFactory().create(items_data, repo_path)
+            review_items, skip_reasons = ReviewItemFactory().create(items_data, repo_path, [])
             return PhaseResult(
                 items=review_items,
                 llm_verdict=llm_verdict,
