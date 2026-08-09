@@ -105,24 +105,24 @@ class TurnParser(ParseReviewTurnUseCase):
         if isinstance(parsed, list):
             return TurnParseResult(
                 kind="verdict",
-                raw_items=[],
+                raw_items=[item for item in parsed if isinstance(item, dict)],
                 metadata={},
             )
 
         return TurnParseResult(kind="unparseable")
 
     def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
-        """Extract verdict metadata from a JSON block in the content."""
+        """Extract verdict metadata from a JSON block or markdown in the content."""
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
             extracted = self._parser.extract_outermost_json(content)
             if extracted is None:
-                return {}
+                return self._extract_verdict_from_markdown(content)
             try:
                 parsed = json.loads(extracted)
             except json.JSONDecodeError:
-                return {}
+                return self._extract_verdict_from_markdown(content)
         if isinstance(parsed, dict) and "verdict" in parsed:
             return {
                 "verdict": str(parsed.get("verdict", "")),
@@ -137,7 +137,17 @@ class TurnParser(ParseReviewTurnUseCase):
                     parsed.get("praise", [])
                 ),
             }
-        return {}
+        return self._extract_verdict_from_markdown(content)
+
+    def _extract_verdict_from_markdown(self, content: str) -> dict[str, Any]:
+        verdict = self._parser._extract_verdict_md(content)
+        return {
+            "verdict": verdict.value,
+            "reason": "",
+            "summary": "",
+            "suggestions": [],
+            "praise": [],
+        }
 
     def _parse_json(self, content: str) -> Any:
         """Attempt to parse *content* as JSON, with markdown extraction fallback."""
