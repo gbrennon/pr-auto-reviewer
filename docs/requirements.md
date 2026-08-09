@@ -4,9 +4,8 @@
 
 - **Ollama** — Local AI inference server. Install from https://ollama.ai
 - **systemd** — For service management on Linux
-- **curl** — For API calls
-- **python3** — For JSON processing
-- **bash** — Shell scripts
+- **uv** — Python package manager. Install from https://docs.astral.sh/uv/
+- **python3** — Python 3.10+
 
 ## Hardware
 
@@ -16,12 +15,12 @@
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| Codeberg | Tested |
-| Forgejo | Tested |
-| Gitea | Should work |
-
+| Platform | Status   |
+|----------|----------|
+| GitHub   | Tested   |
+| Codeberg | Tested   |
+| Forgejo  | Tested   |
+| Gitea    | Should work |
 ## Accounts
 
 Requires two accounts or one account with two tokens:
