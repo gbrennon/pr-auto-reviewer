@@ -53,11 +53,11 @@ Forgejo/Codeberg expects:
 
 ## Publisher Behavior by Verdict
 
-| Verdict | GitHub event | Forgejo event | Published as | Blocking items |
+| Verdict | GitHub event | Forgejo event | Published as | Item placement |
 |---|---|---|---|---|
-| `APPROVED` | `APPROVE` | `APPROVED` | Formal review | None allowed (API rejects) |
-| `CHANGES_REQUESTED` | `REQUEST_CHANGES` | `REQUEST_CHANGES` | Formal review | Inline comments on review |
-| `COMMENTED` | `COMMENT` | `COMMENT` | Plain PR comment | N/A (all items non-blocking) |
+| `APPROVED` | `APPROVE` | `APPROVED` | Formal review | All items in review body; no separate comment |
+| `CHANGES_REQUESTED` | `REQUEST_CHANGES` | `REQUEST_CHANGES` | Formal review + optional comment | **GitHub**: all items in review body. **Forgejo**: blocking items (CRITICAL/MAJOR) in review body; non-blocking items (MINOR/INFO) as a separate PR comment |
+| `COMMENTED` | `COMMENT` | `COMMENT` | Plain PR comment | All items in a single comment (both platforms) |
 
 ### Critical Rule
 
@@ -69,6 +69,21 @@ The publisher enforces this: a `COMMENT` verdict is published as a plain comment
 For `APPROVED`, blocking items are logically empty because the LLM wouldn't
 return blocking items alongside an approve verdict.
 
+
+### Blocking/Non-Blocking Split
+
+The `ReviewPublisherProcessor._build_formal_path()` method controls whether
+non-blocking items (MINOR/INFO) are split into a separate comment. The split
+is platform-dependent:
+
+- **GitHub** (`GithubReviewPublisher`): all items stay in the formal review
+  body — no separate comment is posted.
+- **Forgejo** (`ForgejoReviewPublisher`): blocking items go into the formal
+  review; non-blocking items are published as a separate PR comment with a
+  `COMMENTED`-style body (no verdict header).
+
+The `COMMENTED` verdict path (`_build_comment_path`) is unchanged — it always
+emits a single comment containing all items, regardless of platform.
 ---
 
 ## Danger Zones: Places That Construct `CodeReview`
@@ -76,12 +91,16 @@ return blocking items alongside an approve verdict.
 Any code that creates a new `CodeReview` object is a **verdict mutation point**.
 These are the places where a verdict can be accidentally overwritten:
 
-| Location | Line | What it does | Risk |
+| Location | Line (approx.) | What it does | Risk |
 |---|---|---|---|
-| `review_pull_request_service.py` `_add_deterministic_findings` | 282 | Adds noisy-logging findings; **MUST preserve `review.verdict`** | HIGH — was hardcoded `APPROVED`, now fixed |
-| `review_pull_request_service.py` execute guard | 96 | Overrides to `CHANGES_REQUESTED` when prior unresolved blockers exist | LOW — intentional, guarded by `if` |
-| `forgejo_review_publisher.py` publish | 56,74 | Splits items into comment/review body | LOW — copies input verdict |
-| `github_review_publisher.py` publish | 56,74 | Same pattern as Forgejo | LOW — copies input verdict |
+| `review_pull_request_service.py` `_add_deterministic_findings` | ~282 | Adds noisy-logging findings; **MUST preserve `review.verdict`** | HIGH — was hardcoded `APPROVED`, now fixed |
+| `review_pull_request_service.py` execute guard | ~96 | Overrides to `CHANGES_REQUESTED` when prior unresolved blockers exist | LOW — intentional, guarded by `if` |
+| `forgejo_review_publisher.py` `publish` | ~42,56 | Splits items into comment/review body; applies `APPROVED`→`APPROVE` override | LOW — copies input verdict |
+| `github_review_publisher.py` `publish` | ~42,56 | Same pattern as Forgejo (no event-name override needed) | LOW — copies input verdict |
+
+> **Note**: Line numbers are approximate and drift with refactors. Use `grep` to
+> locate the current positions: `grep -n "def publish\|_add_deterministic"` in the
+> relevant source files.
 
 ### Agent Checklist: When Touching `CodeReview` Construction
 

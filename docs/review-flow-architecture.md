@@ -2,6 +2,8 @@
 
 **Command:** `uv run pr-auto-reviewer review -r gbrennon/pr-auto-reviewer -p 71 -v --force`
 
+> **Note:** Line numbers in code references are approximate and reflect the codebase at time of writing. Refer to actual source for precise locations.
+
 ---
 
 ## 1. Execution Flow Overview
@@ -476,6 +478,14 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+> **Platform difference (blocking/non-blocking split):** The review processor
+> (`_review_processor.py`) now splits items by severity before publishing.
+> For **Forgejo/Codeberg**, blocking items (CRITICAL/MAJOR) go in the formal
+> review while non-blocking items (MINOR/INFO) are published as a separate
+> comment. For **GitHub**, all items remain in the formal review body
+> (matching GitHub's review model where every inline comment is part of the
+> review). The terminal publisher is unaffected.
+
 ---
 
 ## 5. Adapter Communication Diagrams
@@ -751,13 +761,19 @@
 | **CLI** | `src/pr_auto_reviewer/presentation/cli/runner.py` (subcommand dispatch) |
 | **Use Case** | `src/pr_auto_reviewer/application/services/review_pull_request_service.py` |
 | **Domain** | `src/pr_auto_reviewer/domain/entities/pull_request.py` |
-| **Value Objects** | `src/pr_auto_reviewer/domain/value_objects/` (13 files) |
-| **Ports** | `src/pr_auto_reviewer/application/ports/` (3 inbound, 14 outbound) |
-| **Adapter: Git** | `src/pr_auto_reviewer/infrastructure/git_platform/` (11 adapters) |
-| **Adapter: LLM** | `src/pr_auto_reviewer/infrastructure/llm/` (Ollama, parser) |
+| **Value Objects** | `src/pr_auto_reviewer/domain/value_objects/` |
+| **Ports** | `src/pr_auto_reviewer/application/ports/` (8 inbound, 22 outbound) |
+| **Adapter: Git** | `src/pr_auto_reviewer/infrastructure/git_platform/` (multi-platform composites) |
+| **Adapter: Local Repo** | `src/pr_auto_reviewer/infrastructure/local_repository/` (clone, context, changeset) |
+| **Adapter: LLM** | `src/pr_auto_reviewer/infrastructure/llm/` — primary: `ollama_exploratory_chat_adapter.py` |
+| **Exploration Tools** | `src/pr_auto_reviewer/infrastructure/llm/exploration_tool_service.py` |
 | **Adapter: Fragments** | `src/pr_auto_reviewer/infrastructure/fragments/` (compose, repos, renderers) |
+| **Publishers** | `src/pr_auto_reviewer/infrastructure/github/github_review_publisher.py` |
+| | `src/pr_auto_reviewer/infrastructure/forgejo/forgejo_review_publisher.py` |
+| **Review Processor** | `src/pr_auto_reviewer/infrastructure/review_publishers/_review_processor.py` |
+| **Body Formatter** | `src/pr_auto_reviewer/infrastructure/review_publishers/body_formatter.py` |
 | **Persistence** | `src/pr_auto_reviewer/infrastructure/persistence/` (JSON file, null) |
 | **Fragments Content** | `src/pr_auto_reviewer/infrastructure/fragments/content/` (universal/, python/, shell/, ...) |
 | **Templates** | `src/pr_auto_reviewer/infrastructure/llm/templates/` (review_output.j2) |
-| **DI Container** | `src/pr_auto_reviewer/infrastructure/container.py` |
+| **DI Container** | `src/pr_auto_reviewer/infrastructure/container/` (_container, _core_services, _platform_adapters, _platform_clients) |
 | **Config** | `src/pr_auto_reviewer/infrastructure/config/config.py` |

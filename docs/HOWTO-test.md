@@ -35,7 +35,7 @@ When the AI posts a review with verdict **Approved**, users can reply with a com
 Run a single review against the PR:
 
 ```bash
-uv run python -m pr_auto_reviewer task --repo owner/repo --pr N
+uv run python -m pr_auto_reviewer review --repo owner/repo --pr N
 ```
 
 **Expected output:**
@@ -138,13 +138,13 @@ Created issue #124 for item 2
 Set the log level for more detail:
 
 ```bash
-uv run python -m pr_auto_reviewer task --repo owner/repo --pr N -v
+uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
 ```
 
 ### Check State File
 
 ```bash
-cat runner-data/pr-reviews.json | python3 -m json.tool
+cat ~/.config/pr-auto-reviewer/state.json | python3 -m json.tool
 ```
 
 ### Manual API Test
@@ -160,16 +160,17 @@ curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
 Reset test state for a PR:
 
 ```bash
-# Edit runner-data/pr-reviews.json to remove the entry, or:
+# Edit ~/.config/pr-auto-reviewer/state.json to remove the entry, or:
 python3 -c "
-import json
-with open('runner-data/pr-reviews.json') as f:
+import json, os
+path = os.path.expanduser('~/.config/pr-auto-reviewer/state.json')
+with open(path) as f:
     d = json.load(f)
 # Remove specific entry
 key = 'owner/repo/N'
 if key in d.get('reviewed', {}):
     del d['reviewed'][key]
-    with open('runner-data/pr-reviews.json', 'w') as f:
+    with open(path, 'w') as f:
         json.dump(d, f)
 "
 ```
