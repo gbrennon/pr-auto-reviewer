@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from ..commands.review_pull_request_command import ReviewPullRequestCommand
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import ReviewPullRequestCommand
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
@@ -325,7 +325,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         return [
             item.id
             for item in review.items
-            if item.severity.is_blocking and item.id
+            if item.is_blocking and item.id
         ]
 
     def _build_unresolved_reason(

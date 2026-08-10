@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 import pytest
 
-from pr_auto_reviewer.application.commands.review_pull_request_command import (
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.application.services.review_pull_request_service import (

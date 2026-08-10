@@ -6,10 +6,10 @@ import argparse
 import logging
 import sys
 
-from pr_auto_reviewer.application.commands.process_issue_commands_command import (
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
 )
-from pr_auto_reviewer.application.commands.review_pull_request_command import (
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
