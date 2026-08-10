@@ -8,16 +8,22 @@ from typing import Any, Protocol
 class ResponseParserPort(Protocol):
     """Parse raw LLM text into item dicts and extract structured content."""
 
-    def parse_items(self, content: str) -> list[dict[str, Any]]:
+    @classmethod
+    def parse_items(cls, raw_text: str) -> list[dict[str, Any]]:
         """Extract a list of item dicts from a phase response."""
         ...
 
-    @staticmethod
-    def strip_frontmatter(text: str) -> str:
+    @classmethod
+    def strip_frontmatter(cls, text: str) -> str:
         """Remove YAML frontmatter delimited by ``---`` lines."""
         ...
 
-    @staticmethod
-    def extract_outermost_json(text: str) -> str | None:
+    @classmethod
+    def extract_outermost_json(cls, text: str) -> str | None:
         """Extract the outermost JSON object from *text*."""
+        ...
+
+    @classmethod
+    def _extract_verdict_md(cls, raw_text: str) -> Any:
+        """Extract the verdict from markdown-formatted LLM output."""
         ...

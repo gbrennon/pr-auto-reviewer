@@ -6,17 +6,17 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from pr_auto_reviewer.application.commands.parse_review_turn_command import (
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case import (
     ParseReviewTurnUseCase,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
 )
+from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +169,11 @@ class TurnParser(ParseReviewTurnUseCase):
         "run_git": ["command"],
     }
 
-    @classmethod
     def _extract_dict_args(
-        cls, action: str, raw_args: dict[str, Any]
+        self, action: str, raw_args: dict[str, Any]
     ) -> str:
         """Extract args from dict-format tool calls the LLM sometimes sends."""
-        for key in cls._DICT_ARG_KEYS.get(action, []):
+        for key in self._DICT_ARG_KEYS.get(action, []):
             if key in raw_args:
                 return str(raw_args[key])
         for fallback in (
@@ -185,8 +184,7 @@ class TurnParser(ParseReviewTurnUseCase):
                 return str(raw_args[fallback])
         return str(raw_args)
 
-    @staticmethod
-    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
+    def _normalize_suggestions(self, raw: Any) -> list[dict[str, str]]:
         """Normalize suggestions from the LLM into a consistent format."""
         if not isinstance(raw, list):
             return []
@@ -206,8 +204,7 @@ class TurnParser(ParseReviewTurnUseCase):
                 })
         return result
 
-    @staticmethod
-    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
+    def _normalize_praise(self, raw: Any) -> list[dict[str, str]]:
         """Normalize praise items from the LLM into a consistent format."""
         if not isinstance(raw, list):
             return []
