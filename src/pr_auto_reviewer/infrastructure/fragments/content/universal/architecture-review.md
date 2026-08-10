@@ -48,6 +48,7 @@ When your review is complete, respond with a single JSON object:
   "items": [
     {
       "file": "path/to/file.py",
+      "line": "42",
       "severity": "critical|major|minor|info",
       "category": "architecture|solid|convention|design",
       "description": "What violates the architecture and why",

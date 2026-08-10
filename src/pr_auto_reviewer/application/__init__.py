@@ -12,7 +12,7 @@ from .ports import (
     IssueTrackerPort,
     CommandBusPort,
 )
-from .commands import ReviewPullRequestCommand, ProcessIssueCommandsCommand
+from pr_auto_reviewer.domain.messages.commands import ReviewPullRequestCommand, ProcessIssueCommandsCommand
 from .services import ReviewPullRequestService, ProcessIssueCommandsService
 from .serializers import IssueBodyBuilder
 

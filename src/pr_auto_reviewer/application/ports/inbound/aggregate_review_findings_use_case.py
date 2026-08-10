@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from pr_auto_reviewer.application.commands.aggregate_review_findings_command import (
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview

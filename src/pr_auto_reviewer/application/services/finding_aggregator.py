@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.application.commands.aggregate_review_findings_command import (
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
@@ -78,12 +78,12 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         for i, item in enumerate(merged, 1):
             object.__setattr__(item, "number", i)
 
-        has_blocking = any(item.severity.is_blocking for item in merged)
-        verdict = (
-            ReviewVerdict.CHANGES_REQUESTED
-            if has_blocking
-            else ReviewVerdict.APPROVED
-        )
+        if not merged:
+            verdict = ReviewVerdict.APPROVED
+        elif any(item.is_blocking for item in merged):
+            verdict = ReviewVerdict.CHANGES_REQUESTED
+        else:
+            verdict = ReviewVerdict.APPROVED
 
         reason = self._reason_builder.build(merged)
         summary = ""

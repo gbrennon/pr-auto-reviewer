@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from pr_auto_reviewer.application.commands.process_issue_commands_command import (
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
 )
 from pr_auto_reviewer.application.services import ProcessIssueCommandsService

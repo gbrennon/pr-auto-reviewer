@@ -49,6 +49,7 @@ When your review is complete, respond with a single JSON object:
   "items": [
     {
       "file": "path/to/file.py",
+      "line": "42",
       "severity": "critical|major|minor|info",
       "category": "bug|security|performance|style|quality",
       "description": "What is wrong and why",

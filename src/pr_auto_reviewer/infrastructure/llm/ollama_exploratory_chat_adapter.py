@@ -677,7 +677,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         for i, item in enumerate(merged, 1):
             object.__setattr__(item, "number", i)
-        has_blocking = any(item.severity.is_blocking for item in merged)
+        has_blocking = any(item.is_blocking for item in merged)
         verdict = (
             ReviewVerdict.CHANGES_REQUESTED
             if has_blocking
@@ -855,7 +855,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         self, code_review: CodeReview, repo_path: str, changed_files: list[str]
     ) -> CodeReview:
         """Run verification on blocking findings, rebuilding CodeReview if any are dropped."""
-        blocking = [i for i in code_review.items if i.severity.is_blocking]
+        blocking = [i for i in code_review.items if i.is_blocking]
         if not blocking:
             return code_review
 
@@ -868,7 +868,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         for i, item in enumerate(verified_items, 1):
             object.__setattr__(item, "number", i)
 
-        has_blocking = any(item.severity.is_blocking for item in verified_items)
+        has_blocking = any(item.is_blocking for item in verified_items)
         verdict = (
             ReviewVerdict.CHANGES_REQUESTED
             if has_blocking
@@ -892,7 +892,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         can read files, search for symbols, and trace inheritance before
         confirming or rejecting each finding.
         """
-        blocking = [i for i in items if i.severity.is_blocking]
+        blocking = [i for i in items if i.is_blocking]
         if not blocking:
             return items
 
@@ -946,7 +946,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             len(blocking),
         )
 
-        non_blocking = [i for i in items if not i.severity.is_blocking]
+        non_blocking = [i for i in items if not i.is_blocking]
         return non_blocking + verified_blocking
 
     def _parse_verify_turn(
