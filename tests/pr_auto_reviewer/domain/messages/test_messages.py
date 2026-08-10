@@ -6,7 +6,7 @@ from pr_auto_reviewer.domain import (
     PullRequestId,
     ReviewItem,
 )
-from pr_auto_reviewer.application.messages import (
+from pr_auto_reviewer.domain.messages import (
     invalid_items_message,
     issues_created_message,
 )

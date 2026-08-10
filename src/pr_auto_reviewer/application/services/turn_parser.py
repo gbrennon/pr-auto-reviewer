@@ -6,17 +6,17 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from pr_auto_reviewer.application.commands.parse_review_turn_command import (
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case import (
     ParseReviewTurnUseCase,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
 )
+from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ class TurnParser(ParseReviewTurnUseCase):
         caller can validate items against the repository.
         """
         items = self._parser.parse_items(content)
+        logger.debug("_parse: parse_items returned %d items", len(items))
         if items:
             metadata = self._extract_verdict_metadata(content)
             return TurnParseResult(
@@ -54,6 +55,7 @@ class TurnParser(ParseReviewTurnUseCase):
 
         parsed = self._parse_json(content)
         if parsed is None:
+            logger.debug("Unparseable content (first 2000 chars): %s", content[:2000])
             return TurnParseResult(kind="unparseable")
 
         if isinstance(parsed, dict) and "action" in parsed:
@@ -103,24 +105,24 @@ class TurnParser(ParseReviewTurnUseCase):
         if isinstance(parsed, list):
             return TurnParseResult(
                 kind="verdict",
-                raw_items=[],
+                raw_items=[item for item in parsed if isinstance(item, dict)],
                 metadata={},
             )
 
         return TurnParseResult(kind="unparseable")
 
     def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
-        """Extract verdict metadata from a JSON block in the content."""
+        """Extract verdict metadata from a JSON block or markdown in the content."""
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
             extracted = self._parser.extract_outermost_json(content)
             if extracted is None:
-                return {}
+                return self._extract_verdict_from_markdown(content)
             try:
                 parsed = json.loads(extracted)
             except json.JSONDecodeError:
-                return {}
+                return self._extract_verdict_from_markdown(content)
         if isinstance(parsed, dict) and "verdict" in parsed:
             return {
                 "verdict": str(parsed.get("verdict", "")),
@@ -135,7 +137,17 @@ class TurnParser(ParseReviewTurnUseCase):
                     parsed.get("praise", [])
                 ),
             }
-        return {}
+        return self._extract_verdict_from_markdown(content)
+
+    def _extract_verdict_from_markdown(self, content: str) -> dict[str, Any]:
+        verdict = self._parser._extract_verdict_md(content)
+        return {
+            "verdict": verdict.value,
+            "reason": "",
+            "summary": "",
+            "suggestions": [],
+            "praise": [],
+        }
 
     def _parse_json(self, content: str) -> Any:
         """Attempt to parse *content* as JSON, with markdown extraction fallback."""
@@ -157,12 +169,11 @@ class TurnParser(ParseReviewTurnUseCase):
         "run_git": ["command"],
     }
 
-    @classmethod
     def _extract_dict_args(
-        cls, action: str, raw_args: dict[str, Any]
+        self, action: str, raw_args: dict[str, Any]
     ) -> str:
         """Extract args from dict-format tool calls the LLM sometimes sends."""
-        for key in cls._DICT_ARG_KEYS.get(action, []):
+        for key in self._DICT_ARG_KEYS.get(action, []):
             if key in raw_args:
                 return str(raw_args[key])
         for fallback in (
@@ -173,8 +184,7 @@ class TurnParser(ParseReviewTurnUseCase):
                 return str(raw_args[fallback])
         return str(raw_args)
 
-    @staticmethod
-    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
+    def _normalize_suggestions(self, raw: Any) -> list[dict[str, str]]:
         """Normalize suggestions from the LLM into a consistent format."""
         if not isinstance(raw, list):
             return []
@@ -194,8 +204,7 @@ class TurnParser(ParseReviewTurnUseCase):
                 })
         return result
 
-    @staticmethod
-    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
+    def _normalize_praise(self, raw: Any) -> list[dict[str, str]]:
         """Normalize praise items from the LLM into a consistent format."""
         if not isinstance(raw, list):
             return []

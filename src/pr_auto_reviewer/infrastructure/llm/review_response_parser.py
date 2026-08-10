@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -81,6 +82,213 @@ class ReviewResponseParser:
                 )
             )
         return items
+
+    _STRUCTURED_ITEM = re.compile(
+        r"^###\s+\[(\w+)\]\s+\[(\w+)\]\s+([^\s—:]+)(?::(\d+))?\s*—\s*(.+)$",
+        re.MULTILINE,
+    )
+
+    _IMPROVEMENT_SECTION = re.compile(
+        r"(?:###|####)\s+\*?\*?(?:\d+\.\s*)?\*?\*?"
+        r"(?:Key\s+)?(?:Potential\s+(?:Issues\s+and\s+)?Improvements?|"
+        r"Issues(?:\s+(?:Found|and\s+Improvements))?|Problems?|"
+        r"Concerns?|Considerations?\s+for\s+Robustness|"
+        r"Recommendations?|Suggestions?|Findings|Observations|Action\s+Items)"
+        r"\*?\*?\s*:?\s*\n+(.*?)(?=\n###\s|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _H4_ITEM = re.compile(
+        r"^####\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _NUMBERED_ITEM = re.compile(
+        r"^\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BULLET_ITEM = re.compile(
+        r"^[-*]\s+\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BACKTICK_PATH = re.compile(r"`([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)`")
+
+    _LINE_PATTERN = re.compile(
+        r"(?:line|at line|:)\s*(\d+)",
+        re.IGNORECASE,
+    )
+
+    _SEVERITY_PATTERN = re.compile(
+        r"\[(critical|major|minor|info)\]",
+        re.IGNORECASE,
+    )
+
+    _CATEGORY_PATTERN = re.compile(
+        r"\[(bug|security|performance|maintainability|style|quality|"
+        r"architecture|solid|convention|design|documentation)\]",
+        re.IGNORECASE,
+    )
+
+    _CODE_BLOCK = re.compile(
+        r"```(?:python|rust|go|js|ts|java|sh|bash|yaml|json|toml|text)?\s*\n(.*?)```",
+        re.DOTALL,
+    )
+
+    _FIX_HEADER = re.compile(
+        r"\*\*(?:Fix|Suggested(?: Fix)?|Improved Code|Recommendation|"
+        r"Should Be|Instead|Correct(?:ed)?)\*?\*?\s*:?\s*",
+        re.IGNORECASE,
+    )
+
+    _CURRENT_HEADER = re.compile(
+        r"\*\*(?:Current|Issue|Problem|Code)\*?\*?\s*:?\s*",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _parse_prose_items(cls, content: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        structured = cls._parse_structured_items(content)
+        if structured:
+            return structured
+        for match in cls._IMPROVEMENT_SECTION.finditer(content):
+            section_body = match.group(1)
+            section_items: list[dict[str, Any]] = []
+            for item_match in cls._H4_ITEM.finditer(section_body):
+                title = item_match.group(1).strip().rstrip("*:").strip()
+                if len(title) > 10:
+                    section_items.append(
+                        cls._make_prose_item(title, section_body, item_match.start())
+                    )
+            if not section_items:
+                for item_match in cls._NUMBERED_ITEM.finditer(section_body):
+                    title = item_match.group(1).strip().rstrip("*:").strip()
+                    if len(title) > 10:
+                        section_items.append(
+                            cls._make_prose_item(title, section_body, item_match.start())
+                        )
+            if not section_items:
+                for item_match in cls._BULLET_ITEM.finditer(section_body):
+                    title = item_match.group(1).strip().rstrip("*:").strip()
+                    if len(title) > 10:
+                        section_items.append(
+                            cls._make_prose_item(title, section_body, item_match.start())
+                        )
+            items.extend(section_items)
+        if not items:
+            items = cls._parse_flat_prose_items(content)
+        return items
+
+    @classmethod
+    def _parse_structured_items(cls, content: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for match in cls._STRUCTURED_ITEM.finditer(content):
+            severity_raw, category_raw, file_path, line, description = match.groups()
+            item_start = match.start()
+            next_match = cls._STRUCTURED_ITEM.search(content, match.end())
+            section_end = next_match.start() if next_match else len(content)
+            section_body = content[item_start:section_end]
+            code_blocks = cls._CODE_BLOCK.findall(section_body)
+            current_code = code_blocks[0].strip() if len(code_blocks) >= 1 else ""
+            suggested_fix = code_blocks[1].strip() if len(code_blocks) >= 2 else ""
+            if not suggested_fix and len(code_blocks) >= 1:
+                fix_match = cls._FIX_HEADER.search(section_body)
+                if fix_match:
+                    after_fix = section_body[fix_match.end():]
+                    fix_blocks = cls._CODE_BLOCK.findall(after_fix)
+                    if fix_blocks:
+                        suggested_fix = fix_blocks[0].strip()
+            items.append({
+                "file": file_path.strip(),
+                "severity": severity_raw.strip().lower(),
+                "category": category_raw.strip().lower(),
+                "description": description.strip(),
+                "line": (line or "").strip(),
+                "current_code": current_code,
+                "suggested_fix": suggested_fix,
+            })
+        return items
+
+    @classmethod
+    def _parse_flat_prose_items(cls, content: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for match in cls._H4_ITEM.finditer(content):
+            title = match.group(1).strip().rstrip("*:").strip()
+            if len(title) > 10:
+                items.append(cls._make_prose_item(title, content, match.start()))
+        if not items:
+            for match in cls._NUMBERED_ITEM.finditer(content):
+                title = match.group(1).strip().rstrip("*:").strip()
+                if len(title) > 10:
+                    items.append(cls._make_prose_item(title, content, match.start()))
+        return items
+
+    @classmethod
+    def _make_prose_item(
+        cls, title: str, section_body: str, match_start: int
+    ) -> dict[str, Any]:
+        context_end = min(match_start + 2000, len(section_body))
+        context = section_body[match_start:context_end]
+        code_blocks = cls._CODE_BLOCK.findall(context)
+        current_code = code_blocks[0].strip() if len(code_blocks) >= 1 else ""
+        suggested_fix = ""
+        if len(code_blocks) >= 2:
+            suggested_fix = code_blocks[1].strip()
+        elif len(code_blocks) >= 1:
+            fix_match = cls._FIX_HEADER.search(context)
+            if fix_match:
+                after_fix = context[fix_match.end():]
+                fix_blocks = cls._CODE_BLOCK.findall(after_fix)
+                if fix_blocks:
+                    suggested_fix = fix_blocks[0].strip()
+        if not current_code:
+            current_match = cls._CURRENT_HEADER.search(context)
+            if current_match:
+                after_current = context[current_match.end():]
+                cur_blocks = cls._CODE_BLOCK.findall(after_current)
+                if cur_blocks:
+                    current_code = cur_blocks[0].strip()
+        file_path = ""
+        path_match = cls._BACKTICK_PATH.search(context)
+        if path_match:
+            candidate = path_match.group(1)
+            if "." in candidate and not candidate.startswith("`"):
+                file_path = candidate
+        if not file_path:
+            path_in_title = cls._BACKTICK_PATH.search(title)
+            if path_in_title:
+                candidate = path_in_title.group(1)
+                if "." in candidate:
+                    file_path = candidate
+        line = ""
+        line_match = cls._LINE_PATTERN.search(title)
+        if not line_match:
+            line_match = cls._LINE_PATTERN.search(context)
+        if line_match:
+            line = line_match.group(1)
+        severity = "minor"
+        sev_match = cls._SEVERITY_PATTERN.search(title)
+        if not sev_match:
+            sev_match = cls._SEVERITY_PATTERN.search(context[:200])
+        if sev_match:
+            severity = sev_match.group(1).lower()
+        category = "maintainability"
+        cat_match = cls._CATEGORY_PATTERN.search(title)
+        if not cat_match:
+            cat_match = cls._CATEGORY_PATTERN.search(context[:200])
+        if cat_match:
+            category = cat_match.group(1).lower()
+        return {
+            "file": file_path,
+            "severity": severity,
+            "category": category,
+            "description": title,
+            "line": line,
+            "current_code": current_code,
+            "suggested_fix": suggested_fix,
+        }
 
     @classmethod
     def _extract_verdict_md(cls, raw_text: str) -> ReviewVerdict:
@@ -179,9 +387,7 @@ class ReviewResponseParser:
                 current_code=str(item_dict.get("current_code", "")),
                 suggested_fix=str(item_dict.get("suggested_fix", "")),
             )
-            if not review_item.file_path:
-                continue
-            if not review_item.current_code and not review_item.suggested_fix:
+            if not review_item.file_path and not review_item.description:
                 continue
             items.append(review_item)
         return CodeReview(
@@ -416,7 +622,12 @@ class ReviewResponseParser:
             re.DOTALL,
         )
         if code_block_match:
-            cleaned = code_block_match.group(1).strip()
+            extracted = code_block_match.group(1).strip()
+            try:
+                json.loads(extracted)
+                cleaned = extracted
+            except (json.JSONDecodeError, ValueError):
+                pass
         try:
             data = json.loads(cleaned)
             if isinstance(data, list):
@@ -440,7 +651,7 @@ class ReviewResponseParser:
                     return fallback
                 return []
         except (json.JSONDecodeError, ValueError):
-            logger.debug("parse_items: JSON parse failed, trying text extraction")
+            pass
         extracted = ReviewResponseParser.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
@@ -455,6 +666,30 @@ class ReviewResponseParser:
                     return fallback
             except (json.JSONDecodeError, ValueError):
                 pass
+        logger.debug("parse_items: JSON and extraction failed, trying markdown fallback")
+        markdown_items = ReviewResponseParser._parse_markdown_items(cleaned)
+        if markdown_items:
+            return [
+                {
+                    "file": item.file_path,
+                    "severity": item.severity.value,
+                    "category": item.category.value,
+                    "description": item.description,
+                    "line": item.line,
+                    "current_code": item.current_code,
+                    "suggested_fix": item.suggested_fix,
+                }
+                for item in markdown_items
+            ]
+        prose_items = ReviewResponseParser._parse_prose_items(cleaned)
+        if prose_items:
+            logger.info("parse_items: extracted %d items via prose parser", len(prose_items))
+            return prose_items
+        logger.warning(
+            "parse_items: all parsers failed — dumping raw content (%d chars) to /tmp/parse_items_failed.txt",
+            len(raw_text),
+        )
+        Path("/tmp/parse_items_failed.txt").write_text(raw_text)
         return []
 
     @classmethod

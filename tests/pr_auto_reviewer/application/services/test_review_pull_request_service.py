@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from pr_auto_reviewer.application.commands.review_pull_request_command import (
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.application.services import ReviewPullRequestService

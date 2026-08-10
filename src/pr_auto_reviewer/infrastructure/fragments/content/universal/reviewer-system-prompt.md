@@ -95,10 +95,11 @@ The verdict is ALWAYS the final message in the conversation. The expanded JSON f
 4. `current_code`: Copy the actual `+` lines from the diff verbatim. Never use placeholders
 5. `suggested_fix`: Concrete, real code. Never abstract text or descriptions
 6. Do NOT suggest removing code. Suggest changing it (current_code → suggested_fix)
-7. `praise` MUST always have at least 1-2 praise items for genuinely good patterns
-8. `summary` always include 2-3 sentences
-9. NEVER use keys called `changes` or `files`. Put everything in `issues`, `praise`, or `summary`
-10. Do NOT flag `-` lines as problems — they're already deleted
+7. When outputting findings as narrative prose instead of JSON, include the problematic code in a fenced code block (```) immediately after the finding description, followed by the suggested fix in a second fenced code block
+8. `praise` MUST always have at least 1-2 praise items for genuinely good patterns
+9. `summary` always include 2-3 sentences
+10. NEVER use keys called `changes` or `files`. Put everything in `issues`, `praise`, or `summary`
+11. Do NOT flag `-` lines as problems — they're already deleted
 
 ## WHAT TO LOOK FOR
 

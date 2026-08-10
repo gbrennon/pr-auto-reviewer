@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pr_auto_reviewer.application.commands.register_issue_command import (
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
 from pr_auto_reviewer.application.services import RegisterIssueService
