@@ -14,20 +14,53 @@ class ReviewItemParser:
     — no I/O, no ports."""
 
     _ITEM_PATTERN = re.compile(
-        r"^\d+\.\s*\*\*(?P<severity>[A-Z]+)\*\*\s*\[(?P<category>\w+)](?:\s*`(?P<file>[^`]+)`)?\s*[:-]?\s*(?P<description>.+)$",
+        r"^(?P<number>\d+)\.\s+\[(?P<category>[^\]]+)\]\s+\[(?P<severity>[A-Z]+)\]"
+        r"(?: (?P<file_info>[^\n]+))?"
+        r"(?:\n\n(?P<description>[^\n]+))?",
         re.MULTILINE,
     )
 
     def parse(self, raw_body: str) -> list[ReviewItem]:
         items: list[ReviewItem] = []
-        for n, match in enumerate(self._ITEM_PATTERN.finditer(raw_body), start=1):
-            file_path = match.group("file") or None
+        for match in self._ITEM_PATTERN.finditer(raw_body):
+            file_path, line, description = self._extract_fields(
+                match.group("file_info"), match.group("description"),
+            )
 
             items.append(ReviewItem(
-                number=n,
+                number=int(match.group("number")),
                 severity=ItemSeverity.from_value(match.group("severity")),
                 category=IssueCategory.from_value(match.group("category")),
                 file_path=file_path,
-                description=match.group("description").strip(),
+                description=description,
+                line=line,
             ))
         return items
+
+    @staticmethod
+    def _extract_fields(
+        file_info: str | None, description: str | None,
+    ) -> tuple[str | None, str, str]:
+        if description is not None:
+            file_path, line = _split_file_info(file_info)
+            return file_path, line, description.strip()
+
+        if file_info:
+            file_info = file_info.strip()
+            if ":" in file_info and file_info.rsplit(":", 1)[1].isdigit():
+                fp, ln = file_info.rsplit(":", 1)
+                return fp, ln, ""
+            return None, "", file_info
+
+        return None, "", ""
+
+
+def _split_file_info(file_info: str | None) -> tuple[str | None, str]:
+    if not file_info:
+        return None, ""
+    file_info = file_info.strip()
+    if ":" in file_info:
+        parts = file_info.rsplit(":", 1)
+        if parts[1].isdigit():
+            return parts[0], parts[1]
+    return file_info, ""
