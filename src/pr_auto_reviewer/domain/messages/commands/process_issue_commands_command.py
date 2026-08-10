@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from ...domain.value_objects.pull_request_id import PullRequestId
-from ...domain.value_objects.commit_sha import CommitSha
+from ...value_objects.pull_request_id import PullRequestId
+from ...value_objects.commit_sha import CommitSha
 
 @dataclass(frozen=True)
 class ProcessIssueCommandsCommand:
