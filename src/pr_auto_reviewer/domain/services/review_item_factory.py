@@ -1,5 +1,6 @@
 """ReviewItemFactory — construct validated ReviewItem domain objects from parsed dicts."""
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any, ClassVar
@@ -146,6 +147,9 @@ class ReviewItemFactory:
                     skip_reasons.append(reason)
                     continue
 
+            item_id = self._generate_id(
+                file_path, description, len(review_items)
+            )
             review_item = ReviewItem(
                 number=len(review_items) + 1,
                 severity=ItemSeverity.from_value(
@@ -157,6 +161,7 @@ class ReviewItemFactory:
                 file_path=file_path,
                 description=str(item_dict.get("description", "")),
                 line=str(item_dict.get("line", "")),
+                id=item_id,
                 current_code=current_code,
                 suggested_fix=suggested_fix,
             )
@@ -170,3 +175,10 @@ class ReviewItemFactory:
                 ", ".join(skip_reasons),
             )
         return review_items, skip_reasons
+
+    @staticmethod
+    def _generate_id(file_path: str, description: str, index: int) -> str:
+        """Generate a short 4-character hex ID for a review item."""
+        seed = f"{file_path}:{description}:{index}"
+        digest = hashlib.sha256(seed.encode()).hexdigest()
+        return digest[:4]
