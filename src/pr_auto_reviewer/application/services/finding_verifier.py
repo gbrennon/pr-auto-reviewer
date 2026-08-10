@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.application.commands.verify_findings_command import (
+from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import (
@@ -27,6 +28,11 @@ logger = logging.getLogger(__name__)
 _VERIFY_MAX_TURNS = 5
 _MAX_EMPTY_RESPONSES = 3
 _MAX_UNPARSEABLE_RESPONSES = 3
+
+_FINDING_RESULT_LINE = re.compile(
+    r"(?:- |#### )?\*?\*?(?:Finding|Item)\s*(\d+)\*?\*?\s*[:—-]\s*(.+)",
+    re.IGNORECASE,
+)
 
 
 class FindingVerifier(VerifyFindingsUseCase):
@@ -50,7 +56,7 @@ class FindingVerifier(VerifyFindingsUseCase):
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Verify blocking findings, returning only those confirmed by the LLM."""
         blocking = [
-            i for i in command.items if i.severity.is_blocking
+            i for i in command.items if i.is_blocking
         ]
         if not blocking:
             return list(command.items)
@@ -77,8 +83,16 @@ class FindingVerifier(VerifyFindingsUseCase):
         verified_indices: set[int] = set()
         for r in results:
             idx = r.get("finding_index")
-            if r.get("verified", False) and isinstance(idx, int):
+            verified = r.get("verified", False)
+            if verified and isinstance(idx, int):
                 verified_indices.add(idx)
+            else:
+                logger.debug(
+                    "Verifier refuted finding: verified=%s idx=%s reasoning=%s",
+                    verified,
+                    idx,
+                    r.get("reasoning", "")[:120],
+                )
 
         verified_blocking: list[ReviewItem] = []
         for i, item in enumerate(blocking):
@@ -106,7 +120,7 @@ class FindingVerifier(VerifyFindingsUseCase):
         )
 
         non_blocking = [
-            i for i in command.items if not i.severity.is_blocking
+            i for i in command.items if not i.is_blocking
         ]
         return non_blocking + verified_blocking
 
@@ -235,15 +249,14 @@ class FindingVerifier(VerifyFindingsUseCase):
         )
         return None
 
-    @staticmethod
     def _parse_verify_turn(
-        content: str,
+        self, content: str
     ) -> list[dict[str, Any]] | dict[str, str] | None:
         """Parse a verification conversation turn into results or a tool-call dict."""
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
-            return None
+            return self._parse_verify_prose(content)
 
         if not isinstance(data, dict):
             return None
@@ -256,9 +269,40 @@ class FindingVerifier(VerifyFindingsUseCase):
 
         return None
 
-    @staticmethod
+    def _parse_verify_prose(
+        self, content: str
+    ) -> list[dict[str, Any]] | None:
+        """Parse verification results from narrative prose instead of JSON."""
+        results: list[dict[str, Any]] = []
+        for match in _FINDING_RESULT_LINE.finditer(content):
+            idx_str = match.group(1)
+            rest = match.group(2).strip().lower()
+            verified = not any(
+                kw in rest
+                for kw in (
+                    "refuted",
+                    "not found",
+                    "doesn't exist",
+                    "hallucinated",
+                    "cannot verify",
+                    "unable to",
+                )
+            )
+            try:
+                finding_index = int(idx_str)
+            except ValueError:
+                continue
+            results.append(
+                {
+                    "finding_index": finding_index,
+                    "verified": verified,
+                    "reasoning": match.group(2).strip()[:200],
+                }
+            )
+        return results if results else None
+
     def _format_findings_for_verification(
-        items: list[ReviewItem], repo_path: str
+        self, items: list[ReviewItem], repo_path: str
     ) -> str:
         """Format blocking findings with surrounding file context for verification."""
         parts: list[str] = []
@@ -269,7 +313,7 @@ class FindingVerifier(VerifyFindingsUseCase):
             if item.file_path:
                 full_path = repo_root / item.file_path
                 if full_path.exists():
-                    file_content = FindingVerifier._extract_file_context(
+                    file_content = self._extract_file_context(
                         full_path, item.current_code
                     )
 
@@ -286,9 +330,8 @@ class FindingVerifier(VerifyFindingsUseCase):
 
         return "\n\n".join(parts)
 
-    @classmethod
     def _extract_file_context(
-        cls, file_path: Path, snippet: str
+        self, file_path: Path, snippet: str
     ) -> str:
         """Extract surrounding context from a file around a matching code snippet."""
         try:

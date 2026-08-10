@@ -68,7 +68,7 @@ class ReviewPublisherProcessor:
     def _build_comment_path(
         self, pr_id: PullRequestId, review: CodeReview,
     ) -> ProcessedReview:
-        non_blocking = [i for i in review.items if not i.severity.is_blocking]
+        non_blocking = [i for i in review.items if not i.is_blocking]
         comment_review = CodeReview(
             verdict=ReviewVerdict.COMMENTED,
             reason=ReasonBuilder.build(non_blocking),
