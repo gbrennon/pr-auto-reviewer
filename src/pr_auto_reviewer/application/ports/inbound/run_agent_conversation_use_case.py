@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from pr_auto_reviewer.application.commands.run_agent_conversation_command import (
+from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
 from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
