@@ -1,7 +1,7 @@
 """Pure domain functions to build human-readable comment messages."""
 
-from ...domain.entities.issue import Issue
-from ...domain.entities.review_item import ReviewItem
+from ..entities.issue import Issue
+from ..entities.review_item import ReviewItem
 
 def invalid_items_message(
     invalid: list[int], available: list[ReviewItem]
