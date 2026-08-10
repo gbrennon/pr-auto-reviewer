@@ -5,43 +5,35 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
-from pr_auto_reviewer.application.commands.verify_findings_command import (
-    VerifyFindingsCommand,
-)
-from pr_auto_reviewer.application.commands.aggregate_review_findings_command import (
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
-from pr_auto_reviewer.application.commands.run_agent_conversation_command import (
+from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
-from pr_auto_reviewer.application.commands.run_multi_phase_review_command import (
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
-from pr_auto_reviewer.application.events.findings_aggregated_event import (
+from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
+    VerifyFindingsCommand,
+)
+from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
     FindingsAggregatedEvent,
 )
-from pr_auto_reviewer.application.events.phase_completed_event import (
+from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
     PhaseCompletedEvent,
-)
-from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
-    AggregateReviewFindingsUseCase,
-)
-from pr_auto_reviewer.application.ports.inbound.run_agent_conversation_use_case import (
-    RunAgentConversationUseCase,
 )
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
     RunMultiPhaseReviewUseCase,
-)
-from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import (
-    VerifyFindingsUseCase,
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
 from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
     ReviewSuggestion,
@@ -53,7 +45,6 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,19 +63,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
     def __init__(
         self,
-        conversation_service: RunAgentConversationUseCase,
-        aggregator: AggregateReviewFindingsUseCase,
+        command_bus: CommandBusPort,
         tool_factory: Callable[[str, list[str]], Any],
-        verifier: VerifyFindingsUseCase | None = None,
-        event_bus: CommandBusPort | None = None,
         max_retries: int = 5,
         max_feedback_rounds: int = 2,
     ) -> None:
-        self._conversation_service = conversation_service
-        self._aggregator = aggregator
+        self._command_bus = command_bus
         self._tool_factory = tool_factory
-        self._verifier = verifier
-        self._event_bus = event_bus
         self._max_retries = max_retries
         self._max_feedback_rounds = max_feedback_rounds
 
@@ -157,10 +142,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     len(best_attempt_items),
                     self._max_retries,
                 )
-                result = self._aggregator.execute(
-                    AggregateReviewFindingsCommand(
-                        items=best_attempt_items, model_used=model
-                    )
+                result = cast(
+                    CodeReview,
+                    self._command_bus.dispatch(
+                        AggregateReviewFindingsCommand(
+                            items=best_attempt_items, model_used=model
+                        )
+                    ),
                 )
             else:
                 logger.warning(
@@ -231,9 +219,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         )
         return best
 
-    @staticmethod
     def _build_feedback_context(
-        result: CodeReview, round_number: int
+        self, result: CodeReview, round_number: int
     ) -> str:
         """Build a feedback prompt from a zero-item review result."""
         escalation = (
@@ -297,7 +284,24 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 repo_path=repo_path,
                 changed_files=changed_files,
             )
-            all_items.extend(phase_result.items)
+            existing_keys = {
+                (item.file_path or "", item.description)
+                for item in all_items
+            }
+            new_count = 0
+            for item in phase_result.items:
+                key = (item.file_path or "", item.description)
+                if key not in existing_keys:
+                    all_items.append(item)
+                    existing_keys.add(key)
+                    new_count += 1
+            if new_count < len(phase_result.items):
+                logger.info(
+                    "Phase %s: %d/%d items were duplicates of prior phases",
+                    phase.phase_name,
+                    len(phase_result.items) - new_count,
+                    len(phase_result.items),
+                )
             last_phase_result = phase_result
             if accumulated_items is not None:
                 accumulated_items.clear()
@@ -366,57 +370,52 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 model_used=model,
             )
 
-        code_review = self._aggregator.execute(
+        code_review = self._command_bus.dispatch(
             AggregateReviewFindingsCommand(
                 items=all_items,
                 phase_result=last_phase_result,
                 model_used=model,
             )
         )
-        if self._verifier is not None and code_review.items:
-            verified_items = self._verifier.execute(
+        if code_review.items:
+            verified_items = self._command_bus.dispatch(
                 VerifyFindingsCommand(
                     items=code_review.items,
                     repo_path=repo_path,
                     changed_files=changed_files,
                 )
             )
-            if verified_items is not code_review.items:
+            if (
+                verified_items is not None
+                and verified_items is not code_review.items
+            ):
                 code_review = self._rebuild_after_verification(
                     verified_items, model
                 )
         self._publish(FindingsAggregatedEvent(code_review=code_review))
         return code_review
 
-    @staticmethod
     def _rebuild_after_verification(
-        verified_items: list[Any], model: str
+        self, verified_items: list[Any], model: str
     ) -> CodeReview:
         """Rebuild a CodeReview after verification dropped some items."""
-        from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-
         for i, item in enumerate(verified_items, 1):
             object.__setattr__(item, "number", i)
 
-        has_blocking = any(
-            item.severity.is_blocking
-            for item in verified_items
-            if isinstance(item, ReviewItem)
-        )
-        verdict = (
-            ReviewVerdict.CHANGES_REQUESTED
-            if has_blocking
-            else ReviewVerdict.COMMENTED
-        )
+        review_items = [
+            item for item in verified_items if isinstance(item, ReviewItem)
+        ]
+        if not review_items:
+            verdict = ReviewVerdict.APPROVED
+        elif any(item.is_blocking for item in review_items):
+            verdict = ReviewVerdict.CHANGES_REQUESTED
+        else:
+            verdict = ReviewVerdict.APPROVED
 
         return CodeReview(
             verdict=verdict,
             reason="Findings verified against source code.",
-            items=[
-                item
-                for item in verified_items
-                if isinstance(item, ReviewItem)
-            ],
+            items=review_items,
             model_used=model,
         )
 
@@ -433,12 +432,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         )
         for retry in range(self._max_retries):
             try:
-                return self._conversation_service.execute(
+                return self._command_bus.dispatch(
                     RunAgentConversationCommand(
                         system_prompt=phase_prompt,
                         repo_path=repo_path,
                         changed_files=changed_files,
                         tool_execution=tool_service,
+                        phase_name=phase_name,
                     )
                 )
             except LlmUnavailableError as exc:
@@ -458,11 +458,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 )
         raise RuntimeError("Unreachable: _max_retries must be >= 1")
 
-    @staticmethod
-    def _is_max_turns_exceeded(exc: LlmUnavailableError) -> bool:
+    def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
         return "Phase exceeded max turns" in str(exc)
 
     def _publish(self, event: Any) -> None:
-        """Publish an event to the bus if one is configured."""
-        if self._event_bus is not None:
-            self._event_bus.dispatch(event)
+        """Publish an event to the bus."""
+        self._command_bus.dispatch(event)
