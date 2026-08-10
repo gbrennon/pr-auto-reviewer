@@ -32,3 +32,14 @@ class ReviewItem:
         object.__setattr__(
             self, "category", IssueCategory.from_value(str(self.category)),
         )
+
+    @property
+    def is_blocking(self) -> bool:
+        """Return True when this item should block a PR merge.
+
+        Blocking conditions: CRITICAL or MAJOR severity, or SECURITY
+        category regardless of severity.
+        """
+        if self.severity.is_blocking:
+            return True
+        return self.category == IssueCategory.SECURITY
