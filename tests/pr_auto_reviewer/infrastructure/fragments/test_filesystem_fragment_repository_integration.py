@@ -1,5 +1,9 @@
-"""Integration tests for FileSystemFragmentRepository — REAL files, NO mocks."""
+"""Integration tests for FileSystemFragmentRepository — REAL files, NO mocks.
 
+All file I/O uses pytest ``tmp_path`` — no writes to the source tree.
+"""
+
+import shutil
 from pathlib import Path
 
 import pytest
@@ -8,21 +12,26 @@ from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository i
     FileSystemFragmentRepository,
 )
 
+_REAL_FIXTURES = (
+    Path(__file__).parent.parent.parent.parent / "fixtures" / "fragments"
+)
+
+
 class TestFileSystemFragmentRepository:
-    """Integration tests using real fragment files from disk."""
+    """Integration tests using real fragment files copied into tmp_path."""
 
     @pytest.fixture
-    def fixtures_dir(self) -> Path:
-        """Path to the real test fragments directory."""
-        return (
-            Path(__file__).parent.parent.parent.parent / "fixtures" / "fragments"
-        )
+    def fixtures_dir(self, tmp_path: Path) -> Path:
+        """Copy real test fragments into a temp directory."""
+        dest = tmp_path / "fragments"
+        shutil.copytree(_REAL_FIXTURES, dest)
+        return dest
 
     @pytest.fixture
     def repository(
         self, fixtures_dir: Path,
     ) -> FileSystemFragmentRepository:
-        """Create repository pointing to real test fixture files."""
+        """Create repository pointing to the temp fixture copy."""
         return FileSystemFragmentRepository(base_path=fixtures_dir)
 
     def test_creates_repository_with_valid_path(
@@ -76,16 +85,13 @@ class TestFileSystemFragmentRepository:
             "Use list comprehensions over map/filter.\n"
         )
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert len(fragments) == 2
-            ids = {f.id for f in fragments}
-            assert ids == {"python-error-handling", "python-idioms"}
-            assert fragments[0].id == "python-error-handling"
-            assert fragments[1].id == "python-idioms"
-        finally:
-            second.unlink()
+        assert len(fragments) == 2
+        ids = {f.id for f in fragments}
+        assert ids == {"python-error-handling", "python-idioms"}
+        assert fragments[0].id == "python-error-handling"
+        assert fragments[1].id == "python-idioms"
 
     def test_returns_empty_list_for_unknown_language(
         self, repository: FileSystemFragmentRepository,
@@ -160,13 +166,10 @@ class TestFileSystemFragmentRepository:
             "Content here\n"
         )
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert all(f.id != "malformed" for f in fragments)
-            assert any(f.id == "python-error-handling" for f in fragments)
-        finally:
-            bad_file.unlink()
+        assert all(f.id != "malformed" for f in fragments)
+        assert any(f.id == "python-error-handling" for f in fragments)
 
     def test_handles_missing_required_fields(
         self,
@@ -182,13 +185,10 @@ class TestFileSystemFragmentRepository:
             "Content without ID\n"
         )
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert all(f.id != "" for f in fragments)
-            assert len(fragments) >= 1
-        finally:
-            incomplete.unlink()
+        assert all(f.id != "" for f in fragments)
+        assert len(fragments) >= 1
 
     def test_skips_non_markdown_files(
         self,
@@ -199,12 +199,9 @@ class TestFileSystemFragmentRepository:
         txt_file = fixtures_dir / "python" / "notes.txt"
         txt_file.write_text("not a fragment")
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert len(fragments) == 1
-        finally:
-            txt_file.unlink()
+        assert len(fragments) == 1
 
     def test_handles_file_without_yaml_front_matter(
         self,
@@ -215,13 +212,10 @@ class TestFileSystemFragmentRepository:
         no_yaml = fixtures_dir / "python" / "no-frontmatter.md"
         no_yaml.write_text("# Just markdown\n\nNo front matter here.\n")
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert len(fragments) == 1
-            assert fragments[0].id == "python-error-handling"
-        finally:
-            no_yaml.unlink()
+        assert len(fragments) == 1
+        assert fragments[0].id == "python-error-handling"
 
     def test_returns_fragments_sorted_by_priority_descending(
         self,
@@ -240,13 +234,10 @@ class TestFileSystemFragmentRepository:
             "# Low priority\n"
         )
 
-        try:
-            fragments = repository.find_by_language("python")
+        fragments = repository.find_by_language("python")
 
-            assert len(fragments) == 2
-            assert fragments[0].priority >= fragments[1].priority
-        finally:
-            low.unlink()
+        assert len(fragments) == 2
+        assert fragments[0].priority >= fragments[1].priority
 
     def test_returns_empty_list_when_no_universal_dir(
         self, tmp_path: Path,
