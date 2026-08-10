@@ -6,7 +6,7 @@ import logging
 import signal
 import time
 
-from pr_auto_reviewer.application.commands.review_pull_request_command import (
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker

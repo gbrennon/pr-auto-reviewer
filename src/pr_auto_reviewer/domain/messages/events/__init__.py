@@ -1,4 +1,4 @@
-"""Application events — facts about what happened during review processing."""
+"""Domain events — facts about what happened during review processing."""
 
 from .conversation_completed_event import ConversationCompletedEvent
 from .findings_aggregated_event import FindingsAggregatedEvent

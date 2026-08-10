@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from ..commands.register_issue_command import RegisterIssueCommand
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import RegisterIssueCommand
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.pull_request_not_found_error import PullRequestNotFoundError
 from ...domain.exceptions.review_item_not_found_error import ReviewItemNotFoundError

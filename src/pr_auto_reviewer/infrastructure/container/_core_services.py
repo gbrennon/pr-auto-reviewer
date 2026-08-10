@@ -9,44 +9,57 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
+    AggregateReviewFindingsCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+    RunAgentConversationCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
+    VerifyFindingsCommand,
+)
+from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
+    ConversationCompletedEvent,
+)
+from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
+    FindingsAggregatedEvent,
+)
+from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
+    PhaseCompletedEvent,
+)
+from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
+    ReviewTurnParsedEvent,
+)
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
+from pr_auto_reviewer.application.services.event_logging_handler import (
+    EventLoggingHandler,
+)
 from pr_auto_reviewer.application.services.finding_aggregator import (
     FindingAggregator,
+)
+from pr_auto_reviewer.application.services.finding_verifier import (
+    FindingVerifier,
 )
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
-from pr_auto_reviewer.application.services.finding_verifier import (
-    FindingVerifier,
-)
 from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
-from pr_auto_reviewer.infrastructure.llm.ollama_agent_adapter import (
-    OllamaAgentAdapter,
-)
-from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
-    OllamaChatClient,
-)
-from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
-    ExplorationToolService,
-)
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-    ReviewResponseParser,
-)
-from pr_auto_reviewer.infrastructure.review_publishers._shared import (
-    ReasonBuilder,
-)
-from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
-    JsonFilePullRequestRepository,
-)
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
-from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
-    LinuxNotifier,
+from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.context.review_context_factory import (
+    ReviewContextFactory,
+)
+from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
+    ComposeReviewPromptAdapter,
 )
 from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
@@ -54,11 +67,29 @@ from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository i
 from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
-from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
-    ComposeReviewPromptAdapter,
+from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
+    ExplorationToolService,
 )
-from pr_auto_reviewer.infrastructure.context.review_context_factory import (
-    ReviewContextFactory,
+from pr_auto_reviewer.infrastructure.llm.ollama_agent_adapter import (
+    OllamaAgentAdapter,
+)
+from pr_auto_reviewer.infrastructure.conversation_logger import (
+    MarkdownConversationLogger,
+)
+from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
+    OllamaChatClient,
+)
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
+    LinuxNotifier,
+)
+from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
+    JsonFilePullRequestRepository,
+)
+from pr_auto_reviewer.infrastructure.review_publishers._shared import (
+    ReasonBuilder,
 )
 
 logger = logging.getLogger(__name__)
@@ -181,10 +212,15 @@ def wire_core_services(
         timeout=config.ollama_timeout,
         max_retries=config.llm_max_retries,
     )
+    command_bus = InMemoryCommandBus()
+    conversation_logger = MarkdownConversationLogger(
+        base_dir=Path(config_dir) / "conversations"
+    )
     turn_parser = TurnParser(ReviewResponseParser())
     conversation_service = AgentConversationService(
         chat_port=chat_client,
-        turn_parser=turn_parser,
+        command_bus=command_bus,
+        conversation_logger=conversation_logger,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
     verify_prompt = ReviewResponseParser.strip_frontmatter(
@@ -199,12 +235,31 @@ def wire_core_services(
     )
     aggregator = FindingAggregator(ReasonBuilder())
     orchestrator = MultiPhaseReviewOrchestrator(
-        conversation_service=conversation_service,
-        aggregator=aggregator,
+        command_bus=command_bus,
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
             repo_path, changed_files=changed_files
         ),
-        verifier=verifier,
+    )
+    command_bus.register(
+        RunAgentConversationCommand, conversation_service.execute
+    )
+    command_bus.register(
+        AggregateReviewFindingsCommand, aggregator.execute
+    )
+    command_bus.register(VerifyFindingsCommand, verifier.execute)
+    command_bus.register(ParseReviewTurnCommand, turn_parser.execute)
+    event_logger = EventLoggingHandler()
+    command_bus.register(
+        ReviewTurnParsedEvent, event_logger.handle_review_turn_parsed
+    )
+    command_bus.register(
+        ConversationCompletedEvent, event_logger.handle_conversation_completed
+    )
+    command_bus.register(
+        PhaseCompletedEvent, event_logger.handle_phase_completed
+    )
+    command_bus.register(
+        FindingsAggregatedEvent, event_logger.handle_findings_aggregated
     )
     plan = _build_review_plan()
     llm_review: LlmReviewPort = OllamaAgentAdapter(
@@ -212,7 +267,6 @@ def wire_core_services(
         orchestrator=orchestrator,
         plan=plan,
     )
-    command_bus = InMemoryCommandBus()
     notifier = LinuxNotifier(run_command=subprocess.run)
 
     fragments_dir = config.fragments_dir or None

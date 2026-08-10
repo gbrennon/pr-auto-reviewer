@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.application.commands.run_multi_phase_review_command import (
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (

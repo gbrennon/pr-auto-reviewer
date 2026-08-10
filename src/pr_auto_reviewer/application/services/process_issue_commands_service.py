@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-from ..commands.process_issue_commands_command import ProcessIssueCommandsCommand
-from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.issue import Issue
+from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions import (
-    PullRequestNotFoundError,
     IssueCreationError,
+    PullRequestNotFoundError,
 )
+from ...domain.services.issue_command_parser import IssueCommandParser
+from ...domain.services.review_item_parser import ReviewItemParser
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import ProcessIssueCommandsCommand
+from pr_auto_reviewer.domain.messages.messages import invalid_items_message, issues_created_message
+from ..ports.inbound.process_issue_commands_use_case import ProcessIssueCommandsUseCase
+from ..ports.outbound.comment_publisher_port import CommentPublisherPort
+from ..ports.outbound.comment_reader_port import CommentReaderPort
+from ..ports.outbound.issue_tracker_port import IssueTrackerPort
 from ..ports.outbound.pull_request_repository import PullRequestRepository
 from ..ports.outbound.review_reader_port import ReviewReaderPort
-from ..ports.outbound.comment_reader_port import CommentReaderPort
-from ..ports.outbound.comment_publisher_port import CommentPublisherPort
-from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.inbound.process_issue_commands_use_case import ProcessIssueCommandsUseCase
-from ...domain.services.review_item_parser import ReviewItemParser
-from ...domain.services.issue_command_parser import IssueCommandParser
 from ..serializers.issue_body_builder import IssueBodyBuilder
-from ..messages.messages import invalid_items_message, issues_created_message
+
 
 class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
 
@@ -63,9 +64,8 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
     def _fetch_comments(self, pr: PullRequest):
         return self._comment_reader.get_comments(pr.id)
 
-    @staticmethod
     def _partition_item_numbers(
-        requested: list[int], items: list[ReviewItem],
+        self, requested: list[int], items: list[ReviewItem],
     ) -> tuple[list[int], list[int]]:
         valid_numbers = {item.number for item in items}
         valid: list[int] = []
