@@ -10,32 +10,41 @@
 
 ```
  1  CLI entry
-    │  pyproject.toml → pr_auto_reviewer.cli:main()
-    │  Parses args: --repo=gbrennon/pr-auto-reviewer --pr=71 --force --verbose
-    v
+     │  pyproject.toml → pr_auto_reviewer.cli:main()
+     │  Parses args: --repo=gbrennon/pr-auto-reviewer --pr=71 --force --verbose
+     v
  2  bootstrap()
-    │  CompositionRoot → Container (DI) → wires all adapters
-    v
- 3  CliRunner._run_review()
-    │  force=True → pr_lister.get_pr(repo, 71)  [state-agnostic]
-    │  Builds ReviewPullRequestCommand(pr_id, sha, title, desc, force=true)
-    v
- 4  ReviewPullRequestService.execute()
-    ├─ 4a. PullRequestRepository.find(pr_id)
-    │      → Load from ~/.config/pr-auto-reviewer/state.json
-    ├─ 4b. force=true → skip needs_review check
-    ├─ 4c. ChangesetFetcherPort.fetch(pr_id, sha)
-    │      → Git API: GET diff, GET file contents, GET commits
-    ├─ 4d. ReviewContextFactoryPort.build(pr_id, diff, title, desc)
-    │      → Fetches repo structure, detects language/architecture
-    │      → Fetches prompt fragments, renders via Jinja2, composes prompt
-    ├─ 4e. LlmReviewPort.review_prompt(prompt)
-    │      → POST Ollama /api/generate, parse JSON response
-    ├─ 4f. ReviewPublisherPort.publish(pr_id, review)
-    │      → POST Git API: submit formal review
-    ├─ 4g. pr.add_review(review, sha)  [new immutable PullRequest]
-    └─ 4h. PullRequestRepository.save(pr)
-           → Write to state.json
+     │  CompositionRoot → Container (DI) → wires all adapters
+     v
+ 3  cli.py:main() rebuilds argv
+     │  ["pr-auto-reviewer", "review", "--repo", "...", "--pr", "71", "--force", "--verbose"]
+     v
+ 4  CliRunner._run_review()
+     │  force=True → pr_lister.get_pr(repo, 71)  [state-agnostic]
+     │  Builds ReviewPullRequestCommand(pr_id, sha, title, desc, force=true)
+     v
+ 5  ReviewPullRequestService.execute()
+     ├─ 5a. PullRequestRepository.find(pr_id)
+     │      → Load from ~/.config/pr-auto-reviewer/state.json
+     ├─ 5b. force=true → skip needs_review check
+     ├─ 5c. TokenVerifierPort.verify(pr_id)  [preflight]
+     ├─ 5d. ChangesetFetcherPort.fetch(pr_id, sha)
+     │      → Local git clone: git fetch, compute diff, read file contents
+     ├─ 5e. ReviewContextFactoryPort.build(pr_id, diff, pr_title=title, pr_description=desc, target_branch=target_branch)
+     │      → Fetches repo structure via local git
+     │      → Detects language/architecture
+     │      → Fetches prompt fragments, renders via Jinja2, composes prompt
+     ├─ 5f. LlmReviewPort.review_prompt(prompt)
+     │      → POST Ollama /api/generate, parse JSON response
+     │      → Retry orchestrator handles retries on failure
+     ├─ 5g. _add_deterministic_findings(review, diff)  [preserves verdict]
+     ├─ 5h. Blocker tracking (resolve old, track new, override verdict if needed)
+     ├─ 5i. ReviewPublisherPort.publish(pr_id, review, diff)
+     │      → POST Git API: submit formal review or comment
+     │      → Platform-specific: Forgejo splits non-blocking items
+     ├─ 5j. pr.add_review(review, sha)  [new immutable PullRequest]
+     └─ 5k. PullRequestRepository.save(pr)
+            → Write to state.json
 ```
 
 ---
@@ -61,35 +70,51 @@
                     │  │                                  │     │
                     │  │  ReviewPullRequestService        │─────│───┐
                     │  │  ProcessIssueCommandsService     │     │   │
+                    │  │  MultiPhaseReviewOrchestrator    │     │   │
+                    │  │  AgentConversationService        │     │   │
+                    │  │  FindingVerifier                 │     │   │
+                    │  │  FindingAggregator               │     │   │
+                    │  │  EventLoggingHandler             │     │   │
                     │  └──────────────────────────────────┘     │   │
                     │                                          │   │
                     │  ┌──────────────────────────────────┐     │   │
                     │  │   Inbound Ports (Protocols)      │     │   │
                     │  │   ─────────────────────────      │     │   │
-                    │  │   ReviewPullRequestUseCase       │     │   │
-                    │  │   ProcessIssueCommandsUseCase    │     │   │
-                    │  │   RegisterIssuePort              │     │   │
+                    │  │  ReviewPullRequestUseCase        │     │   │
+                    │  │  ProcessIssueCommandsUseCase     │     │   │
+                    │  │  RunMultiPhaseReviewUseCase      │     │   │
+                    │  │  RunAgentConversationUseCase     │     │   │
+                    │  │  VerifyFindingsUseCase           │     │   │
+                    │  │  AggregateReviewFindingsUseCase  │     │   │
+                    │  │  ParseReviewTurnUseCase          │     │   │
+                    │  │  RegisterIssuePort               │     │   │
                     │  └──────────────────────────────────┘     │   │
                     │                                          │   │
                     │  ┌──────────────────────────────────┐     │   │
                     │  │   Commands (CQRS)                │     │   │
                     │  │   ──────────────────────         │     │   │
-                    │  │   ReviewPullRequestCommand       │     │   │
-                    │  │   ProcessIssueCommandsCommand    │     │   │
-                    │  │   RegisterIssueCommand           │     │   │
+                    │  │  ReviewPullRequestCommand        │     │   │
+                    │  │  ProcessIssueCommandsCommand     │     │   │
+                    │  │  RunMultiPhaseReviewCommand      │     │   │
+                    │  │  RunAgentConversationCommand     │     │   │
+                    │  │  VerifyFindingsCommand           │     │   │
+                    │  │  AggregateReviewFindingsCommand  │     │   │
+                    │  │  ParseReviewTurnCommand          │     │   │
+                    │  │  RegisterIssueCommand            │     │   │
                     │  └──────────────────────────────────┘     │   │
                     │                                          │   │
                     │  ┌──────────────────────────────────┐     │   │
                     │  │   Domain Services                │     │   │
                     │  │   ReviewItemParser               │     │   │
-                    │  │   IssueCommandParser             │     │   │
+                    │  │  IssueCommandParser              │     │   │
+                    │  │  ReviewItemFactory               │     │   │
                     │  └──────────────────────────────────┘     │   │
                     └──────────────┬───────────────────────────┘   │
                                    │ calls ───── Driven Ports     │
                                    │            (Outbound)        │
                     ┌──────────────▼───────────────────────────┐   │
-                    │         INFRASTRUCTURE LAYER            ◄───┘
-                    │                                          │
+                    │         INFRASTRUCTURE LAYER             │   │
+                    │                                          │   │
                     │  ┌────────────────────────────────────┐   │
                     │  │   OUTBOUND PORTS (Interfaces)      │   │
                     │  │                                    │   │
@@ -107,30 +132,41 @@
                     │  │  IssueTrackerPort                   │   │
                     │  │  CommandBusPort                     │   │
                     │  │  ReviewReaderPort                   │   │
+                    │  │  TokenVerifierPort                  │   │
+                    │  │  ConversationLoggerPort             │   │
+                    │  │  ReasonBuilderPort                  │   │
                     │  └────────────────────────────────────┘   │
                     │                                            │
                     │  ┌────────────────────────────────────┐   │
                     │  │   ADAPTERS (Implementations)       │   │
                     │  │                                    │   │
-                    │  │  GitChangesetFetcherAdapter  ─────▶│───│─── Git API
-                    │  │  GitRepositoryContextAdapter ─────▶│───│─── Git API
-                    │  │  GitReviewPublisherAdapter  ─────▶│───│─── Git API
-                    │  │  GitReviewReaderAdapter     ─────▶│───│─── Git API
-                    │  │  GitCommentReaderAdapter    ─────▶│───│─── Git API
-                    │  │  GitCommentPublisherAdapter ─────▶│───│─── Git API
-                    │  │  GitIssueTrackerAdapter     ─────▶│───│─── Git API
-                    │  │  GitPrListerAdapter         ─────▶│───│─── Git API
-                    │  │  GitRepoListerAdapter       ─────▶│───│─── Git API
+                    │  │  LocalChangesetFetcher  ──────────▶│───│─── Local git
+                    │  │  LocalRepositoryContext ──────────▶│───│─── Local git
+                    │  │  Github/Forgejo ReviewPublisher ──▶│───│─── Git API
+                    │  │  Github/Forgejo ReviewReader  ────▶│───│─── Git API
+                    │  │  Github/Forgejo CommentReader ──▶│───│─── Git API
+                    │  │  Github/Forgejo CommentPublisher─▶│───│─── Git API
+                    │  │  Github/Forgejo IssueTracker  ────▶│───│─── Git API
+                    │  │  Github/Forgejo PrLister  ────────▶│───│─── Git API
+                    │  │  Github/Forgejo RepoLister  ──────▶│───│─── Git API
+                    │  │  Composite* adapters  ────────────▶│───│─── Multi-platform
                     │  │                                    │   │
                     │  │  OllamaLlmAdapter ────────────────▶│───│─── Ollama
+                    │  │  OllamaExploratoryChatAdapter ────▶│───│─── Ollama
+                    │  │  OllamaAgentAdapter ──────────────▶│───│─── Ollama
                     │  │                                    │   │
                     │  │  TerminalReviewPublisherAdapter ──▶│─── stdout
-                    │  │  NullPullRequestRepository  ──────▶│─── no-op
+                    │  │  NullPullRequestRepository ────────▶│─── no-op
                     │  │  JsonFilePullRequestRepo ─────────▶│─── state.json
                     │  │                                    │   │
                     │  │  FileSystemFragmentRepository ────▶│─── content/*.md
-                    │  │  Jinja2Renderer              ─────▶│─── Jinja2
-                    │  │  ComposeReviewPromptAdapter  ─────▶│─── prompt assembly
+                    │  │  Jinja2Renderer ──────────────────▶│─── Jinja2
+                    │  │  ComposeReviewPromptAdapter ──────▶│─── prompt assembly
+                    │  │  InMemoryCommandBus ──────────────▶│─── in-process
+                    │  │  PreflightVerifier ───────────────▶│─── Git API
+                    │  │  RateLimitTracker ────────────────▶│─── disk
+                    │  │  Https/SshCloneUrlResolver ───────▶│─── URL construction
+                    │  │  LinuxNotifier ───────────────────▶│─── libnotify
                     │  └────────────────────────────────────┘   │
                     └────────────────────────────────────────────┘
 ```
@@ -146,19 +182,20 @@
 │  HTTP Clients:                                                  │
 │    GitPlatformHttpClient(api_url, token)           ── main      │
 │    GitPlatformHttpClient(api_url, reviewer_token)  ── reviewer  │
+│    Forgejo/GitHub-specific clients for multi-platform mode      │
 │                                                                 │
 │  Adapters created:                                              │
 │    pr_repository ──── JsonFilePullRequestRepository(state.json) │
-│    changeset_fetcher ─ GitChangesetFetcherAdapter(http_client)  │
-│    repository_context ─ GitRepositoryContextAdapter(http_client)│
+│    changeset_fetcher ─ LocalChangesetFetcher(local_repo, resolver)│
+│    repository_context ─ LocalRepositoryContext(local_repo)      │
 │    llm_review ──────── OllamaLlmAdapter(host, model, ...)       │
-│    review_publisher ── GitReviewPublisherAdapter(reviewer_cli)  │
-│    review_reader ───── GitReviewReaderAdapter(http_client)      │
-│    comment_reader ──── GitCommentReaderAdapter(http_client)     │
-│    comment_publisher ─ GitCommentPublisherAdapter(reviewer_cli) │
-│    issue_tracker ───── GitIssueTrackerAdapter(http_client)      │
-│    repo_lister ─────── GitRepoListerAdapter(http_client)        │
-│    pr_lister ───────── GitPrListerAdapter(http_client)          │
+│    review_publisher ── Github/Forgejo/Composite/Terminal        │
+│    review_reader ───── Github/Forgejo/Composite                  │
+│    comment_reader ──── Github/Forgejo/Composite                  │
+│    comment_publisher ─ Github/Forgejo/Composite                  │
+│    issue_tracker ───── Github/Forgejo/Composite                  │
+│    repo_lister ─────── Github/Forgejo/Composite                  │
+│    pr_lister ───────── Github/Forgejo/Composite                  │
 │                                                                 │
 │  Fragment System:                                               │
 │    fragment_repository ── FileSystemFragmentRepository(fragments)│
@@ -170,6 +207,11 @@
 │    review_context_factory ── ReviewContextFactory(              │
 │                               repository_context,              │
 │                               compose_review_prompt)            │
+│                                                                 │
+│  Advanced Services:                                             │
+│    command_bus ──────── InMemoryCommandBus()                    │
+│    token_verifier ────── PreflightVerifier()                    │
+│    notifier ──────────── LinuxNotifier()                        │
 └─────────────────────────────────────────────────────────────────┘
 
   CompositionRoot._wire_components()
@@ -180,12 +222,21 @@
   │       review_context_factory,    ← Composite: wraps 2 ports
   │       llm_review,
   │       review_publisher,
+  │       token_verifier,
   │   )
   │
   ├── ProcessIssueCommandsService(
   │       pr_repository, review_reader, comment_reader,
   │       comment_publisher, issue_tracker, review_item_parser,
   │       issue_command_parser, issue_body_builder,
+  │   )
+  │
+  ├── MultiPhaseReviewOrchestrator(
+  │       command_bus, tool_factory, max_retries, max_feedback_rounds
+  │   )
+  │
+  ├── AgentConversationService(
+  │       chat_port, command_bus, conversation_logger, ...
   │   )
   │
   └── CliRunner(
@@ -195,6 +246,9 @@
           pr_lister,
           review_item_parser,
           pr_repository,
+          notifier,
+          token_verifier,
+          output_mode,
       )
 ```
 
@@ -247,7 +301,7 @@
   │                                                               │
   │  Since --force:                                               │
   │    → pr_lister.get_pr("gbrennon/pr-auto-reviewer", 71)        │
-  │       └─ GitPrListerAdapter                                   │
+  │       └─ ForgejoPrLister / GithubPrLister / CompositePrLister │
   │            GET /repos/gbrennon/pr-auto-reviewer/pulls/71      │
   │            → OpenPullRequest(pr_id, head_sha, title, desc)    │
   │       (state-agnostic — works for closed/merged PRs too)      │
@@ -284,29 +338,35 @@
 │ │ command.force == True → ALWAYS REVIEW (skip check)      │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
-│ 4.3.3 FETCH DIFF (step-by-step inside)                         │
+│ 4.3.3 PREFLIGHT TOKEN VERIFICATION                             │
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ token_verifier.verify(pr_id)                             │   │
+│ │   PreflightVerifier:                                     │   │
+│ │     1. GET /user (auth check)                            │   │
+│ │     2. POST /pulls/{n}/requested_reviewers (write check) │   │
+│ │   Cached in ~/.config/pr-auto-reviewer/verified-tokens.json│   │
+│ └──────────────────────────────────────────────────────────┘   │
+│                    │                                            │
+│ 4.3.4 FETCH DIFF VIA LOCAL GIT CLONE                           │
 │ ┌──────────────────────────────────────────────────────────┐   │
 │ │ changeset_fetcher.fetch(pr_id, head_sha)                 │   │
 │ │                                                          │   │
-│ │ GitChangesetFetcherAdapter                               │   │
+│ │ LocalChangesetFetcher                                    │   │
 │ │  ┌──────────────────────────────────────────────────┐   │   │
-│ │  │ ① GET /repos/gbrennon/pr-auto-reviewer/          │   │   │
-│ │  │       pulls/71.diff                              │   │   │
-│ │  │   → raw unified diff (string)                    │   │   │
-│ │  │   Validate: len > 50 chars                       │   │   │
-│ │  │                                                  │   │   │
-│ │  │ ② Extract changed file paths from diff headers   │   │   │
-│ │  │   regex: ^diff --git a/(.+) b/(.+)               │   │   │
-│ │  │   → ["src/main.py", "src/utils.py", ...]         │   │   │
-│ │  │                                                  │   │   │
-│ │  │ ③ For each changed file:                         │   │   │
-│ │  │   GET /repos/gbrennon/pr-auto-reviewer/          │   │   │
-│ │  │       raw/{sha}/{file_path}                      │   │   │
-│ │  │   → file_contents: {"src/main.py": "...", ...}   │   │   │
-│ │  │                                                  │   │   │
-│ │  │ ④ GET /repos/gbrennon/pr-auto-reviewer/          │   │   │
-│ │  │       pulls/71/commits?limit=30                  │   │   │
-│ │  │   → ["feat: add ...", "fix: ...", ...]           │   │   │
+│ │  │ ① Resolve clone URL (HTTPS or SSH)               │   │   │
+│ │  │ ② Clone/fetch repo to ~/.cache/pr-auto-reviewer/ │   │   │
+│ │  │     repos/{owner}_{repo}_{pr}/                    │   │   │
+│ │  │ ③ git fetch origin pull/{pr}/head:pr-{pr}        │   │   │
+│ │  │ ④ Resolve base SHA (merge-base)                  │   │   │
+│ │  │ ⑤ git diff base_sha..pr-{pr} → raw unified diff  │   │   │
+│ │  │ ⑥ Extract changed file paths from diff headers   │   │   │
+│ │  │    regex: ^diff --git a/(.+) b/(.+)              │   │   │
+│ │  │    → ["src/main.py", "src/utils.py", ...]         │   │   │
+│ │  │ ⑦ For each changed file:                         │   │   │
+│ │  │    git show pr-{pr}:{file_path} → file contents  │   │   │
+│ │  │    → file_contents: {"src/main.py": "...", ...}  │   │   │
+│ │  │ ⑧ git log base_sha..pr-{pr} --format=%s          │   │   │
+│ │  │    → ["feat: add ...", "fix: ...", ...]           │   │   │
 │ │  └──────────────────────────────────────────────────┘   │   │
 │ │                                                          │   │
 │ │ → PullRequestDiff(                                       │   │
@@ -317,32 +377,34 @@
 │ │   )                                                      │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
-│ 4.3.4 BUILD REVIEW CONTEXT + COMPOSE PROMPT                    │
+│ 4.3.5 BUILD REVIEW CONTEXT + COMPOSE PROMPT                    │
 │ ┌──────────────────────────────────────────────────────────┐   │
-│ │ review_context_factory.build(pr_id, diff, title, desc)   │   │
+│ │ review_context_factory.build(pr_id, diff,                │   │
+│ │     pr_title=title, pr_description=desc,                 │   │
+│ │     target_branch=target_branch)                         │   │
 │ │                                                          │   │
 │ │ ┌─ ReviewContextFactory (Composite Port) ─────────────┐  │   │
 │ │ │                                                     │  │   │
-│ │ │ 4.4.a RepositoryContextPort.fetch(pr_id)            │  │   │
-│ │ │   └─ GitRepositoryContextAdapter                    │  │   │
-│ │ │      ① GET .../git/trees/main?recursive=1           │  │   │
-│ │ │        → tree_paths: ["src/...", "tests/..."]       │  │   │
-│ │ │      ② ArchitectureDetector.detect(paths)           │  │   │
-│ │ │        → "hexagonal" / "mvc" / "unknown"            │  │   │
-│ │ │      ③ Fetch CONVENTIONS.md / ARCHITECTURE.md       │  │   │
-│ │ │      ④ PythonVersionDetector.detect(paths)→"3.12"  │  │   │
-│ │ │      → RepositoryContext(arch, conventions, struc)  │  │   │
+│ │ │ 4.5.a RepositoryContextPort.fetch(pr_id)            │  │   │
+│ │ │   └─ LocalRepositoryContext                          │  │   │
+│ │ │      ① git ls-tree -r --name-only HEAD               │  │   │
+│ │ │         → tree_paths: ["src/...", "tests/..."]       │  │   │
+│ │ │      ② ArchitectureDetector.detect(paths)            │  │   │
+│ │ │         → "hexagonal" / "mvc" / "unknown"            │  │   │
+│ │ │      ③ Fetch CONVENTIONS.md / ARCHITECTURE.md        │  │   │
+│ │ │      ④ PythonVersionDetector.detect(paths)→"3.12"   │  │   │
+│ │ │      → RepositoryContext(arch, conventions, struc)   │  │   │
 │ │ │                                                     │  │   │
-│ │ │   Augment: attach pr_title, pr_description          │  │   │
+│ │ │   Augment: attach pr_title, pr_description           │  │   │
 │ │ │                                                     │  │   │
-│ │ │ 4.4.b RepositoryContextPort.build_fragment_context() │  │   │
-│ │ │   └─ GitRepositoryContextAdapter                    │  │   │
-│ │ │      ① LanguageDetector.detect(file_paths)          │  │   │
-│ │ │        → "python" (from .py extension)              │  │   │
-│ │ │      ② ContextSerializer.serialize(repo_ctx,       │  │   │
-│ │ │           commit_msgs, python_version)              │  │   │
-│ │ │        → Markdown string                            │  │   │
-│ │ │      → ("python", serialized_context | None)        │  │   │
+│ │ │ 4.5.b RepositoryContextPort.build_fragment_context() │  │   │
+│ │ │   └─ LocalRepositoryContext                          │  │   │
+│ │ │      ① LanguageDetector.detect(file_paths)           │  │   │
+│ │ │         → "python" (from .py extension)              │  │   │
+│ │ │      ② ContextSerializer.serialize(repo_ctx,        │  │   │
+│ │ │           commit_msgs, python_version)               │  │   │
+│ │ │         → Markdown string                            │  │   │
+│ │ │      → ("python", serialized_context | None)         │  │   │
 │ │ │                                                     │  │   │
 │ │ │   ReviewContext(                                     │  │   │
 │ │ │     language="python",                              │  │   │
@@ -351,8 +413,8 @@
 │ │ │     repository_context=serialized,                   │  │   │
 │ │ │   )                                                  │  │   │
 │ │ │                                                     │  │   │
-│ │ │ 4.4.c ComposeReviewPromptPort.execute(ctx)          │  │   │
-│ │ │   └─ ComposeReviewPromptAdapter                     │  │   │
+│ │ │ 4.5.c ComposeReviewPromptPort.execute(ctx)           │  │   │
+│ │ │   └─ ComposeReviewPromptAdapter                      │  │   │
 │ │ │                                                     │  │   │
 │ │ │   ── SELECT FRAGMENTS ──                            │  │   │
 │ │ │   fragment_repository.find_by_language("python")    │  │   │
@@ -366,29 +428,33 @@
 │ │ │   Greedy select highest-priority fragments          │  │   │
 │ │ │   that fit within fragment_max_tokens               │  │   │
 │ │ │                                                     │  │   │
+│ │ │   ── STRICT SELECTION (if USE_STRICT_FRAGMENT_SELECTION) ──│
+│ │ │   Filter fragments by keyword/path match against   │  │   │
+│ │ │   diff and file paths                              │  │   │
+│ │ │                                                     │  │   │
 │ │ │   ── RENDER FRAGMENTS ──                            │  │   │
 │ │ │   For each fragment:                                │  │   │
-│ │ │     Jinja2Renderer.render(template, variables)      │  │   │
-│ │ │     variables: language, file_paths,                │  │   │
+│ │ │     Jinja2Renderer.render(template, variables)     │  │   │
+│ │ │     variables: language, file_paths,               │  │   │
 │ │ │               repository_context                    │  │   │
-│ │ │     (diff placeholder: "[Full diff below...]")      │  │   │
+│ │ │     (diff placeholder: "[Full diff below...]")     │  │   │
 │ │ │                                                     │  │   │
 │ │ │   ── COMPOSE FINAL PROMPT ──                        │  │   │
-│ │ │   Join rendered sections with "\n\n---\n\n"         │  │   │
+│ │ │   Join rendered sections with "\n\n---\n\n"        │  │   │
 │ │ │   Append repository_context                         │  │   │
 │ │ │   Append JSON output reminder                       │  │   │
 │ │ │   Append "## Diff\n```diff\n{diff}\n```"            │  │   │
-│ │ │   (Truncate diff if > max_total_chars)              │  │   │
+│ │ │   (Truncate diff if > max_total_chars)             │  │   │
 │ │ │                                                     │  │   │
 │ │ │   → ComposedPrompt(                                 │  │   │
-│ │ │       content="Full prompt text...",                │  │   │
-│ │ │       fragments_used=["type-hints", "solid", ...],  │  │   │
-│ │ │       total_tokens=len//4,                          │  │   │
-│ │ │     )                                               │  │   │
+│ │ │       content="Full prompt text...",               │  │   │
+│ │ │       fragments_used=["type-hints", "solid", ...], │  │   │
+│ │ │       total_tokens=len//4,                         │  │   │
+│ │ │     )                                              │  │   │
 │ │ └─────────────────────────────────────────────────────┘  │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
-│ 4.3.5 RUN LLM REVIEW                                           │
+│ 4.3.6 RUN LLM REVIEW                                           │
 │ ┌──────────────────────────────────────────────────────────┐   │
 │ │ llm_review.review_prompt(composed_prompt)                │   │
 │ │                                                          │   │
@@ -431,41 +497,88 @@
 │ │  │     model_used="code-review:latest",               │   │   │
 │ │  │   )                                                │   │   │
 │ │  └──────────────────────────────────────────────────┘   │   │
+│ │                                                          │   │
+│ │  ── RETRY ORCHESTRATION (on failure) ──                │   │   │
+│ │  RetryOrchestrator:                                    │   │   │
+│ │    - Max retries: LLM_MAX_RETRIES (default 5)          │   │   │
+│ │    - On unparseable: builds correction prompt          │   │   │
+│ │    - On token exhaustion: restarts                     │   │   │
+│ │    - Dumps prompts to /tmp/ollama-prompt-try*.txt      │   │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
-│ 4.3.6 PUBLISH REVIEW                                           │
+│ 4.3.7 ADD DETERMINISTIC FINDINGS                               │
 │ ┌──────────────────────────────────────────────────────────┐   │
-│ │ review_publisher.publish(pr_id, review)                  │   │
+│ │ _add_deterministic_findings(review, diff)                │   │
+│ │   Scans diff for noisy logger.info() calls with          │   │   │
+│ │   specific markers (GET, POST, keys=, tokens, etc.)      │   │   │
+│ │   Adds MINOR/MAINTAINABILITY items suggesting            │   │   │
+│ │   logger.debug() instead                                 │   │   │
+│ │   Preserves original review.verdict (not hardcoded!)     │   │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│                    │                                            │
+│ 4.3.8 TRACK BLOCKING ITEMS                                     │
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ blocking_ids = [item.id for item in review.items         │   │
+│ │                if item.is_blocking and item.id]          │   │
+│ │                                                          │   │
+│ │ // Resolve old blockers no longer in this review         │   │
+│ │ if pr.unresolved_blocking_ids:                           │   │
+│ │     resolved = [id for id in pr.unresolved_blocking_ids  │   │
+│ │                  if id not in blocking_ids]              │   │
+│ │     if resolved: pr = pr.with_resolved_blocking(*resolved)│
+│ │                                                          │   │
+│ │ // Track new/persistent blockers                          │   │
+│ │ if blocking_ids:                                         │   │
+│ │     pr = pr.with_unresolved_blocking(*blocking_ids)      │   │
+│ │                                                          │   │
+│ │ // Guard: override verdict if blockers remain            │   │
+│ │ if pr.unresolved_blocking_ids and                        │   │
+│ │    review.verdict != ReviewVerdict.CHANGES_REQUESTED:    │   │
+│ │     review = CodeReview(                                 │   │
+│ │         verdict=ReviewVerdict.CHANGES_REQUESTED,         │   │
+│ │         reason=build_unresolved_reason(...),             │   │
+│ │         summary=review.summary,                          │   │
+│ │         items=review.items,                              │   │
+│ │         ...                                              │   │
+│ │     )                                                    │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│                    │                                            │
+│ 4.3.9 PUBLISH REVIEW                                           │
+│ ┌──────────────────────────────────────────────────────────┐   │
+│ │ review_publisher.publish(pr_id, review, diff)            │   │
 │ │                                                          │   │
 │ │ GitReviewPublisherAdapter (since output_mode="codeberg") │   │
 │ │  ┌──────────────────────────────────────────────────┐   │   │
-│ │  │ Map verdict → event:                              │   │   │
-│ │  │   APPROVED          → "APPROVED"                  │   │   │
-│ │  │   CHANGES_REQUESTED → "REQUEST_CHANGES"           │   │   │
-│ │  │   COMMENTED         → "COMMENT"                   │   │   │
-│ │  │                                                   │   │   │
-│ │  │ COMMENTED → POST /issues/{num}/comments            │   │   │
-│ │  │   (non-blocking items only; blocking → formal only) │   │   │
-│ │  │ APPROVED/REQUEST_CHANGES → first counts existing    │   │   │
-│ │  │   reviews to offset item numbers (no duplicates).   │   │   │
-│ │  │   Then: request reviewer → POST /pulls/{num}/reviews│   │   │
-│ │  │   with full body + inline diff comments.            │   │   │
-│ │  │                                                   │   │   │
-│ │  │ format_review_body(review, start_number=N)          │   │   │
-│ │  │   Jinja2 template: review_output.j2               │   │   │
-│ │  │   → Markdown body with verdict, summary,          │   │   │
-│ │  │     issue table, suggestions, praise              │   │   │
-│ │  │                                                   │   │   │
-│ │  │ POST .../pulls/71/requested_reviewers              │   │   │
-│ │  │   { reviewers: [reviewer_username] }              │   │   │
-│ │  │   (non-fatal if fails)                             │   │   │
-│ │  │                                                   │   │   │
-│ │  │ POST .../pulls/71/reviews                          │   │   │
-│ │  │   { event: verdict_event, body: formatted_body }  │   │   │
-│ │ └──────────────────────────────────────────────────┘   │   │
+│ │  │ ProcessedReview = ReviewPublisherProcessor.process() │   │   │
+│ │  │   verdict_event = _VERDICT_TO_EVENT[review.verdict]  │   │   │
+│ │  │   APPROVED          → "APPROVE" (GitHub)            │   │   │
+│ │  │   CHANGES_REQUESTED → "REQUEST_CHANGES"            │   │   │
+│ │  │   COMMENTED         → "COMMENT"                    │   │   │
+│ │  │                                                     │   │   │
+│ │  │   If COMMENTED → comment-only path                 │   │   │
+│ │  │     All non-blocking items → single PR comment     │   │   │
+│ │  │                                                     │   │   │
+│ │  │   If formal review → formal path                   │   │   │
+│ │  │     Build body with all items (GitHub)             │   │   │
+│ │  │     OR split: blocking in review, non-blocking     │   │   │
+│ │  │         as separate comment (Forgejo)              │   │   │
+│ │  │     count_existing_items() for number offset       │   │   │
+│ │  │                                                     │   │   │
+│ │  │   Forgejo override:                                │   │   │
+│ │  │     if verdict_event == "APPROVE":                 │   │   │
+│ │  │         verdict_event = "APPROVED"                 │   │   │
+│ │  │                                                     │   │   │
+│ │  │   POST /pulls/{n}/reviews with:                    │   │   │
+│ │  │     {event, body, commit_id, comments[], official} │   │   │
+│ │  │   Forgejo: official=true, GitHub: no official      │   │   │
+│ │  │   Inline comments:                                 │   │   │
+│ │  │     GitHub: "position" from diff                   │   │   │
+│ │  │     Forgejo: "old_position"/"new_position"         │   │   │
+│ │  │   Request reviewer: POST /pulls/{n}/requested_reviewers│
+│ │  └──────────────────────────────────────────────────┘   │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
-│ 4.3.7 RECORD & PERSIST                                         │
+│ 4.3.10 RECORD & PERSIST                                        │
 │ ┌──────────────────────────────────────────────────────────┐   │
 │ │ pr.add_review(review, head_sha)                          │   │
 │ │   → new PullRequest with review appended, sha updated    │   │
@@ -499,35 +612,50 @@
 │  GET(path, **params)    → requests.get(api_url + path, params, headers)    │
 │  GET_RAW(path)          → requests.get(api_url + path, headers) → .text    │
 │  POST(path, body)       → requests.post(api_url + path, json=body, hdrs)  │
+│  Rate limit headers parsed: x-ratelimit-limit, -remaining, -reset          │
 └────────────────────────────────────────────────────────────────────────────┘
-         ▲                      ▲                      ▲
-         │                      │                      │
-         │ injected into        │ injected into        │ injected into
-    ┌────┴────────────┐   ┌────┴────────────┐   ┌────┴────────────┐
-    │ ChangesetFetcher│   │ RepositoryCtx   │   │ ReviewPublisher │
-    │   Adapter       │   │   Adapter       │   │   Adapter       │
-    └─────────────────┘   └─────────────────┘   └─────────────────┘
-         │                      │                      │
-         │ API calls:           │ API calls:           │ API calls:
-         │                      │                      │
-    ═════╪══════════════════════╪══════════════════════╪═══════════════
-         ▼                      ▼                      ▼
-    ┌──────────────────────────────────────────────────────────────┐
-    │                 Forgejo / Codeberg / GitHub                   │
-    │                                                              │
-    │  GET  /repos/{repo}/pulls/{num}.diff                         │
-    │  GET  /repos/{repo}/raw/{sha}/{file}                         │
-    │  GET  /repos/{repo}/pulls/{num}/commits                      │
-    │  GET  /repos/{repo}/git/trees/{branch}?recursive=1           │
-    │  GET  /repos/{repo}/raw/main/{CONVENTIONS.md,...}            │
-    │  GET  /repos/{repo}/pulls/{num}                              │
-    │  GET  /user                                                  │
-    │  GET  /user/repos                                            │
-    │  POST /repos/{repo}/pulls/{num}/reviews                      │
-    │  POST /repos/{repo}/pulls/{num}/requested_reviewers          │
-    │  POST /repos/{repo}/issues                                   │
-    │  POST /repos/{repo}/issues/{num}/comments                    │
-    └──────────────────────────────────────────────────────────────┘
+          ▲                      ▲                      ▲
+          │                      │                      │
+          │ injected into        │ injected into        │ injected into
+     ┌────┴────────────┐   ┌────┴────────────┐   ┌────┴────────────┐
+     │ ChangesetFetcher│   │ RepositoryCtx   │   │ ReviewPublisher │
+     │   (Local git)   │   │   (Local git)   │   │   Adapter       │
+     └─────────────────┘   └─────────────────┘   └─────────────────┘
+          │                      │                      │
+          │ Git commands:        │ Git commands:        │ API calls:
+          │                      │                      │
+     ══════════════════════════════════════════════════════════════════════════
+          ▼                      ▼                      ▼
+     ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐
+     │  Local Git Repo  │ │  Local Git Repo  │ │  Forgejo / Codeberg /    │
+     │  (cloned cache)  │ │  (cloned cache)  │ │  GitHub                  │
+     └──────────────────┘ └──────────────────┘ └──────────────────────────┘
+```
+
+**Local Git Operations (ChangesetFetcher / RepositoryContext):**
+```
+  git clone/fetch → ~/.cache/pr-auto-reviewer/repos/{owner}_{repo}_{pr}/
+  git fetch origin pull/{pr}/head:pr-{pr}
+  git merge-base origin/main pr-{pr}  → base_sha
+  git diff base_sha..pr-{pr}          → raw diff
+  git show pr-{pr}:{file_path}        → file contents
+  git log base_sha..pr-{pr} --format=%s → commit messages
+  git ls-tree -r --name-only HEAD     → repo structure
+  git show HEAD:CONVENTIONS.md        → convention files
+```
+
+**API Calls (ReviewPublisher / ReviewReader / etc.):**
+```
+  GET  /repos/{repo}/pulls/{num}              (PR metadata)
+  GET  /repos/{repo}/pulls/{num}/reviews      (existing reviews)
+  POST /repos/{repo}/pulls/{num}/reviews      (submit formal review)
+  POST /repos/{repo}/pulls/{num}/requested_reviewers (request reviewer)
+  POST /repos/{repo}/issues/{num}/comments    (post comment)
+  GET  /repos/{repo}/issues/{num}/comments    (read comments)
+  POST /repos/{repo}/issues                   (create tracker issue)
+  GET  /user/repos                            (list repos)
+  GET  /repos/{repo}/pulls                    (list open PRs)
+  GET  /user                                  (auth check)
 ```
 
 ### 5.2. LLM Adapter / Ollama Communication
@@ -564,6 +692,12 @@
 │        └─ Fallback: Markdown regex parser                │
 │                                                          │
 │        → CodeReview(verdict, items, summary, ...)        │
+│                                                          │
+│  RetryOrchestrator (on failure):                         │
+│    - Max retries: LLM_MAX_RETRIES                        │
+│    - On parse error: RetryPromptBuilder builds           │
+│      correction prompt with error details                │
+│    - Dumps each attempt to /tmp/ollama-prompt-try*.txt   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -578,20 +712,21 @@
 │    ├─ 1. SELECT FRAGMENTS                                               │
 │    │    fragment_repository.find_by_language("python")                   │
 │    │    └─ FileSystemFragmentRepository                                 │
-    │    │         Read content/python/type-hints.md                         │
-    │    │         Read content/python/resource-management.md                │
-    │    │         Read content/python/error-handling.md                     │
+│    │         Read content/python/type-hints.md                         │
+│    │         Read content/python/resource-management.md                │
+│    │         Read content/python/error-handling.md                     │
 │    │         ...                                                         │
 │    │                                                                     │
 │    │    fragment_repository.find_universal()                             │
 │    │    └─ FileSystemFragmentRepository                                 │
-    │    │         Read content/universal/reviewer-system-prompt.md          │
-    │    │         Read content/universal/solid-principles.md                │
-    │    │         Read content/universal/naming-conventions.md              │
+│    │         Read content/universal/reviewer-system-prompt.md          │
+│    │         Read content/universal/solid-principles.md                │
+│    │         Read content/universal/naming-conventions.md              │
 │    │         ...                                                         │
 │    │                                                                     │
 │    │    Merge → sort by priority descending                              │
 │    │    TokenBudgetManager: greedy filter to fit max_tokens             │
+│    │    Strict selection (if enabled): keyword/path heuristic filter   │
 │    │                                                                     │
 │    ├─ 2. RENDER FRAGMENTS                                               │
 │    │    For each fragment:                                               │
@@ -602,6 +737,8 @@
 │    │        repository_context: serialized,                              │
 │    │        code: "[Full diff below...]",        ← placeholder          │
 │    │        diff: "[Full diff below...]",        ← placeholder          │
+│    │        issue_category_values: "bug/security/..."                   │
+│    │        issue_severity_values: "high/medium/info"                   │
 │    │      }                                                             │
 │    │                                                                     │
 │    ├─ 3. COMPOSE                                                        │
@@ -629,151 +766,229 @@
   │  -v,     │     │              │     │  Parses args,│     └────┬────┘
   │  --force │     │  Wires all   │     │  fetches PR  │          │
   └──────────┘     │  adapters    │     │  metadata    │          │ GET /pulls/71
-                   └──────────────┘     └──────┬───────┘          │
-                                               │                  ▼
-                                               │           ┌────────────┐
-                                               │           │  Git API   │
-                                               │           │ (Forgejo/  │
-                                               │           │  GitHub)   │
-                                               │           └────────────┘
-                                               │
-                                               ▼
-                                    ┌─────────────────────┐
-                                    │ ReviewPullRequest   │
-                                    │ Service.execute()   │
-                                    └──┬───┬───┬───┬───┬──┘
-                                       │   │   │   │   │
-              ┌────────────────────────┘   │   │   │   └──────────────┐
-              ▼                            │   │   │                  ▼
-     ┌────────────────┐                    │   │   │        ┌────────────────┐
-     │ PullRequestRepo│                    │   │   │        │  state.json    │
-     │ .find()        │                    │   │   │        │  (persist)     │
-     └────────────────┘                    │   │   │        └────────────────┘
-              │                            │   │   │
-              ▼                            │   │   │
-     ┌────────────────┐                    │   │   │
-     │ Changeset      │                    │   │   │
-     │ Fetcher.fetch()│────────────────────┼───┼───┼──────▶ Git API
-     └────────────────┘                    │   │   │        (diff, files,
-              │                            │   │   │         commits)
-              ▼                            │   │   │
-     ┌────────────────┐                    │   │   │
-     │ ReviewContext  │                    │   │   │
-     │ Factory.build()│────────────────────┼───┼───┼──────▶ Git API
-     └────────────────┘                    │   │   │        (tree, conv)
-              │                            │   │   │
-              ├────────────────────────────┼───┼───┼──────▶ content/*.md
-              │                            │   │   │
-              ▼                            │   │   │
-     ┌────────────────┐                    │   │   │
-     │ ComposeReview  │                    │   │   │
-     │ PromptAdapter  │────────────────────┼───┼───┼──────▶ Jinja2 render
-     │ .execute()     │                    │   │   │
-     └────────────────┘                    │   │   │
-              │                            │   │   │
-              ▼                            │   │   │
-     ┌────────────────┐                    │   │   │
-     │ OllamaLlm      │                    │   │   │
-     │ Adapter        │────────────────────┼───┼───┼──────▶ Ollama HTTP
-     │ .review_prompt │                    │   │   │        /api/generate
-     └────────────────┘                    │   │   │
-              │                            │   │   │
-              ▼                            │   │   │
-     ┌────────────────┐                    │   │   │
-     │ ReviewPublisher│                    │   │   │
-     │ .publish()     │────────────────────┼───┼───┼──────▶ Git API
-     └────────────────┘                    │   │   │        POST /reviews
-                                           │   │   │
-                                           ▼   ▼   ▼
-                                    ┌─────────────────────┐
-                                    │  Review posted to   │
-                                    │  PR #71             │
-                                    └─────────────────────┘
+                    └──────────────┘     └──────┬───────┘          │
+                                                │                  ▼
+                                                │           ┌────────────┐
+                                                │           │  Git API   │
+                                                │           │ (Forgejo/  │
+                                                │           │  GitHub)   │
+                                                │           └────────────┘
+                                                │
+                                                ▼
+                                     ┌─────────────────────┐
+                                     │ ReviewPullRequest   │
+                                     │ Service.execute()   │
+                                     └──┬───┬───┬───┬───┬──┘
+                                        │   │   │   │   │
+               ┌────────────────────────┘   │   │   │   └──────────────┐
+               ▼                            │   │   │                  ▼
+      ┌────────────────┐                    │   │   │        ┌────────────────┐
+      │ PullRequestRepo│                    │   │   │        │  state.json    │
+      │ .find()        │                    │   │   │        │  (persist)     │
+      └────────────────┘                    │   │   │        └────────────────┘
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ Changeset      │                    │   │   │
+      │ Fetcher.fetch()│────────────────────┼───┼───┼──────▶ Local Git
+      │ (Local git)    │   clone, diff,     │   │   │
+      └────────────────┘   file contents    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ ReviewContext  │                    │   │   │
+      │ Factory.build()│────────────────────┼───┼───┼──────▶ Local Git
+      │ (local git)    │   repo structure,  │   │   │
+      └────────────────┘   conventions       │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ ComposePrompt  │                    │   │   │
+      │ Adapter.execute│                    │   │   │
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ LlmReviewPort  │                    │   │   │
+      │ .review_prompt │────────────────────┼───┼───┼──────▶ Ollama
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ Deterministic  │                    │   │   │
+      │ Findings       │                    │   │   │
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ Blocker        │                    │   │   │
+      │ Tracking       │                    │   │   │
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ Review         │                    │   │   │
+      │ Publisher      │────────────────────┼───┼───┼──────▶ Git API
+      │ .publish()     │                    │   │   │
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ PullRequest    │                    │   │   │
+      │ .add_review()  │                    │   │   │
+      └────────────────┘                    │   │   │
+               │                            │   │   │
+               ▼                            │   │   │
+      ┌────────────────┐                    │   │   │
+      │ PullRequest    │                    │   │   │
+      │ Repo.save()    │────────────────────┼───┼───┼──────▶ state.json
+      └────────────────┘                    │   │   │
 ```
 
 ---
 
-## 7. Layered Domain Model
+## 7. Advanced Review Flows
+
+### 7.1. Multi-Phase Review
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  VALUE OBJECTS (immutable, no identity)                              │
-│                                                                     │
-│  PullRequestId(repository, number)  ─── identity of the review      │
-│  CommitSha(value)                   ─── git commit hash              │
-│  PullRequestDiff                    ─── diff + file contents + msgs │
-│  CodeReview                         ─── LLM output (verdict+items)  │
-│  ReviewVerdict                      ─── APPROVED/CHANGES_REQUESTED/ │
-│  ItemSeverity                       ─── CRITICAL/MAJOR/MINOR/INFO   │
-│  RepositoryContext                  ─── repo metadata for prompt    │
-│  CommentId / PrComment / IssueCommand                               │
-│  ComposedPrompt / ReviewContext / PromptFragment                    │
-└─────────────────────────────────────────────────────────────────────┘
+RunMultiPhaseReviewCommand
+       │
+       ▼
+MultiPhaseReviewOrchestrator.execute()
+       │
+       ├─▶ Full retry loop (max_retries times)
+       │    │
+       │    ├─▶ _run_phases(plan, repo_path, changed_files, model)
+       │    │    │
+       │    │    ├─▶ Phase 1: Security Review
+       │    │    │    RunAgentConversationCommand → AgentConversationService
+       │    │    │    └─▶ Tool calls: read_file, search_codebase, etc.
+       │    │    │
+       │    │    ├─▶ Phase 2: Architecture Review
+       │    │    │    (injects Phase 1 findings via __PREVIOUS_FINDINGS__)
+       │    │    │
+       │    │    ├─▶ Phase 3: Style Review
+       │    │    │
+       │    │    └─▶ Aggregate: AggregateReviewFindingsCommand
+       │    │         └─▶ FindingAggregator → deduplicate, merge
+       │    │         └─▶ VerifyFindingsCommand
+       │    │              └─▶ FindingVerifier → validate against source
+       │    │
+       │    └─▶ If zero items: _run_feedback_loop() (max_feedback_rounds)
+       │         Re-runs with feedback context from prior attempt
+       │
+       └─▶ Returns final CodeReview
+```
 
-┌─────────────────────────────────────────────────────────────────────┐
-│  ENTITIES (mutable identity tracked over time)                      │
-│                                                                     │
-│  PullRequest (aggregate root)                                       │
-│    └─ id: PullRequestId                                             │
-│    └─ head_sha: CommitSha                                           │
-│    └─ reviews: tuple[CodeReview]                                    │
-│    └─ processed_comment_ids: frozenset[CommentId]                   │
-│    └─ needs_review(sha) → bool                                      │
-│    └─ add_review(review, sha) → PullRequest (immutable replace)     │
-│                                                                     │
-│  ReviewItem                                                         │
-│    └─ number, severity, category, file_path,                        │
-│       line, description, current_code, suggested_fix                │
-│                                                                     │
-│  ReviewSuggestion                                                   │
-│    └─ file, line, description,                                      │
-│       current_code, suggested_code                                  │
-│                                                                     │
-│  ReviewPraise                                                       │
-│    └─ description, file                                             │
-│       (never enumerated — purely qualitative)                       │
-│                                                                     │
-│  Issue                                                              │
-│    └─ id, title, body, closed                                       │
-│    └─ close() → Issue (immutable replace)                           │
-└─────────────────────────────────────────────────────────────────────┘
+### 7.2. Agent System
+
+The agent system provides specialized agents for different review aspects. The `MultiPhaseReviewOrchestrator` creates a `ReviewPlan` with phases, each phase specifying an agent type:
+
+| Agent | Purpose |
+|-------|---------|
+| `AdvisorAgent` | Provides advisory feedback |
+| `ArchitectAgent` | Reviews architecture and design |
+| `EngineerAgent` | Reviews implementation details |
+| `ExplorerAgent` | Explores codebase for context |
+| `ManagerAgent` | Orchestrates the review process |
+| `ReviewerAgent` | Performs the actual code review |
+
+Each agent is instantiated with a role-specific system prompt. The `AgentConversationService` runs the multi-turn conversation with tool access (read_file, search_codebase, list_directory, run_git, get_changed_files).
+
+### 7.3. Agent Conversation (Single Phase)
+
+```
+RunAgentConversationCommand
+       │
+       ▼
+AgentConversationService._run()
+       │
+       ├─▶ Initialize messages: [system_prompt, user_prompt_with_tools]
+       │
+       ├─▶ Loop (max 10 turns):
+       │    │
+       │    ├─▶ chat_port.send(messages) → OllamaExploratoryChatAdapter
+       │    │
+       │    ├─▶ ParseReviewTurnCommand → TurnParseResult
+       │    │    ├─▶ verdict: build PhaseResult, validate, return
+       │    │    ├─▶ tool_call: execute_tool → append result → continue
+       │    │    ├─▶ unparseable: reprompt (max 3 consecutive)
+       │    │    └─▶ empty: reprompt (max 3 consecutive)
+       │    │
+       │    └─▶ Demand tool exploration if verdict with no tool calls
+       │
+       └─▶ Max turns exceeded → LlmUnavailableError with dump
 ```
 
 ---
 
-## 8. Key Design Decisions
+## 8. Key Implementation Details
 
-| Decision | Rationale |
-|---|---|
-| **Hexagonal Architecture** | Domain + Application layers have zero dependencies on infrastructure. Every external system (Git API, Ollama, filesystem) is behind a port/adapter. |
-| **Composite `ReviewContextFactory`** | Wraps `RepositoryContextPort` + `ComposeReviewPromptPort` into a single port, eliminating data-clump in `ReviewPullRequestService`. |
-| **Immutable aggregate** | `PullRequest` is a frozen dataclass. "Mutation" methods return a new instance via `dataclasses.replace()`. Prevents accidental state corruption. |
-| **Fragment-based prompts** | Language-specific + universal prompt fragments are selected by priority, rendered via Jinja2, and composed into a single prompt. Token-budget-aware greedy selection. |
-| **Force mode bypass** | `--force` skips the `needs_review()` check and the open-PR filter, enabling re-review of closed/merged PRs. |
-| **Two-level CLI parsing** | `cli.py` (outer) parses top-level args and bootstraps; `CliRunner` (inner) re-parses for subcommand dispatch. Enables reuse from `CliRunner.main()`. |
+### Local Git Clone for Diffs
 
-## 9. File Index
+The `LocalChangesetFetcher` uses local git clones instead of API calls:
+- Clones to `~/.cache/pr-auto-reviewer/repos/{owner}_{repo}_{pr}/`
+- Uses `git fetch origin pull/{pr}/head:pr-{pr}` to get PR ref
+- Computes diff via `git diff base_sha..pr-{pr}`
+- Reads file contents via `git show pr-{pr}:{file_path}`
+- Avoids API rate limits, provides full file context
 
-| Layer | Key Files |
-|---|---|
-| **Entry** | `src/pr_auto_reviewer/cli.py` (argparse + dispatch) |
-| **Composition** | `src/pr_auto_reviewer/presentation/composition_root.py` (bootstrap, wiring) |
-| **CLI** | `src/pr_auto_reviewer/presentation/cli/runner.py` (subcommand dispatch) |
-| **Use Case** | `src/pr_auto_reviewer/application/services/review_pull_request_service.py` |
-| **Domain** | `src/pr_auto_reviewer/domain/entities/pull_request.py` |
-| **Value Objects** | `src/pr_auto_reviewer/domain/value_objects/` |
-| **Ports** | `src/pr_auto_reviewer/application/ports/` (8 inbound, 22 outbound) |
-| **Adapter: Git** | `src/pr_auto_reviewer/infrastructure/git_platform/` (multi-platform composites) |
-| **Adapter: Local Repo** | `src/pr_auto_reviewer/infrastructure/local_repository/` (clone, context, changeset) |
-| **Adapter: LLM** | `src/pr_auto_reviewer/infrastructure/llm/` — primary: `ollama_exploratory_chat_adapter.py` |
-| **Exploration Tools** | `src/pr_auto_reviewer/infrastructure/llm/exploration_tool_service.py` |
-| **Adapter: Fragments** | `src/pr_auto_reviewer/infrastructure/fragments/` (compose, repos, renderers) |
-| **Publishers** | `src/pr_auto_reviewer/infrastructure/github/github_review_publisher.py` |
-| | `src/pr_auto_reviewer/infrastructure/forgejo/forgejo_review_publisher.py` |
-| **Review Processor** | `src/pr_auto_reviewer/infrastructure/review_publishers/_review_processor.py` |
-| **Body Formatter** | `src/pr_auto_reviewer/infrastructure/review_publishers/body_formatter.py` |
-| **Persistence** | `src/pr_auto_reviewer/infrastructure/persistence/` (JSON file, null) |
-| **Fragments Content** | `src/pr_auto_reviewer/infrastructure/fragments/content/` (universal/, python/, shell/, ...) |
-| **Templates** | `src/pr_auto_reviewer/infrastructure/llm/templates/` (review_output.j2) |
-| **DI Container** | `src/pr_auto_reviewer/infrastructure/container/` (_container, _core_services, _platform_adapters, _platform_clients) |
-| **Config** | `src/pr_auto_reviewer/infrastructure/config/config.py` |
+### Token Budget & Fragment Selection
+
+- Fragments have `priority` (1000=system, 100-999=language, 1-99=supplementary)
+- `TokenBudgetManager` greedily selects highest-priority fragments
+- `USE_STRICT_FRAGMENT_SELECTION=true` adds heuristic relevance filter
+- Diff included once at end, truncated to fit `max_total_chars` (default 60k)
+
+### Verdict Preservation
+
+`CodeReview` is `frozen=True`. Every construction site must preserve verdict:
+- `_add_deterministic_findings`: uses `verdict=review.verdict` (was bug: hardcoded APPROVED)
+- Blocker guard: only overrides to CHANGES_REQUESTED when unresolved blockers exist
+- Publishers: copy input verdict, apply platform-specific event mapping
+
+### Rate Limit Tracking
+
+- `RateLimitTracker` parses `x-ratelimit-limit`, `-remaining`, `-reset`
+- State persisted to `~/.config/pr-auto-reviewer/rate-limits.json`
+- Waits before requests when remaining < threshold
+- Survives restarts to avoid immediate re-exhaustion
+
+### Preflight Verification
+
+- Runs before each review: `GET /user` + `POST /requested_reviewers`
+- Caches verified `(org, role)` pairs in `verified-tokens.json`
+- Side-effect-free (empty reviewers list)
+
+---
+
+## 9. Files Referenced
+
+| Component | File |
+|-----------|------|
+| CLI entry | `src/pr_auto_reviewer/cli.py` |
+| Bootstrap | `src/pr_auto_reviewer/presentation/composition_root.py` |
+| DI Container | `src/pr_auto_reviewer/infrastructure/container/_container.py` |
+| Review Service | `src/pr_auto_reviewer/application/services/review_pull_request_service.py` |
+| Changeset Fetcher | `src/pr_auto_reviewer/infrastructure/local_repository/local_changeset_fetcher.py` |
+| Local Git Repo | `src/pr_auto_reviewer/infrastructure/local_repository/local_git_repository.py` |
+| Review Context Factory | `src/pr_auto_reviewer/infrastructure/context/review_context_factory.py` |
+| Compose Prompt | `src/pr_auto_reviewer/infrastructure/fragments/compose_review_prompt_adapter.py` |
+| Fragment Repo | `src/pr_auto_reviewer/infrastructure/fragments/file_system_fragment_repository.py` |
+| LLM Adapter | `src/pr_auto_reviewer/infrastructure/llm/ollama_llm_adapter.py` |
+| Response Parser | `src/pr_auto_reviewer/infrastructure/llm/review_response_parser.py` |
+| Retry Orchestrator | `src/pr_auto_reviewer/infrastructure/llm/retry_orchestrator.py` |
+| Review Publisher | `src/pr_auto_reviewer/infrastructure/review_publishers/review_publishing_service.py` |
+| Forgejo Publisher | `src/pr_auto_reviewer/infrastructure/forgejo/forgejo_review_publisher.py` |
+| GitHub Publisher | `src/pr_auto_reviewer/infrastructure/github/github_review_publisher.py` |
+| Review Processor | `src/pr_auto_reviewer/infrastructure/review_publishers/_review_processor.py` |
+| Verdict Mapping | `src/pr_auto_reviewer/infrastructure/review_publishers/_shared.py` |
+| Multi-Phase Orchestrator | `src/pr_auto_reviewer/application/services/multi_phase_review_orchestrator.py` |
+| Agent Conversation | `src/pr_auto_reviewer/application/services/agent_conversation_service.py` |
+| Finding Verifier | `src/pr_auto_reviewer/application/services/finding_verifier.py` |
+| Finding Aggregator | `src/pr_auto_reviewer/application/services/finding_aggregator.py` |
+| Polling Daemon | `src/pr_auto_reviewer/presentation/polling_daemon/polling_daemon.py` |
+| Config Loader | `src/pr_auto_reviewer/infrastructure/config/config.py` |
+| Rate Limit Tracker | `src/pr_auto_reviewer/infrastructure/client/rate_limit_tracker/rate_limit_tracker.py` |
+| Preflight Verifier | `src/pr_auto_reviewer/infrastructure/client/preflight_verifier.py` |
