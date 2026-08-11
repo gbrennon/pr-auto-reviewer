@@ -62,12 +62,12 @@ class TestProcessIssueCommandsService:
 
     def test_processes_issue_command_and_creates_issues(self, _pr_id, _sha, _pr, _item):
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader(
             [
                 PrComment(
                     id=CommentId(value="c1"),
-                    body="/create-issue 1",
+                    body="/create issue 1",
                     created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
                 )
             ]
@@ -104,7 +104,7 @@ class TestProcessIssueCommandsService:
     def test_skips_already_processed_comment(self, _pr_id, _sha, _pr, _item):
         processed = _pr.mark_comment_processed(CommentId(value="c1"))
         pr_repo = StubPullRequestRepository(initial=processed)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader(
             [
                 PrComment(
@@ -151,7 +151,7 @@ class TestProcessIssueCommandsService:
 
     def test_noop_when_no_comments(self, _pr_id, _sha, _pr):
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader([])
         tracker = StubIssueTracker()
 
@@ -203,7 +203,7 @@ class TestProcessIssueCommandsService:
     def test_skips_non_command_comment(self, _pr_id, _sha, _pr, _item):
         """A regular comment without /create-issue syntax is skipped."""
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader(
             [
                 PrComment(
@@ -231,7 +231,7 @@ class TestProcessIssueCommandsService:
     def test_publishes_invalid_items_message(self, _pr_id, _sha, _pr, _item):
         """When comment references non-existent item numbers, error message posted."""
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader(
             [
                 PrComment(
@@ -260,12 +260,12 @@ class TestProcessIssueCommandsService:
     def test_raises_on_issue_creation_error(self, _pr_id, _sha, _pr, _item):
         """When issue tracker raises IssueCreationError, it is re-raised."""
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         comment_reader = StubCommentReader(
             [
                 PrComment(
                     id=CommentId(value="c2"),
-                    body="/create-issue 1",
+                    body="/create issue 1",
                     created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
                 )
             ]
