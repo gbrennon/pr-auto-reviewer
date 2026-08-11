@@ -17,12 +17,24 @@ class IssueBodyBuilder:
         )
 
         item_ref = item.id if item.id else f"#{item.number}"
-        body = (
-            f"## Review Item {item_ref} from {pr_id}\n\n"
-            f"- **Severity:** {item.severity.upper()}\n"
-            f"- **Category:** {item.category}\n"
-            f"- **File:** {location}\n\n"
-            f"{item.description}\n"
-        )
+        body_parts = [
+            f"## Review Item {item_ref} from {pr_id}\n",
+            f"- **Severity:** {item.severity.upper()}",
+            f"- **Category:** {item.category}",
+            f"- **File:** {location}\n",
+            f"{item.description}\n",
+        ]
+
+        if item.current_code:
+            body_parts.append(
+                "### Current Code\n```\n" + item.current_code + "\n```\n"
+            )
+
+        if item.suggested_fix:
+            body_parts.append(
+                "### Suggested Fix\n```\n" + item.suggested_fix + "\n```\n"
+            )
+
+        body = "\n".join(body_parts)
 
         return title, body
