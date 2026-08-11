@@ -208,7 +208,7 @@ class TestCliRunner:
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
         from pr_auto_reviewer.presentation.cli.runner import CliRunner
 
-        mock_review_reader.get_latest_review.return_value = "1. **MAJOR** [security] `src/auth.py` - vulnerability"
+        mock_review_reader.get_latest_review.return_value = "1. [security] [MAJOR] src/auth.py\n\nvulnerability"
 
         mock_items = [
             ReviewItem(
@@ -471,7 +471,7 @@ class TestCliRunner:
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
         from pr_auto_reviewer.presentation.cli.runner import CliRunner
 
-        raw_body = "1. **MAJOR** [security] `src/auth.py` - vulnerability"
+        raw_body = "1. [security] [MAJOR] src/auth.py\n\nvulnerability"
         mock_review_reader.get_latest_review.return_value = raw_body
 
         mock_items = [

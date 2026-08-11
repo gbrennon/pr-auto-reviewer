@@ -15,9 +15,15 @@ logger = logging.getLogger(__name__)
 class ReviewItemFactory:
     """Construct validated ReviewItem domain objects from parsed item dicts.
 
-    Validates that each ``file_path`` exists in the repository;
-    hallucinated paths are skipped with a warning. Returns validated
-    items and a list of human-readable skip reasons for feedback.
+    Enforces the domain invariant that every finding must be grounded in
+    concrete code: ``file_path``, ``current_code``, and ``suggested_fix``
+    must all be non-empty. Findings lacking code evidence are skipped with
+    a descriptive reason so the caller can request a re-review.
+
+    Additionally validates that each ``file_path`` exists in the repository
+    and that ``current_code`` matches the actual file content at the
+    claimed line; hallucinated paths are skipped with a warning. Returns
+    validated items and a list of human-readable skip reasons for feedback.
     """
 
     _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
@@ -40,8 +46,14 @@ class ReviewItemFactory:
     ) -> tuple[list[ReviewItem], list[str]]:
         """Construct ReviewItem domain objects from parsed item dicts.
 
-        Validates that each ``file_path`` exists in the repository;
-        hallucinated paths are skipped with a warning.
+        Enforces the domain invariant that every finding must include
+        concrete code evidence: ``file_path``, ``current_code`` and
+        ``suggested_fix`` must all be non-empty. Finds lacking any of
+        these are skipped with a descriptive reason.
+
+        Additionally validates that each ``file_path`` exists in the
+        repository and that ``current_code`` matches the actual file
+        content at the claimed line; hallucinated paths are skipped.
         """
         repo_root = Path(repo_path) if repo_path else None
         review_items: list[ReviewItem] = []
@@ -60,8 +72,10 @@ class ReviewItemFactory:
                 file_path = default_file
             full_path: Path | None = None
             if repo_root is not None and file_path:
-                full_path = repo_root / file_path
-                if not full_path.exists():
+                full_path, file_path = self._resolve_file_path(
+                    file_path, repo_root, changed_files
+                )
+                if full_path is None:
                     reason = f"file not found: {file_path}"
                     logger.warning("Skipping finding — %s", reason)
                     skip_reasons.append(reason)
@@ -147,6 +161,26 @@ class ReviewItemFactory:
                     skip_reasons.append(reason)
                     continue
 
+            if not file_path:
+                reason = "no file path in finding — cannot point to target code"
+                logger.warning("Skipping finding — %s", reason)
+                skip_reasons.append(reason)
+                continue
+
+            if not current_code:
+                reason = f"no current_code evidence in {file_path}"
+                logger.warning("Skipping finding — %s", reason)
+                skip_reasons.append(reason)
+                continue
+
+            if not suggested_fix:
+                reason = (
+                    f"no suggested_fix provided for {file_path}"
+                )
+                logger.warning("Skipping finding — %s", reason)
+                skip_reasons.append(reason)
+                continue
+
             item_id = self._generate_id(
                 file_path, description, len(review_items)
             )
@@ -182,3 +216,55 @@ class ReviewItemFactory:
         seed = f"{file_path}:{description}:{index}"
         digest = hashlib.sha256(seed.encode()).hexdigest()
         return digest[:4]
+
+    @staticmethod
+    def _resolve_file_path(
+        file_path: str,
+        repo_root: Path,
+        changed_files: list[str] | None,
+    ) -> tuple[Path | None, str]:
+        """Resolve a potentially partial file path against changed_files.
+
+        When the LLM returns a short or partial path (e.g. ``module.py``
+        or ``pkg/module.py``), this method attempts to find the full
+        repo-relative path by matching against the known changed files.
+        Returns ``(full_path, resolved_file_path)`` on success, or
+        ``(None, original_file_path)`` when no match is found.
+        """
+        direct_path = repo_root / file_path
+        if direct_path.exists():
+            return direct_path, file_path
+
+        if not changed_files:
+            return None, file_path
+
+        cleaned = file_path.lstrip("/")
+        candidates: list[tuple[int, str]] = []
+
+        for cf in changed_files:
+            cf_clean = cf[2:] if cf.startswith(("a/", "b/")) else cf
+
+            if cf_clean == cleaned:
+                candidates.append((0, cf_clean))
+                continue
+
+            if cf_clean.endswith("/" + cleaned):
+                candidates.append((1, cf_clean))
+                continue
+
+            if "/" not in cleaned:
+                cf_basename = (
+                    cf_clean.rsplit("/", 1)[-1]
+                    if "/" in cf_clean
+                    else cf_clean
+                )
+                if cf_basename == cleaned:
+                    candidates.append((2, cf_clean))
+                    continue
+
+        if not candidates:
+            return None, file_path
+
+        candidates.sort(key=lambda x: (x[0], len(x[1])))
+        matched = candidates[0][1]
+        return repo_root / matched, matched

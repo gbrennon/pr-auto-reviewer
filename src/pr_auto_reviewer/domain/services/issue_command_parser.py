@@ -8,10 +8,11 @@ from ..value_objects.issue_command import IssueCommand
 
 class IssueCommandParser:
     """Pure domain service. Detects command syntax in a comment body
-    (e.g. `/create-issue 1,3`) and returns an IssueCommand VO, or None."""
+    (e.g. ``/create issue 1,3`` or ``/create-issue for 1,3``) and returns
+    an IssueCommand VO, or None."""
 
     _COMMAND_PATTERN = re.compile(
-        r"/create-issue\s+(?P<numbers>[\d,\s]+)",
+        r"/?\s*create[- ]?issue(?:\s+for)?\s+(?P<numbers>[\d,\s]+)",
         re.IGNORECASE,
     )
 
