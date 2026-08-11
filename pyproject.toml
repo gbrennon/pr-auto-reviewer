@@ -47,3 +47,8 @@ addopts = [
     "--cov=pr_auto_reviewer",
     "--cov-report=term-missing",
 ]
+markers = [
+    "integration: marks tests as integration tests (require real API credentials)",
+    "e2e: marks tests as end-to-end tests (require full environment)",
+    "unit: marks tests as unit tests (fast, isolated, mocked)",
+]
