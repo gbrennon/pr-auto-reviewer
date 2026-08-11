@@ -1,176 +1,190 @@
-# How to Test: Issue Creation from Review Comments
+# How to Test
 
-This document describes how to validate the new feature that allows creating issues from review suggestions via user commands.
+This document describes how to run tests and validate the application.
 
-## Overview
+## Test Philosophy
 
-When the AI posts a review with verdict **Approved**, users can reply with a command to create issues for specific suggestions.
+- **Unit tests** — Use mocks, test single units in isolation (AAA pattern)
+- **Integration tests** — Exercise real collaborator interactions, use fixtures derived from real dependency calls, never mocks
+- **E2E tests** — Full application flow from entry point to outcome
 
-### Supported Command Syntax
-
-| Command | Creates Issues For |
-|---------|------------------|
-| `create issue for 1, 2` | items 1 and 2 |
-| `issue 1, 2` | items 1 and 2 |
-| `create issue for 1` | item 1 only |
-| `issue 3` | item 3 only |
-
-> **Note:** This feature is designed to also work with GitHub in the future - the command syntax is platform-agnostic.
-
-## Prerequisites
-
-1. A running PR Auto Reviewer setup (or run manually with `uv run python -m pr_auto_reviewer process-commands --repo owner/repo --pr N`)
-2. Access to a test repository with at least one open PR
-3. Tokens configured properly
-
-## Testing Steps
-
-### Step 1: Create a Test PR with Reviewable Changes
-
-1. Go to your test repository on Codeberg/Forgejo
-2. Create a PR with sufficient code changes (for good AI review suggestions)
-
-### Step 2: Run the Review
-
-Run a single review against the PR:
+## Running Tests
 
 ```bash
-uv run python -m pr_auto_reviewer review --repo owner/repo --pr N
+# All tests
+uv run pytest tests/ -x -q
+
+# Unit tests only (fast, isolated, mocked)
+uv run pytest tests/ -m "unit" -x -q
+
+# Integration tests only (require real API credentials)
+uv run pytest tests/ -m integration -x -q
+
+# E2E tests only (require full environment)
+uv run pytest tests/ -m e2e -x -q
+
+# Specific test file
+uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_ollama_llm_adapter.py -x -q
+
+# With coverage
+uv run pytest tests/ --cov=src/pr_auto_reviewer --cov-report=term-missing
 ```
 
-**Expected output:**
+## Test Markers
+
+| Marker | Purpose |
+|--------|---------|
+| `@pytest.mark.unit` | Fast, isolated tests with mocks |
+| `@pytest.mark.integration` | Tests that exercise real collaborator interactions |
+| `@pytest.mark.e2e` | Full application flow from entry point to outcome |
+
+**Note:** Currently no tests are explicitly marked. Run `uv run pytest tests/` (no filter) to run all tests. The markers are defined for future use when tests are categorized.
+
+## Test Structure
+
 ```
-Reviewing PR #N in owner/repo...
-Fetching diff...
-Sending to LLM...
-Review posted — verdict: Approved
-```
-
-### Step 3: Verify Review has Numbered Items
-
-Check the PR review on Codeberg. You should see:
-
-```markdown
-## AI Code Review
-
-**Verdict:** Approved
-
-### Issues
-1. [MEDIUM] [security] src/auth.rs:45: Consider using constant-time comparison
-
-### Suggestions
-2. [file:src/main.rs:10] Consider adding a unit test...
-```
-
-Note the numbers: Issue #1, Suggestion #2
-
-### Step 4: Post a Command Comment
-
-On the PR, add a comment with:
-```
-create issue for 1, 2
+tests/
+├── conftest.py                    # Shared fixtures
+├── pr_auto_reviewer/
+│   ├── test_e2e_review_flow.py    # Full review flow E2E
+│   ├── test_e2e_review_verdict.py # Verdict behavior E2E
+│   ├── test_multilang_review_verdict.py
+│   ├── presentation/              # CLI, daemon, composition root
+│   ├── application/               # Services, ports
+│   ├── domain/                    # Entities, value objects, services
+│   └── infrastructure/            # Adapters, config, clients, etc.
 ```
 
-### Step 5: Process Commands
+## Key Test Patterns
 
-Run the command processor:
+### Unit Tests (Mocks Allowed)
+
+```python
+def test_review_item_parser_extracts_severity():
+    # Arrange
+    parser = ReviewItemParser()
+    body = "1. [CRITICAL] [security] src/auth.py:42: SQL injection"
+    # Act
+    items = parser.parse(body)
+    # Assert
+    assert len(items) == 1
+    assert items[0].severity == ItemSeverity.CRITICAL
+```
+
+### Integration Tests (Real Dependencies, Fixtures)
+
+```python
+# tests/pr_auto_reviewer/infrastructure/git_platform/test_review_publisher.py
+# Uses real API calls recorded as fixtures in tests/pr_auto_reviewer/infrastructure/git_platform/fixtures/
+```
+
+Fixtures are stored as JSON files capturing real API responses. See `tests/pr_auto_reviewer/infrastructure/git_platform/fixtures/`.
+
+### E2E Tests
 
 ```bash
-uv run python -m pr_auto_reviewer process-commands --repo owner/repo --pr N
+# Requires configured .env with real tokens
+uv run pytest tests/pr_auto_reviewer/test_e2e_review_flow.py -x -v
 ```
 
-**Expected output:**
-```
-Processing commands for PR #N in owner/repo...
-Found command in comment X: create issue for 1,2
-Created issue #123 for item 1
-Created issue #124 for item 2
-```
+## Testing the Review Flow
 
-### Step 6: Verify Issues Created
-
-1. Check the Issues page - you should see new issues with titles like:
-   - `[PR #N] 1: [MEDIUM] [security] src/auth.rs:45: Consider using constant-time comparison`
-   - `[PR #N] 2: Consider adding a unit test...`
-
-2. Check the PR comments - the app should have replied with:
-   - `Created issue(s): #123, #124 from your request.`
-
-## Test Scenarios
-
-### Scenario 1: Invalid Item Numbers
-
-**Setup:** Post comment `create issue for 99`
-
-**Expected:**
-- App replies with error about item 99 not existing
-- No issues created
-
-### Scenario 2: Changes Requested Verdict
-
-**Setup:** Have a review with `changes_requested` verdict
-
-**Expected:**
-- Command `create issue for 1` should be ignored
-- Log shows: `Skipping command check (verdict: changes_requested)`
-
-### Scenario 3: Duplicate Command
-
-**Setup:** Post the same command twice
-
-**Expected:**
-- First command creates issues
-- Second command is silently ignored (tracked in state)
-
-### Scenario 4: Mixed Valid/Invalid
-
-**Setup:** Post `create issue for 1, 99, 2`
-
-**Expected:**
-- Error about item 99
-- Issues created for items 1 and 2
-- App replies with error about invalid items
-
-## Debugging
-
-### Enable Verbose Logging
-
-Set the log level for more detail:
+### 1. Unit Test the Service
 
 ```bash
-uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
+uv run pytest tests/pr_auto_reviewer/application/services/test_review_pull_request_service.py -x -q
 ```
 
-### Check State File
+### 2. Test LLM Adapter with Mock Ollama
+
+```bash
+uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_ollama_llm_adapter.py -x -q
+```
+
+### 3. Test Fragment Composition
+
+```bash
+uv run pytest tests/pr_auto_reviewer/infrastructure/fragments/test_compose_review_prompt_adapter.py -x -q
+```
+
+### 4. Test Publisher Logic
+
+```bash
+uv run pytest tests/pr_auto_reviewer/infrastructure/review_publishers/ -x -q
+```
+
+### 5. Test Multi-Platform Adapters
+
+```bash
+uv run pytest tests/pr_auto_reviewer/infrastructure/git_platform/multi_platform/ -x -q
+```
+
+## Manual Testing
+
+### Single Review (Terminal Mode)
+
+```bash
+# No API calls, prints to stdout
+REVIEW_OUTPUT=terminal uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
+```
+
+### Verify Prompt Construction
+
+```bash
+# Dumps prompt to /tmp/ollama-prompt-try1-initial.txt
+DEBUG=1 uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
+```
+
+### Check State
 
 ```bash
 cat ~/.config/pr-auto-reviewer/state.json | python3 -m json.tool
 ```
 
-### Manual API Test
+### Token Verification
 
-List issues:
 ```bash
-curl -sf -H "Authorization: token $FORGEJO_TOKEN" \
-  "https://codeberg.org/api/v1/repos/owner/repo/issues" | jq
+# Auth check
+curl -s -w "HTTP %{http_code}\n" -o /dev/null \
+  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  https://api.github.com/user
+
+# Write access check
+curl -s -w "HTTP %{http_code}\n" -o /dev/null \
+  -X POST \
+  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reviewers":[]}' \
+  https://api.github.com/repos/OWNER/REPO/pulls/PR/requested_reviewers
 ```
 
-## Cleanup
+## Test Fixtures
 
-Reset test state for a PR:
+Integration test fixtures are in:
+```
+tests/pr_auto_reviewer/infrastructure/git_platform/fixtures/
+├── github/
+│   ├── pulls_list.json
+│   ├── pull_diff.txt
+│   ├── pull_commits.json
+│   ├── file_contents.json
+│   ├── review_publish_response.json
+│   └── ...
+└── forgejo/
+    ├── pulls_list.json
+    ├── pull_diff.txt
+    └── ...
+```
+
+Fixtures are created by running real API calls and saving responses. They are used to test adapter parsing logic without hitting the API.
+
+## CI/CD
+
+Tests run automatically on push. See `.github/workflows/` for pipeline configuration.
 
 ```bash
-# Edit ~/.config/pr-auto-reviewer/state.json to remove the entry, or:
-python3 -c "
-import json, os
-path = os.path.expanduser('~/.config/pr-auto-reviewer/state.json')
-with open(path) as f:
-    d = json.load(f)
-# Remove specific entry
-key = 'owner/repo/N'
-if key in d.get('reviewed', {}):
-    del d['reviewed'][key]
-    with open(path, 'w') as f:
-        json.dump(d, f)
-"
+# Pre-commit checks (run locally)
+uv run ruff check src/ tests/
+uv run mypy src/
+uv run pytest tests/ -x -q
 ```
