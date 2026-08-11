@@ -89,9 +89,10 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
         review_items: list[ReviewItem],
     ) -> list[Issue]:
         created: list[Issue] = []
+        items_by_number = {item.number: item for item in review_items}
 
         for item_number in valid:
-            item = review_items[item_number - 1]
+            item = items_by_number[item_number]
             title, body = self._issue_body_builder.build(pr.id, item)
 
             try:

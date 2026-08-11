@@ -53,7 +53,7 @@ class TestRegisterIssueService:
             id="a3f2",
         )
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         parser = ReviewItemParser()
         tracker = StubIssueTracker()
         builder = IssueBodyBuilder()
@@ -84,7 +84,7 @@ class TestRegisterIssueService:
             id="",
         )
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MINOR** [style] `y.py`: nit")
+        review_reader = StubReviewReader(body="1. [style] [MINOR] y.py\n\nnit")
         parser = ReviewItemParser()
         tracker = StubIssueTracker()
         builder = IssueBodyBuilder()
@@ -142,7 +142,7 @@ class TestRegisterIssueService:
 
     def test_raises_when_item_not_found(self, _pr_id, _sha, _pr):
         pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. **MAJOR** [bug] `x.py`: broken")
+        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
         svc = RegisterIssueService(
             pr_repo,
             review_reader,

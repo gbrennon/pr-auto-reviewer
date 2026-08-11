@@ -8,6 +8,7 @@ import re
 from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
+from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
     PullRequestDiff,
@@ -57,14 +58,25 @@ class ReviewPublishingService:
     # -- item counting ------------------------------------------------------
 
     def count_existing_items(self, pr_id: PullRequestId) -> int:
-        """Return count of existing reviews on this PR, used to offset
-        issue numbers so new items don't reuse numbers from prior reviews."""
+        """Return the total number of review items across all existing reviews
+        on this PR, used to offset issue numbers so new items do not reuse
+        numbers from prior reviews."""
         try:
             reviews = self._client.get(
                 f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews",
                 repo=pr_id.repository,
             )
-            return len(reviews) if isinstance(reviews, list) else 0
+            if not isinstance(reviews, list):
+                return 0
+            parser = ReviewItemParser()
+            total = 0
+            for review in reviews:
+                if not isinstance(review, dict):
+                    continue
+                body = review.get("body", "") or ""
+                if isinstance(body, str):
+                    total += len(parser.parse(body))
+            return total
         except Exception:
             return 0
 

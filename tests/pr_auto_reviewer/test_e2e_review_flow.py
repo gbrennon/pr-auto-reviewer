@@ -328,7 +328,7 @@ class TestCliRunnerE2E:
         from pr_auto_reviewer.domain.entities.review_item import ReviewItem
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
-        mock_review_reader.get_latest_review.return_value = "1. **MAJOR** [security] `src/auth.py` - issue"
+        mock_review_reader.get_latest_review.return_value = "1. [security] [MAJOR] src/auth.py\n\nissue"
         mock_item_parser.parse.return_value = [
             ReviewItem(
                 number=1,
