@@ -92,3 +92,21 @@ class TestIssueCommandParser:
         assert result is not None
         with pytest.raises(Exception):
             result.item_numbers = [3]
+
+    def test_parse_create_issue_with_space_separator(self) -> None:
+        parser = IssueCommandParser()
+        result = parser.parse("c_12345", "/create issue 1,2,3")
+        assert result is not None
+        assert result.item_numbers == [1, 2, 3]
+
+    def test_parse_create_issue_with_space_and_for_keyword(self) -> None:
+        parser = IssueCommandParser()
+        result = parser.parse("c_12345", "/create issue for 1,2")
+        assert result is not None
+        assert result.item_numbers == [1, 2]
+
+    def test_parse_create_issue_without_leading_slash(self) -> None:
+        parser = IssueCommandParser()
+        result = parser.parse("c_12345", "create issue 1,2")
+        assert result is not None
+        assert result.item_numbers == [1, 2]

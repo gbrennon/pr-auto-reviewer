@@ -289,6 +289,24 @@ index def456..ghi789 100644
         )
         assert result == 0
 
+    def test_count_existing_items_counts_items_not_reviews(
+        self, patched_private_client, monkeypatch,
+    ):
+        reviews = [
+            {"id": 1, "body": "0. [maintainability] [MINOR]\n\nFirst issue\n1. [bug] [MAJOR] src/x.py:1\n\nSecond issue"},
+            {"id": 2, "body": "2. [docs] [MINOR] README.md:5\n\nThird issue\n3. [style] [INFO]\n\nFourth issue"},
+        ]
+        monkeypatch.setattr(
+            patched_private_client, "get", lambda path, **kw: reviews,
+        )
+        adapter = GitReviewPublisherAdapter(
+            patched_private_client, patched_private_client,
+        )
+        result = adapter._publishing.count_existing_items(
+            PullRequestId(repository="o/r", number=1),
+        )
+        assert result == 4
+
 
     def test_publish_comment_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
