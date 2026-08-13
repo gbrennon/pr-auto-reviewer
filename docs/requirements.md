@@ -6,11 +6,12 @@
 - **systemd** — For service management on Linux
 - **uv** — Python package manager. Install from https://docs.astral.sh/uv/
 - **python3** — Python 3.10+
+- **git** — For local repository cloning and diff computation
 
 ## Hardware
 
 - **RAM**: 8GB+ recommended (depends on Ollama model)
-- **Storage**: Minimal (state files only)
+- **Storage**: Minimal (state files only) + cache for git clones (~100MB per repo)
 - **CPU**: Depends on Ollama model used
 
 ## Platform Support
@@ -21,6 +22,7 @@
 | Codeberg | Tested   |
 | Forgejo  | Tested   |
 | Gitea    | Should work |
+
 ## Accounts
 
 Requires two accounts or one account with two tokens:
@@ -31,3 +33,13 @@ Requires two accounts or one account with two tokens:
 ## Tokens
 
 See [docs/tokens/](tokens/README.md) for full instructions on token types, required permissions, and verification.
+
+## Model
+
+The default model is `code-review:latest`. Pull it with:
+
+```bash
+ollama pull code-review:latest
+```
+
+Or set `LLM_MODEL` to any model available in your Ollama instance.
