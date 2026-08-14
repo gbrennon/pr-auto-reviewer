@@ -15,10 +15,13 @@ logger = logging.getLogger(__name__)
 class ReviewItemFactory:
     """Construct validated ReviewItem domain objects from parsed item dicts.
 
-    Enforces the domain invariant that every finding must be grounded in
-    concrete code: ``file_path``, ``current_code``, and ``suggested_fix``
-    must all be non-empty. Findings lacking code evidence are skipped with
-    a descriptive reason so the caller can request a re-review.
+    Enforces the domain invariant that every finding must carry a
+    meaningful description. ``file_path``, ``current_code``, and
+    ``suggested_fix`` are preserved when present, but findings are not
+    discarded solely for missing code snippets — otherwise almost every
+    real review is emptied out. Files that cannot be resolved and lines
+    that fall out of range are still skipped with a descriptive reason so
+    the caller can request a re-review.
 
     Additionally validates that each ``file_path`` exists in the repository
     and that ``current_code`` matches the actual file content at the
@@ -46,10 +49,11 @@ class ReviewItemFactory:
     ) -> tuple[list[ReviewItem], list[str]]:
         """Construct ReviewItem domain objects from parsed item dicts.
 
-        Enforces the domain invariant that every finding must include
-        concrete code evidence: ``file_path``, ``current_code`` and
-        ``suggested_fix`` must all be non-empty. Finds lacking any of
-        these are skipped with a descriptive reason.
+        Enforces the domain invariant that every finding must carry a
+        meaningful description. ``file_path``, ``current_code``, and
+        ``suggested_fix`` are preserved when present, but findings are
+        not discarded solely for missing code snippets. This prevents a
+        narrative review from being silently emptied out.
 
         Additionally validates that each ``file_path`` exists in the
         repository and that ``current_code`` matches the actual file
@@ -161,25 +165,11 @@ class ReviewItemFactory:
                     skip_reasons.append(reason)
                     continue
 
-            if not file_path:
-                reason = "no file path in finding — cannot point to target code"
-                logger.warning("Skipping finding — %s", reason)
-                skip_reasons.append(reason)
-                continue
-
-            if not current_code:
-                reason = f"no current_code evidence in {file_path}"
-                logger.warning("Skipping finding — %s", reason)
-                skip_reasons.append(reason)
-                continue
-
-            if not suggested_fix:
-                reason = (
-                    f"no suggested_fix provided for {file_path}"
-                )
-                logger.warning("Skipping finding — %s", reason)
-                skip_reasons.append(reason)
-                continue
+            if not current_code and full_path is not None:
+                try:
+                    current_code = full_path.read_text()[:500]
+                except OSError:
+                    pass
 
             item_id = self._generate_id(
                 file_path, description, len(review_items)

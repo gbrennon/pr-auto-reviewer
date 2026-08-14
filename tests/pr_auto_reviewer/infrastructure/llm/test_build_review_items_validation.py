@@ -56,20 +56,20 @@ class TestBuildReviewItemsValidation:
         assert len(result) == 1
         assert result[0].file_path == "src/lib.py"
 
-    def test_empty_file_path_is_skipped(self, tmp_path: Path) -> None:
-        """Items without a file path cannot point to target code and are skipped."""
+    def test_empty_file_path_with_description_is_kept(self, tmp_path: Path) -> None:
+        """Items without a file path but with a real description are preserved."""
         item_dicts: list[dict[str, Any]] = [
             {"file": "", "severity": "major", "category": "architecture", "description": "global concern", "line": "", "current_code": "", "suggested_fix": ""},
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].file_path == ""
 
-    def test_description_without_code_evidence_is_skipped(
+    def test_unresolvable_file_dropped_but_empty_file_kept(
         self, tmp_path: Path
     ) -> None:
-        """Items with a description but no current_code/suggested_fix are dropped."""
+        """Findings with a non-existent file are dropped; no-file findings survive."""
         (tmp_path / "src").mkdir(parents=True)
-        (tmp_path / "src" / "empty.py").write_text("")
         item_dicts: list[dict[str, Any]] = [
             {
                 "file": "src/empty.py",
@@ -91,10 +91,11 @@ class TestBuildReviewItemsValidation:
             },
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].file_path == ""
 
-    def test_item_without_current_code_is_skipped(self, tmp_path: Path) -> None:
-        """Items with file_path and suggested_fix but no current_code are dropped."""
+    def test_item_without_current_code_is_kept(self, tmp_path: Path) -> None:
+        """Items with a file path and description but no current_code are preserved."""
         (tmp_path / "src").mkdir(parents=True)
         (tmp_path / "src" / "real.py").write_text("x = 1")
         item_dicts: list[dict[str, Any]] = [
@@ -109,10 +110,11 @@ class TestBuildReviewItemsValidation:
             },
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].suggested_fix == "x = renamed_variable"
 
-    def test_item_without_suggested_fix_is_skipped(self, tmp_path: Path) -> None:
-        """Items with file_path and current_code but no suggested_fix are dropped."""
+    def test_item_without_suggested_fix_is_kept(self, tmp_path: Path) -> None:
+        """Items with a file path and current_code but no suggested_fix are preserved."""
         (tmp_path / "src").mkdir(parents=True)
         (tmp_path / "src" / "real.py").write_text("x = 1")
         item_dicts: list[dict[str, Any]] = [
@@ -127,7 +129,8 @@ class TestBuildReviewItemsValidation:
             },
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].current_code == "x = 1"
 
     def test_item_with_full_code_evidence_is_accepted(self, tmp_path: Path) -> None:
         """Items with file_path, current_code, and suggested_fix are kept."""
@@ -150,19 +153,19 @@ class TestBuildReviewItemsValidation:
         assert result[0].current_code == "x = 1"
         assert result[0].suggested_fix == "x = count"
 
-    def test_empty_repo_path_still_requires_code_evidence(self, tmp_path: Path) -> None:
-        """Even with empty repo_path, concrete-code-evidence rule is enforced."""
+    def test_empty_repo_path_keeps_descriptive_items(self, tmp_path: Path) -> None:
+        """Without a repo path, findings with non-empty descriptions are preserved."""
         item_dicts: list[dict[str, Any]] = [
             {"file": "src/foo.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"},
             {"file": "src/nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""},
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, "")
-        assert len(result) == 1
+        assert len(result) == 2
 
-    def test_crosscutting_finding_without_code_evidence_is_skipped(
+    def test_crosscutting_finding_without_code_evidence_is_kept(
         self, tmp_path: Path
     ) -> None:
-        """Cross-cutting findings without file_path are dropped — cannot point to code."""
+        """Cross-cutting findings without a file_path are preserved when descriptive."""
         item_dicts: list[dict[str, Any]] = [
             {
                 "file": "",
@@ -175,7 +178,7 @@ class TestBuildReviewItemsValidation:
             },
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
-        assert len(result) == 0
+        assert len(result) == 1
 
     def test_drops_items_with_invalid_line_numbers(self, tmp_path: Path) -> None:
         """Items with invalid line numbers are dropped."""
