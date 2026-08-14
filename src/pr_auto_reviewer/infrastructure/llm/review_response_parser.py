@@ -99,7 +99,7 @@ class ReviewResponseParser:
     )
 
     _H4_ITEM = re.compile(
-        r"^####\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        r"^#{3,4}\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
         re.MULTILINE,
     )
 
