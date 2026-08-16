@@ -1,6 +1,7 @@
 """PullRequestDiff — immutable snapshot of what changed in a PR at a specific commit."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .pull_request_id import PullRequestId
 from .commit_sha import CommitSha
@@ -16,3 +17,4 @@ class PullRequestDiff:
     repository_structure: str | None = None
     conventions: str | None = None
     commit_messages: list[str] = field(default_factory=list)
+    clone_path: Path | None = None
