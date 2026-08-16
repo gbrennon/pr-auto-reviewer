@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import ReviewPullRequestCommand
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+    RunMultiPhaseReviewCommand,
+)
+from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
@@ -40,6 +45,8 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         llm_review: LlmReviewPort,
         review_publisher: ReviewPublisherPort,
         token_verifier: TokenVerifierPort | None = None,
+        command_bus: Any = None,
+        conversation_logger: Any = None,
     ) -> None:
         self._pr_repository = pr_repository
         self._changeset_fetcher = changeset_fetcher
@@ -47,6 +54,8 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         self._llm_review = llm_review
         self._review_publisher = review_publisher
         self._token_verifier = token_verifier
+        self._command_bus = command_bus
+        self._conversation_logger = conversation_logger
 
     def execute(self, command: ReviewPullRequestCommand) -> None:
         self._log_start(command)
@@ -68,7 +77,13 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             pr_description=description,
             target_branch=command.target_branch,
         )
-        review = self._run_llm_review_with_prompt(composed)
+
+        # Use multi-phase orchestrator if command_bus is available,
+        # otherwise fall back to single-turn review
+        if self._command_bus is not None:
+            review = self._run_multi_phase_review(composed, command)
+        else:
+            review = self._run_single_turn_review(composed)
         review = self._add_deterministic_findings(review, diff)
 
         blocking_ids = self._extract_blocking_ids(review)
@@ -179,6 +194,76 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
     def _run_llm_review_with_prompt(self, prompt) -> CodeReview:
         """Send the composed prompt to the LLM and log the result."""
         logger.info("Sending composed prompt to LLM for review...")
+        review = self._llm_review.review_prompt(prompt)
+        logger.info(
+            "LLM review complete: verdict=%s, items=%d, summary_len=%d",
+            review.verdict.value,
+            len(review.items),
+            len(review.summary) if review.summary else 0,
+        )
+        return review
+
+    def _build_review_plan(self) -> ReviewPlan:
+        """Build a ReviewPlan with phases corresponding to sub-agent roles.
+
+        The plan consists of 5 phases: Advisor, Engineer, Architect,
+        Security Review, and Performance Analysis. Each phase provides
+        a different perspective on the code review.
+        """
+        phases: list[ReviewPhase] = []
+        phase_configs = [
+            ("advisor", "Advisor Review"),
+            ("engineer", "Engineer Review"),
+            ("architect", "Architect Review"),
+            ("security", "Security Review"),
+            ("performance", "Performance Analysis"),
+        ]
+        for phase_id, phase_name in phase_configs:
+            phases.append(
+                ReviewPhase(
+                    phase_id=phase_id,
+                    phase_name=phase_name,
+                    system_prompt="",
+                )
+            )
+        return ReviewPlan(phases=tuple(phases), methodology="sub-agent-multi-phase")
+
+    def _run_multi_phase_review(
+        self, composed: Any, command: ReviewPullRequestCommand,
+    ) -> CodeReview:
+        """Run multi-phase review by dispatching the command to the command bus.
+
+        The command handler registered against ``RunMultiPhaseReviewCommand``
+        executes the orchestrator, keeping this inbound service decoupled
+        from the other inbound use case.
+        """
+        diff = self._fetch_diff(command)
+        if diff.clone_path is None:
+            logger.warning(
+                "PR %s has no local clone; falling back to single-turn review",
+                command.pr_id,
+            )
+            return self._run_single_turn_review(composed)
+
+        changed_files: list[str] = sorted(diff.file_contents.keys()) if diff.file_contents else []
+        plan = self._build_review_plan()
+        return self._command_bus.dispatch(
+            RunMultiPhaseReviewCommand(
+                plan=plan,
+                repo_path=diff.clone_path,
+                changed_files=changed_files,
+                model="code-review:latest",
+            )
+        )
+
+    def _run_single_turn_review(self, prompt) -> CodeReview:
+        """Run single-turn LLM review.
+
+        When no command_bus is available, this method sends the composed
+        prompt to the LLM once and returns the result. This is the fallback
+        path when the full multi-phase infrastructure is not wired.
+        """
+        logger.info("Sending composed prompt to LLM for single-turn review...")
         review = self._llm_review.review_prompt(prompt)
         logger.info(
             "LLM review complete: verdict=%s, items=%d, summary_len=%d",
