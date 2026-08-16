@@ -3,11 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
-    split_repository_prefix,
-)
-
 
 from dataclasses import replace
 
@@ -38,11 +33,9 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         self,
         repository_context: RepositoryContextPort,
         compose_review_prompt: ComposeReviewPromptPort,
-        local_clone_base_dir: str = "",
     ) -> None:
         self._repository_context = repository_context
         self._compose_review_prompt = compose_review_prompt
-        self._local_clone_base_dir = local_clone_base_dir
 
     def build(
         self,
@@ -87,12 +80,10 @@ class ReviewContextFactory(ReviewContextFactoryPort):
         )
 
         composed = self._compose_review_prompt.execute(review_context)
-        if self._local_clone_base_dir:
-            _, clean_repo = split_repository_prefix(pr_id.repository)
-            dir_name = f"{clean_repo.replace('/', '_')}_{pr_id.number}"
+        if diff.clone_path is not None:
             composed = replace(
                 composed,
-                repo_path=str(Path(self._local_clone_base_dir) / dir_name),
+                repo_path=str(diff.clone_path.resolve()),
             )
         logger.info(
             "ReviewContextFactory return: prompt=%d chars tokens=%d fragments=%s repo_path=%s",

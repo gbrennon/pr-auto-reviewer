@@ -103,6 +103,7 @@ class Container:
         self._pr_repository = core.pr_repository
         self._llm_review = core.llm_review
         self._command_bus = core.command_bus
+        self._conversation_logger = core.conversation_logger
         self._notifier = core.notifier
         self._fragment_repository = core.fragment_repository
         self._fragment_renderer = core.fragment_renderer
@@ -145,6 +146,10 @@ class Container:
     @property
     def review_publisher(self) -> ReviewPublisherPort:
         return self._review_publisher
+
+    @property
+    def conversation_logger(self) -> MarkdownConversationLogger:
+        return self._conversation_logger
 
     @property
     def review_reader(self) -> ReviewReaderPort:
