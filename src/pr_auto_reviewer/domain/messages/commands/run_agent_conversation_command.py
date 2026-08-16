@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from typing import Any
 
@@ -17,7 +18,7 @@ class RunAgentConversationCommand:
     """
 
     system_prompt: str
-    repo_path: str
+    repo_path: Path
     changed_files: list[str]
     tool_execution: Any
     phase_name: str = ""

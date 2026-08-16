@@ -19,7 +19,7 @@ from pr_auto_reviewer.infrastructure.container._platform_adapters import (
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (

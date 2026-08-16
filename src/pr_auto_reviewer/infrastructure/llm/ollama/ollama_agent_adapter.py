@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
@@ -18,7 +19,7 @@ from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
 )
 
@@ -59,7 +60,7 @@ class OllamaAgentAdapter(LlmReviewPort):
         return self._orchestrator.execute(
             RunMultiPhaseReviewCommand(
                 plan=self._plan,
-                repo_path=repo_path.strip(),
+                repo_path=Path(repo_path.strip()),
                 changed_files=changed_files,
                 model=self._chat_client._model,
             )

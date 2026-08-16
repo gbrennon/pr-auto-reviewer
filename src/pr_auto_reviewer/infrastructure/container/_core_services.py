@@ -18,6 +18,9 @@ from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import 
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+    RunMultiPhaseReviewCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
@@ -70,13 +73,13 @@ from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama_agent_adapter import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_agent_adapter import (
     OllamaAgentAdapter,
 )
 from pr_auto_reviewer.infrastructure.conversation_logger import (
     MarkdownConversationLogger,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
 )
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
@@ -181,6 +184,7 @@ class CoreServices:
     pr_repository: PullRequestRepository
     llm_review: LlmReviewPort
     command_bus: CommandBusPort
+    conversation_logger: MarkdownConversationLogger
     notifier: NotifierPort
     fragment_repository: FragmentRepositoryPort
     fragment_renderer: PromptRendererPort
@@ -243,6 +247,7 @@ def wire_core_services(
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
     )
+    command_bus.register(RunMultiPhaseReviewCommand, orchestrator.execute)
     command_bus.register(
         AggregateReviewFindingsCommand, aggregator.execute
     )
@@ -295,13 +300,13 @@ def wire_core_services(
     review_context_factory = ReviewContextFactory(
         repository_context=repository_context,
         compose_review_prompt=prompt_adapter,
-        local_clone_base_dir=config.local_clone_base_dir,
     )
 
     return CoreServices(
         pr_repository=pr_repository,
         llm_review=llm_review,
         command_bus=command_bus,
+        conversation_logger=conversation_logger,
         notifier=notifier,
         fragment_repository=fragment_repository,
         fragment_renderer=fragment_renderer,
