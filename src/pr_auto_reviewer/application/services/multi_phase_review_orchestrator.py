@@ -333,7 +333,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         if not all_items:
             verdict = ReviewVerdict.COMMENTED
             reason = "No issues found across all review phases."
-            summary = ""
+            # Ensure summary is always filled, even when no prior phase result exists
+            summary = last_phase_result.llm_summary if last_phase_result and last_phase_result.llm_summary else "No issues found across all review phases."
             suggestions: list[ReviewSuggestion] = []
             praise_list: list[ReviewPraise] = []
 
@@ -406,15 +407,24 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             item for item in verified_items if isinstance(item, ReviewItem)
         ]
         if not review_items:
+            # All findings were dropped (e.g., refuted as hallucinations).
+            # Return APPROVED with diagnostic reason/summary rather than empty fields.
             verdict = ReviewVerdict.APPROVED
+            reason = "No findings survived verification against source code."
+            summary = "All reported findings were refuted during verification — they were not confirmed as real issues in the changed files."
         elif any(item.is_blocking for item in review_items):
             verdict = ReviewVerdict.CHANGES_REQUESTED
+            reason = "Findings verified against source code."
+            summary = f"{len(review_items)} blocking finding(s) verified."
         else:
             verdict = ReviewVerdict.APPROVED
+            reason = "Findings verified against source code."
+            summary = f"{len(review_items)} non-blocking finding(s) verified."
 
         return CodeReview(
             verdict=verdict,
-            reason="Findings verified against source code.",
+            reason=reason,
+            summary=summary,
             items=review_items,
             model_used=model,
         )
