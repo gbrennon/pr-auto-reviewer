@@ -47,7 +47,7 @@ class FindingVerifier(VerifyFindingsUseCase):
         self,
         chat_port: AgentChatPort,
         verify_prompt: str,
-        tool_factory: Callable[[str, list[str]], Any],
+        tool_factory: Callable[[Path, list[str]], Any],
     ) -> None:
         self._chat_port = chat_port
         self._verify_prompt = verify_prompt
@@ -127,7 +127,7 @@ class FindingVerifier(VerifyFindingsUseCase):
     def _run_verification_conversation(
         self,
         system_prompt: str,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
     ) -> list[dict[str, Any]] | None:
         """Run a multi-turn verification conversation with tool access."""
@@ -302,11 +302,11 @@ class FindingVerifier(VerifyFindingsUseCase):
         return results if results else None
 
     def _format_findings_for_verification(
-        self, items: list[ReviewItem], repo_path: str
+        self, items: list[ReviewItem], repo_path: Path
     ) -> str:
         """Format blocking findings with surrounding file context for verification."""
         parts: list[str] = []
-        repo_root = Path(repo_path)
+        repo_root = repo_path
 
         for i, item in enumerate(items):
             file_content = ""

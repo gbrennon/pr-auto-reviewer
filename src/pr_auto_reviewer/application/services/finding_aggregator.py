@@ -44,6 +44,19 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
             command.items, command.phase_result, command.model_used
         )
 
+    @staticmethod
+    def _build_summary(merged: list[ReviewItem]) -> str:
+        """Build a short human-readable summary from the merged items."""
+        files = sorted({item.file_path for item in merged if item.file_path})
+        blocking = sum(1 for item in merged if item.is_blocking)
+        base = (
+            f"Found {len(merged)} issue(s)"
+            f" ({blocking} blocking across {len(files)} file(s))."
+        )
+        if files:
+            base += " Files: " + ", ".join(files[:5])
+        return base
+
     def _merge(
         self,
         items: list[ReviewItem],
@@ -91,11 +104,9 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         praise: list[ReviewPraise] = []
 
         if phase_result is not None:
-            if phase_result.llm_verdict is not None:
-                try:
-                    verdict = ReviewVerdict(phase_result.llm_verdict)
-                except ValueError:
-                    pass
+            coerced = ReviewVerdict.coerce(phase_result.llm_verdict)
+            if coerced is not None:
+                verdict = coerced
             if not reason and phase_result.llm_reason:
                 reason = phase_result.llm_reason
             if phase_result.llm_summary:
@@ -111,6 +122,9 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
                     file=p.get("file", ""),
                     description=p.get("description", ""),
                 ))
+
+        if not summary and merged:
+            summary = self._build_summary(merged)
 
         return CodeReview(
             verdict=verdict,
