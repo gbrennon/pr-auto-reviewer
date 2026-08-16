@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
 
