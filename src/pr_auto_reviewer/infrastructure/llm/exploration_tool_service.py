@@ -39,8 +39,8 @@ class ExplorationToolService:
     Results are JSON-serializable dicts suitable for injection into chat messages.
     """
 
-    def __init__(self, repo_path: str, changed_files: list[str] | None = None) -> None:
-        if not repo_path or not repo_path.strip():
+    def __init__(self, repo_path: Path | str, changed_files: list[str] | None = None) -> None:
+        if not repo_path:
             raise ValueError("repo_path cannot be empty")
         resolved = Path(repo_path).resolve()
         if not resolved.is_dir():
