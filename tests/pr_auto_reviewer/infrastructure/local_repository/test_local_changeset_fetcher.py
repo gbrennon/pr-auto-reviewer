@@ -16,31 +16,6 @@ from tests.fakes.local_repository_fakes import FakeLocalRepository
 class TestLocalChangesetFetcher:
     """Tests for LocalChangesetFetcher using a FakeLocalRepository."""
 
-    def _make_sample_diff(self, with_deletion: bool = False) -> str:
-        """Build a sample unified diff with optional deletion header."""
-        lines = [
-            "diff --git a/src/foo.py b/src/foo.py",
-            "@@ -1,3 +1,4 @@",
-            "+new line",
-            "diff --git a/src/bar.py b/src/bar.py",
-            "@@ -1,2 +1,3 @@",
-            "+another line",
-        ]
-        if with_deletion:
-            lines.insert(0, "--- a/deleted.py")
-            lines.insert(1, "+++ /dev/null")
-        return "\n".join(lines)
-
-    def _make_repo(self) -> FakeLocalRepository:
-        """Create a fully-stubbed LocalRepositoryPort fake."""
-        return FakeLocalRepository(
-            clone_return=Path("/tmp/clone/repo"),
-            compute_diff_return=self._make_sample_diff(),
-            commit_messages_return=["fix: stuff"],
-            resolve_base_sha_return="abc123",
-            read_file_return="print('hello')",
-        )
-
     def test_fetch_returns_pull_request_diff_with_correct_fields(self) -> None:
         """Fetch returns a PullRequestDiff carrying all expected fields."""
         repo = FakeLocalRepository(
@@ -178,3 +153,28 @@ class TestLocalChangesetFetcher:
         assert len(read_file_calls) >= 1
         for call_args, call_kwargs in read_file_calls:
             assert call_kwargs["ref"] == "pr-42"
+
+    def _make_sample_diff(self, with_deletion: bool = False) -> str:
+        """Build a sample unified diff with optional deletion header."""
+        lines = [
+            "diff --git a/src/foo.py b/src/foo.py",
+            "@@ -1,3 +1,4 @@",
+            "+new line",
+            "diff --git a/src/bar.py b/src/bar.py",
+            "@@ -1,2 +1,3 @@",
+            "+another line",
+        ]
+        if with_deletion:
+            lines.insert(0, "--- a/deleted.py")
+            lines.insert(1, "+++ /dev/null")
+        return "\n".join(lines)
+
+    def _make_repo(self) -> FakeLocalRepository:
+        """Create a fully-stubbed LocalRepositoryPort fake."""
+        return FakeLocalRepository(
+            clone_return=Path("/tmp/clone/repo"),
+            compute_diff_return=self._make_sample_diff(),
+            commit_messages_return=["fix: stuff"],
+            resolve_base_sha_return="abc123",
+            read_file_return="print('hello')",
+        )

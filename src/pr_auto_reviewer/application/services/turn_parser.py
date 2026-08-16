@@ -31,6 +31,13 @@ class TurnParser(ParseReviewTurnUseCase):
     responsibility.
     """
 
+    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
+        "read_file": ["file", "file_path"],
+        "list_directory": ["path", "directory_path"],
+        "search_codebase": ["pattern"],
+        "run_git": ["command"],
+    }
+
     def __init__(self, parser: ResponseParserPort) -> None:
         self._parser = parser
 
@@ -224,13 +231,6 @@ class TurnParser(ParseReviewTurnUseCase):
                 except json.JSONDecodeError:
                     pass
         return None
-
-    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
-        "read_file": ["file", "file_path"],
-        "list_directory": ["path", "directory_path"],
-        "search_codebase": ["pattern"],
-        "run_git": ["command"],
-    }
 
     def _extract_dict_args(
         self, action: str, raw_args: dict[str, Any]

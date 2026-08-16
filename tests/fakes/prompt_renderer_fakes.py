@@ -24,12 +24,6 @@ class FakePromptRenderer:
         self.raise_on_render = raise_on_render
         self.render_calls: list[tuple[str, dict[str, str]]] = []
 
-    def render(self, template: str, variables: dict[str, str]) -> str:
-        self.render_calls.append((template, variables))
-        if self.raise_on_render is not None:
-            raise self.raise_on_render
-        return self.return_value
-
     @property
     def called(self) -> bool:
         """``True`` when ``render()`` was called at least once."""
@@ -46,3 +40,9 @@ class FakePromptRenderer:
         if not self.render_calls:
             return None
         return (self.render_calls[-1],)
+
+    def render(self, template: str, variables: dict[str, str]) -> str:
+        self.render_calls.append((template, variables))
+        if self.raise_on_render is not None:
+            raise self.raise_on_render
+        return self.return_value

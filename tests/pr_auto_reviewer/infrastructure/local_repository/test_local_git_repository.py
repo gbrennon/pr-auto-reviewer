@@ -24,66 +24,6 @@ pytestmark = pytest.mark.skipif(
 
 
 class TestLocalGitRepository:
-    def _configure_git(self, repo_path: Path) -> None:
-        subprocess.run(
-            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-    def _create_commit(self, repo_path: Path, filename: str, content: str) -> None:
-        file_path = repo_path / filename
-        file_path.write_text(content)
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", filename],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo_path), "commit", "-m", f"Add {filename}"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-    def _get_head_sha(self, repo_path: Path) -> str:
-        result = subprocess.run(
-            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-
-    def _get_rev_parse(self, repo_path: Path, ref: str) -> str:
-        result = subprocess.run(
-            ["git", "-C", str(repo_path), "rev-parse", ref],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.strip()
-
-    def _init_repo(self, base: Path, name: str) -> Path:
-        repo_path = base / name
-        repo_path.mkdir()
-        subprocess.run(
-            ["git", "init", "-b", "main", str(repo_path)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        self._configure_git(repo_path)
-        self._create_commit(repo_path, "README.md", "# Test Repo")
-        return repo_path
 
     def test_clone_creates_directory_and_returns_path(self, tmp_path: Path) -> None:
         repo_path = self._init_repo(tmp_path, "source")
@@ -235,3 +175,63 @@ class TestLocalGitRepository:
 
         assert "README.md" in files
         assert "src/main.py" in files
+    def _configure_git(self, repo_path: Path) -> None:
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def _create_commit(self, repo_path: Path, filename: str, content: str) -> None:
+        file_path = repo_path / filename
+        file_path.write_text(content)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", filename],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", f"Add {filename}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def _get_head_sha(self, repo_path: Path) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def _get_rev_parse(self, repo_path: Path, ref: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", ref],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def _init_repo(self, base: Path, name: str) -> Path:
+        repo_path = base / name
+        repo_path.mkdir()
+        subprocess.run(
+            ["git", "init", "-b", "main", str(repo_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self._configure_git(repo_path)
+        self._create_commit(repo_path, "README.md", "# Test Repo")
+        return repo_path

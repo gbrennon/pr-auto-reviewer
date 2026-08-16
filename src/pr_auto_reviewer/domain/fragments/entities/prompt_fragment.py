@@ -33,10 +33,6 @@ class PromptFragment:
         if self.metadata is None:
             object.__setattr__(self, "metadata", {})
 
-    def is_universal(self) -> bool:
-        """Return ``True`` when this fragment applies to all languages."""
-        return self.language is None
-
     def __eq__(self, other: object) -> bool:
         """Equality based on ID only (value-object identity)."""
         if not isinstance(other, PromptFragment):
@@ -46,3 +42,7 @@ class PromptFragment:
     def __hash__(self) -> int:
         """Hash based on ID only."""
         return hash(self.id)
+
+    def is_universal(self) -> bool:
+        """Return ``True`` when this fragment applies to all languages."""
+        return self.language is None

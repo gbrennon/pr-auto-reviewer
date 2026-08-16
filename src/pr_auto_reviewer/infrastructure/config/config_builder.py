@@ -26,6 +26,10 @@ class ConfigBuilder:
         env_name: Value for ``Config.env``.
     """
 
+    @classmethod
+    def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
+        return source.get(key, default).strip()
+
     @staticmethod
     def _parse_org_token_overrides(source: dict[str, str]) -> OrgTokenOverrides:
         github: dict[str, OrgTokenEntry] = {}
@@ -80,10 +84,6 @@ class ConfigBuilder:
                         )
 
         return OrgTokenOverrides(github=github, forgejo=forgejo)
-
-    @classmethod
-    def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
-        return source.get(key, default).strip()
 
     def build(self, source: dict[str, str], env_name: str, llm_max_retries: int = 5) -> Config:
         platform_mode_raw = (

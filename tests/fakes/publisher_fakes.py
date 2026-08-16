@@ -28,6 +28,9 @@ class SpyClient:
         self.post_calls: list[tuple[str, dict]] = []
         self._fail_verify = fail_verify
 
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         self.verify_calls.append(pr_id)
         if self._fail_verify is not None:
@@ -44,6 +47,3 @@ class SpyClient:
     def post(self, path: str, payload: dict[str, Any], **kwargs: Any) -> Any:
         self.post_calls.append((path, kwargs))
         return self._delegate.post(path, payload, **kwargs)
-
-    def __getattr__(self, name: str):
-        return getattr(self._delegate, name)

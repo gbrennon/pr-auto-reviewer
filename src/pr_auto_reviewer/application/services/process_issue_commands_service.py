@@ -44,6 +44,10 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
         self._issue_command_parser = issue_command_parser
         self._issue_body_builder = issue_body_builder
 
+    def execute(self, command: ProcessIssueCommandsCommand) -> None:
+        pr = self._load_pull_request(command)
+        self._process_comments_for_pull_request(pr)
+
     def _load_pull_request(
         self, command: ProcessIssueCommandsCommand,
     ) -> PullRequest:
@@ -163,7 +167,3 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
 
         pr = self._process_each_comment(pr, comments, review_items)
         self._persist_pull_request(pr)
-
-    def execute(self, command: ProcessIssueCommandsCommand) -> None:
-        pr = self._load_pull_request(command)
-        self._process_comments_for_pull_request(pr)

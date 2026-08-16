@@ -38,27 +38,6 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 
 class TestProcessIssueCommandsService:
-    @pytest.fixture
-    def _pr_id(self):
-        return PullRequestId(repository="owner/repo", number=42)
-
-    @pytest.fixture
-    def _sha(self):
-        return CommitSha(value="abc123")
-
-    @pytest.fixture
-    def _pr(self, _pr_id, _sha):
-        return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha)
-
-    @pytest.fixture
-    def _item(self):
-        return ReviewItem(
-            number=1,
-            severity=ItemSeverity.MAJOR,
-            category="bug",
-            file_path="x.py",
-            description="broken",
-        )
 
     def test_processes_issue_command_and_creates_issues(self, _pr_id, _sha, _pr, _item):
         pr_repo = StubPullRequestRepository(initial=_pr)
@@ -290,3 +269,24 @@ class TestProcessIssueCommandsService:
         )
         with pytest.raises(IssueCreationError):
             svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+    @pytest.fixture
+    def _pr_id(self):
+        return PullRequestId(repository="owner/repo", number=42)
+
+    @pytest.fixture
+    def _sha(self):
+        return CommitSha(value="abc123")
+
+    @pytest.fixture
+    def _pr(self, _pr_id, _sha):
+        return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha)
+
+    @pytest.fixture
+    def _item(self):
+        return ReviewItem(
+            number=1,
+            severity=ItemSeverity.MAJOR,
+            category="bug",
+            file_path="x.py",
+            description="broken",
+        )

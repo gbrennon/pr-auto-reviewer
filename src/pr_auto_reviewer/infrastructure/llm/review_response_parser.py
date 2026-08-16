@@ -23,37 +23,95 @@ class ReviewResponseParser:
 
     _STOP_TOKENS = ("<|im_end|>", "<｜end▁of▁thinking｜>")
 
+    _STRUCTURED_ITEM = re.compile(
+        r"^###\s+\[(\w+)\]\s+\[(\w+)\]\s+([^\s—:]+)(?::(\d+))?\s*—\s*(.+)$",
+        re.MULTILINE,
+    )
+
+    _H4_ITEM = re.compile(
+        r"^#{3,4}\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _STRENGTHS_SECTION = re.compile(
+        r"(?:###|####)\s+\*?\*?(?:Strengths?|What[’']s\s+Good|"
+        r"Positives?|Praise|Good\s+Practices?)\*?\*?\s*:?\s*\n+"
+        r"(.*?)(?=\n(?:#{2,4}|[A-Z].*:\s*\n)\s+|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _RECOMMENDATION_SECTION = re.compile(
+        r"(?:###|####)\s+\*?\*?(?:Areas?\s+for\s+(?:Improvement|Improvements)|"
+        r"(?:Recommended\s+)?Improvements?|Recommendations?|"
+        r"Suggestions?|Action\s+Items|What\s+to\s+Do\s+Next|"
+        r"Suggested\s+Changes?)\*?\*?\s*:?\s*\n+"
+        r"(.*?)(?=\n(?:#{2,4}|\Z))",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _ISSUE_SECTION = re.compile(
+        r"(?:###|####)\s+\*?\*?(?:Issues?(?:\s+(?:Found|and\s+Improvements|Identified))?|"
+        r"Problems?|Findings|Bugs?|Errors?|Concerns|"
+        r"Code\s+Problems|Defects)\*?\*?\s*:?\s*\n+"
+        r"(.*?)(?=\n(?:#{2,4}|\Z))",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    _NUMBERED_ITEM = re.compile(
+        r"^\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BULLET_ITEM = re.compile(
+        r"^[-*]\s+\*?\*?(.+?)\*?\*?\s*$",
+        re.MULTILINE,
+    )
+
+    _BACKTICK_PATH = re.compile(r"`([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)`")
+
+    _LINE_RANGE = re.compile(
+        r"(?:line|at line|:)\s*(\d+)(?:\s*(?:-|to|through)\s*(\d+))?",
+        re.IGNORECASE,
+    )
+
+    _LOC_RANGE = re.compile(
+        r"\b(?:[Ll](?:ine)?s?\s*)?(\d+)\s*(?:-|to|through)\s*[Ll]?\s*(\d+)\b",
+        re.IGNORECASE,
+    )
+
+    _FILE_LINE = re.compile(
+        r"([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\s*[:#]\s*(\d+)(?:\s*(?:-|to|through)\s*(\d+))?",
+    )
+
+    _SEVERITY_PATTERN = re.compile(
+        r"\[(critical|major|minor|info)\]",
+        re.IGNORECASE,
+    )
+
+    _CATEGORY_PATTERN = re.compile(
+        r"\[(bug|security|performance|maintainability|style|quality|"
+        r"architecture|solid|convention|design|documentation)\]",
+        re.IGNORECASE,
+    )
+
+    _CODE_BLOCK = re.compile(
+        r"```(?:python|rust|go|js|ts|java|sh|bash|yaml|json|toml|text)?\s*\n(.*?)```",
+        re.DOTALL,
+    )
+
+    _FIX_HEADER = re.compile(
+        r"\*\*(?:Fix|Suggested(?: Fix)?|Improved Code|Recommendation|"
+        r"Should Be|Instead|Correct(?:ed)?)\*?\*?\s*:?\s*",
+        re.IGNORECASE,
+    )
+
+    _CURRENT_HEADER = re.compile(
+        r"\*\*(?:Current|Issue|Problem|Code)\*?\*?\s*:?\s*",
+        re.IGNORECASE,
+    )
+
     def __init__(self) -> None:
         pass
-
-    def parse(self, content: str, model: str) -> CodeReview:
-        cleaned = self._clean_response(content)
-        try:
-            data = json.loads(self._sanitize_json_literals(cleaned))
-            result = self._code_review_from_dict(data, model)
-            summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
-            praise_empty = (not isinstance(result.praise, list) or not result.praise)
-            if summary_empty or praise_empty:
-                markdown_result = self._parse_markdown_fallback(content, model)
-                result = self._merge_json_markdown(result, markdown_result, model)
-            return result
-        except (json.JSONDecodeError, ValueError):
-            logger.debug("parse: JSON decode failed, trying text extraction")
-        extracted = self.extract_outermost_json(cleaned)
-        if extracted is not None:
-            try:
-                data = json.loads(self._sanitize_json_literals(extracted))
-                result = self._code_review_from_dict(data, model)
-                summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
-                praise_empty = (not isinstance(result.praise, list) or not result.praise)
-                if summary_empty or praise_empty:
-                    markdown_result = self._parse_markdown_fallback(content, model)
-                    result = self._merge_json_markdown(result, markdown_result, model)
-                return result
-            except (json.JSONDecodeError, ValueError):
-                logger.debug("parse: extracted JSON decode also failed")
-        markdown_result = self._parse_markdown_fallback(content, model)
-        return markdown_result
 
     @classmethod
     def _parse_markdown_fallback(cls, content: str, model: str) -> CodeReview:
@@ -160,93 +218,6 @@ class ReviewResponseParser:
                 )
             )
         return items
-
-    _STRUCTURED_ITEM = re.compile(
-        r"^###\s+\[(\w+)\]\s+\[(\w+)\]\s+([^\s—:]+)(?::(\d+))?\s*—\s*(.+)$",
-        re.MULTILINE,
-    )
-
-    _H4_ITEM = re.compile(
-        r"^#{3,4}\s+\*?\*?\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
-        re.MULTILINE,
-    )
-
-    _STRENGTHS_SECTION = re.compile(
-        r"(?:###|####)\s+\*?\*?(?:Strengths?|What[’']s\s+Good|"
-        r"Positives?|Praise|Good\s+Practices?)\*?\*?\s*:?\s*\n+"
-        r"(.*?)(?=\n(?:#{2,4}|[A-Z].*:\s*\n)\s+|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    )
-
-    _RECOMMENDATION_SECTION = re.compile(
-        r"(?:###|####)\s+\*?\*?(?:Areas?\s+for\s+(?:Improvement|Improvements)|"
-        r"(?:Recommended\s+)?Improvements?|Recommendations?|"
-        r"Suggestions?|Action\s+Items|What\s+to\s+Do\s+Next|"
-        r"Suggested\s+Changes?)\*?\*?\s*:?\s*\n+"
-        r"(.*?)(?=\n(?:#{2,4}|\Z))",
-        re.IGNORECASE | re.DOTALL,
-    )
-
-    _ISSUE_SECTION = re.compile(
-        r"(?:###|####)\s+\*?\*?(?:Issues?(?:\s+(?:Found|and\s+Improvements|Identified))?|"
-        r"Problems?|Findings|Bugs?|Errors?|Concerns|"
-        r"Code\s+Problems|Defects)\*?\*?\s*:?\s*\n+"
-        r"(.*?)(?=\n(?:#{2,4}|\Z))",
-        re.IGNORECASE | re.DOTALL,
-    )
-
-    _NUMBERED_ITEM = re.compile(
-        r"^\d+\.\s*\*?\*?(.+?)\*?\*?\s*$",
-        re.MULTILINE,
-    )
-
-    _BULLET_ITEM = re.compile(
-        r"^[-*]\s+\*?\*?(.+?)\*?\*?\s*$",
-        re.MULTILINE,
-    )
-
-    _BACKTICK_PATH = re.compile(r"`([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)`")
-
-    _LINE_RANGE = re.compile(
-        r"(?:line|at line|:)\s*(\d+)(?:\s*(?:-|to|through)\s*(\d+))?",
-        re.IGNORECASE,
-    )
-
-    _LOC_RANGE = re.compile(
-        r"\b(?:[Ll](?:ine)?s?\s*)?(\d+)\s*(?:-|to|through)\s*[Ll]?\s*(\d+)\b",
-        re.IGNORECASE,
-    )
-
-    _FILE_LINE = re.compile(
-        r"([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\s*[:#]\s*(\d+)(?:\s*(?:-|to|through)\s*(\d+))?",
-    )
-
-    _SEVERITY_PATTERN = re.compile(
-        r"\[(critical|major|minor|info)\]",
-        re.IGNORECASE,
-    )
-
-    _CATEGORY_PATTERN = re.compile(
-        r"\[(bug|security|performance|maintainability|style|quality|"
-        r"architecture|solid|convention|design|documentation)\]",
-        re.IGNORECASE,
-    )
-
-    _CODE_BLOCK = re.compile(
-        r"```(?:python|rust|go|js|ts|java|sh|bash|yaml|json|toml|text)?\s*\n(.*?)```",
-        re.DOTALL,
-    )
-
-    _FIX_HEADER = re.compile(
-        r"\*\*(?:Fix|Suggested(?: Fix)?|Improved Code|Recommendation|"
-        r"Should Be|Instead|Correct(?:ed)?)\*?\*?\s*:?\s*",
-        re.IGNORECASE,
-    )
-
-    _CURRENT_HEADER = re.compile(
-        r"\*\*(?:Current|Issue|Problem|Code)\*?\*?\s*:?\s*",
-        re.IGNORECASE,
-    )
 
     @classmethod
     def _parse_prose_items(cls, content: str) -> list[dict[str, Any]]:
@@ -608,86 +579,6 @@ class ReviewResponseParser:
             return para if len(para) > 20 else None
         return None
 
-    def _clean_response(self, content: str) -> str:
-        cleaned = content.strip()
-        for stop in self._STOP_TOKENS:
-            idx = cleaned.find(stop)
-            if idx != -1:
-                cleaned = cleaned[:idx].strip()
-        code_block_match = re.search(
-            r"```(?:json)?\s*\n?(.*?)```",
-            cleaned,
-            re.DOTALL,
-        )
-        if code_block_match:
-            cleaned = code_block_match.group(1).strip()
-        return cleaned
-
-    def _code_review_from_dict(self, data: dict[str, Any], model: str) -> CodeReview:
-        items_data = data.get("items") or data.get("findings") or data.get("issues") or []
-        if not isinstance(items_data, list):
-            items_data = []
-        items: list[ReviewItem] = []
-        for i, item_dict in enumerate(items_data, 1):
-            if not isinstance(item_dict, dict):
-                continue
-            raw_desc = item_dict.get("description", "")
-            if isinstance(raw_desc, dict):
-                description = ", ".join(f"{k}={v}" for k, v in raw_desc.items())
-            else:
-                description = str(raw_desc)
-            raw_severity = str(item_dict.get("severity", "info"))
-            if ItemSeverity.accepts(raw_severity):
-                severity_value = raw_severity
-            else:
-                _, severity_value = ReviewResponseParser._infer_severity(description)
-            raw_category = item_dict.get("category") or item_dict.get("type")
-            if raw_category:
-                category_value = str(raw_category)
-            else:
-                category_value = ReviewResponseParser._infer_type(description, severity_value)
-            review_item = ReviewItem(
-                number=i,
-                severity=ItemSeverity.from_value(severity_value),
-                category=IssueCategory.from_value(category_value),
-                file_path=str(item_dict.get("file", "")),
-                description=description,
-                line=str(item_dict.get("line", "")),
-                current_code=str(item_dict.get("current_code", "")),
-                suggested_fix=str(item_dict.get("suggested_fix", "")),
-            )
-            if not review_item.file_path and not review_item.description:
-                continue
-            items.append(review_item)
-        return CodeReview(
-            verdict=self._resolve_verdict(data.get("verdict"), items),
-            reason=self._resolve_reason(data),
-            summary=str(data.get("summary", "")),
-            items=items,
-            suggestions=[
-                ReviewSuggestion(description=str(s)) if isinstance(s, str)
-                else ReviewSuggestion(
-                    description=str(s.get("description", "")),
-                    file=str(s.get("file", "")),
-                    line=str(s.get("line", "")),
-                    current_code=str(s.get("current_code", "")),
-                    suggested_code=str(s.get("suggested_code", "")),
-                )
-                for s in data.get("suggestions", [])
-                if isinstance(s, (str, dict))
-            ],
-            praise=[
-                ReviewPraise(description=str(p)) if isinstance(p, str)
-                else ReviewPraise(
-                    description=str(p.get("description", "")),
-                    file=str(p.get("file", "")),
-                )
-                for p in data.get("praise", [])
-                if isinstance(p, (str, dict))
-            ],
-            model_used=model,
-        )
-
     @classmethod
     def _empty_review(cls, model: str, *, reason: str) -> CodeReview:
         return CodeReview(
@@ -882,50 +773,6 @@ class ReviewResponseParser:
             return {"file": file_match.group(1), "description": file_match.group(2).strip()}
         return {"file": "", "description": rest}
 
-    @staticmethod
-    def _normalize_item_dict(item: dict[str, Any]) -> dict[str, Any]:
-        """Map LLM JSON item fields onto the canonical parser schema."""
-        severity_raw = str(item.get("severity") or "minor").lower().strip()
-        severity_map = {
-            "high": "major", "medium": "minor", "low": "minor",
-            "critical": "critical", "major": "major", "minor": "minor",
-            "info": "info",
-        }
-        category_default = "maintainability"
-        category_raw = str(
-            item.get("category") or item.get("type") or ""
-        ).lower().strip()
-        category = {
-            "bug": "bug", "security": "security",
-            "performance": "performance", "maintainability": "maintainability",
-            "style": "style", "quality": "quality",
-            "architecture": "architecture", "solid": "design",
-            "design": "design", "convention": "maintainability",
-        }.get(category_raw, category_default)
-        description = str(
-            item.get("description")
-            or item.get("issue")
-            or item.get("title")
-            or item.get("message")
-            or ""
-        )
-        current_code = str(item.get("current_code") or item.get("code") or "")
-        suggested_fix = str(item.get("suggested_fix") or item.get("fix") or "")
-        category_raw_lower = category_raw
-        if suggested_fix == "" and description:
-            suggested_fix = (
-                f"Resolve the reported {category_raw_lower or 'issue'}: {description}"
-            )
-        return {
-            "file": str(item.get("file") or item.get("file_path") or ""),
-            "line": str(item.get("line") or ""),
-            "severity": severity_map.get(severity_raw, severity_raw),
-            "category": category,
-            "description": description,
-            "current_code": current_code,
-            "suggested_fix": suggested_fix,
-        }
-
     @classmethod
     def parse_item_observations(cls, raw_text: str) -> list[dict[str, str]]:
         """Extract fix-less LLM item dicts as non-blocking suggestions."""
@@ -993,38 +840,6 @@ class ReviewResponseParser:
                     if isinstance(item, dict)
                 ]
         return []
-
-    @staticmethod
-    def _is_concrete(item: dict[str, Any]) -> bool:
-        code = str(item.get("current_code") or "").strip()
-        fix = str(item.get("suggested_fix") or "").strip()
-        return bool(code) and bool(fix)
-
-    @staticmethod
-    def _sanitize_json_literals(text: str) -> str:
-        """Escape raw control characters inside JSON string literals."""
-        out: list[str] = []
-        in_string = False
-        escaped = False
-        for ch in text:
-            if escaped:
-                out.append(ch)
-                escaped = False
-                continue
-            if ch == "\\":
-                out.append(ch)
-                escaped = True
-                continue
-            if ch == '"':
-                out.append(ch)
-                in_string = not in_string
-                continue
-            if in_string and ord(ch) < 0x20:
-                mapping = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
-                out.append(mapping.get(ch, f"\\u{ord(ch):04x}"))
-                continue
-            out.append(ch)
-        return "".join(out)
 
     @classmethod
     def parse_items(cls, raw_text: str) -> list[dict[str, Any]]:
@@ -1130,3 +945,188 @@ class ReviewResponseParser:
         if second == -1:
             return cleaned
         return cleaned[second + 3:].strip()
+
+    @staticmethod
+    def _normalize_item_dict(item: dict[str, Any]) -> dict[str, Any]:
+        """Map LLM JSON item fields onto the canonical parser schema."""
+        severity_raw = str(item.get("severity") or "minor").lower().strip()
+        severity_map = {
+            "high": "major", "medium": "minor", "low": "minor",
+            "critical": "critical", "major": "major", "minor": "minor",
+            "info": "info",
+        }
+        category_default = "maintainability"
+        category_raw = str(
+            item.get("category") or item.get("type") or ""
+        ).lower().strip()
+        category = {
+            "bug": "bug", "security": "security",
+            "performance": "performance", "maintainability": "maintainability",
+            "style": "style", "quality": "quality",
+            "architecture": "architecture", "solid": "design",
+            "design": "design", "convention": "maintainability",
+        }.get(category_raw, category_default)
+        description = str(
+            item.get("description")
+            or item.get("issue")
+            or item.get("title")
+            or item.get("message")
+            or ""
+        )
+        current_code = str(item.get("current_code") or item.get("code") or "")
+        suggested_fix = str(item.get("suggested_fix") or item.get("fix") or "")
+        category_raw_lower = category_raw
+        if suggested_fix == "" and description:
+            suggested_fix = (
+                f"Resolve the reported {category_raw_lower or 'issue'}: {description}"
+            )
+        return {
+            "file": str(item.get("file") or item.get("file_path") or ""),
+            "line": str(item.get("line") or ""),
+            "severity": severity_map.get(severity_raw, severity_raw),
+            "category": category,
+            "description": description,
+            "current_code": current_code,
+            "suggested_fix": suggested_fix,
+        }
+
+    @staticmethod
+    def _is_concrete(item: dict[str, Any]) -> bool:
+        code = str(item.get("current_code") or "").strip()
+        fix = str(item.get("suggested_fix") or "").strip()
+        return bool(code) and bool(fix)
+
+    @staticmethod
+    def _sanitize_json_literals(text: str) -> str:
+        """Escape raw control characters inside JSON string literals."""
+        out: list[str] = []
+        in_string = False
+        escaped = False
+        for ch in text:
+            if escaped:
+                out.append(ch)
+                escaped = False
+                continue
+            if ch == "\\":
+                out.append(ch)
+                escaped = True
+                continue
+            if ch == '"':
+                out.append(ch)
+                in_string = not in_string
+                continue
+            if in_string and ord(ch) < 0x20:
+                mapping = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+                out.append(mapping.get(ch, f"\\u{ord(ch):04x}"))
+                continue
+            out.append(ch)
+        return "".join(out)
+
+    def parse(self, content: str, model: str) -> CodeReview:
+        cleaned = self._clean_response(content)
+        try:
+            data = json.loads(self._sanitize_json_literals(cleaned))
+            result = self._code_review_from_dict(data, model)
+            summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
+            praise_empty = (not isinstance(result.praise, list) or not result.praise)
+            if summary_empty or praise_empty:
+                markdown_result = self._parse_markdown_fallback(content, model)
+                result = self._merge_json_markdown(result, markdown_result, model)
+            return result
+        except (json.JSONDecodeError, ValueError):
+            logger.debug("parse: JSON decode failed, trying text extraction")
+        extracted = self.extract_outermost_json(cleaned)
+        if extracted is not None:
+            try:
+                data = json.loads(self._sanitize_json_literals(extracted))
+                result = self._code_review_from_dict(data, model)
+                summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
+                praise_empty = (not isinstance(result.praise, list) or not result.praise)
+                if summary_empty or praise_empty:
+                    markdown_result = self._parse_markdown_fallback(content, model)
+                    result = self._merge_json_markdown(result, markdown_result, model)
+                return result
+            except (json.JSONDecodeError, ValueError):
+                logger.debug("parse: extracted JSON decode also failed")
+        markdown_result = self._parse_markdown_fallback(content, model)
+        return markdown_result
+
+    def _clean_response(self, content: str) -> str:
+        cleaned = content.strip()
+        for stop in self._STOP_TOKENS:
+            idx = cleaned.find(stop)
+            if idx != -1:
+                cleaned = cleaned[:idx].strip()
+        code_block_match = re.search(
+            r"```(?:json)?\s*\n?(.*?)```",
+            cleaned,
+            re.DOTALL,
+        )
+        if code_block_match:
+            cleaned = code_block_match.group(1).strip()
+        return cleaned
+
+    def _code_review_from_dict(self, data: dict[str, Any], model: str) -> CodeReview:
+        items_data = data.get("items") or data.get("findings") or data.get("issues") or []
+        if not isinstance(items_data, list):
+            items_data = []
+        items: list[ReviewItem] = []
+        for i, item_dict in enumerate(items_data, 1):
+            if not isinstance(item_dict, dict):
+                continue
+            raw_desc = item_dict.get("description", "")
+            if isinstance(raw_desc, dict):
+                description = ", ".join(f"{k}={v}" for k, v in raw_desc.items())
+            else:
+                description = str(raw_desc)
+            raw_severity = str(item_dict.get("severity", "info"))
+            if ItemSeverity.accepts(raw_severity):
+                severity_value = raw_severity
+            else:
+                _, severity_value = ReviewResponseParser._infer_severity(description)
+            raw_category = item_dict.get("category") or item_dict.get("type")
+            if raw_category:
+                category_value = str(raw_category)
+            else:
+                category_value = ReviewResponseParser._infer_type(description, severity_value)
+            review_item = ReviewItem(
+                number=i,
+                severity=ItemSeverity.from_value(severity_value),
+                category=IssueCategory.from_value(category_value),
+                file_path=str(item_dict.get("file", "")),
+                description=description,
+                line=str(item_dict.get("line", "")),
+                current_code=str(item_dict.get("current_code", "")),
+                suggested_fix=str(item_dict.get("suggested_fix", "")),
+            )
+            if not review_item.file_path and not review_item.description:
+                continue
+            items.append(review_item)
+        return CodeReview(
+            verdict=self._resolve_verdict(data.get("verdict"), items),
+            reason=self._resolve_reason(data),
+            summary=str(data.get("summary", "")),
+            items=items,
+            suggestions=[
+                ReviewSuggestion(description=str(s)) if isinstance(s, str)
+                else ReviewSuggestion(
+                    description=str(s.get("description", "")),
+                    file=str(s.get("file", "")),
+                    line=str(s.get("line", "")),
+                    current_code=str(s.get("current_code", "")),
+                    suggested_code=str(s.get("suggested_code", "")),
+                )
+                for s in data.get("suggestions", [])
+                if isinstance(s, (str, dict))
+            ],
+            praise=[
+                ReviewPraise(description=str(p)) if isinstance(p, str)
+                else ReviewPraise(
+                    description=str(p.get("description", "")),
+                    file=str(p.get("file", "")),
+                )
+                for p in data.get("praise", [])
+                if isinstance(p, (str, dict))
+            ],
+            model_used=model,
+        )

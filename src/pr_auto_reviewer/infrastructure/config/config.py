@@ -69,6 +69,20 @@ class ConfigLoader:
             if key in os.environ:
                 values[key] = os.environ[key]
 
+    def load(self) -> Config:
+        repo_root = RepoRoot.path()
+        env = self._detector.detect()
+
+        user_config_path = os.path.expanduser(
+            "~/.config/pr-auto-reviewer/config"
+        )
+        repo_env_path = repo_root / ".env"
+
+        if env == "production":
+            return self._load_production(user_config_path)
+
+        return self._load_development(user_config_path, repo_env_path, env)
+
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
             values = dotenv_values(config_path)
@@ -103,20 +117,6 @@ class ConfigLoader:
 
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         return self._builder.build(values, env_name=env, llm_max_retries=llm_max_retries)
-
-    def load(self) -> Config:
-        repo_root = RepoRoot.path()
-        env = self._detector.detect()
-
-        user_config_path = os.path.expanduser(
-            "~/.config/pr-auto-reviewer/config"
-        )
-        repo_env_path = repo_root / ".env"
-
-        if env == "production":
-            return self._load_production(user_config_path)
-
-        return self._load_development(user_config_path, repo_env_path, env)
 
 
 def load_config() -> Config:

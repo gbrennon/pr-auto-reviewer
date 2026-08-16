@@ -251,6 +251,12 @@ class TestLlmUnavailable:
     MagicMock is used ONLY for mock_response objects at the HTTP boundary.
     """
 
+    @staticmethod
+    def _cmd(pr_id: PullRequestId, head_sha: CommitSha) -> ReviewPullRequestCommand:
+        return ReviewPullRequestCommand(
+            pr_id=pr_id, head_sha=head_sha, title="Test",
+        )
+
     @pytest.fixture
     def pr_id(self) -> PullRequestId:
         return PullRequestId(repository="owner/repo", number=1)
@@ -258,28 +264,6 @@ class TestLlmUnavailable:
     @pytest.fixture
     def head_sha(self) -> CommitSha:
         return CommitSha("abc123")
-
-    @pytest.fixture
-    def _diff(self, pr_id: PullRequestId, head_sha: CommitSha) -> PullRequestDiff:
-        return PullRequestDiff(
-            pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
-        )
-
-    @pytest.fixture
-    def _svc(self, _diff: PullRequestDiff) -> ReviewPullRequestService:
-        return ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
-            changeset_fetcher=StubChangesetFetcher(_diff),
-            review_context_factory=StubReviewContextFactory(),
-            llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
-            review_publisher=StubReviewPublisher(),
-        )
-
-    @staticmethod
-    def _cmd(pr_id: PullRequestId, head_sha: CommitSha) -> ReviewPullRequestCommand:
-        return ReviewPullRequestCommand(
-            pr_id=pr_id, head_sha=head_sha, title="Test",
-        )
 
     def test_connection_refused(
         self,
@@ -438,3 +422,19 @@ class TestLlmUnavailable:
             service.execute(self._cmd(pr_id, head_sha))
 
         assert publisher.publish_calls == []
+
+    @pytest.fixture
+    def _diff(self, pr_id: PullRequestId, head_sha: CommitSha) -> PullRequestDiff:
+        return PullRequestDiff(
+            pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
+        )
+
+    @pytest.fixture
+    def _svc(self, _diff: PullRequestDiff) -> ReviewPullRequestService:
+        return ReviewPullRequestService(
+            pr_repository=StubPullRequestRepository(),
+            changeset_fetcher=StubChangesetFetcher(_diff),
+            review_context_factory=StubReviewContextFactory(),
+            llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
+            review_publisher=StubReviewPublisher(),
+        )

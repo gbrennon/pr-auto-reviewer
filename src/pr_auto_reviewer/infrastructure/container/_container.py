@@ -73,43 +73,6 @@ class Container:
     """Dependency-injection container.  Creates and wires all infrastructure
     adapters based on Config."""
 
-    def _wire(self) -> None:
-        is_terminal = self._config.output_mode == "terminal"
-        clients = wire_platform_clients(self._config)
-        self._http_client = clients.http_client
-        self._reviewer_client = clients.reviewer_client
-        self._token_verifier = clients.token_verifier
-
-        from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
-            LocalGitRepository,
-        )
-        local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
-        adapters = wire_platform_adapters(
-            self._config, clients, is_terminal, local_repository=local_repository
-        )
-        self._repository_context = adapters.repository_context
-        self._changeset_fetcher = adapters.changeset_fetcher
-        self._review_publisher = adapters.review_publisher
-        self._review_reader = adapters.review_reader
-        self._comment_reader = adapters.comment_reader
-        self._comment_publisher = adapters.comment_publisher
-        self._issue_tracker = adapters.issue_tracker
-        self._repo_lister = adapters.repo_lister
-        self._pr_lister = adapters.pr_lister
-
-        core = wire_core_services(
-            self._config, self._repository_context
-        )
-        self._pr_repository = core.pr_repository
-        self._llm_review = core.llm_review
-        self._command_bus = core.command_bus
-        self._conversation_logger = core.conversation_logger
-        self._notifier = core.notifier
-        self._fragment_repository = core.fragment_repository
-        self._fragment_renderer = core.fragment_renderer
-        self._fragment_max_tokens = core.fragment_max_tokens
-        self._review_context_factory = core.review_context_factory
-
     def __init__(self, config: Config | None = None) -> None:
         self._config = config or load_config()
         self._pr_repository: PullRequestRepository = NullPullRequestRepository()
@@ -202,3 +165,40 @@ class Container:
     @property
     def fragment_max_tokens(self) -> int | None:
         return self._fragment_max_tokens
+
+    def _wire(self) -> None:
+        is_terminal = self._config.output_mode == "terminal"
+        clients = wire_platform_clients(self._config)
+        self._http_client = clients.http_client
+        self._reviewer_client = clients.reviewer_client
+        self._token_verifier = clients.token_verifier
+
+        from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
+            LocalGitRepository,
+        )
+        local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        adapters = wire_platform_adapters(
+            self._config, clients, is_terminal, local_repository=local_repository
+        )
+        self._repository_context = adapters.repository_context
+        self._changeset_fetcher = adapters.changeset_fetcher
+        self._review_publisher = adapters.review_publisher
+        self._review_reader = adapters.review_reader
+        self._comment_reader = adapters.comment_reader
+        self._comment_publisher = adapters.comment_publisher
+        self._issue_tracker = adapters.issue_tracker
+        self._repo_lister = adapters.repo_lister
+        self._pr_lister = adapters.pr_lister
+
+        core = wire_core_services(
+            self._config, self._repository_context
+        )
+        self._pr_repository = core.pr_repository
+        self._llm_review = core.llm_review
+        self._command_bus = core.command_bus
+        self._conversation_logger = core.conversation_logger
+        self._notifier = core.notifier
+        self._fragment_repository = core.fragment_repository
+        self._fragment_renderer = core.fragment_renderer
+        self._fragment_max_tokens = core.fragment_max_tokens
+        self._review_context_factory = core.review_context_factory

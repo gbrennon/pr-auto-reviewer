@@ -36,14 +36,6 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
     def __init__(self, reason_builder: ReasonBuilderPort) -> None:
         self._reason_builder = reason_builder
 
-    def execute(
-        self, command: AggregateReviewFindingsCommand
-    ) -> CodeReview:
-        """Deduplicate *command.items* and build a ``CodeReview``."""
-        return self._merge(
-            command.items, command.phase_result, command.model_used
-        )
-
     @staticmethod
     def _build_summary(merged: list[ReviewItem]) -> str:
         """Build a short human-readable summary from the merged items."""
@@ -56,6 +48,14 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         if files:
             base += " Files: " + ", ".join(files[:5])
         return base
+
+    def execute(
+        self, command: AggregateReviewFindingsCommand
+    ) -> CodeReview:
+        """Deduplicate *command.items* and build a ``CodeReview``."""
+        return self._merge(
+            command.items, command.phase_result, command.model_used
+        )
 
     def _merge(
         self,

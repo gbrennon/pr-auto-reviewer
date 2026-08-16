@@ -16,32 +16,6 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 
 class TestCompositionRoot:
 
-    @pytest.fixture
-    def _fake_config(self) -> Config:
-        return Config(
-            env="test",
-            platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fake-owner",
-            forgejo_reviewer_token="fake-reviewer",
-            forgejo_reviewer_username="fake-user",
-            github_owner_token="fake-owner",
-            github_reviewer_token="fake-reviewer",
-            github_reviewer_username="fake-user",
-            output_mode="terminal",
-        )
-
-    @pytest.fixture
-    def _root(self, monkeypatch, _fake_config: Config):
-        monkeypatch.setattr(
-            "pr_auto_reviewer.presentation.composition_root.load_config",
-            lambda: _fake_config,
-        )
-        monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.container.load_config",
-            lambda: _fake_config,
-        )
-        return CompositionRoot()
-
     def test_composition_root_exposes_application_components(self, _root):
         assert isinstance(_root.components, ApplicationComponents)
 
@@ -76,9 +50,6 @@ class TestCompositionRoot:
     def test_container_is_exposed(self, _root):
         assert _root.container is not None
 
-
-class TestBootstrapBackwardCompat:
-
     @pytest.fixture
     def _fake_config(self) -> Config:
         return Config(
@@ -92,6 +63,21 @@ class TestBootstrapBackwardCompat:
             github_reviewer_username="fake-user",
             output_mode="terminal",
         )
+
+    @pytest.fixture
+    def _root(self, monkeypatch, _fake_config: Config):
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container.load_config",
+            lambda: _fake_config,
+        )
+        return CompositionRoot()
+
+
+class TestBootstrapBackwardCompat:
 
     def test_bootstrap_function_returns_application_components(
         self, monkeypatch, _fake_config,
@@ -120,3 +106,17 @@ class TestBootstrapBackwardCompat:
         )
         components = bootstrap()
         assert components is not None
+
+    @pytest.fixture
+    def _fake_config(self) -> Config:
+        return Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fake-owner",
+            forgejo_reviewer_token="fake-reviewer",
+            forgejo_reviewer_username="fake-user",
+            github_owner_token="fake-owner",
+            github_reviewer_token="fake-reviewer",
+            github_reviewer_username="fake-user",
+            output_mode="terminal",
+        )

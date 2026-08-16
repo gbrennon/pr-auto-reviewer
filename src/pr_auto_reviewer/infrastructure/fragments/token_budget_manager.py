@@ -17,10 +17,6 @@ class TokenBudgetManager:
         self._max_tokens = max_tokens
         self._consumed_tokens = 0
 
-    def _estimate_tokens(self, text: str) -> int:
-        """Return an estimated token count for *text* (``len(text) // 4``)."""
-        return len(text) // 4
-
     def fits_budget(self, text: str) -> bool:
         """Return ``True`` if *text* fits within the remaining budget."""
         tokens = self._estimate_tokens(text)
@@ -50,3 +46,7 @@ class TokenBudgetManager:
     def reset(self) -> None:
         """Reset consumed tokens to zero (start a new budget cycle)."""
         self._consumed_tokens = 0
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Return an estimated token count for *text* (``len(text) // 4``)."""
+        return len(text) // 4

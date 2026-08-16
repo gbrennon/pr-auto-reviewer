@@ -13,10 +13,10 @@ class TokenSlug:
 
     token: str
 
+    def __str__(self) -> str:
+        return self.value
+
     @property
     def value(self) -> str:
         """Return the slug (last 8 chars, or ``"none"`` for empty tokens)."""
         return self.token[-8:] if self.token else "none"
-
-    def __str__(self) -> str:
-        return self.value
