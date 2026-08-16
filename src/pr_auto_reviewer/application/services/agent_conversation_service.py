@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
@@ -71,6 +72,17 @@ class AgentConversationService(RunAgentConversationUseCase):
         self._max_empty_responses = max_empty_responses
         self._max_unparseable_responses = max_unparseable_responses
 
+    @staticmethod
+    def _derive_pr_identifier(repo_path: Path | None) -> str:
+        if repo_path is None:
+            return "unknown"
+        path_str = str(repo_path)
+        import re
+        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", path_str)
+        if match:
+            return f"{match.group(1)}/{match.group(2)}#{match.group(3)}"
+        return path_str.rsplit("/", 1)[-1]
+
     def execute(
         self, command: RunAgentConversationCommand
     ) -> PhaseResult:
@@ -85,7 +97,7 @@ class AgentConversationService(RunAgentConversationUseCase):
     def _run(
         self,
         system_prompt: str,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
         tool_execution: Any,
         phase_name: str = "",
@@ -264,7 +276,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _build_phase_result(
-        self, parsed: TurnParseResult, repo_path: str, changed_files: list[str]
+        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str]
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
@@ -272,16 +284,125 @@ class AgentConversationService(RunAgentConversationUseCase):
         review_items, skip_reasons = ReviewItemFactory().create(
             raw_items, repo_path, changed_files
         )
+        suggestions = list(metadata.get("suggestions", []))
+        repo_root = Path(repo_path) if repo_path else None
+        for s in suggestions:
+            if not str(s.get("file", "")).strip():
+                s["file"] = self._find_mentioned_file(
+                    str(s.get("description", "")), changed_files
+                )
+            if (
+                repo_root is not None
+                and str(s.get("file", "")).strip()
+                and not str(s.get("line", "")).strip()
+                and not str(s.get("current_code", "")).strip()
+            ):
+                grounded = self._ground_suggestion(
+                    s, repo_root, changed_files
+                )
+                if grounded is not None:
+                    s.update(grounded)
+        accepted_descriptions = {item.description for item in review_items}
+        for item_dict in raw_items:
+            if not isinstance(item_dict, dict):
+                continue
+            description = str(item_dict.get("description", "")).strip()
+            if not description:
+                continue
+            if description in accepted_descriptions:
+                continue
+            if any(
+                s.get("description") == description for s in suggestions
+            ):
+                continue
+            suggestion = {
+                "file": str(
+                    item_dict.get("file", "")
+                ) or self._find_mentioned_file(description, changed_files),
+                "line": str(item_dict.get("line", "")),
+                "description": description,
+            }
+            if (
+                repo_root is not None
+                and str(suggestion["file"]).strip()
+                and not str(suggestion["line"]).strip()
+                and not str(item_dict.get("current_code", "")).strip()
+            ):
+                grounded = self._ground_suggestion(
+                    suggestion, repo_root, changed_files
+                )
+                if grounded is not None:
+                    suggestion.update(grounded)
+            suggestions.append(suggestion)
         return PhaseResult(
             items=review_items,
             llm_verdict=metadata.get("verdict") or None,
             llm_reason=metadata.get("reason", ""),
             llm_summary=metadata.get("summary", ""),
-            llm_suggestions=metadata.get("suggestions", []),
+            llm_suggestions=suggestions,
             llm_praise=metadata.get("praise", []),
             skip_reasons=skip_reasons,
         )
 
+
+    @staticmethod
+    def _find_mentioned_file(
+        text: str, changed_files: list[str]
+    ) -> str:
+        """Return the changed file whose name appears in *text*; else empty."""
+        if not text or not changed_files:
+            return ""
+        for candidate in sorted(changed_files, key=len, reverse=True):
+            basename = candidate.rsplit("/", 1)[-1]
+            stem = basename.rsplit(".", 1)[0]
+            if basename in text or (stem and stem in text):
+                return candidate
+        return ""
+
+    @staticmethod
+    def _ground_suggestion(
+        suggestion: dict[str, str],
+        repo_root: Path,
+        changed_files: list[str],
+    ) -> dict[str, str] | None:
+        """Fill line and current_code for a suggestion from repository files."""
+        file_path = str(suggestion.get("file", ""))
+        full_path: Path | None = None
+        resolved = file_path
+        if file_path:
+            candidate = repo_root / file_path
+            if candidate.is_file():
+                full_path = candidate
+            else:
+                for changed in changed_files:
+                    if changed.endswith(file_path) or file_path.endswith(changed):
+                        candidate = repo_root / changed
+                        if candidate.is_file():
+                            full_path = candidate
+                            resolved = changed
+                            break
+        if full_path is None:
+            return None
+        description = str(suggestion.get("description", ""))
+        line_str = str(
+            ReviewItemFactory._locate_symbol_range(full_path, description) or ""
+        )
+        current_code = ""
+        if line_str or ReviewItemFactory._extract_symbols(description):
+            current_code = str(
+                ReviewItemFactory._read_evidence(
+                    full_path, repo_root, line_str, description
+                )
+                or ""
+            )
+        result: dict[str, str] = {}
+        if resolved:
+            result["file"] = resolved
+        if line_str:
+            result["line"] = line_str
+        if current_code:
+            result["current_code"] = current_code
+        return result or None
 
     def _publish(self, event: Any) -> None:
         """Publish an event to the bus."""
@@ -293,8 +414,11 @@ class AgentConversationService(RunAgentConversationUseCase):
         messages: list[ConversationMessage],
         turns: int,
         phase_result: PhaseResult | None,
-        repo_path: str = "",
+        repo_path: Path | None = None,
     ) -> None:
+        self._log_conversation_debug(
+            phase_name, messages, turns, phase_result, repo_path,
+        )
         if self._conversation_logger is None:
             return
         pr_identifier = self._derive_pr_identifier(repo_path)
@@ -322,11 +446,25 @@ class AgentConversationService(RunAgentConversationUseCase):
             )
 
     @staticmethod
-    def _derive_pr_identifier(repo_path: str) -> str:
-        if not repo_path:
-            return "unknown"
-        import re
-        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", repo_path)
-        if match:
-            return f"{match.group(1)}/{match.group(2)}#{match.group(3)}"
-        return repo_path.rsplit("/", 1)[-1]
+    def _log_conversation_debug(
+        phase_name: str,
+        messages: list[ConversationMessage],
+        turns: int,
+        phase_result: PhaseResult | None,
+        repo_path: Path | None = None,
+    ) -> None:
+        """Emit the full conversation when the CLI runs in debug mode."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+        verdict = phase_result.llm_verdict if phase_result else "exhausted"
+        item_count = len(phase_result.items) if phase_result else 0
+        logger.debug(
+            "=== Conversation: %s (turns=%d, verdict=%s, items=%d) ===",
+            phase_name, turns, verdict, item_count,
+        )
+        for message in messages:
+            role = getattr(message, "role", "unknown")
+            content = getattr(message, "content", "")
+            logger.debug(
+                "--- %s ---\n%s", role, str(content)
+            )

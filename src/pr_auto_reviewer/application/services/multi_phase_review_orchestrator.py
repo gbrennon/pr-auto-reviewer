@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
 
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -64,7 +65,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     def __init__(
         self,
         command_bus: CommandBusPort,
-        tool_factory: Callable[[str, list[str]], Any],
+        tool_factory: Callable[[Path, list[str]], Any],
         max_retries: int = 5,
         max_feedback_rounds: int = 2,
     ) -> None:
@@ -87,7 +88,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     def _run_phases_full_retry(
         self,
         plan: ReviewPlan,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
         model: str,
     ) -> CodeReview:
@@ -157,7 +158,16 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 )
                 result = CodeReview(
                     verdict=ReviewVerdict.COMMENTED,
-                    reason="No issues found across all review phases.",
+                    reason=(
+                        "Application could not extract a structured verdict "
+                        "from any review phase."
+                    ),
+                    summary=(
+                        f"Reviewed {len(plan.phases)} phases over model {model}; "
+                        "no structured verdict or items were obtained from the "
+                        "LLM output. This is a pipeline failure signal, not a "
+                        "clean review."
+                    ),
                     model_used=model,
                 )
 
@@ -171,7 +181,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     def _run_feedback_loop(
         self,
         plan: ReviewPlan,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
         model: str,
         previous_result: CodeReview,
@@ -251,7 +261,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     def _run_phases(
         self,
         plan: ReviewPlan,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
         model: str,
         accumulated_items: list[ReviewItem] | None = None,
@@ -333,18 +343,16 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         if not all_items:
             verdict = ReviewVerdict.COMMENTED
             reason = "No issues found across all review phases."
-            summary = ""
+            summary = "No issues found across all review phases."
             suggestions: list[ReviewSuggestion] = []
             praise_list: list[ReviewPraise] = []
 
             if last_phase_result is not None:
-                if last_phase_result.llm_verdict is not None:
-                    try:
-                        verdict = ReviewVerdict(
-                            last_phase_result.llm_verdict
-                        )
-                    except ValueError:
-                        pass
+                coerced = ReviewVerdict.coerce(
+                    last_phase_result.llm_verdict
+                )
+                if coerced is not None and coerced is not ReviewVerdict.COMMENTED:
+                    verdict = coerced
                 if last_phase_result.llm_reason:
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
@@ -360,6 +368,25 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         file=p.get("file", ""),
                         description=p.get("description", ""),
                     ))
+
+            if verdict == ReviewVerdict.COMMENTED:
+                if not reason:
+                    reason = (
+                        "Application could not extract a structured verdict "
+                        "from any review phase."
+                    )
+                if not summary:
+                    summary = (
+                        f"Reviewed {len(plan.phases)} phases over model {model}; "
+                        "no structured verdict or items were obtained from the "
+                        "LLM output. This is a pipeline failure signal, not a "
+                        "clean review."
+                    )
+            else:
+                if not reason:
+                    reason = "Review completed without action items."
+                if not summary:
+                    summary = reason
 
             return CodeReview(
                 verdict=verdict,
@@ -390,32 +417,62 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 and verified_items is not code_review.items
             ):
                 code_review = self._rebuild_after_verification(
-                    verified_items, model
+                    verified_items, model, previous=code_review,
                 )
         self._publish(FindingsAggregatedEvent(code_review=code_review))
         return code_review
 
     def _rebuild_after_verification(
-        self, verified_items: list[Any], model: str
+        self, verified_items: list[Any], model: str,
+        previous: CodeReview | None = None,
     ) -> CodeReview:
         """Rebuild a CodeReview after verification dropped some items."""
+        previous_items = len(previous.items) if previous is not None else 0
         for i, item in enumerate(verified_items, 1):
             object.__setattr__(item, "number", i)
 
         review_items = [
             item for item in verified_items if isinstance(item, ReviewItem)
         ]
-        if not review_items:
+        if previous is not None and previous.verdict == ReviewVerdict.COMMENTED:
+            verdict = previous.verdict
+        elif not review_items and previous_items:
+            verdict = ReviewVerdict.APPROVED
+        elif not review_items:
             verdict = ReviewVerdict.APPROVED
         elif any(item.is_blocking for item in review_items):
             verdict = ReviewVerdict.CHANGES_REQUESTED
         else:
             verdict = ReviewVerdict.APPROVED
 
+        dropped = previous_items - len(review_items)
+        if dropped and previous is not None:
+            reason = "No findings survived verification against source code."
+            summary = "All reported findings were refuted during verification — they were not confirmed as real issues in the changed files."
+        else:
+            summary = (
+                previous.summary
+                if previous is not None and previous.summary
+                else (
+                    f"Reviewed the diff over model {model}; "
+                    "no actionable findings remained after verification."
+                )
+            )
+            reason = (
+                previous.reason
+                if previous is not None and previous.reason
+                else "Findings verified against source code."
+            )
+        suggestions = (previous.suggestions if previous is not None else [])
+        praise = (previous.praise if previous is not None else [])
+
         return CodeReview(
             verdict=verdict,
-            reason="Findings verified against source code.",
+            reason=reason,
+            summary=summary,
             items=review_items,
+            suggestions=list(suggestions),
+            praise=list(praise),
             model_used=model,
         )
 
@@ -423,7 +480,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         self,
         phase_name: str,
         phase_prompt: str,
-        repo_path: str,
+        repo_path: Path,
         changed_files: list[str],
     ) -> PhaseResult:
         """Run a single phase with per-phase retry on exhaustion."""

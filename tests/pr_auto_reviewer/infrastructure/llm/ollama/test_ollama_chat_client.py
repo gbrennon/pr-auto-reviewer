@@ -22,7 +22,7 @@ from pr_auto_reviewer.domain.agent.conversation_message import (
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama_chat_client import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
 )
 
@@ -111,7 +111,7 @@ class TestOllamaChatClient:
 
         monkeypatch.setattr(requests, "post", fake_post)
         monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.llm.ollama_chat_client.time.sleep",
+            "pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client.time.sleep",
             lambda _: None,
         )
 

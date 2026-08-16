@@ -55,6 +55,8 @@ class ApplicationComponents:
     cli_runner: CliRunner
     notifier: NotifierPort | None = None
     token_verifier: TokenVerifierPort | None = None
+    command_bus: InMemoryCommandBus | None = None
+    conversation_logger: ConversationLogger | None = None
 
 class CompositionRoot:
     """Wires infrastructure, application and presentation layers.
@@ -86,6 +88,8 @@ class CompositionRoot:
             llm_review=c.llm_review,
             review_publisher=c.review_publisher,
             token_verifier=c.token_verifier,
+            command_bus=c.command_bus,
+            conversation_logger=c.conversation_logger,
         )
 
         review_item_parser = ReviewItemParser()

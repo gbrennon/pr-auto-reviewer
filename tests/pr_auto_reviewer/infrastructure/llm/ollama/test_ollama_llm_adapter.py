@@ -15,7 +15,7 @@ from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
 )
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter import (
     OllamaLlmAdapter,
 )
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
@@ -34,7 +34,7 @@ def prompt_builder() -> PromptBuilder:
 @pytest.fixture
 def sample_diff() -> PullRequestDiff:
     """Create a sample diff from real PR fixture."""
-    fixture_path = Path(__file__).parents[3] / "fixtures" / "diffs" / "sample-ollama.diff"
+    fixture_path = Path(__file__).parents[4] / "fixtures" / "diffs" / "sample-ollama.diff"
     return PullRequestDiff(
         pr_id=None,
         head_sha=None,

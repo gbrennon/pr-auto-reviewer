@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
-from pr_auto_reviewer.infrastructure.llm.ollama_exploratory_chat_adapter import (
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
 

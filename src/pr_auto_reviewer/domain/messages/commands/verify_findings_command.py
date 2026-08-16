@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 
@@ -16,5 +17,5 @@ class VerifyFindingsCommand:
     """
 
     items: list[ReviewItem]
-    repo_path: str
+    repo_path: Path
     changed_files: list[str]

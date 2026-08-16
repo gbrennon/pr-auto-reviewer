@@ -1,7 +1,7 @@
 """DEPRECATED: Staged multi-phase code review via Ollama chat API with exploration tools.
 
 This adapter has been replaced by the agentic review architecture:
-- OllamaAgentAdapter (infrastructure/llm/ollama_agent_adapter.py)
+- OllamaAgentAdapter (infrastructure/llm/ollama/ollama_agent_adapter.py)
 - AgentConversationService (application/services/agent_conversation_service.py)
 - MultiPhaseReviewOrchestrator (application/services/multi_phase_review_orchestrator.py)
 - TurnParser (application/services/turn_parser.py)
@@ -58,7 +58,7 @@ from pr_auto_reviewer.domain.services.review_item_factory import (
 logger = logging.getLogger(__name__)
 
 _PHASE_PROMPT_DIR = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent.parent.parent
     / "fragments"
     / "content"
     / "universal"
