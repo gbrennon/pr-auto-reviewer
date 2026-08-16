@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
 )
@@ -171,18 +173,34 @@ class TestReviewContextFactoryBuild:
         assert isinstance(result, ComposedPrompt)
         assert compose.execute_calls[0].diff == "+def foo(): pass\n"
 
-    def test_repo_path_strips_platform_prefix(self) -> None:
+    def test_repo_path_comes_from_diff_clone_path(self) -> None:
         repo_ctx = StubRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         pr_id = PullRequestId(repository="forgejo:gbrennon/pr-auto-reviewer", number=112)
-        factory = ReviewContextFactory(
-            repo_ctx, compose, local_clone_base_dir="/tmp/clones",
+        diff = _make_diff()
+        diff = PullRequestDiff(
+            pr_id=pr_id,
+            head_sha=diff.head_sha,
+            diff_content=diff.diff_content,
+            file_contents=diff.file_contents,
+            commit_messages=diff.commit_messages,
+            clone_path=Path("/tmp/clones/gbrennon_pr-auto-reviewer_112"),
         )
+        factory = ReviewContextFactory(repo_ctx, compose)
 
-        result = factory.build(pr_id, _make_diff())
+        result = factory.build(pr_id, diff)
 
         assert result.repo_path is not None
         assert ":" not in result.repo_path, (
             f"repo_path must not contain colon but got {result.repo_path}"
         )
         assert "/tmp/clones/gbrennon_pr-auto-reviewer_112" == result.repo_path
+
+    def test_repo_path_empty_when_no_clone(self) -> None:
+        repo_ctx = StubRepositoryContext()
+        compose = _SpyComposeReviewPrompt()
+        factory = ReviewContextFactory(repo_ctx, compose)
+
+        result = factory.build(_make_pr_id(), _make_diff())
+
+        assert result.repo_path == ""
