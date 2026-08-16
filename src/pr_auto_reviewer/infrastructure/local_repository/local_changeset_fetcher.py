@@ -91,4 +91,5 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
             diff_content=raw_diff,
             file_contents=file_contents,
             commit_messages=commit_messages,
+            clone_path=repo_path,
         )

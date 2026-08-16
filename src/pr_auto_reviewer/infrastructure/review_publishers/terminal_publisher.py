@@ -24,9 +24,16 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
 
     @staticmethod
     def _review_to_json(review: CodeReview) -> str:
+        def _compact(payload: dict[str, object]) -> dict[str, object]:
+            return {
+                key: value
+                for key, value in payload.items()
+                if value not in ("", None)
+            }
+
         def _convert(item):
             if isinstance(item, ReviewItem):
-                return {
+                return _compact({
                     "number": item.number,
                     "severity": item.severity.value,
                     "category": item.category.value,
@@ -36,16 +43,18 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
                     "id": item.id,
                     "current_code": item.current_code,
                     "suggested_fix": item.suggested_fix,
-                }
+                })
             if isinstance(item, ReviewSuggestion):
-                return {
+                return _compact({
                     "file": item.file, "line": item.line,
                     "description": item.description,
                     "current_code": item.current_code,
                     "suggested_code": item.suggested_code,
-                }
+                })
             if isinstance(item, ReviewPraise):
-                return {"file": item.file, "description": item.description}
+                return _compact({
+                    "file": item.file, "description": item.description,
+                })
             return item
 
         data = {
