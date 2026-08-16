@@ -31,14 +31,6 @@ logger = logging.getLogger(__name__)
 class PollingDaemon:
     """Polls repositories for open PRs and triggers review operations."""
 
-    def _setup_signal_handlers(self) -> None:
-        def handle_signal(signum: int, frame: object) -> None:
-            logger.info("Shutdown signal received, stopping...")
-            raise KeyboardInterrupt
-
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
-
     def __init__(
         self,
         config: PollingDaemonConfig,
@@ -56,6 +48,42 @@ class PollingDaemon:
         self._update_tracker = update_tracker
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
+    def start(self) -> None:
+        """Start the polling loop."""
+        logger.info(
+            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
+            f"run_once={self._config.run_once})"
+        )
+        try:
+            deleted = clean_temp_files()
+            if deleted:
+                logger.info("Cleaned up %d stale temp file(s)", deleted)
+        except Exception:
+            logger.warning("Temp file cleanup failed, continuing", exc_info=True)
+
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                logger.info("=== Cycle #%d ===", cycle)
+                self._run_cycle()
+
+                if self._config.run_once:
+                    break
+
+                time.sleep(self._config.poll_interval_seconds)
+        except KeyboardInterrupt:
+            pass
+
+        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
+
+    def _setup_signal_handlers(self) -> None:
+        def handle_signal(signum: int, frame: object) -> None:
+            logger.info("Shutdown signal received, stopping...")
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
@@ -138,31 +166,3 @@ class PollingDaemon:
                     self._process_pr(pr)
         except LlmUnavailableError:
             logger.warning("LLM unavailable — cancelling this cycle")
-    def start(self) -> None:
-        """Start the polling loop."""
-        logger.info(
-            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
-            f"run_once={self._config.run_once})"
-        )
-        try:
-            deleted = clean_temp_files()
-            if deleted:
-                logger.info("Cleaned up %d stale temp file(s)", deleted)
-        except Exception:
-            logger.warning("Temp file cleanup failed, continuing", exc_info=True)
-
-        cycle = 0
-        try:
-            while True:
-                cycle += 1
-                logger.info("=== Cycle #%d ===", cycle)
-                self._run_cycle()
-
-                if self._config.run_once:
-                    break
-
-                time.sleep(self._config.poll_interval_seconds)
-        except KeyboardInterrupt:
-            pass
-
-        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")

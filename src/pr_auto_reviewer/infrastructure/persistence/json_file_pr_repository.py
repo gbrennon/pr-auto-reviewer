@@ -42,6 +42,42 @@ class JsonFilePullRequestRepository(PullRequestRepository):
     def __init__(self, file_path: str | Path) -> None:
         self._file_path = Path(file_path)
 
+    def find(self, pr_id: PullRequestId) -> PullRequest | None:
+        data = self._load()
+        reviewed = data.get("reviewed", {})
+
+        key = _make_key(pr_id)
+        raw = reviewed.get(key)
+        if raw is None:
+            logger.debug("No persisted state for %s", pr_id)
+            return None
+
+        logger.debug("Found persisted state for %s", pr_id)
+        pr = self._deserialize(pr_id, raw)
+        logger.info(
+            "JsonFilePullRequestRepository.find return: title='%s' sha=%s reviews=%d",
+            pr.title, pr.head_sha.value[:7], len(pr.reviews),
+        )
+        return pr
+
+    def save(self, pr: PullRequest) -> None:
+        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
+        data = self._load()
+        reviewed = data.setdefault("reviewed", {})
+
+        key = _make_key(pr.id)
+        reviewed[key] = self._serialize(pr)
+
+        self._save(data)
+
+    def reset(self) -> None:
+        """Clear all persisted state by deleting and recreating the file."""
+        logger.info("Resetting state file %s", self._file_path)
+        if self._file_path.exists():
+            self._file_path.unlink()
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_path.write_text('{"reviewed":{}}')
+
     def _load(self) -> dict:
         if not self._file_path.exists():
             return {"reviewed": {}}
@@ -92,24 +128,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             processed_comment_ids=processed_ids,
         )
 
-    def find(self, pr_id: PullRequestId) -> PullRequest | None:
-        data = self._load()
-        reviewed = data.get("reviewed", {})
-
-        key = _make_key(pr_id)
-        raw = reviewed.get(key)
-        if raw is None:
-            logger.debug("No persisted state for %s", pr_id)
-            return None
-
-        logger.debug("Found persisted state for %s", pr_id)
-        pr = self._deserialize(pr_id, raw)
-        logger.info(
-            "JsonFilePullRequestRepository.find return: title='%s' sha=%s reviews=%d",
-            pr.title, pr.head_sha.value[:7], len(pr.reviews),
-        )
-        return pr
-
     def _save(self, data: dict) -> None:
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_path = tempfile.mkstemp(
@@ -155,21 +173,3 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                 str(c) for c in pr.processed_comment_ids
             ),
         }
-
-    def save(self, pr: PullRequest) -> None:
-        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
-        data = self._load()
-        reviewed = data.setdefault("reviewed", {})
-
-        key = _make_key(pr.id)
-        reviewed[key] = self._serialize(pr)
-
-        self._save(data)
-
-    def reset(self) -> None:
-        """Clear all persisted state by deleting and recreating the file."""
-        logger.info("Resetting state file %s", self._file_path)
-        if self._file_path.exists():
-            self._file_path.unlink()
-        self._file_path.parent.mkdir(parents=True, exist_ok=True)
-        self._file_path.write_text('{"reviewed":{}}')

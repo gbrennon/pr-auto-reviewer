@@ -35,6 +35,51 @@ class ReviewPublishingService:
         self._client = client
         self._owner_client = owner_client
 
+    @staticmethod
+    def _is_diff_metadata_line(line: str) -> bool:
+        return line.startswith((
+            "index ",
+            "new file mode ",
+            "deleted file mode ",
+            "old mode ",
+            "new mode ",
+            "similarity index ",
+            "dissimilarity index ",
+            "rename from ",
+            "rename to ",
+            "copy from ",
+            "copy to ",
+        ))
+
+    @staticmethod
+    def _verify_remaining_snippet_lines(
+        lines: list[str],
+        start: int,
+        remaining: list[str],
+    ) -> bool:
+        if not remaining:
+            return True
+        idx = 0
+        for line in lines[start:]:
+            if line.startswith("diff --git"):
+                return False
+            if line.startswith("@@"):
+                continue
+            if ReviewPublishingService._is_diff_metadata_line(line):
+                continue
+            if line.startswith(("--- ", "+++ ")):
+                continue
+            content = line[1:] if line[:1] in ("-", "+") else line
+            if not content.strip():
+                continue
+            if remaining[idx] in content:
+                idx += 1
+                if idx == len(remaining):
+                    return True
+            else:
+                return False
+        return False
+
     def verify_tokens(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for both reviewer and owner tokens
         before publishing.  Wraps ``PreflightVerificationError`` as
@@ -185,80 +230,6 @@ class ReviewPublishingService:
             )
         return self._build_github_inline_comments(diff_text, items, suggestions)
 
-    def _build_github_inline_comments(
-        self, diff_text: str, items: list, suggestions: list,
-    ) -> list[dict]:
-        """Build GitHub-style inline comments using diff ``position``."""
-        comments: list[dict] = []
-
-        for item in items:
-            pos_data = self.find_diff_position(
-                diff_text, item.file_path, item.current_code,
-            )
-            if pos_data:
-                comments.append(
-                    {
-                        "path": item.file_path,
-                        "position": pos_data["position"],
-                        "body": item.description,
-                    }
-                )
-
-        for s in suggestions:
-            s_file = s.file
-            s_code = s.current_code
-            if not s_file or not s_code:
-                continue
-            pos_data = self.find_diff_position(diff_text, s_file, s_code)
-            if pos_data:
-                s_body = s.description
-                comments.append(
-                    {
-                        "path": s_file,
-                        "position": pos_data["position"],
-                        "body": s_body,
-                    }
-                )
-        return comments
-
-    def _build_forgejo_inline_comments(
-        self, diff_text: str, items: list, suggestions: list,
-    ) -> list[dict]:
-        """Build Forgejo-style inline comments using ``old_position`` / ``new_position``."""
-        comments: list[dict] = []
-
-        for item in items:
-            pos_data = self.find_diff_position(
-                diff_text, item.file_path, item.current_code,
-            )
-            if pos_data:
-                comments.append(
-                    {
-                        "path": item.file_path,
-                        "body": item.description,
-                        "old_position": pos_data["old_line"] or 0,
-                        "new_position": pos_data["new_line"] or 0,
-                    }
-                )
-
-        for s in suggestions:
-            s_file = s.file
-            s_code = s.current_code
-            if not s_file or not s_code:
-                continue
-            pos_data = self.find_diff_position(diff_text, s_file, s_code)
-            if pos_data:
-                s_body = s.description
-                comments.append(
-                    {
-                        "path": s_file,
-                        "body": s_body,
-                        "old_position": pos_data["old_line"] or 0,
-                        "new_position": pos_data["new_line"] or 0,
-                    }
-                )
-        return comments
-
     # -- diff position lookup -----------------------------------------------
 
     def find_diff_position(
@@ -358,47 +329,76 @@ class ReviewPublishingService:
 
         return None
 
-    @staticmethod
-    def _is_diff_metadata_line(line: str) -> bool:
-        return line.startswith((
-            "index ",
-            "new file mode ",
-            "deleted file mode ",
-            "old mode ",
-            "new mode ",
-            "similarity index ",
-            "dissimilarity index ",
-            "rename from ",
-            "rename to ",
-            "copy from ",
-            "copy to ",
-        ))
+    def _build_github_inline_comments(
+        self, diff_text: str, items: list, suggestions: list,
+    ) -> list[dict]:
+        """Build GitHub-style inline comments using diff ``position``."""
+        comments: list[dict] = []
 
-    @staticmethod
-    def _verify_remaining_snippet_lines(
-        lines: list[str],
-        start: int,
-        remaining: list[str],
-    ) -> bool:
-        if not remaining:
-            return True
-        idx = 0
-        for line in lines[start:]:
-            if line.startswith("diff --git"):
-                return False
-            if line.startswith("@@"):
+        for item in items:
+            pos_data = self.find_diff_position(
+                diff_text, item.file_path, item.current_code,
+            )
+            if pos_data:
+                comments.append(
+                    {
+                        "path": item.file_path,
+                        "position": pos_data["position"],
+                        "body": item.description,
+                    }
+                )
+
+        for s in suggestions:
+            s_file = s.file
+            s_code = s.current_code
+            if not s_file or not s_code:
                 continue
-            if ReviewPublishingService._is_diff_metadata_line(line):
+            pos_data = self.find_diff_position(diff_text, s_file, s_code)
+            if pos_data:
+                s_body = s.description
+                comments.append(
+                    {
+                        "path": s_file,
+                        "position": pos_data["position"],
+                        "body": s_body,
+                    }
+                )
+        return comments
+
+    def _build_forgejo_inline_comments(
+        self, diff_text: str, items: list, suggestions: list,
+    ) -> list[dict]:
+        """Build Forgejo-style inline comments using ``old_position`` / ``new_position``."""
+        comments: list[dict] = []
+
+        for item in items:
+            pos_data = self.find_diff_position(
+                diff_text, item.file_path, item.current_code,
+            )
+            if pos_data:
+                comments.append(
+                    {
+                        "path": item.file_path,
+                        "body": item.description,
+                        "old_position": pos_data["old_line"] or 0,
+                        "new_position": pos_data["new_line"] or 0,
+                    }
+                )
+
+        for s in suggestions:
+            s_file = s.file
+            s_code = s.current_code
+            if not s_file or not s_code:
                 continue
-            if line.startswith(("--- ", "+++ ")):
-                continue
-            content = line[1:] if line[:1] in ("-", "+") else line
-            if not content.strip():
-                continue
-            if remaining[idx] in content:
-                idx += 1
-                if idx == len(remaining):
-                    return True
-            else:
-                return False
-        return False
+            pos_data = self.find_diff_position(diff_text, s_file, s_code)
+            if pos_data:
+                s_body = s.description
+                comments.append(
+                    {
+                        "path": s_file,
+                        "body": s_body,
+                        "old_position": pos_data["old_line"] or 0,
+                        "new_position": pos_data["new_line"] or 0,
+                    }
+                )
+        return comments

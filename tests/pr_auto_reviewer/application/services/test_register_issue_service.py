@@ -31,17 +31,6 @@ from tests.pr_auto_reviewer.application.stubs import (
 
 
 class TestRegisterIssueService:
-    @pytest.fixture
-    def _pr_id(self):
-        return PullRequestId(repository="owner/repo", number=42)
-
-    @pytest.fixture
-    def _sha(self):
-        return CommitSha(value="abc123")
-
-    @pytest.fixture
-    def _pr(self, _pr_id, _sha):
-        return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha)
 
     def test_registers_issue_by_id(self, _pr_id, _sha, _pr):
         item = ReviewItem(
@@ -201,3 +190,14 @@ class TestRegisterIssueService:
         )
         result = svc._find_item([item], "custom-id")
         assert result is item
+    @pytest.fixture
+    def _pr_id(self):
+        return PullRequestId(repository="owner/repo", number=42)
+
+    @pytest.fixture
+    def _sha(self):
+        return CommitSha(value="abc123")
+
+    @pytest.fixture
+    def _pr(self, _pr_id, _sha):
+        return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha)

@@ -63,6 +63,32 @@ class OllamaLlmAdapter(LlmReviewPort):
             max_retries=self._max_retries,
         )
 
+    def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
+        """Build prompt from diff+context via PromptBuilder, then call Ollama.
+
+        Deprecated: prefer :meth:`review_prompt` with fragment-based
+        composition orchestrated by the application service.
+        """
+        prompt_str = self._prompt_builder.build(diff, context)
+        return self._call_ollama(prompt_str)
+
+    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
+        """Send an already-composed prompt to Ollama and return a CodeReview.
+
+        Args:
+            prompt: A fully assembled prompt ready for LLM consumption.
+
+        Returns:
+            The parsed code review.
+        """
+        logger.info(
+            "Reviewing with composed prompt: %d chars, %d tokens, %d fragments used",
+            len(prompt.content),
+            prompt.total_tokens,
+            len(prompt.fragments_used),
+        )
+        return self._call_ollama(prompt.content)
+
     def _dump_prompt_to_file(self, prompt_text: str, attempt: int) -> None:
         label = "correction" if attempt > 0 else "initial"
         path = f"/tmp/ollama-prompt-try{attempt + 1}-{label}.txt"
@@ -205,30 +231,4 @@ class OllamaLlmAdapter(LlmReviewPort):
             logger.debug(_SEP)
 
         return review
-
-    def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
-        """Build prompt from diff+context via PromptBuilder, then call Ollama.
-
-        Deprecated: prefer :meth:`review_prompt` with fragment-based
-        composition orchestrated by the application service.
-        """
-        prompt_str = self._prompt_builder.build(diff, context)
-        return self._call_ollama(prompt_str)
-
-    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
-        """Send an already-composed prompt to Ollama and return a CodeReview.
-
-        Args:
-            prompt: A fully assembled prompt ready for LLM consumption.
-
-        Returns:
-            The parsed code review.
-        """
-        logger.info(
-            "Reviewing with composed prompt: %d chars, %d tokens, %d fragments used",
-            len(prompt.content),
-            prompt.total_tokens,
-            len(prompt.fragments_used),
-        )
-        return self._call_ollama(prompt.content)
 

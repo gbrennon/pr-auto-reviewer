@@ -48,6 +48,21 @@ class ExplorationToolService:
         self._repo_root = resolved
         self._changed_files = changed_files or []
 
+    @staticmethod
+    def _parse_read_args(args: str) -> tuple[str, int | None, int | None]:
+        """Parse the read_file argument string.
+
+        Returns: ``(path, start_line | None, end_line | None)``.
+        """
+        match = re.match(r"^(\S+)\s+(L?)(\d+)(?:-L?(\d+))?$", args.strip())
+        if match:
+            path = match.group(1)
+            start = int(match.group(3))
+            end_str = match.group(4)
+            end = int(end_str) if end_str else None
+            return path, start, end
+        return args.strip(), None, None
+
     def execute(self, operation: str, args: str | dict[str, str]) -> dict[str, Any]:
         """Dispatch an operation by name.
 
@@ -257,18 +272,3 @@ class ExplorationToolService:
         except ValueError:
             return None
         return candidate
-
-    @staticmethod
-    def _parse_read_args(args: str) -> tuple[str, int | None, int | None]:
-        """Parse the read_file argument string.
-
-        Returns: ``(path, start_line | None, end_line | None)``.
-        """
-        match = re.match(r"^(\S+)\s+(L?)(\d+)(?:-L?(\d+))?$", args.strip())
-        if match:
-            path = match.group(1)
-            start = int(match.group(3))
-            end_str = match.group(4)
-            end = int(end_str) if end_str else None
-            return path, start, end
-        return args.strip(), None, None

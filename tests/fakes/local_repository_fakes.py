@@ -44,6 +44,10 @@ class FakeLocalRepository:
 
         self._read_file_idx = 0
 
+    @property
+    def last_clone_path(self) -> Path | None:
+        return self._last_clone_path
+
     def clone(self, pr_id: object, clone_url: str) -> Path:
         self.clone_calls.append(((pr_id, clone_url), {}))
         return self.clone_return
@@ -83,10 +87,6 @@ class FakeLocalRepository:
         if isinstance(self.read_file_return, BaseException):
             raise self.read_file_return
         return self.read_file_return
-
-    @property
-    def last_clone_path(self) -> Path | None:
-        return self._last_clone_path
 
     def list_tree(
         self, repo_path: Path, ref: str = "HEAD",

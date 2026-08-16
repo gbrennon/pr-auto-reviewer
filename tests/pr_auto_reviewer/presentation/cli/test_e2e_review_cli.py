@@ -176,6 +176,19 @@ class TestReviewCliJsonOutput:
     }
     _PRAISE_KEYS = {"file", "description"}
 
+    @classmethod
+    def _assert_no_defaults(cls, value) -> None:
+        """Recursively assert every JSON value is non-empty."""
+        if isinstance(value, dict):
+            for key, val in value.items():
+                assert val not in ("", None), (
+                    f"JSON field {key!r} fell back to a default value {val!r}"
+                )
+                cls._assert_no_defaults(val)
+        elif isinstance(value, list):
+            for entry in value:
+                cls._assert_no_defaults(entry)
+
     @staticmethod
     def _build_full_review() -> CodeReview:
         """Return the CodeReview a healthy LLM reply would produce."""
@@ -250,19 +263,6 @@ class TestReviewCliJsonOutput:
         json_section = output.split("--- JSON ---", 1)[1]
         json_text = json_section.split("\n" + "=" * 60, 1)[0]
         return json.loads(json_text)
-
-    @classmethod
-    def _assert_no_defaults(cls, value) -> None:
-        """Recursively assert every JSON value is non-empty."""
-        if isinstance(value, dict):
-            for key, val in value.items():
-                assert val not in ("", None), (
-                    f"JSON field {key!r} fell back to a default value {val!r}"
-                )
-                cls._assert_no_defaults(val)
-        elif isinstance(value, list):
-            for entry in value:
-                cls._assert_no_defaults(entry)
 
     def test_review_command_prints_json_with_all_fields_filled(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=42)

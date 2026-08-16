@@ -11,10 +11,6 @@ FIXTURES = "tests/fixtures"
 
 class TestReviewResponseParser:
 
-    def _load(self, name):
-        with open(f"{FIXTURES}/ollama_responses/{name}") as f:
-            return f.read()
-
     def test_parse_plain_json_returns_code_review(self):
         raw = self._load("plain_json.json")
         result = ReviewResponseParser().parse(raw, "test-model")
@@ -613,3 +609,7 @@ class TestReviewResponseParser:
         }
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
+
+    def _load(self, name):
+        with open(f"{FIXTURES}/ollama_responses/{name}") as f:
+            return f.read()

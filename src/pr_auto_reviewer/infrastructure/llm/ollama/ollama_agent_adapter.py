@@ -43,6 +43,28 @@ class OllamaAgentAdapter(LlmReviewPort):
         self._orchestrator = orchestrator
         self._plan = plan
 
+    @staticmethod
+    def _extract_file_listing(composed_content: str) -> list[str]:
+        """Extract changed file paths from the rendered prompt's diff section."""
+        paths: set[str] = set()
+        seen_section = False
+        for line in composed_content.split("\n"):
+            if line.startswith("## Diff"):
+                seen_section = True
+                continue
+            if not seen_section:
+                continue
+            if line.startswith(("--- a/", "+++ b/")):
+                raw = line.split(" ", 1)[1] if " " in line else ""
+                if not raw:
+                    continue
+                if raw == "/dev/null":
+                    continue
+                if raw.startswith(("a/", "b/")):
+                    raw = raw[2:]
+                paths.add(raw)
+        return sorted(paths)
+
     def review(self, diff: object, context: object) -> CodeReview:
         """Not used in production; raises NotImplementedError."""
         raise NotImplementedError(
@@ -65,25 +87,3 @@ class OllamaAgentAdapter(LlmReviewPort):
                 model=self._chat_client._model,
             )
         )
-
-    @staticmethod
-    def _extract_file_listing(composed_content: str) -> list[str]:
-        """Extract changed file paths from the rendered prompt's diff section."""
-        paths: set[str] = set()
-        seen_section = False
-        for line in composed_content.split("\n"):
-            if line.startswith("## Diff"):
-                seen_section = True
-                continue
-            if not seen_section:
-                continue
-            if line.startswith(("--- a/", "+++ b/")):
-                raw = line.split(" ", 1)[1] if " " in line else ""
-                if not raw:
-                    continue
-                if raw == "/dev/null":
-                    continue
-                if raw.startswith(("a/", "b/")):
-                    raw = raw[2:]
-                paths.add(raw)
-        return sorted(paths)

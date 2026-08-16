@@ -20,23 +20,6 @@ class ReviewItemParser:
         re.MULTILINE,
     )
 
-    def parse(self, raw_body: str) -> list[ReviewItem]:
-        items: list[ReviewItem] = []
-        for match in self._ITEM_PATTERN.finditer(raw_body):
-            file_path, line, description = self._extract_fields(
-                match.group("file_info"), match.group("description"),
-            )
-
-            items.append(ReviewItem(
-                number=int(match.group("number")),
-                severity=ItemSeverity.from_value(match.group("severity")),
-                category=IssueCategory.from_value(match.group("category")),
-                file_path=file_path,
-                description=description,
-                line=line,
-            ))
-        return items
-
     @staticmethod
     def _extract_fields(
         file_info: str | None, description: str | None,
@@ -53,6 +36,23 @@ class ReviewItemParser:
             return None, "", file_info
 
         return None, "", ""
+
+    def parse(self, raw_body: str) -> list[ReviewItem]:
+        items: list[ReviewItem] = []
+        for match in self._ITEM_PATTERN.finditer(raw_body):
+            file_path, line, description = self._extract_fields(
+                match.group("file_info"), match.group("description"),
+            )
+
+            items.append(ReviewItem(
+                number=int(match.group("number")),
+                severity=ItemSeverity.from_value(match.group("severity")),
+                category=IssueCategory.from_value(match.group("category")),
+                file_path=file_path,
+                description=description,
+                line=line,
+            ))
+        return items
 
 
 def _split_file_info(file_info: str | None) -> tuple[str | None, str]:

@@ -73,16 +73,16 @@ class _StubReviewService:
         self.call_args_list: list = []
         self._last_call_args = None
 
+    @property
+    def call_args(self):
+        """Return call_args for the most recent call (like MagicMock)."""
+        return self._last_call_args
+
     def execute(self, command) -> None:
         self.commands.append(command)
         self.call_count = len(self.commands)
         self._last_call_args = _Call((command,))
         self.call_args_list.append(self._last_call_args)
-
-    @property
-    def call_args(self):
-        """Return call_args for the most recent call (like MagicMock)."""
-        return self._last_call_args
 
     def assert_called_once(self) -> None:
         assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"

@@ -65,6 +65,21 @@ class CompositionRoot:
     fully-wired presentation-layer entry points.
     """
 
+    def __init__(self, config_path: str | None = None) -> None:
+        _ = config_path
+        config = load_config()
+        self._setup_logging(config.debug)
+        self._container = Container(config)
+        self._components = self._wire_components()
+
+    @property
+    def components(self) -> ApplicationComponents:
+        return self._components
+
+    @property
+    def container(self) -> Container:
+        return self._container
+
     @staticmethod
     def _setup_logging(debug: bool) -> None:
         log_level = logging.DEBUG if debug else logging.INFO
@@ -77,6 +92,27 @@ class CompositionRoot:
         if not debug:
             logging.getLogger("urllib3").setLevel(logging.WARNING)
             logging.getLogger("requests").setLevel(logging.WARNING)
+
+    def run_daemon(self) -> None:
+        config = self._container.config if hasattr(self, '_container') else load_config()
+
+        daemon_config = PollingDaemonConfig(
+            poll_interval_seconds=config.poll_interval,
+            repos_filter=config.repos_filter or None,
+            run_once=config.run_once,
+            force_pr=config.force_pr,
+        )
+
+        daemon = PollingDaemon(
+            config=daemon_config,
+            repo_lister=self._components.repo_lister,
+            pr_lister=self._components.pr_lister,
+            review_service=self._components.review_service,
+            notifier=self._components.notifier,
+            update_tracker=RepoUpdateTracker(),
+        )
+
+        daemon.start()
 
     def _wire_components(self) -> ApplicationComponents:
         c = self._container
@@ -130,42 +166,6 @@ class CompositionRoot:
             notifier=c.notifier,
             token_verifier=c.token_verifier,
         )
-
-    def __init__(self, config_path: str | None = None) -> None:
-        _ = config_path
-        config = load_config()
-        self._setup_logging(config.debug)
-        self._container = Container(config)
-        self._components = self._wire_components()
-
-    @property
-    def components(self) -> ApplicationComponents:
-        return self._components
-
-    @property
-    def container(self) -> Container:
-        return self._container
-
-    def run_daemon(self) -> None:
-        config = self._container.config if hasattr(self, '_container') else load_config()
-
-        daemon_config = PollingDaemonConfig(
-            poll_interval_seconds=config.poll_interval,
-            repos_filter=config.repos_filter or None,
-            run_once=config.run_once,
-            force_pr=config.force_pr,
-        )
-
-        daemon = PollingDaemon(
-            config=daemon_config,
-            repo_lister=self._components.repo_lister,
-            pr_lister=self._components.pr_lister,
-            review_service=self._components.review_service,
-            notifier=self._components.notifier,
-            update_tracker=RepoUpdateTracker(),
-        )
-
-        daemon.start()
 
 def bootstrap() -> ApplicationComponents:
     """Backward-compatible entry point.  Delegates to CompositionRoot."""

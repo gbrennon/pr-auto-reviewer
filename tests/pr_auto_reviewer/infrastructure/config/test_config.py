@@ -8,56 +8,6 @@ from tests.fixtures.config_fixtures import ConfigFixtures as F
 
 
 class TestLoadConfig:
-    @pytest.fixture(autouse=True)
-    def _clean_env(self, monkeypatch, tmp_path: Path):
-        """Prevent real .env and env vars from leaking into tests."""
-        monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.config.repo_root.RepoRoot.path",
-            classmethod(lambda cls: tmp_path),
-        )
-        monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
-            lambda path: {},
-        )
-        for var in [
-            "ENV",
-            "PLATFORM_MODE",
-            "FORGEJO_MODE",
-            "FORGEJO_API_URL",
-            "FORGEJO_HOST",
-            "GITHUB_API_URL",
-            "GITHUB_OWNER_TOKEN",
-            "GITHUB_REVIEWER_TOKEN",
-            "GITHUB_REVIEWER_USERNAME",
-            "GITHUB_REVIEW_MODE",
-            "FORGEJO_OWNER_TOKEN",
-            "FORGEJO_REVIEWER_TOKEN",
-            "FORGEJO_REVIEWER_USERNAME",
-            "LLM_HOST",
-            "OLLAMA_HOST",
-            "LLM_MODEL",
-            "OLLAMA_MODEL",
-            "REVIEW_OUTPUT",
-            "POLL_INTERVAL",
-            "DEBUG",
-            "MAX_PROMPT_TOKENS",
-            "MAX_FILE_CHARS",
-            "MAX_FILES",
-            "USE_COMPACT_TEMPLATE",
-            "USE_STRICT_FRAGMENT_SELECTION",
-            "MAX_STRUCTURE_LINES",
-            "PROMPT_MODE",
-            "OLLAMA_TIMEOUT",
-            "LLM_MAX_RETRIES",
-            "RUN_ONCE",
-            "REPOS_FILTER",
-            "FORCE_PR",
-        ]:
-            monkeypatch.delenv(var, raising=False)
-
-    def _enter_dev_mode(self, tmp_path: Path) -> None:
-        """Create .env so load_config detects development mode."""
-        (tmp_path / ".env").touch()
 
     def test_defaults_when_no_env_vars(self):
         from pr_auto_reviewer.infrastructure.config.config import load_config
@@ -275,3 +225,53 @@ class TestLoadConfig:
         fj_overrides = cfg.org_token_overrides.forgejo
         assert "my-other-org" in fj_overrides
         assert fj_overrides["my-other-org"].owner_token == "fj_owner_token"
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch, tmp_path: Path):
+        """Prevent real .env and env vars from leaking into tests."""
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.repo_root.RepoRoot.path",
+            classmethod(lambda cls: tmp_path),
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {},
+        )
+        for var in [
+            "ENV",
+            "PLATFORM_MODE",
+            "FORGEJO_MODE",
+            "FORGEJO_API_URL",
+            "FORGEJO_HOST",
+            "GITHUB_API_URL",
+            "GITHUB_OWNER_TOKEN",
+            "GITHUB_REVIEWER_TOKEN",
+            "GITHUB_REVIEWER_USERNAME",
+            "GITHUB_REVIEW_MODE",
+            "FORGEJO_OWNER_TOKEN",
+            "FORGEJO_REVIEWER_TOKEN",
+            "FORGEJO_REVIEWER_USERNAME",
+            "LLM_HOST",
+            "OLLAMA_HOST",
+            "LLM_MODEL",
+            "OLLAMA_MODEL",
+            "REVIEW_OUTPUT",
+            "POLL_INTERVAL",
+            "DEBUG",
+            "MAX_PROMPT_TOKENS",
+            "MAX_FILE_CHARS",
+            "MAX_FILES",
+            "USE_COMPACT_TEMPLATE",
+            "USE_STRICT_FRAGMENT_SELECTION",
+            "MAX_STRUCTURE_LINES",
+            "PROMPT_MODE",
+            "OLLAMA_TIMEOUT",
+            "LLM_MAX_RETRIES",
+            "RUN_ONCE",
+            "REPOS_FILTER",
+            "FORCE_PR",
+        ]:
+            monkeypatch.delenv(var, raising=False)
+
+    def _enter_dev_mode(self, tmp_path: Path) -> None:
+        """Create .env so load_config detects development mode."""
+        (tmp_path / ".env").touch()

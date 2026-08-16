@@ -8,40 +8,6 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 
 class TestContainer:
 
-    @pytest.fixture(autouse=True)
-    def _redirect_config_dir(self, tmp_path: Path, monkeypatch) -> None:
-        config_root = tmp_path / ".config" / "pr-auto-reviewer"
-        config_root.mkdir(parents=True, exist_ok=True)
-        _real_expanduser = os.path.expanduser
-        monkeypatch.setattr(
-            os.path,
-            "expanduser",
-            lambda p, _real=_real_expanduser: str(config_root) if "pr-auto-reviewer" in p else _real(p),
-        )
-        monkeypatch.setattr(os, "makedirs", lambda *a, **kw: None)
-
-    @pytest.fixture
-    def _fake_config(self) -> Config:
-        return Config(
-            env="test",
-            platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fake-owner",
-            forgejo_reviewer_token="fake-reviewer",
-            forgejo_reviewer_username="fake-user",
-            github_owner_token="fake-owner",
-            github_reviewer_token="fake-reviewer",
-            github_reviewer_username="fake-user",
-            output_mode="terminal",
-        )
-
-    @pytest.fixture
-    def _container(self, monkeypatch, _fake_config: Config):
-        monkeypatch.setattr(
-            "pr_auto_reviewer.infrastructure.container.load_config",
-            lambda: _fake_config,
-        )
-        return Container(_fake_config)
-
     @pytest.mark.parametrize("attr", [
         "config",
         "pr_repository",
@@ -148,3 +114,37 @@ class TestContainer:
             "OWNER", "test-org/repo"
         )
         assert source.startswith("FORGEJO_")
+
+    @pytest.fixture(autouse=True)
+    def _redirect_config_dir(self, tmp_path: Path, monkeypatch) -> None:
+        config_root = tmp_path / ".config" / "pr-auto-reviewer"
+        config_root.mkdir(parents=True, exist_ok=True)
+        _real_expanduser = os.path.expanduser
+        monkeypatch.setattr(
+            os.path,
+            "expanduser",
+            lambda p, _real=_real_expanduser: str(config_root) if "pr-auto-reviewer" in p else _real(p),
+        )
+        monkeypatch.setattr(os, "makedirs", lambda *a, **kw: None)
+
+    @pytest.fixture
+    def _fake_config(self) -> Config:
+        return Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fake-owner",
+            forgejo_reviewer_token="fake-reviewer",
+            forgejo_reviewer_username="fake-user",
+            github_owner_token="fake-owner",
+            github_reviewer_token="fake-reviewer",
+            github_reviewer_username="fake-user",
+            output_mode="terminal",
+        )
+
+    @pytest.fixture
+    def _container(self, monkeypatch, _fake_config: Config):
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container.load_config",
+            lambda: _fake_config,
+        )
+        return Container(_fake_config)
