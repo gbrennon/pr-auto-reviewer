@@ -1,9 +1,12 @@
 """Tests for ForgejoCommentPublisher using fixture data."""
 
+import requests
+
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
     ForgejoCommentPublisher,
 )
+
 
 class TestForgejoCommentPublisher:
     """Tests for ForgejoCommentPublisher using captured fixture data."""
@@ -18,7 +21,7 @@ class TestForgejoCommentPublisher:
         """POST failure is logged but not raised."""
         monkeypatch.setattr(
             patched_private_client, "post",
-            lambda path, body: (_ for _ in ()).throw(Exception("Network error"))
+            lambda path, body, *, repo=None: (_ for _ in ()).throw(requests.exceptions.ConnectionError("Network error"))
         )
         adapter = ForgejoCommentPublisher(patched_private_client)
         pr_id = PullRequestId(repository="o/r", number=1)

@@ -1,8 +1,8 @@
-import pytest
 
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
     split_repository_prefix,
 )
+
 
 class TestSplitRepositoryPrefix:
     def test_returns_forgejo_for_unprefixed_repo(self):

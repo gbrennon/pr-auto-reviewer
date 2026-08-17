@@ -46,9 +46,8 @@ class _FakeRetryPromptBuilder:
 class TestRetryOrchestrator:
     """Tests for RetryOrchestrator.execute_with_correction."""
 
-    @staticmethod
     def _make_review_with_items(
-        verdict: ReviewVerdict = ReviewVerdict.CHANGES_REQUESTED,
+        self, verdict: ReviewVerdict = ReviewVerdict.CHANGES_REQUESTED,
     ) -> CodeReview:
         items = [
             ReviewItem(

@@ -6,37 +6,42 @@ import argparse
 import logging
 import sys
 
-from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
-    ProcessIssueCommandsCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
+import requests
+
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
     ProcessIssueCommandsUseCase,
 )
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
+from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
     PullRequestRepository,
 )
-from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
+from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
+    ReviewReaderPort,
+)
 from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
     TokenVerifierPort,
 )
+from pr_auto_reviewer.domain.exceptions.domain_error import DomainError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
     PullRequestNotFoundError,
 )
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
+    ProcessIssueCommandsCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-from pr_auto_reviewer.presentation.ports import PrListerPort
-from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
 )
+from pr_auto_reviewer.presentation.ports import PrListerPort
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +71,32 @@ class CliRunner:
         self._notifier = notifier
         self._token_verifier = token_verifier
         self._output_mode = output_mode
+
+    def run(self, argv: list[str]) -> int:
+        """Run the CLI with the given arguments."""
+        parser = argparse.ArgumentParser(prog="pr-auto-reviewer")
+        subparsers = parser.add_subparsers(dest="command", required=True)
+
+        subparsers.add_parser("review", help="Force review a specific PR")
+        subparsers.add_parser(
+            "process-commands", help="Process issue commands for a PR"
+        )
+        subparsers.add_parser("list-items", help="List review items for a PR")
+        subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
+
+        args, _unknown = parser.parse_known_args(argv[1:])
+
+        if args.command == "review":
+            return self._run_review(argv[2:])
+        elif args.command == "process-commands":
+            return self._run_process_commands(argv[2:])
+        elif args.command == "list-items":
+            return self._run_list_items(argv[2:])
+        elif args.command == "clean":
+            return self._run_clean()
+        else:
+            parser.print_help()
+            return 1
 
     def _run_review(self, argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog="pr-auto-reviewer review")
@@ -145,7 +176,7 @@ class CliRunner:
             if self._notifier:
                 self._notifier.notify_error("Review publish failed", e)
             return 1
-        except Exception as e:
+        except (DomainError, requests.RequestException, RuntimeError, ValueError) as e:
             print(f"Error: {e}")
             if self._notifier:
                 self._notifier.notify_error(f"Review failed for PR #{command.pr_id.number}", e)
@@ -212,7 +243,7 @@ class CliRunner:
 
                 traceback.print_exc()
             return 1
-        except Exception as e:
+        except (DomainError, requests.RequestException, RuntimeError, ValueError) as e:
             print(f"Error: {e}")
             if self._notifier:
                 self._notifier.notify_error(f"Command processing failed for PR #{args.pr}", e)
@@ -274,32 +305,6 @@ class CliRunner:
         self._pr_repository.reset()
         print("Review state cleaned. All PRs will be treated as new.")
         return 0
-
-    def run(self, argv: list[str]) -> int:
-        """Run the CLI with the given arguments."""
-        parser = argparse.ArgumentParser(prog="pr-auto-reviewer")
-        subparsers = parser.add_subparsers(dest="command", required=True)
-
-        subparsers.add_parser("review", help="Force review a specific PR")
-        subparsers.add_parser(
-            "process-commands", help="Process issue commands for a PR"
-        )
-        subparsers.add_parser("list-items", help="List review items for a PR")
-        subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
-
-        args, _unknown = parser.parse_known_args(argv[1:])
-
-        if args.command == "review":
-            return self._run_review(argv[2:])
-        elif args.command == "process-commands":
-            return self._run_process_commands(argv[2:])
-        elif args.command == "list-items":
-            return self._run_list_items(argv[2:])
-        elif args.command == "clean":
-            return self._run_clean()
-        else:
-            parser.print_help()
-            return 1
 
 
 def main() -> None:

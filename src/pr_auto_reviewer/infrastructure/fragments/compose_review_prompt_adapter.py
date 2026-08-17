@@ -66,6 +66,21 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
         self._max_total_chars = max_total_chars
         self._strict_selection = bool(use_strict_selection)
 
+    def execute(self, context: ReviewContext) -> ComposedPrompt:
+        """Execute the composition for *context*."""
+        logger.info(
+            "ComposeReviewPromptAdapter.execute(language=%s, files=%d, diff=%d chars)",
+            context.language, len(context.file_paths), len(context.diff),
+        )
+        fragments = self._select_fragments(context)
+
+        if not fragments:
+            raise ValueError(
+                f"No fragments found for language: {context.language}",
+            )
+
+        return self._compose_prompt(fragments, context)
+
     def _apply_budget_constraints(
         self, fragments: list[PromptFragment],
     ) -> list[PromptFragment]:
@@ -319,18 +334,3 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
             len(result.content), result.total_tokens, result.fragments_used,
         )
         return result
-
-    def execute(self, context: ReviewContext) -> ComposedPrompt:
-        """Execute the composition for *context*."""
-        logger.info(
-            "ComposeReviewPromptAdapter.execute(language=%s, files=%d, diff=%d chars)",
-            context.language, len(context.file_paths), len(context.diff),
-        )
-        fragments = self._select_fragments(context)
-
-        if not fragments:
-            raise ValueError(
-                f"No fragments found for language: {context.language}",
-            )
-
-        return self._compose_prompt(fragments, context)

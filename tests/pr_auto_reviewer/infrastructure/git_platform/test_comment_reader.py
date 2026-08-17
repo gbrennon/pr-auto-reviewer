@@ -2,13 +2,14 @@
 
 import pytest
 
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.exceptions.invalid_comment_id_error import (
     InvalidCommentIdError,
 )
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.forgejo.comment_reader import (
     ForgejoCommentReader,
 )
+
 
 class TestForgejoCommentReader:
     """Tests for ForgejoCommentReader using captured fixture data."""

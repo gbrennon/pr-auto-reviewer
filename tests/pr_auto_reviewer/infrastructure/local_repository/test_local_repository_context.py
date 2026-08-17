@@ -2,13 +2,12 @@
 
 from pathlib import Path
 
-
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.infrastructure.local_repository.local_repository_context import (
     LocalRepositoryContext,
 )
-from tests.fakes.local_repository_fakes import FakeLocalRepository
+from tests.fakes import FakeLocalRepository
 
 
 class TestLocalRepositoryContextFetch:

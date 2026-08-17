@@ -1,5 +1,9 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
-from pr_auto_reviewer.domain import PullRequestId, InvalidPullRequestIdError
+
+from pr_auto_reviewer.domain import InvalidPullRequestIdError, PullRequestId
+
 
 class TestPullRequestId:
     """Tests for PullRequestId value object."""
@@ -27,7 +31,7 @@ class TestPullRequestId:
 
     def test_immutability(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=42)
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             pr_id.number = 99
 
     def test_str_representation(self) -> None:

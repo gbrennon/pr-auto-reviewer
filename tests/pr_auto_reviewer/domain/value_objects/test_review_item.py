@@ -1,5 +1,9 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
-from pr_auto_reviewer.domain import ReviewItem, ItemSeverity
+
+from pr_auto_reviewer.domain import ItemSeverity, ReviewItem
+
 
 class TestReviewItem:
     """Tests for ReviewItem value object."""
@@ -87,7 +91,7 @@ class TestReviewItem:
             file_path=None,
             description="desc",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             item.description = "changed"
 
     def test_hash_consistency(self) -> None:

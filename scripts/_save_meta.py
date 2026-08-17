@@ -1,4 +1,5 @@
-import json, sys
+import json
+import sys
 
 meta = {
     "owner": sys.argv[1],

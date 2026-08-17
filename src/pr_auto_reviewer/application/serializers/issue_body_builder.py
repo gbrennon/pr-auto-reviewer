@@ -1,7 +1,8 @@
 """IssueBodyBuilder — pure domain service to build issue title and body."""
 
-from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.entities.review_item import ReviewItem
+from ...domain.value_objects.pull_request_id import PullRequestId
+
 
 class IssueBodyBuilder:
     """Produces (title, body) for a tracker issue from a ReviewItem.

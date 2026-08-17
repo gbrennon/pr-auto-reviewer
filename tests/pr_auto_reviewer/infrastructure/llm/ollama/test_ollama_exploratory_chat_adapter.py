@@ -1,11 +1,11 @@
 """Tests for OllamaExploratoryChatAdapter."""
 
 from __future__ import annotations
-from pathlib import Path
 
 import json
-import time as _time
 import tempfile
+import time as _time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -850,17 +850,20 @@ class TestMultiTurn:
 
 
 class TestExtractFileListing:
-    """Tests for _extract_file_listing static method."""
+    """Tests for _extract_file_listing instance method."""
+
+    def setup_method(self) -> None:
+        self.adapter = OllamaExploratoryChatAdapter(model="m")
 
     def test_extracts_files_from_diff_section(self) -> None:
         """Parses --- a/path and +++ b/path lines after ## Diff header."""
         content = "some text\n## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\nmore\n--- a/lib/bar.py\n+++ b/lib/bar.py\n"
-        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        result = self.adapter._extract_file_listing(content)
         assert result == ["lib/bar.py", "src/foo.py"]
     def test_skips_dev_null(self) -> None:
         """Lines with /dev/null are excluded; other paths in the same diff are kept."""
         content = "## Diff\n--- /dev/null\n+++ b/src/new.py\n--- a/src/old.py\n+++ /dev/null\n--- a/src/keep.py\n+++ b/src/keep.py\n"
-        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        result = self.adapter._extract_file_listing(content)
         assert "src/keep.py" in result
         assert "src/new.py" in result
         assert "src/old.py" in result
@@ -868,13 +871,13 @@ class TestExtractFileListing:
 
     def test_handles_no_diff_section(self) -> None:
         """Returns empty list when no ## Diff header present."""
-        result = OllamaExploratoryChatAdapter._extract_file_listing("just some text\nno headers\n")
+        result = self.adapter._extract_file_listing("just some text\nno headers\n")
         assert result == []
 
     def test_deduplicates_paths(self) -> None:
         """Same file appearing multiple times yields one entry."""
         content = "## Diff\n--- a/src/foo.py\n+++ b/src/foo.py\n--- a/src/foo.py\n+++ b/src/foo.py\n"
-        result = OllamaExploratoryChatAdapter._extract_file_listing(content)
+        result = self.adapter._extract_file_listing(content)
         assert result == ["src/foo.py"]
 
 

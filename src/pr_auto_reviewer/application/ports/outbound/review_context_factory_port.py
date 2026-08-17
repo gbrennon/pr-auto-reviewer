@@ -8,6 +8,7 @@ from ....domain.fragments.entities.composed_prompt import ComposedPrompt
 from ....domain.value_objects.pull_request_diff import PullRequestDiff
 from ....domain.value_objects.pull_request_id import PullRequestId
 
+
 class ReviewContextFactoryPort(Protocol):
     """Outbound port that encapsulates repository-context fetching,
     language detection, context serialisation, and fragment-based

@@ -6,9 +6,6 @@ import time
 from typing import Any
 
 import requests
-from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
-    RetryPromptBuilder,
-)
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
@@ -17,8 +14,14 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
+from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
+    RetryPromptBuilder,
+)
 from pr_auto_reviewer.infrastructure.llm.retry_orchestrator import RetryOrchestrator
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+
 logger = logging.getLogger(__name__)
 
 _SEP = "=" * 72
@@ -62,6 +65,32 @@ class OllamaLlmAdapter(LlmReviewPort):
             retry_builder=self._retry_builder,
             max_retries=self._max_retries,
         )
+
+    def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
+        """Build prompt from diff+context via PromptBuilder, then call Ollama.
+
+        Deprecated: prefer :meth:`review_prompt` with fragment-based
+        composition orchestrated by the application service.
+        """
+        prompt_str = self._prompt_builder.build(diff, context)
+        return self._call_ollama(prompt_str)
+
+    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
+        """Send an already-composed prompt to Ollama and return a CodeReview.
+
+        Args:
+            prompt: A fully assembled prompt ready for LLM consumption.
+
+        Returns:
+            The parsed code review.
+        """
+        logger.info(
+            "Reviewing with composed prompt: %d chars, %d tokens, %d fragments used",
+            len(prompt.content),
+            prompt.total_tokens,
+            len(prompt.fragments_used),
+        )
+        return self._call_ollama(prompt.content)
 
     def _dump_prompt_to_file(self, prompt_text: str, attempt: int) -> None:
         label = "correction" if attempt > 0 else "initial"
@@ -205,30 +234,4 @@ class OllamaLlmAdapter(LlmReviewPort):
             logger.debug(_SEP)
 
         return review
-
-    def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:
-        """Build prompt from diff+context via PromptBuilder, then call Ollama.
-
-        Deprecated: prefer :meth:`review_prompt` with fragment-based
-        composition orchestrated by the application service.
-        """
-        prompt_str = self._prompt_builder.build(diff, context)
-        return self._call_ollama(prompt_str)
-
-    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
-        """Send an already-composed prompt to Ollama and return a CodeReview.
-
-        Args:
-            prompt: A fully assembled prompt ready for LLM consumption.
-
-        Returns:
-            The parsed code review.
-        """
-        logger.info(
-            "Reviewing with composed prompt: %d chars, %d tokens, %d fragments used",
-            len(prompt.content),
-            prompt.total_tokens,
-            len(prompt.fragments_used),
-        )
-        return self._call_ollama(prompt.content)
 

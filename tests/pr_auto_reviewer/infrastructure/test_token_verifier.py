@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
-from tests.fakes.token_fakes import FakeTokenResolver, FakeVerifier
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
+from tests.fakes import FakeTokenResolver, FakeVerifier
+
 
 class TestTokenVerifierDelegatesToClients:
     @staticmethod
@@ -20,7 +19,7 @@ class TestTokenVerifierDelegatesToClients:
         label: str = "owner",
         verified_cache_path: Path | None = None,
     ) -> GitPlatformHttpClient:
-        resolver = FakeTokenResolver({f"o/r": f"{label}-tok"})
+        resolver = FakeTokenResolver({"o/r": f"{label}-tok"})
         verifier = FakeVerifier()
         return GitPlatformHttpClient(
             "https://api.example.com",

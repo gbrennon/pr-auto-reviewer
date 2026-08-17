@@ -8,6 +8,22 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
+    RunMultiPhaseReviewUseCase,
+)
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
+)
+from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_suggestion import (
+    ReviewSuggestion,
+)
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
@@ -25,22 +41,6 @@ from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
 )
 from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
     PhaseCompletedEvent,
-)
-from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
-    RunMultiPhaseReviewUseCase,
-)
-from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
-    CommandBusPort,
-)
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import (
-    ReviewSuggestion,
-)
-from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-    LlmUnavailableError,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
@@ -375,13 +375,12 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         "Application could not extract a structured verdict "
                         "from any review phase."
                     )
-                if not summary:
-                    summary = (
-                        f"Reviewed {len(plan.phases)} phases over model {model}; "
-                        "no structured verdict or items were obtained from the "
-                        "LLM output. This is a pipeline failure signal, not a "
-                        "clean review."
-                    )
+                summary = (
+                    f"Reviewed {len(plan.phases)} phases over model {model}; "
+                    "no structured verdict or items were obtained from the "
+                    "LLM output. This is a pipeline failure signal, not a "
+                    "clean review."
+                )
             else:
                 if not reason:
                     reason = "Review completed without action items."
@@ -436,9 +435,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         ]
         if previous is not None and previous.verdict == ReviewVerdict.COMMENTED:
             verdict = previous.verdict
-        elif not review_items and previous_items:
-            verdict = ReviewVerdict.APPROVED
-        elif not review_items:
+        elif not review_items and previous_items or not review_items:
             verdict = ReviewVerdict.APPROVED
         elif any(item.is_blocking for item in review_items):
             verdict = ReviewVerdict.CHANGES_REQUESTED
@@ -447,8 +444,14 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
         dropped = previous_items - len(review_items)
         if dropped and previous is not None:
-            reason = "No findings survived verification against source code."
-            summary = "All reported findings were refuted during verification — they were not confirmed as real issues in the changed files."
+            reason = (
+                f"{dropped} finding(s) dropped because they did not survive "
+                "verification against source code."
+            )
+            summary = (
+                f"{dropped} of {previous_items} findings did not survive "
+                "verification against source code."
+            )
         else:
             summary = (
                 previous.summary

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
+
 
 class PrListerPort(ABC):
     """Port for listing and fetching pull requests."""
@@ -22,7 +22,7 @@ class PrListerPort(ABC):
         """
 
     @abstractmethod
-    def get_pr(self, repository: str, pr_number: int) -> Optional[OpenPullRequest]:
+    def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         """Fetch a single PR by number, regardless of state (open/closed/merged).
 
         Args:

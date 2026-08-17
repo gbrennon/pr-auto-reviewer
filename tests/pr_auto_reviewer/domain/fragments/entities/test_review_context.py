@@ -4,6 +4,7 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 
+
 class TestReviewContext:
     """Tests for ReviewContext immutable value object."""
 

@@ -1,38 +1,22 @@
 import pytest
-from pr_auto_reviewer.infrastructure.llm.prompt_builder import (
-    PromptBuilder,
-    PromptBudget,
-    _trim_diff,
-    _trim_file_contents,
-    _trim_repo_structure,
-    _parse_diff_hunks,
-    _extract_surrounding_context,
-    _annotate_diff,
-)
+
+from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import (
     RepositoryContext,
 )
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.infrastructure.llm.prompt_builder import (
+    PromptBudget,
+    PromptBuilder,
+    _annotate_diff,
+    _trim_diff,
+    _trim_file_contents,
+    _trim_repo_structure,
+)
+
 
 class TestPromptBuilder:
-
-    @pytest.fixture
-    def _diff(self):
-        return PullRequestDiff(
-            pr_id=PullRequestId(repository="o/r", number=1),
-            head_sha=CommitSha(value="abc"),
-            diff_content="+added line\n-removed line",
-        )
-
-    @pytest.fixture
-    def _context(self):
-        return RepositoryContext(
-            architecture_hint="clean-architecture",
-            repository_structure="src/\n  main.py",
-            conventions="Use type hints",
-        )
 
     def test_build_includes_diff_content(self, _diff, _context):
         result = PromptBuilder().build(_diff, _context)
@@ -139,6 +123,22 @@ class TestPromptBuilder:
         assert "### b.py" in result
         assert "print('hello')" in result
         assert "print('world')" in result
+
+    @pytest.fixture
+    def _diff(self):
+        return PullRequestDiff(
+            pr_id=PullRequestId(repository="o/r", number=1),
+            head_sha=CommitSha(value="abc"),
+            diff_content="+added line\n-removed line",
+        )
+
+    @pytest.fixture
+    def _context(self):
+        return RepositoryContext(
+            architecture_hint="clean-architecture",
+            repository_structure="src/\n  main.py",
+            conventions="Use type hints",
+        )
 
 class TestPromptBudget:
     def test_estimate_tokens_rough_heuristic(self):
@@ -284,22 +284,6 @@ class TestTrimRepoStructure:
 class TestBudgetAwarePromptBuilder:
     """Tests for budget-aware PromptBuilder with max_tokens > 0."""
 
-    @pytest.fixture
-    def _diff(self):
-        return PullRequestDiff(
-            pr_id=PullRequestId(repository="o/r", number=1),
-            head_sha=CommitSha(value="abc"),
-            diff_content="+added line\n-removed line",
-        )
-
-    @pytest.fixture
-    def _context(self):
-        return RepositoryContext(
-            architecture_hint="clean-architecture",
-            repository_structure="src/\n  main.py",
-            conventions="Use type hints",
-        )
-
     def test_legacy_mode_unlimited_when_max_tokens_zero(self, _diff, _context):
         """Legacy mode (max_tokens=0) includes everything unchanged."""
         result = PromptBuilder(max_tokens=0).build(_diff, _context)
@@ -341,3 +325,19 @@ class TestBudgetAwarePromptBuilder:
         result = PromptBuilder(max_tokens=32000, max_files=3).build(diff, _context)
         count = result.count("### f")
         assert count <= 3, f"Expected ≤3 files, got {count}"
+
+    @pytest.fixture
+    def _diff(self):
+        return PullRequestDiff(
+            pr_id=PullRequestId(repository="o/r", number=1),
+            head_sha=CommitSha(value="abc"),
+            diff_content="+added line\n-removed line",
+        )
+
+    @pytest.fixture
+    def _context(self):
+        return RepositoryContext(
+            architecture_hint="clean-architecture",
+            repository_structure="src/\n  main.py",
+            conventions="Use type hints",
+        )

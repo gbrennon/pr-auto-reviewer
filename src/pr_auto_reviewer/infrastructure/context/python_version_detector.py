@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+
 class PythonVersionDetector:
     """Detects the minimum Python version a project targets.
 

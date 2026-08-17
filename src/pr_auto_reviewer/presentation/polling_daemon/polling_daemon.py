@@ -6,14 +6,6 @@ import logging
 import signal
 import time
 
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
-from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
-from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
-from pr_auto_reviewer.infrastructure.client.http_request_counter import (
-    HttpRequestCounter,
-)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
@@ -21,23 +13,27 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPo
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoListerPort
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
+from pr_auto_reviewer.infrastructure.client.http_request_counter import (
+    HttpRequestCounter,
+)
+from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
+from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.presentation.polling_daemon.polling_daemon_config import (
     PollingDaemonConfig,
+)
+from pr_auto_reviewer.presentation.ports import (
+    OpenPullRequest,
+    PrListerPort,
+    RepoListerPort,
 )
 
 logger = logging.getLogger(__name__)
 
 class PollingDaemon:
     """Polls repositories for open PRs and triggers review operations."""
-
-    def _setup_signal_handlers(self) -> None:
-        def handle_signal(signum: int, frame: object) -> None:
-            logger.info("Shutdown signal received, stopping...")
-            raise KeyboardInterrupt
-
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
 
     def __init__(
         self,
@@ -56,6 +52,43 @@ class PollingDaemon:
         self._update_tracker = update_tracker
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
+
+    def start(self) -> None:
+        """Start the polling loop."""
+        logger.info(
+            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
+            f"run_once={self._config.run_once})"
+        )
+        try:
+            deleted = clean_temp_files()
+            if deleted:
+                logger.info("Cleaned up %d stale temp file(s)", deleted)
+        except Exception:
+            logger.warning("Temp file cleanup failed, continuing", exc_info=True)
+
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                logger.info("=== Cycle #%d ===", cycle)
+                self._run_cycle()
+
+                if self._config.run_once:
+                    break
+
+                time.sleep(self._config.poll_interval_seconds)
+        except KeyboardInterrupt:
+            pass
+
+        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
+
+    def _setup_signal_handlers(self) -> None:
+        def handle_signal(signum: int, frame: object) -> None:
+            logger.info("Shutdown signal received, stopping...")
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
@@ -92,8 +125,8 @@ class PollingDaemon:
             raise
         except ReviewPublishError as e:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
-        except Exception as e:
-            logger.exception("Unexpected error processing PR #%d: %s", pr.pr_id.number, e)
+        except Exception as _:
+            logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:
             HttpRequestCounter.instance().log_summary()
 
@@ -118,13 +151,14 @@ class PollingDaemon:
 
                 if self._force_pr is not None:
                     forced = self._pr_lister.get_pr(info.full_name, self._force_pr)
-                    if forced is not None:
-                        if not any(p.pr_id.number == self._force_pr for p in open_prs):
-                            open_prs.append(forced)
-                            logger.info(
-                                "Force-fetched PR #%d in %s (state-agnostic)",
-                                self._force_pr, info.full_name,
-                            )
+                    if forced is not None and not any(
+                        p.pr_id.number == self._force_pr for p in open_prs
+                    ):
+                        open_prs.append(forced)
+                        logger.info(
+                            "Force-fetched PR #%d in %s (state-agnostic)",
+                            self._force_pr, info.full_name,
+                        )
 
                 if not open_prs:
                     logger.debug(f"No open PRs in {info.full_name}")
@@ -138,31 +172,3 @@ class PollingDaemon:
                     self._process_pr(pr)
         except LlmUnavailableError:
             logger.warning("LLM unavailable — cancelling this cycle")
-    def start(self) -> None:
-        """Start the polling loop."""
-        logger.info(
-            f"Starting PollingDaemon (interval={self._config.poll_interval_seconds}s, "
-            f"run_once={self._config.run_once})"
-        )
-        try:
-            deleted = clean_temp_files()
-            if deleted:
-                logger.info("Cleaned up %d stale temp file(s)", deleted)
-        except Exception:
-            logger.warning("Temp file cleanup failed, continuing", exc_info=True)
-
-        cycle = 0
-        try:
-            while True:
-                cycle += 1
-                logger.info("=== Cycle #%d ===", cycle)
-                self._run_cycle()
-
-                if self._config.run_once:
-                    break
-
-                time.sleep(self._config.poll_interval_seconds)
-        except KeyboardInterrupt:
-            pass
-
-        logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import ClassVar
 
 
 class RateLimitFixtures:
     """Rate-limit data captured from real Forgejo/GitHub API responses."""
 
-    # Full headers from a real Forgejo API response
-    full_headers: dict[str, str] = {
+    full_headers: ClassVar[dict[str, str]] = {
         "x-ratelimit-limit": "5000",
         "x-ratelimit-remaining": "4990",
         "x-ratelimit-used": "10",
@@ -18,8 +18,7 @@ class RateLimitFixtures:
         "x-ratelimit-resource": "core",
     }
 
-    # Headers when rate limit is exhausted
-    exhausted_headers: dict[str, str] = {
+    exhausted_headers: ClassVar[dict[str, str]] = {
         "x-ratelimit-limit": "5000",
         "x-ratelimit-remaining": "0",
         "x-ratelimit-used": "5000",
@@ -27,17 +26,14 @@ class RateLimitFixtures:
         "x-ratelimit-resource": "core",
     }
 
-    # Minimal headers (some APIs omit optional fields)
-    minimal_headers: dict[str, str] = {
+    minimal_headers: ClassVar[dict[str, str]] = {
         "x-ratelimit-limit": "5000",
         "x-ratelimit-remaining": "2500",
     }
 
-    # Empty headers (no rate-limit info)
-    empty_headers: dict[str, str] = {}
+    empty_headers: ClassVar[dict[str, str]] = {}
 
-    # Persisted tracker state (captured from real tracker JSON output)
-    persisted_state: dict[str, int | str] = {
+    persisted_state: ClassVar[dict[str, int | str]] = {
         "limit": 5000,
         "remaining": 100,
         "used": 4900,

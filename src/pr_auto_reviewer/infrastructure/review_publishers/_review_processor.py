@@ -11,12 +11,12 @@ from dataclasses import dataclass
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     _VERDICT_TO_EVENT,
     _body_formatter,
-    ReasonBuilder,
+    _reason_builder,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
@@ -71,7 +71,7 @@ class ReviewPublisherProcessor:
         non_blocking = [i for i in review.items if not i.is_blocking]
         comment_review = CodeReview(
             verdict=ReviewVerdict.COMMENTED,
-            reason=ReasonBuilder.build(non_blocking),
+            reason=_reason_builder.build(non_blocking),
             summary=review.summary,
             items=non_blocking,
             suggestions=review.suggestions,
@@ -95,7 +95,7 @@ class ReviewPublisherProcessor:
         all_items = list(review.items)
         body_review = CodeReview(
             verdict=review.verdict,
-            reason=ReasonBuilder.build(all_items),
+            reason=_reason_builder.build(all_items),
             summary=review.summary,
             items=all_items,
             suggestions=review.suggestions,

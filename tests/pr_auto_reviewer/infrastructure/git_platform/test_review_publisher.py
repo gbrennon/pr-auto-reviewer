@@ -1,25 +1,23 @@
 """Tests for GitReviewPublisherAdapter using fixture data."""
 
 import pytest
+import requests
 
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
     ReviewBodyFormatter,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
-    ReviewPublishingService,
-)
+
 GitReviewPublisherAdapter = GithubReviewPublisher
 format_review_body = ReviewBodyFormatter().format
 
@@ -240,7 +238,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         monkeypatch.setattr(patched_private_client, "get_raw",
-                            lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(Exception("diff fetch failed")))
+                            lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(requests.exceptions.HTTPError("diff fetch failed")))
 
         adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
@@ -251,7 +249,7 @@ index def456..ghi789 100644
     def test_publish_post_review_403_raises(self, patched_private_client, monkeypatch):
         """403 on review post raises ReviewPublishError."""
         def fake_post(path, body, *, repo=None):
-            raise Exception("403 Forbidden")
+            raise requests.exceptions.HTTPError("403 Forbidden")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
         adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
@@ -264,7 +262,7 @@ index def456..ghi789 100644
     def test_publish_non_403_raises_review_publish_error(self, patched_private_client, monkeypatch):
         """Non-403 error on review post raises ReviewPublishError."""
         def fake_post(path, body, *, repo=None):
-            raise Exception("500 Internal Server Error")
+            raise requests.exceptions.HTTPError("500 Internal Server Error")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
         adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
@@ -280,7 +278,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch,
     ):
         monkeypatch.setattr(patched_private_client, "get",
-                            lambda path, **kw: (_ for _ in ()).throw(Exception("boom")))
+                            lambda path, **kw: (_ for _ in ()).throw(requests.exceptions.HTTPError("boom")))
         adapter = GitReviewPublisherAdapter(
             patched_private_client, patched_private_client,
         )
@@ -327,7 +325,7 @@ index def456..ghi789 100644
             patched_private_client, patched_private_client,
         )
         def raise_err(*_a, **_kw):
-            raise Exception("post failed")
+            raise requests.exceptions.HTTPError("post failed")
         monkeypatch.setattr(patched_private_client, "post", raise_err)
         adapter._publishing.publish_comment(
             PullRequestId(repository="o/r", number=1), "test body",

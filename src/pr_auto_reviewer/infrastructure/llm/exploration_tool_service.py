@@ -11,6 +11,7 @@ from typing import Any
 
 from pr_auto_reviewer.domain.agent.tool_call import ToolCall
 from pr_auto_reviewer.domain.agent.tool_result import ToolResult
+
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
@@ -47,6 +48,20 @@ class ExplorationToolService:
             raise ValueError(f"repo_path is not a directory: {repo_path}")
         self._repo_root = resolved
         self._changed_files = changed_files or []
+
+    def _parse_read_args(self, args: str) -> tuple[str, int | None, int | None]:
+        """Parse the read_file argument string.
+
+        Returns: ``(path, start_line | None, end_line | None)``.
+        """
+        match = re.match(r"^(\S+)\s+(L?)(\d+)(?:-L?(\d+))?$", args.strip())
+        if match:
+            path = match.group(1)
+            start = int(match.group(3))
+            end_str = match.group(4)
+            end = int(end_str) if end_str else None
+            return path, start, end
+        return args.strip(), None, None
 
     def execute(self, operation: str, args: str | dict[str, str]) -> dict[str, Any]:
         """Dispatch an operation by name.
@@ -138,6 +153,7 @@ class ExplorationToolService:
                 text=True,
                 cwd=str(self._repo_root),
                 timeout=15,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {"status": "error", "error": "Search timed out"}
@@ -215,6 +231,7 @@ class ExplorationToolService:
                 text=True,
                 cwd=str(self._repo_root),
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {"status": "error", "error": "Git command timed out"}
@@ -257,18 +274,3 @@ class ExplorationToolService:
         except ValueError:
             return None
         return candidate
-
-    @staticmethod
-    def _parse_read_args(args: str) -> tuple[str, int | None, int | None]:
-        """Parse the read_file argument string.
-
-        Returns: ``(path, start_line | None, end_line | None)``.
-        """
-        match = re.match(r"^(\S+)\s+(L?)(\d+)(?:-L?(\d+))?$", args.strip())
-        if match:
-            path = match.group(1)
-            start = int(match.group(3))
-            end_str = match.group(4)
-            end = int(end_str) if end_str else None
-            return path, start, end
-        return args.strip(), None, None
