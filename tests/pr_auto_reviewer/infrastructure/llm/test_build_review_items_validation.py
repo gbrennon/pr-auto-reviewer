@@ -33,7 +33,7 @@ class TestBuildReviewItemsValidation:
         assert len(result) == 0
 
     def test_mixed_real_and_hallucinated(self, tmp_path: Path) -> None:
-        """Only valid items with full code evidence survive; numbering is sequential."""
+        """Only valid items with full code evidence survive; ids are generated."""
         (tmp_path / "valid.py").write_text("ok")
         item_dicts: list[dict[str, Any]] = [
             {"file": "valid.py", "severity": "minor", "category": "style", "description": "ok", "line": "", "current_code": "ok", "suggested_fix": "fixed"},
@@ -42,8 +42,8 @@ class TestBuildReviewItemsValidation:
         ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
         assert len(result) == 2
-        assert result[0].number == 1
-        assert result[1].number == 2
+        assert result[0].id  # ID is generated
+        assert result[1].id  # ID is generated
 
     def test_strips_ab_prefix(self, tmp_path: Path) -> None:
         """File paths with a/ or b/ prefix are normalized before validation."""
