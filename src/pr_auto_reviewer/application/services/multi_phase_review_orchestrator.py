@@ -16,6 +16,9 @@ from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
 )
 from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
+    SubReviewGuardrails,
+)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
@@ -434,13 +437,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             item for item in verified_items if isinstance(item, ReviewItem)
         ]
         if previous is not None and previous.verdict == ReviewVerdict.COMMENTED:
-            verdict = previous.verdict
-        elif not review_items and previous_items or not review_items:
-            verdict = ReviewVerdict.APPROVED
-        elif any(item.is_blocking for item in review_items):
-            verdict = ReviewVerdict.CHANGES_REQUESTED
+            verdict = ReviewVerdict.COMMENTED
         else:
-            verdict = ReviewVerdict.APPROVED
+            verdict = SubReviewGuardrails().verdict_for(review_items)
 
         dropped = previous_items - len(review_items)
         if dropped and previous is not None:
