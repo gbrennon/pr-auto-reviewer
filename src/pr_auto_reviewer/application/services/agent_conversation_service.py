@@ -8,18 +8,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
-    ParseReviewTurnCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-    RunAgentConversationCommand,
-)
-from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
-    ConversationCompletedEvent,
-)
-from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
-    ReviewTurnParsedEvent,
-)
 from pr_auto_reviewer.application.ports.inbound.run_agent_conversation_use_case import (
     RunAgentConversationUseCase,
 )
@@ -36,6 +24,18 @@ from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+    RunAgentConversationCommand,
+)
+from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
+    ConversationCompletedEvent,
+)
+from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
+    ReviewTurnParsedEvent,
 )
 from pr_auto_reviewer.domain.services.review_item_factory import (
     ReviewItemFactory,
@@ -72,8 +72,19 @@ class AgentConversationService(RunAgentConversationUseCase):
         self._max_empty_responses = max_empty_responses
         self._max_unparseable_responses = max_unparseable_responses
 
-    @staticmethod
-    def _derive_pr_identifier(repo_path: Path | None) -> str:
+    def execute(
+        self, command: RunAgentConversationCommand
+    ) -> PhaseResult:
+        """Run a single-phase multi-turn conversation."""
+        return self._run(
+            system_prompt=command.system_prompt,
+            repo_path=command.repo_path,
+            changed_files=command.changed_files,
+            tool_execution=command.tool_execution,
+            phase_name=command.phase_name,
+        )
+
+    def _derive_pr_identifier(self, repo_path: Path | None) -> str:
         if repo_path is None:
             return "unknown"
         path_str = str(repo_path)
@@ -84,9 +95,8 @@ class AgentConversationService(RunAgentConversationUseCase):
         return path_str.rsplit("/", 1)[-1]
 
 
-    @staticmethod
     def _find_mentioned_file(
-        text: str, changed_files: list[str]
+        self, text: str, changed_files: list[str]
     ) -> str:
         """Return the changed file whose name appears in *text*; else empty."""
         if not text or not changed_files:
@@ -98,8 +108,8 @@ class AgentConversationService(RunAgentConversationUseCase):
                 return candidate
         return ""
 
-    @staticmethod
     def _ground_suggestion(
+        self,
         suggestion: dict[str, str],
         repo_root: Path,
         changed_files: list[str],
@@ -143,8 +153,8 @@ class AgentConversationService(RunAgentConversationUseCase):
             result["current_code"] = current_code
         return result or None
 
-    @staticmethod
     def _log_conversation_debug(
+        self,
         phase_name: str,
         messages: list[ConversationMessage],
         turns: int,
@@ -166,18 +176,6 @@ class AgentConversationService(RunAgentConversationUseCase):
             logger.debug(
                 "--- %s ---\n%s", role, str(content)
             )
-
-    def execute(
-        self, command: RunAgentConversationCommand
-    ) -> PhaseResult:
-        """Run a single-phase multi-turn conversation."""
-        return self._run(
-            system_prompt=command.system_prompt,
-            repo_path=command.repo_path,
-            changed_files=command.changed_files,
-            tool_execution=command.tool_execution,
-            phase_name=command.phase_name,
-        )
     def _run(
         self,
         system_prompt: str,

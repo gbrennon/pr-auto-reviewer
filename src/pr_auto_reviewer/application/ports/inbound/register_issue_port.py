@@ -2,7 +2,10 @@
 
 from typing import Protocol
 
-from pr_auto_reviewer.domain.messages.commands.register_issue_command import RegisterIssueCommand
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
+    RegisterIssueCommand,
+)
+
 
 class RegisterIssuePort(Protocol):
     """Inbound port for registering a single review item as a tracker issue.

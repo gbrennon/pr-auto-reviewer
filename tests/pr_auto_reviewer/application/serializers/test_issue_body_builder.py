@@ -1,11 +1,12 @@
 """Tests for IssueBodyBuilder domain service."""
 
+from pr_auto_reviewer.application.serializers import IssueBodyBuilder
 from pr_auto_reviewer.domain import (
     ItemSeverity,
     PullRequestId,
     ReviewItem,
 )
-from pr_auto_reviewer.application.serializers import IssueBodyBuilder
+
 
 class TestIssueBodyBuilder:
     """Tests for IssueBodyBuilder.build(pr_id, item) -> tuple[str, str]."""
@@ -20,7 +21,7 @@ class TestIssueBodyBuilder:
             file_path="src/main.py",
             description="SQL injection vulnerability in login handler",
         )
-        title, body = builder.build(pr_id, item)
+        title, _ = builder.build(pr_id, item)
         assert "CRITICAL" in title
         assert "security" in title
 
@@ -34,7 +35,7 @@ class TestIssueBodyBuilder:
             file_path="src/utils.py",
             description="Off-by-one error in loop boundary",
         )
-        title, body = builder.build(pr_id, item)
+        _, body = builder.build(pr_id, item)
         assert "owner/repo#42" in body
         assert "Review Item #3" in body
         assert "MAJOR" in body
@@ -52,7 +53,7 @@ class TestIssueBodyBuilder:
             file_path=None,
             description="Consider using f-strings",
         )
-        title, body = builder.build(pr_id, item)
+        _, body = builder.build(pr_id, item)
         assert "_(no specific file)_" in body
         assert "`" not in body.split("**File:**")[1].split("\n")[0]
 
@@ -101,7 +102,7 @@ class TestIssueBodyBuilder:
             file_path="x.py",
             description=short_desc,
         )
-        title, body = builder.build(pr_id, item)
+        title, _ = builder.build(pr_id, item)
         assert title.endswith(short_desc)
 
     def test_body_contains_formatted_location_with_file_path(self) -> None:
@@ -114,5 +115,23 @@ class TestIssueBodyBuilder:
             file_path="src/auth/login.py",
             description="Hardcoded secret",
         )
-        title, body = builder.build(pr_id, item)
+        _, body = builder.build(pr_id, item)
         assert "- **File:** `src/auth/login.py`" in body
+
+    def test_body_includes_current_code_and_suggested_fix(self) -> None:
+        builder = IssueBodyBuilder()
+        pr_id = PullRequestId(repository="owner/repo", number=1)
+        item = ReviewItem(
+            number=1,
+            severity=ItemSeverity.MAJOR,
+            category="bug",
+            file_path="src/main.py",
+            description="Off-by-one error",
+            current_code="for i in range(len(items)):",
+            suggested_fix="for item in items:",
+        )
+        _, body = builder.build(pr_id, item)
+        assert "### Current Code" in body
+        assert "for i in range(len(items)):" in body
+        assert "### Suggested Fix" in body
+        assert "for item in items:" in body

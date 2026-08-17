@@ -85,3 +85,15 @@ def mock_response_parser() -> MagicMock:
 def mock_reason_builder() -> MagicMock:
     """Mock ReasonBuilderPort."""
     return MagicMock()
+
+
+@pytest.fixture
+def mock_token_verifier() -> MagicMock:
+    """Mock TokenVerifierPort."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_command_bus() -> MagicMock:
+    """Mock CommandBusPort."""
+    return MagicMock()
