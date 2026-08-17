@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.domain.messages.commands.register_issue_command import RegisterIssueCommand
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
+    RegisterIssueCommand,
+)
+
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.pull_request_not_found_error import PullRequestNotFoundError
 from ...domain.exceptions.review_item_not_found_error import ReviewItemNotFoundError
+from ...domain.services.review_item_parser import ReviewItemParser
+from ..ports.inbound.register_issue_port import RegisterIssuePort
+from ..ports.outbound.issue_tracker_port import IssueTrackerPort
 from ..ports.outbound.pull_request_repository import PullRequestRepository
 from ..ports.outbound.review_reader_port import ReviewReaderPort
-from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.inbound.register_issue_port import RegisterIssuePort
-from ...domain.services.review_item_parser import ReviewItemParser
 from ..serializers.issue_body_builder import IssueBodyBuilder
 
 logger = logging.getLogger(__name__)

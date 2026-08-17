@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
+    ProcessIssueCommandsCommand,
+)
+from pr_auto_reviewer.domain.messages.messages import (
+    invalid_items_message,
+    issues_created_message,
+)
+
 from ...domain.entities.issue import Issue
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
-from ...domain.exceptions import (
-    IssueCreationError,
-    PullRequestNotFoundError,
-)
+from ...domain.exceptions import PullRequestNotFoundError
 from ...domain.services.issue_command_parser import IssueCommandParser
 from ...domain.services.review_item_parser import ReviewItemParser
-from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import ProcessIssueCommandsCommand
-from pr_auto_reviewer.domain.messages.messages import invalid_items_message, issues_created_message
 from ..ports.inbound.process_issue_commands_use_case import ProcessIssueCommandsUseCase
 from ..ports.outbound.comment_publisher_port import CommentPublisherPort
 from ..ports.outbound.comment_reader_port import CommentReaderPort
@@ -99,15 +102,12 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
             item = items_by_number[item_number]
             title, body = self._issue_body_builder.build(pr.id, item)
 
-            try:
-                issue = self._issue_tracker.create(
-                    repository=pr.id.repository,
-                    title=title,
-                    body=body,
-                )
-                created.append(issue)
-            except IssueCreationError:
-                raise
+            issue = self._issue_tracker.create(
+                repository=pr.id.repository,
+                title=title,
+                body=body,
+            )
+            created.append(issue)
         return created
 
     def _publish_issues_created_message(

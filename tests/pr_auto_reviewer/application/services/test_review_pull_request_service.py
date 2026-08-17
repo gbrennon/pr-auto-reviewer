@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -636,3 +637,31 @@ class TestReviewPullRequestService:
         assert len(review.items) == 5, (
             f"Expected 5 items (4 LLM + 1 deterministic), got {len(review.items)}"
         )
+
+
+class TestReviewPullRequestServiceTokenVerifier:
+    def test_execute_with_token_verifier(
+        self, mock_token_verifier: MagicMock,
+        mock_pr_repository: MagicMock,
+        mock_changeset_fetcher: MagicMock,
+        mock_review_context_factory: MagicMock,
+        mock_llm_review: MagicMock,
+        mock_review_publisher: MagicMock,
+    ):
+        cmd = _cmd()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_llm_review.review_prompt.return_value = _review(ReviewVerdict.APPROVED)
+
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            token_verifier=mock_token_verifier,
+        )
+
+        service.execute(cmd)
+
+        mock_token_verifier.verify.assert_called_with(cmd.pr_id)
