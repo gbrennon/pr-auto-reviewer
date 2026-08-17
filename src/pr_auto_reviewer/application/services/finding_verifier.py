@@ -9,9 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
-    VerifyFindingsCommand,
-)
 from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import (
     VerifyFindingsUseCase,
 )
@@ -22,6 +19,9 @@ from pr_auto_reviewer.domain.agent.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
+    VerifyFindingsCommand,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -288,10 +288,7 @@ class FindingVerifier(VerifyFindingsUseCase):
                     "unable to",
                 )
             )
-            try:
-                finding_index = int(idx_str)
-            except ValueError:
-                continue
+            finding_index = int(idx_str)
             results.append(
                 {
                     "finding_index": finding_index,
@@ -347,8 +344,6 @@ class FindingVerifier(VerifyFindingsUseCase):
             for ln in snippet.strip().split("\n")
             if ln.strip()
         ]
-        if not snippet_lines:
-            return file_text[:2000]
 
         file_lines = file_text.split("\n")
         first_snippet_line = snippet_lines[0]
