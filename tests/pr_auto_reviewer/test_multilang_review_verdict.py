@@ -8,30 +8,30 @@ No @patch, no MagicMock.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
 from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-
-from tests.pr_auto_reviewer.application.stubs import (
-    StubChangesetFetcher,
-    StubLlmReview,
-    StubPullRequestRepository,
-    StubReviewContextFactory,
-    StubReviewPublisher,
+from tests.fakes import (
+    FakeChangesetFetcher,
+    FakeLlmReview,
+    FakePullRequestRepository,
+    FakeReviewContextFactory,
+    FakeReviewPublisher,
 )
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -44,7 +44,7 @@ def _run_review(
     review: CodeReview,
     file_path: str,
     file_content: str = "",
-) -> tuple[CodeReview, StubReviewContextFactory]:
+) -> tuple[CodeReview, FakeReviewContextFactory]:
     """Execute the full pipeline with stub ports. Returns published review
     and the context factory for inspection of build_calls."""
 
@@ -55,13 +55,13 @@ def _run_review(
         file_contents={file_path: file_content},
     )
 
-    fetcher = StubChangesetFetcher(diff)
-    llm_stub = StubLlmReview(review)
-    publisher = StubReviewPublisher()
-    ctx_factory = StubReviewContextFactory()
+    fetcher = FakeChangesetFetcher(diff)
+    llm_stub = FakeLlmReview(review)
+    publisher = FakeReviewPublisher()
+    ctx_factory = FakeReviewContextFactory()
 
     svc = ReviewPullRequestService(
-        pr_repository=StubPullRequestRepository(),
+        pr_repository=FakePullRequestRepository(),
         changeset_fetcher=fetcher,
         review_context_factory=ctx_factory,
         llm_review=llm_stub,
@@ -214,10 +214,10 @@ class TestApprovedMultilang:
         assert len(r.items) == 0
 
 class TestMultilangPromptContents:
-    """Verify that StubReviewContextFactory.build() received the correct
+    """Verify that FakeReviewContextFactory.build() received the correct
     PullRequestDiff data (including file_paths) for each scenario."""
 
-    SCENARIOS = [
+    SCENARIOS: ClassVar[list[tuple[str, str, str]]] = [
         ("python-sql-injection", "app/repository.py", "sqlite3"),
         ("java-god-class", "src/main/java/com/example/OrderService.java", "OrderService"),
         ("go-no-error-handling", "pkg/handler/user.go", "func CreateUser"),
@@ -234,7 +234,7 @@ class TestMultilangPromptContents:
         file_path: str,
         keyword: str,
     ) -> None:
-        """StubReviewContextFactory.build_calls contain the diff with the
+        """FakeReviewContextFactory.build_calls contain the diff with the
         correct file_paths and file content keyword."""
         _, ctx_factory = _run_review(
             diff_name,
@@ -244,7 +244,7 @@ class TestMultilangPromptContents:
         )
 
         assert len(ctx_factory.build_calls) == 1
-        _pr_id, diff, pr_title, pr_description = ctx_factory.build_calls[0]
+        _pr_id, diff, pr_title, _pr_description = ctx_factory.build_calls[0]
 
         assert file_path in diff.file_contents
         assert keyword in diff.file_contents[file_path]
