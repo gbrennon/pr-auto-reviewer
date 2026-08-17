@@ -54,7 +54,6 @@ class FakeLocalRepository:
 
     def remove(self, repo_path: Path) -> None:
         self.remove_calls.append(((repo_path,), {}))
-        return None
 
     def compute_diff(
         self, repo_path: Path, base_sha: str, head_sha: str,

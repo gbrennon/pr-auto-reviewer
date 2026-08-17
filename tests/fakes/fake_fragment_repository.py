@@ -1,10 +1,10 @@
-"""Stub ``PromptFragmentRepository`` implementations for test use."""
+"""Fake ``PromptFragmentRepository`` implementation for test use."""
 
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 
 
-class StubFragmentRepository:
-    """Stub repository returning pre-configured fragments and recording calls."""
+class FakeFragmentRepository:
+    """Fake repository returning pre-configured fragments and recording calls."""
 
     def __init__(
         self,

@@ -1,20 +1,11 @@
-"""Fake HTTP callers for PreflightVerifier tests."""
+"""Fake HTTP client for PreflightVerifier tests."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-import requests
-
-
-@dataclass
-class FakeResponse:
-    status_code: int
-
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise requests.HTTPError(f"{self.status_code}")
+from tests.fakes.fake_response import FakeResponse
 
 
 @dataclass
@@ -44,5 +35,3 @@ class FakeHttpClient:
     ) -> FakeResponse:
         self.calls.append({"url": path, "headers": headers, "json": json})
         return self.responses.pop(0) if self.responses else FakeResponse(200)
-
-FakeHttpCaller = FakeHttpClient  # backward compat
