@@ -10,3 +10,6 @@ lib/bashunit
 coverage/
 .coverage
 HANDOFF.md
+*.cover
+*.cover
+__pycache__/
