@@ -8,6 +8,7 @@ from ..entities.review_item import ReviewItem
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
 
+
 class ReviewItemParser:
     """Pure domain service. Receives the markdown body of a posted review
     and returns a structured list of ReviewItem. Contains all parsing rules
@@ -20,8 +21,8 @@ class ReviewItemParser:
         re.MULTILINE,
     )
 
-    @staticmethod
-    def _extract_fields(
+    @classmethod
+    def _extract_fields(cls,
         file_info: str | None, description: str | None,
     ) -> tuple[str | None, str, str]:
         if description is not None:

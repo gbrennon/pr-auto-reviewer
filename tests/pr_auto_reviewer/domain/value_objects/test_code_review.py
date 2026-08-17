@@ -1,10 +1,14 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import (
     CodeReview,
-    ReviewVerdict,
-    ReviewItem,
     ItemSeverity,
+    ReviewItem,
+    ReviewVerdict,
 )
+
 
 class TestCodeReview:
     """Tests for CodeReview value object."""
@@ -62,7 +66,7 @@ class TestCodeReview:
 
     def test_immutability(self) -> None:
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             review.summary = "changed"
 
     def test_hash_consistency(self) -> None:

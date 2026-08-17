@@ -1,5 +1,9 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import IssueCommand
+
 
 class TestIssueCommand:
     """Tests for IssueCommand value object."""
@@ -30,7 +34,7 @@ class TestIssueCommand:
 
     def test_immutability(self) -> None:
         cmd = IssueCommand(comment_id="12345", item_numbers=[1])
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             cmd.item_numbers = [2]
 
     def test_hash_consistency(self) -> None:

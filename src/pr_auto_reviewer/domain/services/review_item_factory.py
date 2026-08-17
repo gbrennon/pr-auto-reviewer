@@ -97,15 +97,15 @@ class ReviewItemFactory:
                 return idx + 1, window.strip()
         return None
 
-    @staticmethod
-    def _generate_id(file_path: str, description: str, index: int) -> str:
+    @classmethod
+    def _generate_id(cls,file_path: str, description: str, index: int) -> str:
         """Generate a short 4-character hex ID for a review item."""
         seed = f"{file_path}:{description}:{index}"
         digest = hashlib.sha256(seed.encode()).hexdigest()
         return digest[:4]
 
-    @staticmethod
-    def _locate_symbol_range(
+    @classmethod
+    def _locate_symbol_range(cls,
         full_path: Path, description: str,
     ) -> str | None:
         """Return a line range ``"start-end"`` enclosing the symbol block."""
@@ -131,8 +131,8 @@ class ReviewItemFactory:
                     return f"{idx + 1}-{max(end, idx + 1)}"
         return None
 
-    @staticmethod
-    def _read_evidence(
+    @classmethod
+    def _read_evidence(cls,
         full_path: Path,
         repo_root: Path,
         line_str: str,
@@ -164,8 +164,8 @@ class ReviewItemFactory:
                     ).strip()
         return "\n".join(file_lines[:500]).strip()
 
-    @staticmethod
-    def _resolve_file_path(
+    @classmethod
+    def _resolve_file_path(cls,
         file_path: str,
         repo_root: Path,
         changed_files: list[str] | None,
