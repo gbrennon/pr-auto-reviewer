@@ -21,13 +21,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
-from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
-from pr_auto_reviewer.infrastructure.llm.ollama_llm_adapter import OllamaLlmAdapter
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 
 FIXTURES_DIR = PROJECT_ROOT / "tests" / "fixtures"
@@ -57,8 +57,6 @@ def main() -> None:
 
     if dry_run:
         print(f"[DRY RUN] Would use Ollama at {host} with model={model}")
-    else:
-        llm = OllamaLlmAdapter(host=host, model=model)
 
     context = RepositoryContext(architecture_hint="")
 
@@ -94,8 +92,8 @@ def main() -> None:
             print(f"    [DRY RUN] Would save to {out_file.name}")
             continue
 
+
         import requests
-        import json as _json
 
         class RealOllamaCaller:
             def __init__(self, host: str, model: str):
@@ -114,7 +112,7 @@ def main() -> None:
         try:
             caller = RealOllamaCaller(host, model)
             raw_response = caller.call(prompt)
-        except Exception as e:
+        except requests.RequestException as e:
             print(f"    ERROR: {e}")
             raw_response = {"_error": str(e)}
 

@@ -29,6 +29,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 import requests
 
+from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -36,7 +37,6 @@ from pr_auto_reviewer.infrastructure.config.config import load_config
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
-from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
 )
@@ -73,7 +73,7 @@ def capture_pr(repo: str, pr_num: int, sha: str) -> None:
                 file_contents[b] = content
                 full_content += f"\n=== {b} ===\n{content}"
                 print(f"  File: {b} ({len(content)} chars)")
-            except Exception as exc:
+            except requests.RequestException as exc:
                 print(f"  File: {b} (skipped — {exc})")
 
     if full_content:
