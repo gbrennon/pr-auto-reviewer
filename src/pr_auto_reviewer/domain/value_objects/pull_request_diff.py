@@ -3,8 +3,9 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .pull_request_id import PullRequestId
 from .commit_sha import CommitSha
+from .pull_request_id import PullRequestId
+
 
 @dataclass(frozen=True)
 class PullRequestDiff:

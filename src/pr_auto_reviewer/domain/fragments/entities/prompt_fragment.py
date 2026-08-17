@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+
 @dataclass(frozen=True)
 class PromptFragment:
     """Immutable value object representing a prompt template fragment.

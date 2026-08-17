@@ -1,9 +1,13 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import (
+    InvalidIssueBodyError,
     Issue,
     PullRequestId,
-    InvalidIssueBodyError,
 )
+
 
 class TestIssue:
     """Tests for Issue entity (immutable)."""
@@ -99,7 +103,7 @@ class TestIssue:
             id=100, repository="r", title="t", body="b",
             source_pr_id=pr_id, source_item_number=1,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             issue.id = 200
 
     def test_immutable_source_pr_id(self) -> None:
@@ -108,5 +112,5 @@ class TestIssue:
             id=100, repository="r", title="t", body="b",
             source_pr_id=pr_id, source_item_number=1,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             issue.source_pr_id = PullRequestId(repository="x", number=99)

@@ -22,7 +22,7 @@ class ItemSeverity(StrEnum):
         return self in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR)
 
     @classmethod
-    def from_value(cls, value: str | None) -> "ItemSeverity":
+    def from_value(cls, value: str | None) -> ItemSeverity:
         """Return the severity for *value*, accepting prompt aliases."""
         normalized = (value or "").strip().lower()
         if normalized in _PROMPT_ALIASES:

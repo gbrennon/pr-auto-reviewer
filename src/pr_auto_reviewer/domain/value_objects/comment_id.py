@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from ..exceptions import InvalidCommentIdError
 
+
 @dataclass(frozen=True)
 class CommentId:
     """Opaque identifier for a comment on a pull request.

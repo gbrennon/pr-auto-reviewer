@@ -1,5 +1,7 @@
 import pytest
+
 from pr_auto_reviewer.domain import ItemSeverity
+
 
 class TestItemSeverity:
     """Tests for ItemSeverity enum."""

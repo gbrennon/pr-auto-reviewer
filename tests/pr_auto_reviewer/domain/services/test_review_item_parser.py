@@ -3,6 +3,7 @@
 from pr_auto_reviewer.domain import ItemSeverity, ReviewItem
 from pr_auto_reviewer.domain.services import ReviewItemParser
 
+
 class TestReviewItemParser:
     """Tests for ReviewItemParser.parse(raw_body) -> list[ReviewItem]."""
 
@@ -136,6 +137,28 @@ class TestReviewItemParser:
         assert item.category == "bug"
         assert item.file_path is None
         assert item.description == "This is a bug description"
+
+    def test_parse_file_path_with_line_no_and_no_description(self) -> None:
+        """file_info 'src/main.py:42' with no description → file+line, empty desc."""
+        parser = ReviewItemParser()
+        raw = "1. [security] [CRITICAL] src/main.py:42"
+        result = parser.parse(raw)
+        assert len(result) == 1
+        item = result[0]
+        assert item.file_path == "src/main.py"
+        assert item.line == "42"
+        assert item.description == ""
+
+    def test_parse_header_only_with_no_file_and_no_description(self) -> None:
+        """A bare numbered header yields no file_path, no line, empty desc."""
+        parser = ReviewItemParser()
+        raw = "1. [general] [INFO]"
+        result = parser.parse(raw)
+        assert len(result) == 1
+        item = result[0]
+        assert item.file_path is None
+        assert item.line == ""
+        assert item.description == ""
 
     def test_parse_with_no_separator(self) -> None:
         parser = ReviewItemParser()

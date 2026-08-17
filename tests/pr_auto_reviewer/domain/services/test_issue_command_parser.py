@@ -1,9 +1,12 @@
 """Tests for IssueCommandParser domain service."""
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from pr_auto_reviewer.domain import IssueCommand
 from pr_auto_reviewer.domain.services import IssueCommandParser
+
 
 class TestIssueCommandParser:
     """Tests for IssueCommandParser.parse(comment_id, comment_body) -> IssueCommand | None."""
@@ -90,7 +93,7 @@ class TestIssueCommandParser:
         parser = IssueCommandParser()
         result = parser.parse("c_12345", "/create-issue 1,2")
         assert result is not None
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             result.item_numbers = [3]
 
     def test_parse_create_issue_with_space_separator(self) -> None:

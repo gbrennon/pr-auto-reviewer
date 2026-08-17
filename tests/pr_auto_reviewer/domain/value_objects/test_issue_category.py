@@ -1,5 +1,6 @@
 from pr_auto_reviewer.domain import IssueCategory
 
+
 class TestIssueCategory:
     """Tests for IssueCategory enum."""
 

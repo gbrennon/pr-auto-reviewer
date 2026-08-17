@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 
+
 class IssueCategory(StrEnum):
     """Classification of the kind of review finding."""
 
@@ -21,7 +22,7 @@ class IssueCategory(StrEnum):
     GENERAL = "general"
 
     @classmethod
-    def from_value(cls, value: str | None) -> "IssueCategory":
+    def from_value(cls, value: str | None) -> IssueCategory:
         """Return the category for *value*, accepting legacy aliases."""
         normalized = (value or "").strip().lower()
         aliases = {
