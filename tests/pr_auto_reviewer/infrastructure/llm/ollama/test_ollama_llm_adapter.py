@@ -3,11 +3,13 @@
 import json
 import logging
 from pathlib import Path
-import re
-import requests as _requests
 
 import pytest
+import requests as _requests
 
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
@@ -19,7 +21,10 @@ from pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter import (
     OllamaLlmAdapter,
 )
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+
 
 @pytest.fixture
 def adapter() -> OllamaLlmAdapter:
@@ -90,7 +95,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post_error)
 
-        with pytest.raises(Exception):
+        with pytest.raises(LlmUnavailableError):
             adapter.review(sample_diff, sample_context)
 
     def test_debug_logs_request_payload_when_debug_enabled(
@@ -162,7 +167,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post_invalid_json)
 
-        with pytest.raises(Exception):
+        with pytest.raises(LlmUnavailableError):
             adapter.review(sample_diff, sample_context)
 
     def test_review_handles_empty_response(
@@ -174,7 +179,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post_empty)
 
-        with pytest.raises(Exception):
+        with pytest.raises(LlmUnavailableError):
             adapter.review(sample_diff, sample_context)
 
 

@@ -11,6 +11,7 @@ from pr_auto_reviewer.domain.messages import (
     issues_created_message,
 )
 
+
 class TestInvalidItemsMessage:
     """Tests for invalid_items_message(invalid, available) -> str."""
 

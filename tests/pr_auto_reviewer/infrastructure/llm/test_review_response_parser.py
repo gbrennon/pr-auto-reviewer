@@ -1,19 +1,14 @@
 import json
-import pytest
+
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
 )
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 
 FIXTURES = "tests/fixtures"
 
 class TestReviewResponseParser:
-
-    def _load(self, name):
-        with open(f"{FIXTURES}/ollama_responses/{name}") as f:
-            return f.read()
 
     def test_parse_plain_json_returns_code_review(self):
         raw = self._load("plain_json.json")
@@ -612,4 +607,8 @@ class TestReviewResponseParser:
             "summary": "ok",
         }
         raw = json.dumps(data)
-        result = ReviewResponseParser().parse(raw, "m")
+        ReviewResponseParser().parse(raw, "m")
+
+    def _load(self, name):
+        with open(f"{FIXTURES}/ollama_responses/{name}") as f:
+            return f.read()

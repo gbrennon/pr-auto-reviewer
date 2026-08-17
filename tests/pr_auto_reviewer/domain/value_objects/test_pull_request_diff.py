@@ -1,9 +1,13 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import (
+    CommitSha,
     PullRequestDiff,
     PullRequestId,
-    CommitSha,
 )
+
 
 class TestPullRequestDiff:
     """Tests for PullRequestDiff value object."""
@@ -60,7 +64,7 @@ class TestPullRequestDiff:
         diff = PullRequestDiff(
             pr_id=pr_id, head_sha=CommitSha(value="abc"), diff_content="diff"
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             diff.diff_content = "changed"
 
     def test_hash_consistency(self) -> None:

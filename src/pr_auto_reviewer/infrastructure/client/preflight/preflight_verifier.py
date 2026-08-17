@@ -41,6 +41,32 @@ class PreflightVerifier:
         self._base_url = base_url.rstrip("/")
         self._platform = platform.lower()
 
+    def verify(
+        self,
+        token: str,
+        org: str,
+        repo: str,
+        pr_number: int,
+        role: str = "owner",
+        token_source: str = "",
+    ) -> None:
+        logger.debug(
+            "Preflight for %s/%s (%s token): verifying auth…",
+            org, repo, role,
+        )
+        self._check_auth(token, org, role, token_source)
+
+        logger.debug(
+            "Preflight for %s/%s (%s token): verifying write access…",
+            org, repo, role,
+        )
+        self._check_write_access(token, org, repo, pr_number, role, token_source)
+
+        logger.info(
+            "Preflight passed for %s/%s (%s token).",
+            org, repo, role,
+        )
+
     def _check_auth(
         self, token: str, org: str, role: str, token_source: str = ""
     ) -> None:
@@ -88,29 +114,3 @@ class PreflightVerifier:
                 http_status=resp.status_code, step="write_access",
                 token_source=token_source, url=url, method="POST",
             )
-
-    def verify(
-        self,
-        token: str,
-        org: str,
-        repo: str,
-        pr_number: int,
-        role: str = "owner",
-        token_source: str = "",
-    ) -> None:
-        logger.debug(
-            "Preflight for %s/%s (%s token): verifying auth…",
-            org, repo, role,
-        )
-        self._check_auth(token, org, role, token_source)
-
-        logger.debug(
-            "Preflight for %s/%s (%s token): verifying write access…",
-            org, repo, role,
-        )
-        self._check_write_access(token, org, repo, pr_number, role, token_source)
-
-        logger.info(
-            "Preflight passed for %s/%s (%s token).",
-            org, repo, role,
-        )

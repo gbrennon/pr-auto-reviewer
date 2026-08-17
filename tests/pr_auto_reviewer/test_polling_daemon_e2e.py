@@ -1,0 +1,253 @@
+"""E2E tests for the PollingDaemon review flow.
+
+Tests the daemon polling cycle from repo fetch to review dispatch.
+"""
+
+from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.presentation.polling_daemon import (
+    PollingDaemon,
+    PollingDaemonConfig,
+)
+from pr_auto_reviewer.presentation.ports import (
+    OpenPullRequest,
+    PrListerPort,
+    RepoInfo,
+    RepoListerPort,
+)
+
+
+class MockRepoLister(RepoListerPort):
+    def __init__(self, repos: list[RepoInfo]) -> None:
+        self._repos = repos
+        self.call_count = 0
+
+    def list_repos(self) -> list[RepoInfo]:
+        self.call_count += 1
+        return self._repos
+
+class MockPrLister(PrListerPort):
+    def __init__(self, prs: list[OpenPullRequest]) -> None:
+        self._prs = prs
+        self.call_count = 0
+        self.last_repo = None
+
+    def list_open(self, repository: str) -> list[OpenPullRequest]:
+        self.call_count += 1
+        self.last_repo = repository
+        return self._prs
+
+    def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
+        for p in self._prs:
+            if p.pr_id.number == pr_number:
+                return p
+        return None
+
+class TestPollingDaemonE2E:
+    """E2E tests for PollingDaemon."""
+
+    def test_daemon_fetches_repos_and_prs(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon fetches repos and PRs in a cycle."""
+        repo_lister = MockRepoLister([RepoInfo("repo1"), RepoInfo("repo2")])
+        pr_lister = MockPrLister([])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        assert repo_lister.call_count == 1
+
+    def test_daemon_processes_open_prs(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon processes open (non-draft) PRs."""
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="test/repo", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Test PR",
+            is_draft=False,
+        )
+
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
+        pr_lister = MockPrLister([open_pr])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        stub_review_service.assert_called_once()
+
+    def test_daemon_skips_draft_prs(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon skips draft PRs."""
+        draft_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="test/repo", number=1),
+            head_sha=CommitSha("abc123"),
+            title="WIP",
+            is_draft=True,
+        )
+
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
+        pr_lister = MockPrLister([draft_pr])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        stub_review_service.assert_not_called()
+
+    def test_daemon_handles_empty_repos(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon handles empty repos list."""
+        repo_lister = MockRepoLister([])
+        pr_lister = MockPrLister([])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        stub_review_service.assert_not_called()
+
+    def test_daemon_handles_empty_prs(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon handles repo with no open PRs."""
+        repo_lister = MockRepoLister([RepoInfo("test/repo")])
+        pr_lister = MockPrLister([])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        stub_review_service.assert_not_called()
+        assert pr_lister.call_count == 1
+        assert pr_lister.last_repo == "test/repo"
+
+    def test_daemon_calls_review_service_with_correct_command(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon calls review service with correct command."""
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo", number=42),
+            head_sha=CommitSha("sha123abc"),
+            title="Fix critical bug",
+            is_draft=False,
+        )
+
+        repo_lister = MockRepoLister([RepoInfo("owner/repo")])
+        pr_lister = MockPrLister([open_pr])
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        stub_review_service.assert_called_once()
+        call_args = stub_review_service.call_args
+        command = call_args[0][0]
+
+        assert command.pr_id.repository == "owner/repo"
+        assert command.pr_id.number == 42
+        assert command.head_sha.value == "sha123abc"
+        assert command.title == "Fix critical bug"
+
+    def test_daemon_multiple_prs_in_multiple_repos(
+        self,
+        polling_daemon_config: PollingDaemonConfig,
+        stub_review_service,
+    ) -> None:
+        """Daemon processes multiple PRs from multiple repos."""
+        pr1 = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("sha001"),
+            title="PR 1",
+            is_draft=False,
+        )
+        pr2 = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo2", number=2),
+            head_sha=CommitSha("sha002"),
+            title="PR 2",
+            is_draft=False,
+        )
+
+        class MultiRepoLister(RepoListerPort):
+            def list_repos(self) -> list[RepoInfo]:
+                return [RepoInfo("owner/repo1"), RepoInfo("owner/repo2")]
+
+        class MultiPrLister(PrListerPort):
+            def __init__(self) -> None:
+                self.calls = []
+
+            def list_open(self, repository: str) -> list[OpenPullRequest]:
+                self.calls.append(repository)
+                if repository == "owner/repo1":
+                    return [pr1]
+                elif repository == "owner/repo2":
+                    return [pr2]
+                return []
+
+            def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
+                for pr_list in ([pr1], [pr2]):
+                    for p in pr_list:
+                        if p.pr_id.number == pr_number:
+                            return p
+                return None
+
+        repo_lister = MultiRepoLister()
+        pr_lister = MultiPrLister()
+
+        daemon = PollingDaemon(
+            config=polling_daemon_config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=stub_review_service,
+        )
+
+        daemon._run_cycle()
+
+        assert stub_review_service.call_count == 2

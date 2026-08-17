@@ -22,10 +22,10 @@ from pathlib import Path
 
 import jinja2
 
-from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
-from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
 _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
 _DIFF_FILE_PATH_RE = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE)
@@ -52,8 +52,8 @@ class PromptBudget:
     def remaining_tokens(self) -> int:
         return max(0, self.max_tokens - self._consumed)
 
-    @staticmethod
-    def estimate_tokens(text: str) -> int:
+    @classmethod
+    def estimate_tokens(cls, text: str) -> int:
         """Rough token estimate: 1 token ≈ 4 characters."""
         return len(text) // 4
 
@@ -103,7 +103,7 @@ def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
             continue
 
         if in_hunk and current_file and current_hunk_start is not None:
-            if line.startswith("+") or line.startswith(" ") or line.startswith("-"):
+            if line.startswith(("+", " ", "-")):
                 current_hunk_line += 1
             elif line.startswith("\\"):
                 continue

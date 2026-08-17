@@ -17,14 +17,14 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from dataclasses import dataclass
 from typing import Any, ClassVar
+
 import requests
 
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
+from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
@@ -36,9 +36,10 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
+from pr_auto_reviewer.domain.services.review_item_factory import (
+    ReviewItemFactory,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
 )
@@ -50,9 +51,6 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 )
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     ReasonBuilder,
-)
-from pr_auto_reviewer.domain.services.review_item_factory import (
-    ReviewItemFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +130,13 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
     _DUPLICATE_SUFFIX = ". This was previously identified but may have additional instances."
 
+    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
+        "read_file": ["file", "file_path"],
+        "list_directory": ["path", "directory_path"],
+        "search_codebase": ["pattern"],
+        "run_git": ["command"],
+    }
+
     def __init__(
         self,
         model: str,
@@ -144,13 +149,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         self._timeout = ollama_timeout
         self._max_retries = max_retries
         self._parser = ReviewResponseParser()
-
-
-    def review(self, diff: object, context: object) -> CodeReview:
-        """Not used in production; raises NotImplementedError."""
-        raise NotImplementedError(
-            "Use review_prompt(ComposedPrompt) for staged multi-phase review"
-        )
+        self._reason_builder = ReasonBuilder()
 
     @classmethod
     def _load_phase_prompt(cls, phase_id: str) -> str:
@@ -158,8 +157,53 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         path = _PHASE_PROMPT_DIR / f"{phase_id}.md"
         raw = path.read_text()
         return ReviewResponseParser.strip_frontmatter(raw)
-    @staticmethod
-    def _extract_file_listing(composed_content: str) -> list[str]:
+
+    @classmethod
+    def _extract_file_context(cls, file_path: Path, snippet: str) -> str:
+        """Extract surrounding context from a file around a matching code snippet.
+
+        Searches for the first non-blank line of the snippet in the file using
+        whitespace-normalized matching. Falls back to the first 2000 characters
+        of the file if no match is found.
+        """
+        try:
+            file_text = file_path.read_text()
+        except (OSError, UnicodeDecodeError):
+            return "(file could not be read)"
+
+        if not snippet or not snippet.strip():
+            return file_text[:2000]
+
+        snippet_lines = [
+            ln.strip()
+            for ln in snippet.strip().split("\n")
+            if ln.strip()
+        ]
+        if not snippet_lines:
+            return file_text[:2000]
+
+        file_lines = file_text.split("\n")
+        first_snippet_line = snippet_lines[0]
+
+        match_line = None
+        for idx, line in enumerate(file_lines):
+            if line.strip() == first_snippet_line:
+                match_line = idx
+                break
+
+        if match_line is None:
+            for idx, line in enumerate(file_lines):
+                if first_snippet_line in line.strip():
+                    match_line = idx
+                    break
+
+        if match_line is None:
+            return file_text[:2000]
+
+        window_start = max(0, match_line - 10)
+        window_end = min(len(file_lines), match_line + 50)
+        return "\n".join(file_lines[window_start:window_end])
+    def _extract_file_listing(self, composed_content: str) -> list[str]:
         """Extract changed file paths from the rendered prompt's diff section."""
         paths: set[str] = set()
         seen_section = False
@@ -169,7 +213,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 continue
             if not seen_section:
                 continue
-            if line.startswith("--- a/") or line.startswith("+++ b/"):
+            if line.startswith(("--- a/", "+++ b/")):
                 raw = line.split(" ", 1)[1] if " " in line else ""
                 if not raw:
                     continue
@@ -179,6 +223,114 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                     raw = raw[2:]
                 paths.add(raw)
         return sorted(paths)
+
+    def _build_feedback_context(
+        self,
+        result: CodeReview,
+        round_number: int,
+        skip_reasons: list[str] | None = None,
+    ) -> str:
+        """Build a feedback prompt from a zero-item review result.
+
+        Each successive round escalates urgency so the LLM knows this
+        is a repeated failure, not a one-off retry.
+        """
+        escalation = (
+            "This is unusual for a real code change — please re-examine "
+            "the diff more carefully."
+            if round_number == 1
+            else (
+                f"This is your {round_number}{'st' if round_number == 1 else 'nd'} attempt. Every prior attempt "
+                "also found nothing actionable. Re-examine with fresh eyes: "
+                "assume the diff contains issues and dig deeper."
+            )
+        )
+        skip_note = ""
+        if skip_reasons:
+            unique = sorted(set(skip_reasons))
+            skip_note = (
+                "\n\nItems you reported in the previous attempt were dropped "
+                "for these reasons (fix them in this attempt):\n"
+                + "\n".join(f"- {r}" for r in unique)
+            )
+        return (
+            f"## Review Feedback — Attempt #{round_number} Returned No Findings\n\n"
+            "Your previous review of this pull request produced **zero** actionable findings. "
+            f"{escalation}"
+            f"{skip_note}\n\n"
+            f"Previous verdict: **{result.verdict.value}** — "
+            f"{result.summary or result.reason or 'no explanation provided'}\n\n"
+            "Look for genuine issues: bugs, logic errors, security problems, "
+            "performance concerns, API misuse, race conditions, missing edge cases, "
+            "and architectural problems. Only report issues you can confirm by "
+            "reading the affected files.\n\n"
+            "If after careful re-examination you truly find no issues, "
+            "explain why the change is correct."
+        )
+
+    def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
+        return "Phase exceeded max turns" in str(exc)
+
+    def _default_reason(self, count: int) -> str:
+        return (
+            f"Merged {count} unique findings from "
+            f"{len(_PHASES)} review phases."
+        )
+
+
+    def _normalize_suggestions(self, raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "line": str(entry.get("line", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "line": "",
+                    "description": entry,
+                })
+        return result
+
+    def _normalize_praise(self, raw: Any) -> list[dict[str, str]]:
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                result.append({
+                    "file": str(entry.get("file", "")),
+                    "description": str(entry.get("description", "")),
+                })
+            elif isinstance(entry, str):
+                result.append({
+                    "file": "",
+                    "description": entry,
+                })
+        return result
+
+
+    def review(self, diff: object, context: object) -> CodeReview:
+        """Not used in production; raises NotImplementedError."""
+        raise NotImplementedError(
+            "Use review_prompt(ComposedPrompt) for staged multi-phase review"
+        )
+
+
+    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
+        """Run all review phases against the composed prompt's repository."""
+        repo_path = prompt.repo_path
+        if not repo_path or not repo_path.strip():
+            raise ValueError(
+                "repo_path is required for staged multi-phase review"
+            )
+        changed_files = self._extract_file_listing(prompt.content)
+        return self._run_phases_full_retry(repo_path.strip(), changed_files)
 
     def _run_phases_full_retry(
         self,
@@ -311,50 +463,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             self._MAX_FEEDBACK_ROUNDS,
         )
         return best
-
-    @staticmethod
-    def _build_feedback_context(
-        result: CodeReview,
-        round_number: int,
-        skip_reasons: list[str] | None = None,
-    ) -> str:
-        """Build a feedback prompt from a zero-item review result.
-
-        Each successive round escalates urgency so the LLM knows this
-        is a repeated failure, not a one-off retry.
-        """
-        escalation = (
-            "This is unusual for a real code change — please re-examine "
-            "the diff more carefully."
-            if round_number == 1
-            else (
-                f"This is your {round_number}{'st' if round_number == 1 else 'nd'} attempt. Every prior attempt "
-                "also found nothing actionable. Re-examine with fresh eyes: "
-                "assume the diff contains issues and dig deeper."
-            )
-        )
-        skip_note = ""
-        if skip_reasons:
-            unique = sorted(set(skip_reasons))
-            skip_note = (
-                "\n\nItems you reported in the previous attempt were dropped "
-                "for these reasons (fix them in this attempt):\n"
-                + "\n".join(f"- {r}" for r in unique)
-            )
-        return (
-            f"## Review Feedback — Attempt #{round_number} Returned No Findings\n\n"
-            "Your previous review of this pull request produced **zero** actionable findings. "
-            f"{escalation}"
-            f"{skip_note}\n\n"
-            f"Previous verdict: **{result.verdict.value}** — "
-            f"{result.summary or result.reason or 'no explanation provided'}\n\n"
-            "Look for genuine issues: bugs, logic errors, security problems, "
-            "performance concerns, API misuse, race conditions, missing edge cases, "
-            "and architectural problems. Only report issues you can confirm by "
-            "reading the affected files.\n\n"
-            "If after careful re-examination you truly find no issues, "
-            "explain why the change is correct."
-        )
     def _run_phases(
         self,
         repo_path: str,
@@ -461,17 +569,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         return self._verify_and_rebuild(self._merge_items(all_items, last_phase_result), repo_path, changed_files)
 
 
-    def review_prompt(self, prompt: ComposedPrompt) -> CodeReview:
-        """Run all review phases against the composed prompt's repository."""
-        repo_path = prompt.repo_path
-        if not repo_path or not repo_path.strip():
-            raise ValueError(
-                "repo_path is required for staged multi-phase review"
-            )
-        changed_files = self._extract_file_listing(prompt.content)
-        return self._run_phases_full_retry(repo_path.strip(), changed_files)
-
-
     def _run_phase_with_retry(
         self,
         phase_name: str,
@@ -501,10 +598,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 )
                 tool_service = ExplorationToolService(repo_path, changed_files=changed_files)
         raise RuntimeError("Unreachable: _max_retries must be >= 1")
-
-    @staticmethod
-    def _is_max_turns_exceeded(exc: LlmUnavailableError) -> bool:
-        return "Phase exceeded max turns" in str(exc)
 
     def _run_conversation(
         self,
@@ -662,8 +755,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         for item in items:
             desc = item.description
-            if desc.endswith(self._DUPLICATE_SUFFIX):
-                desc = desc[: -len(self._DUPLICATE_SUFFIX)]
+            desc = desc.removesuffix(self._DUPLICATE_SUFFIX)
             key = (
                 item.file_path or "",
                 str(item.severity),
@@ -684,7 +776,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             else ReviewVerdict.APPROVED
         )
 
-        reason = ReasonBuilder.build(merged)
+        reason = self._reason_builder.build(merged)
         summary = ""
         suggestions: list[ReviewSuggestion] = []
         praise: list[ReviewPraise] = []
@@ -1005,52 +1097,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         return "\n\n".join(parts)
 
-    @classmethod
-    def _extract_file_context(cls, file_path: Path, snippet: str) -> str:
-        """Extract surrounding context from a file around a matching code snippet.
-
-        Searches for the first non-blank line of the snippet in the file using
-        whitespace-normalized matching. Falls back to the first 2000 characters
-        of the file if no match is found.
-        """
-        try:
-            file_text = file_path.read_text()
-        except (OSError, UnicodeDecodeError):
-            return "(file could not be read)"
-
-        if not snippet or not snippet.strip():
-            return file_text[:2000]
-
-        snippet_lines = [
-            ln.strip()
-            for ln in snippet.strip().split("\n")
-            if ln.strip()
-        ]
-        if not snippet_lines:
-            return file_text[:2000]
-
-        file_lines = file_text.split("\n")
-        first_snippet_line = snippet_lines[0]
-
-        match_line = None
-        for idx, line in enumerate(file_lines):
-            if line.strip() == first_snippet_line:
-                match_line = idx
-                break
-
-        if match_line is None:
-            for idx, line in enumerate(file_lines):
-                if first_snippet_line in line.strip():
-                    match_line = idx
-                    break
-
-        if match_line is None:
-            return file_text[:2000]
-
-        window_start = max(0, match_line - 10)
-        window_end = min(len(file_lines), match_line + 50)
-        return "\n".join(file_lines[window_start:window_end])
-
     def _generate_reason(
         self, merged_items: list[ReviewItem], verdict: ReviewVerdict
     ) -> str:
@@ -1082,52 +1128,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         except LlmUnavailableError:
             logger.warning("Failed to generate reason from LLM; using fallback")
             return self._default_reason(len(merged_items))
-
-    @staticmethod
-    def _default_reason(count: int) -> str:
-        return (
-            f"Merged {count} unique findings from "
-            f"{len(_PHASES)} review phases."
-        )
-
-
-    @staticmethod
-    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
-        if not isinstance(raw, list):
-            return []
-        result: list[dict[str, str]] = []
-        for entry in raw:
-            if isinstance(entry, dict):
-                result.append({
-                    "file": str(entry.get("file", "")),
-                    "line": str(entry.get("line", "")),
-                    "description": str(entry.get("description", "")),
-                })
-            elif isinstance(entry, str):
-                result.append({
-                    "file": "",
-                    "line": "",
-                    "description": entry,
-                })
-        return result
-
-    @staticmethod
-    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
-        if not isinstance(raw, list):
-            return []
-        result: list[dict[str, str]] = []
-        for entry in raw:
-            if isinstance(entry, dict):
-                result.append({
-                    "file": str(entry.get("file", "")),
-                    "description": str(entry.get("description", "")),
-                })
-            elif isinstance(entry, str):
-                result.append({
-                    "file": "",
-                    "description": entry,
-                })
-        return result
 
     def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
         """Extract verdict metadata from a JSON block in the content.
@@ -1227,13 +1227,6 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 skip_reasons=skip_reasons,
             )
         return None
-
-    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
-        "read_file": ["file", "file_path"],
-        "list_directory": ["path", "directory_path"],
-        "search_codebase": ["pattern"],
-        "run_git": ["command"],
-    }
 
     def _extract_dict_args(
         self, action: str, raw_args: dict[str, Any]

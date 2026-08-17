@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+
 class PromptRendererPort(Protocol):
     """Port for rendering fragment templates with variable substitution.
 

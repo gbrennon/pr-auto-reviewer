@@ -1,20 +1,18 @@
 """Tests for TerminalReviewPublisherAdapter."""
 
-import pytest
 
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
 
-_review_to_json = TerminalReviewPublisherAdapter._review_to_json
+adapter = TerminalReviewPublisherAdapter()
 
 class TestReviewToJson:
     def test_serializes_full_review(self):
@@ -29,7 +27,7 @@ class TestReviewToJson:
             praise=[ReviewSuggestion(file="a.py", description="nice")],
             model_used="test-model",
         )
-        json_text = _review_to_json(review)
+        json_text = adapter._review_to_json(review)
         assert '"verdict"' in json_text
         assert '"approved"' in json_text
         assert '"a.py"' in json_text

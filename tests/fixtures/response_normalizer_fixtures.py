@@ -2,49 +2,42 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class ResponseNormalizerFixtures:
     """Sample LLM response payloads captured from real Ollama outputs."""
 
-    # A well-formed issue from a real LLM review response
-    well_formed_issue: dict[str, Any] = {
+    well_formed_issue: ClassVar[dict[str, Any]] = {
         "file": "src/app.py",
         "line": "42",
         "description": "Missing null check before dereference",
     }
 
-    # An issue with missing optional fields (LLM sometimes omits line)
-    partial_issue: dict[str, Any] = {
+    partial_issue: ClassVar[dict[str, Any]] = {
         "file": "src/utils.py",
         "description": "Use f-string instead of format()",
     }
 
-    # Empty issue dict (LLM hallucination)
-    empty_issue: dict[str, Any] = {}
+    empty_issue: ClassVar[dict[str, Any]] = {}
 
-    # Issue with None values (LLM sometimes sends null)
-    none_issue: dict[str, Any] = {
+    none_issue: ClassVar[dict[str, Any]] = {
         "file": None,
         "line": None,
         "description": None,
     }
 
-    # Well-formed suggestions list
-    suggestions: list[dict[str, Any]] = [
+    suggestions: ClassVar[list[dict[str, Any]]] = [
         {"description": "Consider using async/await", "file": "app.py"},
         {"description": "Add type hints to function signatures"},
     ]
 
-    # Praise items
-    praise: list[dict[str, Any]] = [
+    praise: ClassVar[list[dict[str, Any]]] = [
         {"description": "Clean separation of concerns"},
         {"description": "Good test coverage"},
     ]
 
-    # Various severity values from real LLM outputs
-    severity_samples: list[str] = [
+    severity_samples: ClassVar[list[str]] = [
         "critical",
         "major",
         "minor",
@@ -55,8 +48,7 @@ class ResponseNormalizerFixtures:
         "INFO",
     ]
 
-    # Various category values from real LLM outputs
-    category_samples: list[str] = [
+    category_samples: ClassVar[list[str]] = [
         "bug",
         "security",
         "performance",
@@ -66,19 +58,15 @@ class ResponseNormalizerFixtures:
         "Security",
     ]
 
-    # Reason as list (some LLMs return array)
-    reason_list: list[str] = ["missing error handling", "no input validation"]
+    reason_list: ClassVar[list[str]] = ["missing error handling", "no input validation"]
 
-    # Retry prompt failures
-    retry_failures_single: list[str] = ["missing_severity"]
-    retry_failures_multiple: list[str] = ["missing_severity", "invalid_category"]
-    retry_failures_unknown: list[str] = ["unknown_key"]
+    retry_failures_single: ClassVar[list[str]] = ["missing_severity"]
+    retry_failures_multiple: ClassVar[list[str]] = ["missing_severity", "invalid_category"]
+    retry_failures_unknown: ClassVar[list[str]] = ["unknown_key"]
 
-    # Description formats from LLM outputs
-    description_dict: dict[str, Any] = {"detail": "The function is too long", "line": "42"}
-    description_list: list[str] = ["Missing null check", "No input validation"]
+    description_dict: ClassVar[dict[str, Any]] = {"detail": "The function is too long", "line": "42"}
+    description_list: ClassVar[list[str]] = ["Missing null check", "No input validation"]
     description_int: int = 404
 
-    # Dict/list values for _ensure_str
-    ensure_str_dict: dict[str, Any] = {"key": "value", "status": "error"}
-    ensure_str_list: list[int] = [1, 2, 3]
+    ensure_str_dict: ClassVar[dict[str, Any]] = {"key": "value", "status": "error"}
+    ensure_str_list: ClassVar[list[int]] = [1, 2, 3]

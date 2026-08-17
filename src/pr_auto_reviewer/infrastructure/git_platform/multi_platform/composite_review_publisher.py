@@ -1,8 +1,13 @@
-from pr_auto_reviewer.application.ports.outbound.review_publisher_port import ReviewPublisherPort
+from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
+    ReviewPublisherPort,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import split_repository_prefix
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
+    split_repository_prefix,
+)
+
 
 class CompositeReviewPublisher(ReviewPublisherPort):
     def __init__(self, publishers: dict[str, ReviewPublisherPort]) -> None:

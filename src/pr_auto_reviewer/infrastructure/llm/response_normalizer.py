@@ -4,60 +4,13 @@ import logging
 from typing import Any
 
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
 logger = logging.getLogger(__name__)
 
 
 class ResponseFieldNormalizer:
-
-    def _ensure_str(self, value: Any, default: str = "") -> str:
-        if value is None:
-            return default
-        if isinstance(value, str):
-            return value
-        if isinstance(value, (int, float)):
-            return str(value)
-        if isinstance(value, dict):
-            return ", ".join(f"{k}={v}" for k, v in value.items())
-        if isinstance(value, list):
-            return ", ".join(self._ensure_str(v) for v in value)
-        return str(value)
-
-    def _coerce_description(self, value: Any) -> str:
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        if isinstance(value, dict):
-            parts = ", ".join(f"{k}={v}" for k, v in value.items())
-            return parts if parts else ""
-        if isinstance(value, list):
-            return ", ".join(self._ensure_str(v) for v in value)
-        return str(value)
-
-    def _coerce_severity(self, value: Any) -> str:
-        raw = self._ensure_str(value).lower()
-        if ItemSeverity.accepts(raw):
-            return ItemSeverity.from_value(raw).value
-        if raw in ("high", "major"):
-            return ItemSeverity.MAJOR.value
-        if raw in ("medium", "minor"):
-            return ItemSeverity.MINOR.value
-        if raw in ("low", "info"):
-            return ItemSeverity.INFO.value
-        if "security" in raw or "critical" in raw:
-            return ItemSeverity.CRITICAL.value
-        return ItemSeverity.INFO.value
-
-    def _coerce_category(self, value: Any) -> str:
-        raw = self._ensure_str(value).lower()
-        try:
-            return IssueCategory.from_value(raw).value
-        except (ValueError, AttributeError):
-            pass
-        return IssueCategory.GENERAL.value
     def normalize_issue(self, raw: dict[str, Any], index: int) -> dict[str, str]:
         file_path = self._ensure_str(raw.get("file"), f"file-{index}")
         description = self._coerce_description(raw.get("description") or raw.get("details"))
@@ -109,6 +62,53 @@ class ResponseFieldNormalizer:
         if isinstance(value, list):
             return " ".join(self._ensure_str(r) for r in value)
         return self._ensure_str(value)
+
+    def _ensure_str(self, value: Any, default: str = "") -> str:
+        if value is None:
+            return default
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, dict):
+            return ", ".join(f"{k}={v}" for k, v in value.items())
+        if isinstance(value, list):
+            return ", ".join(self._ensure_str(v) for v in value)
+        return str(value)
+
+    def _coerce_description(self, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            parts = ", ".join(f"{k}={v}" for k, v in value.items())
+            return parts if parts else ""
+        if isinstance(value, list):
+            return ", ".join(self._ensure_str(v) for v in value)
+        return str(value)
+
+    def _coerce_severity(self, value: Any) -> str:
+        raw = self._ensure_str(value).lower()
+        if ItemSeverity.accepts(raw):
+            return ItemSeverity.from_value(raw).value
+        if raw in ("high", "major"):
+            return ItemSeverity.MAJOR.value
+        if raw in ("medium", "minor"):
+            return ItemSeverity.MINOR.value
+        if raw in ("low", "info"):
+            return ItemSeverity.INFO.value
+        if "security" in raw or "critical" in raw:
+            return ItemSeverity.CRITICAL.value
+        return ItemSeverity.INFO.value
+
+    def _coerce_category(self, value: Any) -> str:
+        raw = self._ensure_str(value).lower()
+        try:
+            return IssueCategory.from_value(raw).value
+        except (ValueError, AttributeError):
+            pass
+        return IssueCategory.GENERAL.value
 
 
 class RetryPromptBuilder:

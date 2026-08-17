@@ -18,8 +18,7 @@ class RepoUpdateTracker:
 
     _STORAGE_DIR = Path("/tmp/pr-auto-reviewer/repo-updates")
 
-    @staticmethod
-    def _slugify(full_name: str) -> str:
+    def _slugify(self, full_name: str) -> str:
         """Replace path separators with hyphens for safe filenames."""
         return full_name.replace("/", "-")
 

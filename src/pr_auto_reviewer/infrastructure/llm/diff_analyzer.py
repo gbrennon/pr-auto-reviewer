@@ -40,7 +40,7 @@ class DiffAnalyzer:
                 continue
 
             if in_hunk and current_file and current_hunk_start is not None:
-                if line.startswith("+") or line.startswith(" ") or line.startswith("-"):
+                if line.startswith(("+", " ", "-")):
                     current_hunk_line += 1
                 elif line.startswith("\\"):
                     continue

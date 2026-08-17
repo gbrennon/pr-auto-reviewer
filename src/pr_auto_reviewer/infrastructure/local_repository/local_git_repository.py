@@ -28,6 +28,11 @@ class LocalGitRepository(LocalRepositoryPort):
     def last_clone_path(self) -> Path | None:
         return self._last_clone_path
 
+    def _ssh_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+        return env
+
     def clone(self, pr_id: PullRequestId, clone_url: str) -> Path:
         dir_name = f"{pr_id.repository.replace('/', '_')}_{pr_id.number}"
         dest = self._temp_base_dir / dir_name
@@ -153,15 +158,10 @@ class LocalGitRepository(LocalRepositoryPort):
             text=True,
             timeout=timeout,
             env=self._ssh_env(),
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(
                 f"git {' '.join(args)} failed: {result.stderr.strip()}"
             )
         return result.stdout
-
-    @staticmethod
-    def _ssh_env() -> dict[str, str]:
-        env = os.environ.copy()
-        env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
-        return env

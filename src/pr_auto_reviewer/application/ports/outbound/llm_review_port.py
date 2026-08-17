@@ -2,10 +2,11 @@
 
 from typing import Protocol
 
+from ....domain.fragments.entities.composed_prompt import ComposedPrompt
+from ....domain.value_objects.code_review import CodeReview
 from ....domain.value_objects.pull_request_diff import PullRequestDiff
 from ....domain.value_objects.repository_context import RepositoryContext
-from ....domain.value_objects.code_review import CodeReview
-from ....domain.fragments.entities.composed_prompt import ComposedPrompt
+
 
 class LlmReviewPort(Protocol):
     def review(self, diff: PullRequestDiff, context: RepositoryContext) -> CodeReview:

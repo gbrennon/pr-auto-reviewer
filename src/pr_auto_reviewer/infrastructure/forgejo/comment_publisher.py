@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+import requests
+
 from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
     CommentPublisherPort,
 )
@@ -30,7 +32,7 @@ class ForgejoCommentPublisher(CommentPublisherPort):
         try:
             response = self._client.post(path, {"body": body}, repo=pr_id.repository)
             logger.info("Comment posted on %s response=%s", pr_id, list(response.keys()) if isinstance(response, dict) else "ok")
-        except Exception:
+        except requests.RequestException:
             logger.warning(
                 "Failed to post comment on %s (non-fatal)", pr_id
             )

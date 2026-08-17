@@ -2,6 +2,7 @@ from pr_auto_reviewer.infrastructure.context.python_version_detector import (
     PythonVersionDetector,
 )
 
+
 class TestPythonVersionDetector:
 
     def test_detect_when_has_pyproject_then_returns_3_9(self):

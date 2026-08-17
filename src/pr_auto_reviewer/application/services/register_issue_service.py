@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.domain.messages.commands.register_issue_command import RegisterIssueCommand
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
+    RegisterIssueCommand,
+)
+
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.pull_request_not_found_error import PullRequestNotFoundError
 from ...domain.exceptions.review_item_not_found_error import ReviewItemNotFoundError
+from ...domain.services.review_item_parser import ReviewItemParser
+from ..ports.inbound.register_issue_port import RegisterIssuePort
+from ..ports.outbound.issue_tracker_port import IssueTrackerPort
 from ..ports.outbound.pull_request_repository import PullRequestRepository
 from ..ports.outbound.review_reader_port import ReviewReaderPort
-from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.inbound.register_issue_port import RegisterIssuePort
-from ...domain.services.review_item_parser import ReviewItemParser
 from ..serializers.issue_body_builder import IssueBodyBuilder
 
 logger = logging.getLogger(__name__)
@@ -38,30 +41,6 @@ class RegisterIssueService(RegisterIssuePort):
         self._review_item_parser = review_item_parser
         self._issue_tracker = issue_tracker
         self._issue_body_builder = issue_body_builder
-
-    def _find_item(self, items: list[ReviewItem], issue_id: str) -> ReviewItem:
-        """Return the ReviewItem whose ``id`` (or fallback ``number``)
-        matches *issue_id*.
-
-        Raises:
-            ReviewItemNotFoundError: when no item matches.
-        """
-        for item in items:
-            if item.id == issue_id:
-                return item
-
-        try:
-            id_ = int(issue_id)
-        except ValueError:
-            pass
-        else:
-            for item in items:
-                if item.number == id_:
-                    return item
-
-        raise ReviewItemNotFoundError(
-            f"review item '{issue_id}' not found in the latest review"
-        )
 
     def execute(self, command: RegisterIssueCommand) -> None:
         logger.info(
@@ -96,4 +75,28 @@ class RegisterIssueService(RegisterIssuePort):
 
         logger.info(
             "Issue '%s' registered for PR %s", command.issue_id, command.pr_id,
+        )
+
+    def _find_item(self, items: list[ReviewItem], issue_id: str) -> ReviewItem:
+        """Return the ReviewItem whose ``id`` (or fallback ``number``)
+        matches *issue_id*.
+
+        Raises:
+            ReviewItemNotFoundError: when no item matches.
+        """
+        for item in items:
+            if item.id == issue_id:
+                return item
+
+        try:
+            id_ = int(issue_id)
+        except ValueError:
+            pass
+        else:
+            for item in items:
+                if item.number == id_:
+                    return item
+
+        raise ReviewItemNotFoundError(
+            f"review item '{issue_id}' not found in the latest review"
         )

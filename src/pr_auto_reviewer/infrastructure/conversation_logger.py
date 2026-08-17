@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -44,7 +44,7 @@ class MarkdownConversationLogger(ConversationLoggerPort):
         phase_dir = self._base_dir / safe_pr
         phase_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         safe_phase = phase_name.replace(" ", "_").replace("—", "-").lower()
         file_path = phase_dir / f"{safe_phase}_{timestamp}.md"
 

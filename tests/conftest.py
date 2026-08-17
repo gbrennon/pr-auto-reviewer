@@ -73,16 +73,16 @@ class _StubReviewService:
         self.call_args_list: list = []
         self._last_call_args = None
 
+    @property
+    def call_args(self):
+        """Return call_args for the most recent call (like MagicMock)."""
+        return self._last_call_args
+
     def execute(self, command) -> None:
         self.commands.append(command)
         self.call_count = len(self.commands)
         self._last_call_args = _Call((command,))
         self.call_args_list.append(self._last_call_args)
-
-    @property
-    def call_args(self):
-        """Return call_args for the most recent call (like MagicMock)."""
-        return self._last_call_args
 
     def assert_called_once(self) -> None:
         assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"
@@ -123,7 +123,6 @@ def _make_ollama_fake_post(response_fixture: str, *, raise_exc: Exception | None
     _fixtures_dir = _Path(__file__).parent / "fixtures" / "ollama_responses"
 
     def _fake_post(url, *, json=None, timeout=None, **kwargs):
-        import requests as _requests
         if raise_exc is not None:
             raise raise_exc
         fixture_path = _fixtures_dir / response_fixture

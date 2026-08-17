@@ -3,6 +3,7 @@
 import re
 from enum import StrEnum
 
+
 class ReviewVerdict(StrEnum):
     """Enumerated conclusion of a code review.
 
@@ -15,7 +16,7 @@ class ReviewVerdict(StrEnum):
     COMMENTED = "commented"
 
     @classmethod
-    def coerce(cls, value: object) -> "ReviewVerdict | None":
+    def coerce(cls, value: object) -> ReviewVerdict | None:
         """Map free-form LLM verdict output onto the enum, or None if unknown."""
         if value is None:
             return None

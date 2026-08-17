@@ -12,5 +12,4 @@ class ReasonBuilderPort(Protocol):
     formatting (e.g. grouping by severity and category).
     """
 
-    @staticmethod
     def build(items: list[ReviewItem]) -> str: ...

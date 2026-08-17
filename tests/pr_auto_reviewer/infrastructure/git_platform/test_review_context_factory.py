@@ -16,7 +16,8 @@ from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryC
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
-from tests.pr_auto_reviewer.application.stubs import StubRepositoryContext
+from tests.fakes import FakeRepositoryContext
+
 
 class _SpyComposeReviewPrompt(ComposeReviewPromptPort):
 
@@ -55,7 +56,7 @@ def _make_diff(
 class TestReviewContextFactoryBuild:
 
     def test_returns_composed_prompt_from_compose_port(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -66,7 +67,7 @@ class TestReviewContextFactoryBuild:
         assert result.fragments_used == ["f1"]
 
     def test_fetches_repository_context_with_correct_pr_id(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
         pr_id = _make_pr_id()
@@ -76,7 +77,7 @@ class TestReviewContextFactoryBuild:
         assert repo_ctx.fetch_calls == [pr_id]
 
     def test_merges_pr_title_into_repository_context(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -86,7 +87,7 @@ class TestReviewContextFactoryBuild:
         assert merged_ctx.pr_title == "My PR Title"
 
     def test_merges_pr_description_into_repository_context(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -96,7 +97,7 @@ class TestReviewContextFactoryBuild:
         assert merged_ctx.pr_description == "Fixes bug #42"
 
     def test_passes_commit_messages_to_build_fragment_context(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
         msgs = ["fix: correct off-by-one", "refactor: extract helper"]
@@ -107,7 +108,7 @@ class TestReviewContextFactoryBuild:
         assert received_msgs == msgs
 
     def test_passes_none_for_empty_commit_messages(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -117,7 +118,7 @@ class TestReviewContextFactoryBuild:
         assert received_msgs is None
 
     def test_builds_review_context_with_correct_diff_content(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -127,7 +128,7 @@ class TestReviewContextFactoryBuild:
         assert rctx.diff == "+def bar():\n    pass\n"
 
     def test_builds_review_context_with_sorted_file_paths(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -139,7 +140,7 @@ class TestReviewContextFactoryBuild:
         assert rctx.file_paths == ["a.py", "m.py", "z.py"]
 
     def test_builds_review_context_with_language_from_repository_context(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -149,7 +150,7 @@ class TestReviewContextFactoryBuild:
         assert rctx.language == "python"
 
     def test_builds_review_context_with_serialized_repository_context(self) -> None:
-        repo_ctx = StubRepositoryContext(
+        repo_ctx = FakeRepositoryContext(
             ctx=RepositoryContext(architecture_hint="hexagonal", conventions="Use types"),
         )
         compose = _SpyComposeReviewPrompt()
@@ -164,7 +165,7 @@ class TestReviewContextFactoryBuild:
 
     def test_build_without_title_and_description_does_not_crash(self) -> None:
         """When pr_title and pr_description are omitted (None), the build must succeed."""
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
@@ -174,7 +175,7 @@ class TestReviewContextFactoryBuild:
         assert compose.execute_calls[0].diff == "+def foo(): pass\n"
 
     def test_repo_path_comes_from_diff_clone_path(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         pr_id = PullRequestId(repository="forgejo:gbrennon/pr-auto-reviewer", number=112)
         diff = _make_diff()
@@ -197,7 +198,7 @@ class TestReviewContextFactoryBuild:
         assert "/tmp/clones/gbrennon_pr-auto-reviewer_112" == result.repo_path
 
     def test_repo_path_empty_when_no_clone(self) -> None:
-        repo_ctx = StubRepositoryContext()
+        repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
