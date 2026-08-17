@@ -8,8 +8,17 @@ import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
-from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
+from pr_auto_reviewer.presentation.polling_daemon import (
+    PollingDaemon,
+    PollingDaemonConfig,
+)
+from pr_auto_reviewer.presentation.ports import (
+    OpenPullRequest,
+    PrListerPort,
+    RepoInfo,
+    RepoListerPort,
+)
+
 
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:
@@ -174,7 +183,7 @@ class TestPollingDaemon:
 
         with patch(
             "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
-        ) as mock_logger:
+        ) as _mock_logger:
             daemon.start()
 
         mock_review_service.execute.assert_called_once()
