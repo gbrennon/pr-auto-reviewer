@@ -339,8 +339,7 @@ class TestCliRunnerE2E:
 
         mock_review_reader.get_latest_review.return_value = "1. [security] [MAJOR] src/auth.py\n\nissue"
         mock_item_parser.parse.return_value = [
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MAJOR,
                 category="security",
                 file_path="src/auth.py",

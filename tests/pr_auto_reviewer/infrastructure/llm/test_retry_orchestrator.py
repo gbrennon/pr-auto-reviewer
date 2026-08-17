@@ -50,8 +50,7 @@ class TestRetryOrchestrator:
         self, verdict: ReviewVerdict = ReviewVerdict.CHANGES_REQUESTED,
     ) -> CodeReview:
         items = [
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MAJOR,
                 category=IssueCategory.BUG,
                 file_path="src/foo.py",

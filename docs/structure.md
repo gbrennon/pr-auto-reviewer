@@ -307,12 +307,15 @@ src/pr_auto_reviewer/
 │   │   ├── advisor_agent.py
 │   │   ├── architect_agent.py
 │   │   ├── conversation.py
+│   │   ├── conversation_decision.py
+│   │   ├── conversation_guardrails.py
 │   │   ├── conversation_message.py
 │   │   ├── engineer_agent.py
 │   │   ├── explorer_agent.py
 │   │   ├── manager_agent.py
 │   │   ├── phase_result.py
 │   │   ├── reviewer_agent.py
+│   │   ├── sub_review_guardrails.py
 │   │   ├── turn_parse_result.py
 │   │   └── review_phase.py
 │   ├── fragments/
@@ -396,7 +399,6 @@ src/pr_auto_reviewer/
 │   │   ├── __init__.py
 │   │   ├── ollama_llm_adapter.py
 │   │   ├── ollama_chat_client.py
-│   │   ├── ollama_exploratory_chat_adapter.py
 │   │   ├── ollama_agent_adapter.py
 │   │   ├── prompt_builder.py
 │   │   ├── prompt_budget.py

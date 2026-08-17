@@ -20,9 +20,11 @@ class CompositeIssueTracker(IssueTrackerPort):
     def __init__(self, trackers: dict[str, IssueTrackerPort]) -> None:
         self._trackers = trackers
 
-    def create(self, repository: str, title: str, body: str) -> Issue:
+    def create(
+        self, repository: str, title: str, body: str, source_item_id: str = ""
+    ) -> Issue:
         platform, clean_repo = split_repository_prefix(repository)
         tracker = self._trackers.get(platform)
         if tracker is None:
             raise ValueError(f"No issue tracker for platform: {platform}")
-        return tracker.create(clean_repo, title, body)
+        return tracker.create(clean_repo, title, body, source_item_id)

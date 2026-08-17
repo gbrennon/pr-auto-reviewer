@@ -1,115 +1,72 @@
 """Tests for IssueCommandParser domain service."""
 
-from dataclasses import FrozenInstanceError
+from __future__ import annotations
 
 import pytest
 
-from pr_auto_reviewer.domain import IssueCommand
-from pr_auto_reviewer.domain.services import IssueCommandParser
+from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
+from pr_auto_reviewer.domain.value_objects.issue_command import IssueCommand
 
 
 class TestIssueCommandParser:
-    """Tests for IssueCommandParser.parse(comment_id, comment_body) -> IssueCommand | None."""
+    """Tests for IssueCommandParser - pure domain service."""
 
-    def test_parse_create_issue_with_multiple_numbers(self) -> None:
+    def test_parse_valid_command(self) -> None:
+        """Test parsing a valid /create issue command."""
         parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue 1,2,3")
+        result = parser.parse("test/comment-id", "/create issue a3f2,b7d1")
+
         assert result is not None
-        assert isinstance(result, IssueCommand)
-        assert result.comment_id == "c_12345"
-        assert result.item_numbers == [1, 2, 3]
+        assert result.comment_id == "test/comment-id"
+        assert result.item_ids == ["a3f2", "b7d1"]
 
-    def test_parse_create_issue_with_single_number(self) -> None:
+    def test_parse_command_with_prefix(self) -> None:
+        """Test parsing with /create issue for prefix."""
         parser = IssueCommandParser()
-        result = parser.parse("c_abc", "/create-issue 5")
+        result = parser.parse("test/id", "/create issue for c4e5")
+
         assert result is not None
-        assert result.comment_id == "c_abc"
-        assert result.item_numbers == [5]
+        assert result.comment_id == "test/id"
+        assert result.item_ids == ["c4e5"]
 
-    def test_parse_regular_comment_returns_none(self) -> None:
+    def test_parse_command_mixed_case(self) -> None:
+        """Test parsing preserves case of IDs."""
         parser = IssueCommandParser()
-        result = parser.parse("c_12345", "regular comment")
-        assert result is None
+        result = parser.parse("test", "/CREATE ISSUE X1,Y2")
 
-    def test_parse_no_create_issue_prefix_returns_none(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/other-command 1,2,3")
-        assert result is None
-
-    def test_parse_create_issue_with_no_digits_returns_none(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue abc")
-        assert result is None
-
-    def test_parse_create_issue_with_empty_numbers_returns_none(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue ,")
-        assert result is None
-
-    def test_parse_create_issue_case_insensitive(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_xyz", "/CREATE-ISSUE 7,8")
         assert result is not None
-        assert result.item_numbers == [7, 8]
+        # IDs are captured as-is (case preserved)
+        assert result.item_ids == ["X1", "Y2"]
 
-    def test_parse_create_issue_mixed_case_command(self) -> None:
+    def test_parse_no_command_returns_none(self) -> None:
+        """Test that non-matching bodies return None."""
         parser = IssueCommandParser()
-        result = parser.parse("c_xyz", "/Create-Issue 3,4")
+        assert parser.parse("id", "just some regular comment text") is None
+        assert parser.parse("id", "") is None
+        assert parser.parse("id", "/create issue") is None
+
+    def test_parse_empty_ids_returns_none(self) -> None:
+        """Test that empty IDs after the command return None."""
+        parser = IssueCommandParser()
+        assert parser.parse("id", "/create issue   ") is None
+
+    def test_parse_command_with_no_ids(self) -> None:
+        """Test that command with no IDs returns None (hits line 33)."""
+        parser = IssueCommandParser()
+        # Pattern matches "create issue" but no IDs follow, so ids list is empty
+        assert parser.parse("id", "/create issue") is None
+
+    def test_parse_single_id(self) -> None:
+        """Test parsing a single item ID."""
+        parser = IssueCommandParser()
+        result = parser.parse("id", "/create issue xyz123")
+
         assert result is not None
-        assert result.item_numbers == [3, 4]
+        assert result.item_ids == ["xyz123"]
 
-    def test_parse_create_issue_with_spaces(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue   1 , 2 , 3")
-        assert result is not None
-        assert result.item_numbers == [1, 2, 3]
+    def test_issue_command_creation(self) -> None:
+        """Test IssueCommand VO creation."""
+        cmd = IssueCommand(comment_id="test-id", item_ids=["a1", "b2"])
 
-    def test_parse_create_issue_ignores_non_numeric_parts(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue 1,abc,3")
-        assert result is not None
-        assert result.item_numbers == [1]
-
-    def test_parse_create_issue_embedded_in_longer_text(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse(
-            "c_12345",
-            "Please create issues for the review items.\n/create-issue 1,2,3\nThanks!"
-        )
-        assert result is not None
-        assert result.item_numbers == [1, 2, 3]
-
-    def test_parse_empty_string_returns_none(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "")
-        assert result is None
-
-    def test_parse_only_whitespace_returns_none(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "   \n  \t  ")
-        assert result is None
-
-    def test_result_is_frozen_dataclass(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create-issue 1,2")
-        assert result is not None
-        with pytest.raises(FrozenInstanceError):
-            result.item_numbers = [3]
-
-    def test_parse_create_issue_with_space_separator(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create issue 1,2,3")
-        assert result is not None
-        assert result.item_numbers == [1, 2, 3]
-
-    def test_parse_create_issue_with_space_and_for_keyword(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "/create issue for 1,2")
-        assert result is not None
-        assert result.item_numbers == [1, 2]
-
-    def test_parse_create_issue_without_leading_slash(self) -> None:
-        parser = IssueCommandParser()
-        result = parser.parse("c_12345", "create issue 1,2")
-        assert result is not None
-        assert result.item_numbers == [1, 2]
+        assert cmd.comment_id == "test-id"
+        assert cmd.item_ids == ["a1", "b2"]

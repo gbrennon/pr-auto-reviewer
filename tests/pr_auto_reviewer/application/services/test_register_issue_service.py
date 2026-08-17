@@ -36,6 +36,10 @@ class TestRegisterIssueService:
         parser = ReviewItemParser()
         builder = IssueBodyBuilder()
 
+        # Parse the review to get the actual generated ID
+        items = parser.parse(mock_review_reader.get_latest_review.return_value)
+        generated_id = items[0].id
+
         svc = RegisterIssueService(
             mock_pr_repository, mock_review_reader, parser,
             mock_issue_tracker, builder,
@@ -44,8 +48,8 @@ class TestRegisterIssueService:
             RegisterIssueCommand(
                 pr_id=_pr_id,
                 head_sha=_sha,
-                issue_id="1",
-                command_text="issue 1",
+                issue_id=generated_id,
+                command_text=f"issue {generated_id}",
             )
         )
 
@@ -66,6 +70,10 @@ class TestRegisterIssueService:
         parser = ReviewItemParser()
         builder = IssueBodyBuilder()
 
+        # Parse the review to get the actual generated ID
+        items = parser.parse(mock_review_reader.get_latest_review.return_value)
+        generated_id = items[0].id
+
         svc = RegisterIssueService(
             mock_pr_repository, mock_review_reader, parser,
             mock_issue_tracker, builder,
@@ -74,8 +82,8 @@ class TestRegisterIssueService:
             RegisterIssueCommand(
                 pr_id=_pr_id,
                 head_sha=_sha,
-                issue_id="1",
-                command_text="issue 1",
+                issue_id=generated_id,
+                command_text=f"issue {generated_id}",
             )
         )
 
@@ -189,7 +197,6 @@ class TestRegisterIssueService:
             IssueBodyBuilder(),
         )
         item = ReviewItem(
-            number=1,
             severity=ItemSeverity.MAJOR,
             category="bug",
             file_path="x.py",

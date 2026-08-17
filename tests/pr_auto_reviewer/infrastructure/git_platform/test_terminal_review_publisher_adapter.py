@@ -7,6 +7,7 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
     TerminalReviewPublisherAdapter,
 )
 
+
 class TestTerminalReviewPublisherAdapter:
     def test_writes_to_file(self, tmp_path, monkeypatch):
         out_file = tmp_path / "subdir" / "review.txt"

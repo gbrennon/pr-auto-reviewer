@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid as _uuid
 from pathlib import Path
 from typing import Any
 
@@ -202,11 +203,11 @@ class ReviewResponseParser:
             re.MULTILINE,
         )
         items: list[ReviewItem] = []
-        for i, match in enumerate(pattern.finditer(content), 1):
+        for match in pattern.finditer(content):
             severity_raw, category_raw, file_path, description = match.groups()
+            item_id = format(_uuid.uuid7().int, "04x")[:4]
             items.append(
                 ReviewItem(
-                    number=i,
                     severity=ItemSeverity.from_value(severity_raw),
                     category=IssueCategory.from_value(category_raw),
                     file_path=file_path.strip(),
@@ -214,6 +215,7 @@ class ReviewResponseParser:
                     line="",
                     current_code="",
                     suggested_fix="",
+                    id=item_id,
                 )
             )
         return items
@@ -1088,7 +1090,6 @@ class ReviewResponseParser:
             else:
                 category_value = ReviewResponseParser._infer_type(description, severity_value)
             review_item = ReviewItem(
-                number=i,
                 severity=ItemSeverity.from_value(severity_value),
                 category=IssueCategory.from_value(category_value),
                 file_path=str(item_dict.get("file", "")),
@@ -1096,6 +1097,7 @@ class ReviewResponseParser:
                 line=str(item_dict.get("line", "")),
                 current_code=str(item_dict.get("current_code", "")),
                 suggested_fix=str(item_dict.get("suggested_fix", "")),
+                id=format(_uuid.uuid7().int, "04x")[:4],
             )
             if not review_item.file_path and not review_item.description:
                 continue

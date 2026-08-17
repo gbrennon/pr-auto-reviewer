@@ -33,7 +33,6 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
         def _convert(item):
             if isinstance(item, ReviewItem):
                 return _compact({
-                    "number": item.number,
                     "severity": item.severity.value,
                     "category": item.category.value,
                     "file_path": item.file_path,
