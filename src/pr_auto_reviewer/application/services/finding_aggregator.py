@@ -9,6 +9,9 @@ from pr_auto_reviewer.application.ports.outbound.reason_builder_port import (
     ReasonBuilderPort,
 )
 from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
+from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
+    SubReviewGuardrails,
+)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
@@ -91,12 +94,7 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         for i, item in enumerate(merged, 1):
             object.__setattr__(item, "number", i)
 
-        if not merged:
-            verdict = ReviewVerdict.APPROVED
-        elif any(item.is_blocking for item in merged):
-            verdict = ReviewVerdict.CHANGES_REQUESTED
-        else:
-            verdict = ReviewVerdict.APPROVED
+        verdict = SubReviewGuardrails().verdict_for(merged)
 
         reason = self._reason_builder.build(merged)
         summary = ""
