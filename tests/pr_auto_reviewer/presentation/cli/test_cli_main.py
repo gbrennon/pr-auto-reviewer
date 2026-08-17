@@ -6,6 +6,7 @@ import pytest
 
 from pr_auto_reviewer.cli import SERVICE_NAME, main
 
+
 class TestCliServiceCommands:
     """E2E tests for pr-auto-reviewer service subcommands."""
 
@@ -43,8 +44,7 @@ class TestCliServiceCommands:
         )
 
     def test_help_flag_shows_service_commands(self) -> None:
-        with patch("sys.argv", ["pr-auto-reviewer", "--help"]):
-            with pytest.raises(SystemExit) as exc_info:
-                main()
+        with patch("sys.argv", ["pr-auto-reviewer", "--help"]), pytest.raises(SystemExit) as exc_info:
+            main()
 
         assert exc_info.value.code == 0

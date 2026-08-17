@@ -9,6 +9,7 @@ the command must carry every attribute filled — no default or empty values.
 import json
 from contextlib import redirect_stdout
 from io import StringIO
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
@@ -147,7 +148,7 @@ class FakeLlmReview(LlmReviewPort):
 class TestReviewCliJsonOutput:
     """E2E: the ``review`` CLI command must emit a fully-populated JSON payload."""
 
-    _TOP_LEVEL_KEYS = {
+    _TOP_LEVEL_KEYS: ClassVar[set[str]] = {
         "verdict",
         "reason",
         "summary",
@@ -156,7 +157,7 @@ class TestReviewCliJsonOutput:
         "praise",
         "model_used",
     }
-    _ITEM_KEYS = {
+    _ITEM_KEYS: ClassVar[set[str]] = {
         "number",
         "severity",
         "category",
@@ -167,14 +168,14 @@ class TestReviewCliJsonOutput:
         "current_code",
         "suggested_fix",
     }
-    _SUGGESTION_KEYS = {
+    _SUGGESTION_KEYS: ClassVar[set[str]] = {
         "file",
         "line",
         "description",
         "current_code",
         "suggested_code",
     }
-    _PRAISE_KEYS = {"file", "description"}
+    _PRAISE_KEYS: ClassVar[set[str]] = {"file", "description"}
 
     @classmethod
     def _assert_no_defaults(cls, value) -> None:
