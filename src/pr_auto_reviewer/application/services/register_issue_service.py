@@ -70,7 +70,7 @@ class RegisterIssueService(RegisterIssuePort):
 
         title, body = self._issue_body_builder.build(pr.id, item)
         self._issue_tracker.create(
-            repository=pr.id.repository, title=title, body=body,
+            repository=pr.id.repository, title=title, body=body, source_item_id=item.id,
         )
 
         logger.info(
@@ -78,8 +78,7 @@ class RegisterIssueService(RegisterIssuePort):
         )
 
     def _find_item(self, items: list[ReviewItem], issue_id: str) -> ReviewItem:
-        """Return the ReviewItem whose ``id`` (or fallback ``number``)
-        matches *issue_id*.
+        """Return the ReviewItem whose ``id`` matches *issue_id*.
 
         Raises:
             ReviewItemNotFoundError: when no item matches.
@@ -87,15 +86,6 @@ class RegisterIssueService(RegisterIssuePort):
         for item in items:
             if item.id == issue_id:
                 return item
-
-        try:
-            id_ = int(issue_id)
-        except ValueError:
-            pass
-        else:
-            for item in items:
-                if item.number == id_:
-                    return item
 
         raise ReviewItemNotFoundError(
             f"review item '{issue_id}' not found in the latest review"

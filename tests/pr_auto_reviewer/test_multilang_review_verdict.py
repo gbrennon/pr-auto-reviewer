@@ -83,8 +83,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.CRITICAL,
                         category=IssueCategory.SECURITY,
                         file_path="app/repository.py",
@@ -103,8 +102,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.CRITICAL,
                         category=IssueCategory.DESIGN,
                         file_path="src/main/java/com/example/OrderService.java",
@@ -124,8 +122,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.MAJOR,
                         category=IssueCategory.BUG,
                         file_path="pkg/handler/user.go",
@@ -143,8 +140,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.CRITICAL,
                         category=IssueCategory.SECURITY,
                         file_path="lib/payment_gateway.rb",
@@ -163,8 +159,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.MAJOR,
                         category=IssueCategory.DESIGN,
                         file_path="Services/ReportGenerator.cs",
@@ -182,8 +177,7 @@ class TestChangesRequestedMultilang:
             CodeReview(
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[
-                    ReviewItem(
-                        number=1,
+                    ReviewItem(id="id-1",
                         severity=ItemSeverity.MINOR,
                         category=IssueCategory.TYPO,
                         file_path="src/infrastructure/persistence/json_dose_record_repository.rs",

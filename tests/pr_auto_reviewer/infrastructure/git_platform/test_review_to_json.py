@@ -19,7 +19,7 @@ class TestReviewToJson:
             reason="lgtm",
             summary="all good",
             items=[
-                ReviewItem(number=0, category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
+                ReviewItem(id="t0", category=IssueCategory.BUG, severity=ItemSeverity.MAJOR,
                           file_path="a.py", description="bad", current_code="x", suggested_fix="y"),
             ],
             praise=[ReviewSuggestion(file="a.py", description="nice")],

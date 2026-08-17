@@ -119,8 +119,7 @@ class TestReviewVerdict:
             verdict=ReviewVerdict.APPROVED,
             model_used="code-review",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.MINOR,
                     category=IssueCategory.QUALITY,
                     file_path="scripts/deploy.sh",

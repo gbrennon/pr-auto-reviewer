@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import uuid as _uuid
 
 from ..entities.review_item import ReviewItem
 from ..value_objects.issue_category import IssueCategory
@@ -45,13 +46,14 @@ class ReviewItemParser:
                 match.group("file_info"), match.group("description"),
             )
 
+            item_id = format(_uuid.uuid7().int, "04x")[:4]
             items.append(ReviewItem(
-                number=int(match.group("number")),
                 severity=ItemSeverity.from_value(match.group("severity")),
                 category=IssueCategory.from_value(match.group("category")),
                 file_path=file_path,
                 description=description,
                 line=line,
+                id=item_id,
             ))
         return items
 

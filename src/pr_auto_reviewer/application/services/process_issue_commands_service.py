@@ -71,20 +71,20 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
     def _fetch_comments(self, pr: PullRequest):
         return self._comment_reader.get_comments(pr.id)
 
-    def _partition_item_numbers(
-        self, requested: list[int], items: list[ReviewItem],
-    ) -> tuple[list[int], list[int]]:
-        valid_numbers = {item.number for item in items}
-        valid: list[int] = []
-        invalid: list[int] = []
+    def _partition_item_ids(
+        self, requested: list[str], items: list[ReviewItem],
+    ) -> tuple[list[str], list[str]]:
+        valid_ids = {item.id for item in items}
+        valid: list[str] = []
+        invalid: list[str] = []
 
-        for n in requested:
-            (valid if n in valid_numbers else invalid).append(n)
+        for id_ in requested:
+            (valid if id_ in valid_ids else invalid).append(id_)
 
         return valid, invalid
 
     def _publish_invalid_items_message(
-        self, pr: PullRequest, invalid: list[int],
+        self, pr: PullRequest, invalid: list[str],
         review_items: list[ReviewItem],
     ) -> None:
         self._comment_publisher.post(
@@ -92,20 +92,21 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
         )
 
     def _create_issues_for_valid_items(
-        self, pr: PullRequest, valid: list[int],
+        self, pr: PullRequest, valid: list[str],
         review_items: list[ReviewItem],
     ) -> list[Issue]:
         created: list[Issue] = []
-        items_by_number = {item.number: item for item in review_items}
+        items_by_id = {item.id: item for item in review_items}
 
-        for item_number in valid:
-            item = items_by_number[item_number]
+        for item_id in valid:
+            item = items_by_id[item_id]
             title, body = self._issue_body_builder.build(pr.id, item)
 
             issue = self._issue_tracker.create(
                 repository=pr.id.repository,
                 title=title,
                 body=body,
+                source_item_id=item.id,
             )
             created.append(issue)
         return created
@@ -131,8 +132,8 @@ class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
                 continue
 
             pr = pr.mark_comment_processed(comment.id)
-            valid, invalid = self._partition_item_numbers(
-                cmd.item_numbers, review_items,
+            valid, invalid = self._partition_item_ids(
+                cmd.item_ids, review_items,
             )
             if invalid:
                 self._publish_invalid_items_message(pr, invalid, review_items)

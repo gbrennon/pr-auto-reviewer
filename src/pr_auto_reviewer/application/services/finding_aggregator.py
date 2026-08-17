@@ -91,9 +91,6 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
             seen.add(key)
             merged.append(item)
 
-        for i, item in enumerate(merged, 1):
-            object.__setattr__(item, "number", i)
-
         verdict = SubReviewGuardrails().verdict_for(merged)
 
         reason = self._reason_builder.build(merged)

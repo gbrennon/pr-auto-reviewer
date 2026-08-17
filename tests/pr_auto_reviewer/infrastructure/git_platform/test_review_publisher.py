@@ -88,7 +88,7 @@ index def456..ghi789 100644
         """_format_body handles None file_path."""
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED, summary="s",
-            items=[ReviewItem(number=1, category="c", severity=ItemSeverity.INFO,
+            items=[ReviewItem(id="1,", category="c", severity=ItemSeverity.INFO,
                               description="d", file_path=None)],
             model_used="m",
         )
@@ -218,7 +218,7 @@ index def456..ghi789 100644
         adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+            items=[ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                               description="Use return True", file_path="src/main.py",
                               current_code="return True", suggested_fix="x")],
             model_used="m",
@@ -348,8 +348,7 @@ index def456..ghi789 100644
             "+return True\n"
         )
         items = [
-            ReviewItem(
-                number=1, severity=ItemSeverity.MAJOR, category="bug",
+            ReviewItem(id="id-1", severity=ItemSeverity.MAJOR, category="bug",
                 description="Blocking", file_path="src/main.py",
                 current_code="return True",
             ),
@@ -403,10 +402,10 @@ index def456..ghi789 100644
         review = CodeReview(
             verdict=ReviewVerdict.COMMENTED, summary="s",
             items=[
-                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                            description="Blocking", file_path="f.py",
                            current_code="x"),
-                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                ReviewItem(id="2,", severity=ItemSeverity.MINOR, category="style",
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],
@@ -435,10 +434,10 @@ index def456..ghi789 100644
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
             items=[
-                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                            description="Blocking", file_path="f.py",
                            current_code="x"),
-                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                ReviewItem(id="2,", severity=ItemSeverity.MINOR, category="style",
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],

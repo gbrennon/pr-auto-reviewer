@@ -9,35 +9,35 @@ class TestIssueCommand:
     """Tests for IssueCommand value object."""
 
     def test_creation_with_items(self) -> None:
-        cmd = IssueCommand(comment_id="12345", item_numbers=[1, 2, 3])
+        cmd = IssueCommand(comment_id="12345", item_ids=["id-1", "id-2", "id-3"])
         assert cmd.comment_id == "12345"
-        assert cmd.item_numbers == [1, 2, 3]
+        assert cmd.item_ids == ["id-1", "id-2", "id-3"]
 
     def test_creation_empty_items(self) -> None:
         cmd = IssueCommand(comment_id="12345")
-        assert cmd.item_numbers == []
+        assert cmd.item_ids == []
 
     def test_equality_same(self) -> None:
-        a = IssueCommand(comment_id="12345", item_numbers=[1, 2])
-        b = IssueCommand(comment_id="12345", item_numbers=[1, 2])
+        a = IssueCommand(comment_id="12345", item_ids=["id-1", "id-2"])
+        b = IssueCommand(comment_id="12345", item_ids=["id-1", "id-2"])
         assert a == b
 
     def test_equality_different_comment_id(self) -> None:
-        a = IssueCommand(comment_id="12345", item_numbers=[1])
-        b = IssueCommand(comment_id="67890", item_numbers=[1])
+        a = IssueCommand(comment_id="12345", item_ids=["id-1"])
+        b = IssueCommand(comment_id="67890", item_ids=["id-1"])
         assert a != b
 
     def test_equality_different_items(self) -> None:
-        a = IssueCommand(comment_id="12345", item_numbers=[1])
-        b = IssueCommand(comment_id="12345", item_numbers=[2])
+        a = IssueCommand(comment_id="12345", item_ids=["id-1"])
+        b = IssueCommand(comment_id="12345", item_ids=["id-2"])
         assert a != b
 
     def test_immutability(self) -> None:
-        cmd = IssueCommand(comment_id="12345", item_numbers=[1])
+        cmd = IssueCommand(comment_id="12345", item_ids=["id-1"])
         with pytest.raises(FrozenInstanceError):
-            cmd.item_numbers = [2]
+            cmd.item_ids = ["id-2"]
 
     def test_hash_consistency(self) -> None:
-        cmd = IssueCommand(comment_id="12345", item_numbers=[1])
+        cmd = IssueCommand(comment_id="12345", item_ids=["id-1"])
         with pytest.raises(TypeError, match="unhashable"):
             hash(cmd)
