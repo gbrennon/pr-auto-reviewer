@@ -15,14 +15,19 @@ Key differences from the old ``OllamaLlmAdapter``:
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
+from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+
 from .ollama_streaming_chat_impl import OllamaStreamingChatClient
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
+
 logger = logging.getLogger(__name__)
 
 

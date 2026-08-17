@@ -17,14 +17,14 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from dataclasses import dataclass
 from typing import Any, ClassVar
+
 import requests
 
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
+from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
@@ -36,9 +36,10 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
+from pr_auto_reviewer.domain.services.review_item_factory import (
+    ReviewItemFactory,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
 )
@@ -50,9 +51,6 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 )
 from pr_auto_reviewer.infrastructure.review_publishers._shared import (
     ReasonBuilder,
-)
-from pr_auto_reviewer.domain.services.review_item_factory import (
-    ReviewItemFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,6 +149,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         self._timeout = ollama_timeout
         self._max_retries = max_retries
         self._parser = ReviewResponseParser()
+        self._reason_builder = ReasonBuilder()
 
     @classmethod
     def _load_phase_prompt(cls, phase_id: str) -> str:
@@ -204,8 +203,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
         window_start = max(0, match_line - 10)
         window_end = min(len(file_lines), match_line + 50)
         return "\n".join(file_lines[window_start:window_end])
-    @staticmethod
-    def _extract_file_listing(composed_content: str) -> list[str]:
+    def _extract_file_listing(self, composed_content: str) -> list[str]:
         """Extract changed file paths from the rendered prompt's diff section."""
         paths: set[str] = set()
         seen_section = False
@@ -215,7 +213,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 continue
             if not seen_section:
                 continue
-            if line.startswith("--- a/") or line.startswith("+++ b/"):
+            if line.startswith(("--- a/", "+++ b/")):
                 raw = line.split(" ", 1)[1] if " " in line else ""
                 if not raw:
                     continue
@@ -226,8 +224,8 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 paths.add(raw)
         return sorted(paths)
 
-    @staticmethod
     def _build_feedback_context(
+        self,
         result: CodeReview,
         round_number: int,
         skip_reasons: list[str] | None = None,
@@ -270,20 +268,17 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             "explain why the change is correct."
         )
 
-    @staticmethod
-    def _is_max_turns_exceeded(exc: LlmUnavailableError) -> bool:
+    def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
         return "Phase exceeded max turns" in str(exc)
 
-    @staticmethod
-    def _default_reason(count: int) -> str:
+    def _default_reason(self, count: int) -> str:
         return (
             f"Merged {count} unique findings from "
             f"{len(_PHASES)} review phases."
         )
 
 
-    @staticmethod
-    def _normalize_suggestions(raw: Any) -> list[dict[str, str]]:
+    def _normalize_suggestions(self, raw: Any) -> list[dict[str, str]]:
         if not isinstance(raw, list):
             return []
         result: list[dict[str, str]] = []
@@ -302,8 +297,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
                 })
         return result
 
-    @staticmethod
-    def _normalize_praise(raw: Any) -> list[dict[str, str]]:
+    def _normalize_praise(self, raw: Any) -> list[dict[str, str]]:
         if not isinstance(raw, list):
             return []
         result: list[dict[str, str]] = []
@@ -761,8 +755,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
 
         for item in items:
             desc = item.description
-            if desc.endswith(self._DUPLICATE_SUFFIX):
-                desc = desc[: -len(self._DUPLICATE_SUFFIX)]
+            desc = desc.removesuffix(self._DUPLICATE_SUFFIX)
             key = (
                 item.file_path or "",
                 str(item.severity),
@@ -783,7 +776,7 @@ class OllamaExploratoryChatAdapter(LlmReviewPort):
             else ReviewVerdict.APPROVED
         )
 
-        reason = ReasonBuilder.build(merged)
+        reason = self._reason_builder.build(merged)
         summary = ""
         suggestions: list[ReviewSuggestion] = []
         praise: list[ReviewPraise] = []

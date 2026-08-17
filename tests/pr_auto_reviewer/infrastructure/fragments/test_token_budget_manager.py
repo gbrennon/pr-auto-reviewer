@@ -6,6 +6,7 @@ from pr_auto_reviewer.infrastructure.fragments.token_budget_manager import (
     TokenBudgetManager,
 )
 
+
 class TestTokenBudgetManager:
     """Tests for TokenBudgetManager token counting and budget control."""
 

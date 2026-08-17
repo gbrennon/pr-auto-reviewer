@@ -10,8 +10,8 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher import (
     LocalChangesetFetcher,
 )
-from tests.fakes.clone_url_resolver_fakes import FakeCloneUrlResolver
-from tests.fakes.local_repository_fakes import FakeLocalRepository
+from tests.fakes import FakeCloneUrlResolver, FakeLocalRepository
+
 
 class TestLocalChangesetFetcher:
     """Tests for LocalChangesetFetcher using a FakeLocalRepository."""

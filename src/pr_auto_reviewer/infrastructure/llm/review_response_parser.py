@@ -15,6 +15,7 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+
 logger = logging.getLogger(__name__)
 
 
@@ -164,9 +165,7 @@ class ReviewResponseParser:
         )
         # Handle verdict and reason (string type)
         verdict_is_string = isinstance(json_result.verdict, str)
-        verdict_empty = (not verdict_is_string or not json_result.verdict.strip())
         reason_is_string = isinstance(json_result.reason, str)
-        reason_empty = (not reason_is_string or not json_result.reason.strip())
         return CodeReview(
             verdict=(markdown_result.verdict if (not verdict_is_string and isinstance(markdown_result.verdict, str) and markdown_result.verdict.strip()) else json_result.verdict),
             reason=(markdown_result.reason if (not reason_is_string and isinstance(markdown_result.reason, str) and markdown_result.reason.strip()) else json_result.reason),
@@ -391,8 +390,7 @@ class ReviewResponseParser:
         praise: list[dict[str, str]] = []
         for match in cls._STRENGTHS_SECTION.finditer(content):
             section = match.group(1)
-            for entry in cls._strength_entries(section):
-                praise.append(entry)
+            praise.extend(cls._strength_entries(section))
         explicit = cls._extract_praise_md(content)
         for entry in explicit:
             if entry not in praise:

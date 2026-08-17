@@ -9,6 +9,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pr_auto_reviewer.application.services.agent_conversation_service import (
+    AgentConversationService,
+)
+from pr_auto_reviewer.application.services.event_logging_handler import (
+    EventLoggingHandler,
+)
+from pr_auto_reviewer.application.services.finding_aggregator import (
+    FindingAggregator,
+)
+from pr_auto_reviewer.application.services.finding_verifier import (
+    FindingVerifier,
+)
+from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
+    MultiPhaseReviewOrchestrator,
+)
+from pr_auto_reviewer.application.services.turn_parser import TurnParser
+from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
@@ -36,30 +54,15 @@ from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
 from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
     ReviewTurnParsedEvent,
 )
-from pr_auto_reviewer.application.services.agent_conversation_service import (
-    AgentConversationService,
-)
-from pr_auto_reviewer.application.services.event_logging_handler import (
-    EventLoggingHandler,
-)
-from pr_auto_reviewer.application.services.finding_aggregator import (
-    FindingAggregator,
-)
-from pr_auto_reviewer.application.services.finding_verifier import (
-    FindingVerifier,
-)
-from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
-    MultiPhaseReviewOrchestrator,
-)
-from pr_auto_reviewer.application.services.turn_parser import TurnParser
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
+)
+from pr_auto_reviewer.infrastructure.conversation_logger import (
+    MarkdownConversationLogger,
 )
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
@@ -75,9 +78,6 @@ from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
 )
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_agent_adapter import (
     OllamaAgentAdapter,
-)
-from pr_auto_reviewer.infrastructure.conversation_logger import (
-    MarkdownConversationLogger,
 )
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,

@@ -12,8 +12,7 @@ from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewCont
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
-from tests.fakes.fragment_repository_fakes import StubFragmentRepository
-from tests.fakes.prompt_renderer_fakes import FakePromptRenderer
+from tests.fakes import FakeFragmentRepository, FakePromptRenderer
 
 
 class TestComposeReviewPromptAdapter:
@@ -24,9 +23,9 @@ class TestComposeReviewPromptAdapter:
         by_language: list[PromptFragment] | None = None,
         universal: list[PromptFragment] | None = None,
         **kwargs,
-    ) -> tuple[ComposeReviewPromptAdapter, StubFragmentRepository]:
+    ) -> tuple[ComposeReviewPromptAdapter, FakeFragmentRepository]:
         """Create an adapter wired to a stub repository with given fragments."""
-        repo = StubFragmentRepository(by_language=by_language, universal=universal)
+        repo = FakeFragmentRepository(by_language=by_language, universal=universal)
         adapter = ComposeReviewPromptAdapter(repository=repo, **kwargs)
         return adapter, repo
 

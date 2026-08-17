@@ -11,7 +11,8 @@ These tests cover the streaming JSON parser regressions:
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import pytest
 import requests

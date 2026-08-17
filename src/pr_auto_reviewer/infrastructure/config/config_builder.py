@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.forgejo_api_url_normalizer import (
     ForgejoApiUrlNormalizer,
@@ -13,7 +15,6 @@ from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
 from pr_auto_reviewer.infrastructure.config.role_suffix_parser import (
     RoleSuffixParser,
 )
-from pathlib import Path
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 
@@ -30,8 +31,7 @@ class ConfigBuilder:
     def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
         return source.get(key, default).strip()
 
-    @staticmethod
-    def _parse_org_token_overrides(source: dict[str, str]) -> OrgTokenOverrides:
+    def _parse_org_token_overrides(self, source: dict[str, str]) -> OrgTokenOverrides:
         github: dict[str, OrgTokenEntry] = {}
         forgejo: dict[str, OrgTokenEntry] = {}
 

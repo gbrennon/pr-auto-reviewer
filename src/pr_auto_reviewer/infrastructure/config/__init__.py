@@ -13,8 +13,8 @@ from pr_auto_reviewer.infrastructure.config.role_suffix_parser import (
 __all__ = [
     "Config",
     "ConfigLoader",
-    "load_config",
     "OrgTokenEntry",
     "OrgTokenOverrides",
     "RoleSuffixParser",
+    "load_config",
 ]

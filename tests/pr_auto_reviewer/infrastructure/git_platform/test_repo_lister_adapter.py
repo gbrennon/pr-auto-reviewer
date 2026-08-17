@@ -3,10 +3,9 @@ from __future__ import annotations
 from pr_auto_reviewer.infrastructure.forgejo.repo_lister import (
     ForgejoRepoLister,
 )
-
-from tests.fakes.http_client import FakeGitPlatformHttpClient
+from tests.fakes import FakeGitPlatformHttpClient
 from tests.fixtures.repo_lister_fixtures import repo_dicts
-from pr_auto_reviewer.presentation.ports.repo_info import RepoInfo
+
 
 class TestForgejoRepoLister:
 

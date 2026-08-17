@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .types import PepEntry, _TYPE_PRIORITY
+from .types import _TYPE_PRIORITY, PepEntry
+
 
 class PepRanker:
     def score(self, pep: PepEntry, target: tuple[int, int]) -> int:

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from tests.fakes.preflight_fakes import FakeHttpClient, FakeResponse
-
 from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers import (
     ForgejoAuthHeaders,
 )
 from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
     PreflightVerifier,
 )
+from tests.fakes import FakeHttpClient, FakeResponse
 
 
 class TestPreflightVerifierNoCache:

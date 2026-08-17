@@ -5,28 +5,22 @@ from __future__ import annotations
 
 import pytest
 
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.container._core_services import (
     CoreServices,
     wire_core_services,
 )
-from pr_auto_reviewer.infrastructure.container._platform_clients import (
-    wire_platform_clients,
-)
 from pr_auto_reviewer.infrastructure.container._platform_adapters import (
     wire_platform_adapters,
 )
-from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
-    JsonFilePullRequestRepository,
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    wire_platform_clients,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
-    OllamaExploratoryChatAdapter,
-)
-from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-    InMemoryCommandBus,
-)
-from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
-    LinuxNotifier,
+from pr_auto_reviewer.infrastructure.context.review_context_factory import (
+    ReviewContextFactory,
 )
 from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository import (
     FileSystemFragmentRepository,
@@ -34,12 +28,15 @@ from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository i
 from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
-from pr_auto_reviewer.infrastructure.context.review_context_factory import (
-    ReviewContextFactory,
-)
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
     LocalGitRepository,
+)
+from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
+    LinuxNotifier,
+)
+from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
+    JsonFilePullRequestRepository,
 )
 
 CORE_SERVICES_INSTANCE_TYPES = [

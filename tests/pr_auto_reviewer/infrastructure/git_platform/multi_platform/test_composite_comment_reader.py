@@ -1,6 +1,6 @@
 """Tests for CompositeCommentReader using stub port implementations."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -14,8 +14,7 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comme
     CompositeCommentReader,
 )
 
-
-_TS = datetime(2025, 1, 15, tzinfo=timezone.utc)
+_TS = datetime(2025, 1, 15, tzinfo=UTC)
 
 
 class _StubCommentReader(CommentReaderPort):

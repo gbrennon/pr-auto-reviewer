@@ -22,8 +22,7 @@ class TerminalReviewPublisherAdapter(ReviewPublisherPort):
     def __init__(self, output_path: str | None = None) -> None:
         self._output_path = output_path
 
-    @staticmethod
-    def _review_to_json(review: CodeReview) -> str:
+    def _review_to_json(self, review: CodeReview) -> str:
         def _compact(payload: dict[str, object]) -> dict[str, object]:
             return {
                 key: value

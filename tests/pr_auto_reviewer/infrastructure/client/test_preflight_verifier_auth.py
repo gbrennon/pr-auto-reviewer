@@ -7,8 +7,6 @@ from typing import Any
 import pytest
 import requests
 
-from tests.fakes.preflight_fakes import FakeHttpClient, FakeResponse
-
 from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
     PreflightVerificationError,
 )
@@ -18,6 +16,7 @@ from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers impor
 from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
     PreflightVerifier,
 )
+from tests.fakes import FakeHttpClient, FakeResponse
 
 
 class FailingGetClient:

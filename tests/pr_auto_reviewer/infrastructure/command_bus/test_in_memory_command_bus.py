@@ -2,7 +2,10 @@
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import InMemoryCommandBus
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
+
 
 class _RecordingHandler:
     """Stub handler that records received commands."""

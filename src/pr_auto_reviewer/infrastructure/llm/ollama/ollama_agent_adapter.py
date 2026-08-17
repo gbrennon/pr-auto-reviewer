@@ -5,9 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
-    RunMultiPhaseReviewCommand,
-)
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
     RunMultiPhaseReviewUseCase,
 )
@@ -17,6 +14,9 @@ from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
+)
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+    RunMultiPhaseReviewCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
@@ -43,8 +43,7 @@ class OllamaAgentAdapter(LlmReviewPort):
         self._orchestrator = orchestrator
         self._plan = plan
 
-    @staticmethod
-    def _extract_file_listing(composed_content: str) -> list[str]:
+    def _extract_file_listing(self, composed_content: str) -> list[str]:
         """Extract changed file paths from the rendered prompt's diff section."""
         paths: set[str] = set()
         seen_section = False

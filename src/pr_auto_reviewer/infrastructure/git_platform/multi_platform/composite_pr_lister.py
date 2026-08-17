@@ -1,7 +1,9 @@
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import (
+    split_repository_prefix,
+)
 from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform._parse_platform_prefix import split_repository_prefix
+from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
 
 
 class CompositePrLister(PrListerPort):

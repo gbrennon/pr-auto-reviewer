@@ -1,8 +1,10 @@
-import pytest
 import os
 from pathlib import Path
-from pr_auto_reviewer.infrastructure.container import Container
+
+import pytest
+
 from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.container import Container
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 
 

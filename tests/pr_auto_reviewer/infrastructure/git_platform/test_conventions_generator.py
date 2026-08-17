@@ -4,6 +4,7 @@ from pr_auto_reviewer.infrastructure.context.conventions_generator import (
     ConventionsGenerator,
 )
 
+
 class TestConventionsGenerator:
 
     def test_generate_returns_none_for_empty_paths(self):

@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 import re
 
+import requests
+
 from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
     PullRequestDiff,
 )
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -35,8 +37,7 @@ class ReviewPublishingService:
         self._client = client
         self._owner_client = owner_client
 
-    @staticmethod
-    def _is_diff_metadata_line(line: str) -> bool:
+    def _is_diff_metadata_line(self, line: str) -> bool:
         return line.startswith((
             "index ",
             "new file mode ",
@@ -51,8 +52,7 @@ class ReviewPublishingService:
             "copy to ",
         ))
 
-    @staticmethod
-    def _verify_remaining_snippet_lines(
+    def _verify_remaining_snippet_lines(self,
         lines: list[str],
         start: int,
         remaining: list[str],
@@ -65,7 +65,7 @@ class ReviewPublishingService:
                 return False
             if line.startswith("@@"):
                 continue
-            if ReviewPublishingService._is_diff_metadata_line(line):
+            if self._is_diff_metadata_line(line):
                 continue
             if line.startswith(("--- ", "+++ ")):
                 continue
@@ -122,7 +122,7 @@ class ReviewPublishingService:
                 if isinstance(body, str):
                     total += len(parser.parse(body))
             return total
-        except Exception:
+        except (requests.RequestException, ValueError):
             return 0
 
     # -- comment publishing -------------------------------------------------
@@ -134,7 +134,7 @@ class ReviewPublishingService:
                 comments_path, {"body": body}, repo=pr_id.repository,
             )
             logger.debug("Comment posted: %s", response)
-        except Exception as exc:
+        except requests.RequestException as exc:
             logger.warning(
                 "Failed to post comment on %s (non-fatal): %s", pr_id, exc,
             )
@@ -170,7 +170,7 @@ class ReviewPublishingService:
                     repo=pr_id.repository,
                 )
                 payload["commit_id"] = pr_info["head"]["sha"]
-        except Exception as exc:
+        except (requests.RequestException, KeyError, TypeError) as exc:
             raise ReviewPublishError(
                 f"Failed to resolve commit_id for formal review of {pr_id}: {exc}",
             ) from exc
@@ -192,7 +192,7 @@ class ReviewPublishingService:
                 logger.info(
                     "Added %d inline comments to formal review", len(inline),
                 )
-        except Exception as exc:
+        except (requests.RequestException, ValueError) as exc:
             logger.warning(
                 "Failed to resolve inline comments for formal review: %s", exc,
             )
@@ -292,40 +292,37 @@ class ReviewPublishingService:
             if line.startswith("-"):
                 old_line += 1
                 content = line[1:]
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": old_line,
-                            "new_line": None,
-                        }
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": old_line,
+                        "new_line": None,
+                    }
             elif line.startswith("+"):
                 new_line += 1
                 content = line[1:]
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": None,
-                            "new_line": new_line,
-                        }
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": None,
+                        "new_line": new_line,
+                    }
             else:
                 old_line += 1
                 new_line += 1
                 content = line
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": old_line,
-                            "new_line": new_line,
-                        }
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": old_line,
+                        "new_line": new_line,
+                    }
 
         return None
 

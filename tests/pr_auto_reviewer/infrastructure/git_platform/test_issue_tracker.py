@@ -7,6 +7,7 @@ from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import (
     ForgejoIssueTracker,
 )
 
+
 class TestForgejoIssueTracker:
     """Tests for ForgejoIssueTracker using captured fixture data."""
 

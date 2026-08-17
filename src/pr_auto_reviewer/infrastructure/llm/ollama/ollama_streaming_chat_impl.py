@@ -22,21 +22,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .ollama_streaming_chat_abc import (
-    OllamaStreamingChatABC,
     OllamaReviewStream,
+    OllamaStreamingChatABC,
 )
-
 
 # ---------------------------------------------------------------------------
 # JSON schema describing the expected review output
 # ---------------------------------------------------------------------------
 
-_REVIEW_JSON_SCHEMA: Dict[str, Any] = {
+_REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "verdict": {
@@ -92,7 +89,7 @@ def _format_diff(diff_content: str) -> str:
     return f"```diff\n{diff_content}\n```"
 
 
-def _build_review_prompt(diff_content: str, json_schema: Dict[str, Any]) -> str:
+def _build_review_prompt(diff_content: str, json_schema: dict[str, Any]) -> str:
     """Build the full user message sent to Ollama for a PR review.
 
     The prompt consists of:
@@ -167,7 +164,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         return self._host
 
     @property
-    def json_schema(self) -> Dict[str, Any]:
+    def json_schema(self) -> dict[str, Any]:
         return _REVIEW_JSON_SCHEMA
 
     # ------------------------------------------------------------------
@@ -177,7 +174,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
     def send_message(
         self,
         message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """Send a message to Ollama and return the full accumulated text.
 
@@ -202,7 +199,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             The complete model response text.
         """
         # Build the messages list
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
 
         if conversation_history:
             messages.extend(conversation_history)
@@ -221,7 +218,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         messages.append({"role": "user", "content": message})
 
         # Build the POST body
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "stream": True,
@@ -233,31 +230,30 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         import httpx
 
         url = f"{self._host}/api/chat"
-        accumulated_chunks: List[str] = []
+        accumulated_chunks: list[str] = []
 
-        with httpx.Client(timeout=self._timeout) as client:
-            with client.stream(
-                "POST", url, json=body, headers={"Accept": "application/json"}
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        # Skip malformed lines (should not happen with
-                        # schema-enforced output, but be defensive)
-                        continue
+        with httpx.Client(timeout=self._timeout) as client, client.stream(
+            "POST", url, json=body, headers={"Accept": "application/json"}
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    # Skip malformed lines (should not happen with
+                    # schema-enforced output, but be defensive)
+                    continue
 
-                    # Ollama streams chunks in {"message": {"role": "...",
-                    # "content": "..."}, "done": bool} format
-                    msg = data.get("message", {})
-                    content = msg.get("content", "") or msg.get("thinking", "")
-                    if content:
-                        accumulated_chunks.append(content)
-                    if data.get("done", False):
-                        break
+                # Ollama streams chunks in {"message": {"role": "...",
+                # "content": "..."}, "done": bool} format
+                msg = data.get("message", {})
+                content = msg.get("content", "") or msg.get("thinking", "")
+                if content:
+                    accumulated_chunks.append(content)
+                if data.get("done", False):
+                    break
 
         return "".join(accumulated_chunks).strip()
 
@@ -317,7 +313,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         # off the main event loop.
         loop = asyncio.get_running_loop()
 
-        accumulated: List[str] = []
+        accumulated: list[str] = []
         verdict_seen = False
 
         def _stream_lines() -> None:
@@ -325,7 +321,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             nonlocal verdict_seen
             import httpx
 
-            body: Dict[str, Any] = {
+            body: dict[str, Any] = {
                 "model": self._model,
                 "messages": [
                     {"role": "user", "content": prompt},
@@ -336,12 +332,11 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             }
 
             url = f"{self._host}/api/chat"
-            with httpx.Client(timeout=self._timeout) as client:
-                with client.stream(
-                    "POST", url, json=body, headers={"Accept": "application/json"}
-                ) as response:
-                    response.raise_for_status()
-                    for line in response.iter_lines():
+            with httpx.Client(timeout=self._timeout) as client, client.stream(
+                "POST", url, json=body, headers={"Accept": "application/json"}
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
                         if not line:
                             continue
                         try:
@@ -363,7 +358,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                         review_stream.advance(content, kind)
                         verdict_seen = verdict_seen or (
                             "verdict:" in content.lower()
-                            and not kind == "tool_call"
+                            and kind != "tool_call"
                         )
 
                         if done:
@@ -390,7 +385,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         # The stream helper already called review_stream.advance() for
         # each line, so we need to re-yield the state.  We reconstruct
         # the turn sequence from the accumulated content.
-        turn_num = 1
         # Reset and re-yield from the beginning
         review_stream.turn_number = 1
         review_stream.content = ""
@@ -439,7 +433,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
     def _classify_turn(
         self,
         content: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         verdict_seen: bool,
     ) -> str:
         """Classify a streaming turn into one of four kinds.

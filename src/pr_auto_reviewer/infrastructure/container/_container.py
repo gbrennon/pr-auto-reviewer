@@ -2,25 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import logging
-
-
-from pr_auto_reviewer.infrastructure.config import Config, load_config
-from pr_auto_reviewer.infrastructure.container._platform_clients import wire_platform_clients
-from pr_auto_reviewer.infrastructure.container._platform_adapters import wire_platform_adapters
-from pr_auto_reviewer.infrastructure.container._core_services import wire_core_services
-from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
-    GitPlatformHttpClient,
-)
-from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
-    NullPullRequestRepository,
-)
-
+from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
+)
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
 )
 from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
     CommentPublisherPort,
@@ -28,21 +17,17 @@ from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
 from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
     CommentReaderPort,
 )
-from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
-    IssueTrackerPort,
-)
-from pr_auto_reviewer.application.ports.outbound.notifier_port import (
-    NotifierPort,
-)
-from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
-    TokenVerifierPort,
-)
-
 from pr_auto_reviewer.application.ports.outbound.fragment_repository_port import (
     FragmentRepositoryPort,
 )
+from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
+    IssueTrackerPort,
+)
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
+)
+from pr_auto_reviewer.application.ports.outbound.notifier_port import (
+    NotifierPort,
 )
 from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
     PromptRendererPort,
@@ -62,10 +47,28 @@ from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
 )
-from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
-    CommandBusPort,
+from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
+    TokenVerifierPort,
+)
+from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
+    GitPlatformHttpClient,
+)
+from pr_auto_reviewer.infrastructure.config import Config, load_config
+from pr_auto_reviewer.infrastructure.container._core_services import wire_core_services
+from pr_auto_reviewer.infrastructure.container._platform_adapters import (
+    wire_platform_adapters,
+)
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    wire_platform_clients,
+)
+from pr_auto_reviewer.infrastructure.conversation_logger import (
+    MarkdownConversationLogger,
+)
+from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
+    NullPullRequestRepository,
 )
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
+
 logger = logging.getLogger(__name__)
 
 

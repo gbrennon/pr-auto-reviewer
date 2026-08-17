@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
