@@ -1,3 +1,5 @@
+"""Fake GitPlatformHttpClient for adapter tests."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -5,6 +7,7 @@ from typing import Any
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+
 
 class FakeGitPlatformHttpClient(GitPlatformHttpClient):
 
