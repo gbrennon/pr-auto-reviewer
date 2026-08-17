@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,12 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
+)
+from pr_auto_reviewer.domain.agent.conversation_decision import (
+    ConversationDecision,
+)
+from pr_auto_reviewer.domain.agent.conversation_guardrails import (
+    ConversationGuardrails,
 )
 from pr_auto_reviewer.domain.agent.conversation_message import (
     ConversationMessage,
@@ -49,12 +56,10 @@ class AgentConversationService(RunAgentConversationUseCase):
     """Run a multi-turn agentic conversation with tool access.
 
     Orchestrates the loop: send messages → parse response → execute
-    tools → append results → repeat until verdict or exhaustion.
+    tools → append results → repeat until verdict or exhaustion. Every
+    reprompt and termination decision is delegated to
+    ``ConversationGuardrails``.
     """
-
-    _MAX_TURNS = 10
-    _MAX_EMPTY_RESPONSES = 3
-    _MAX_UNPARSEABLE_RESPONSES = 3
 
     def __init__(
         self,
@@ -68,9 +73,11 @@ class AgentConversationService(RunAgentConversationUseCase):
         self._chat_port = chat_port
         self._command_bus = command_bus
         self._conversation_logger = conversation_logger
-        self._max_turns = max_turns
-        self._max_empty_responses = max_empty_responses
-        self._max_unparseable_responses = max_unparseable_responses
+        self._guardrails = ConversationGuardrails(
+            max_turns=max_turns,
+            max_empty_responses=max_empty_responses,
+            max_unparseable_responses=max_unparseable_responses,
+        )
 
     def execute(
         self, command: RunAgentConversationCommand
@@ -214,21 +221,23 @@ class AgentConversationService(RunAgentConversationUseCase):
             ),
         ]
 
-        empty_consecutive = 0
-        unparseable_consecutive = 0
-        tool_calls = 0
-        for turn in range(self._max_turns):
-            logger.debug("Turn %d/%d", turn + 1, self._max_turns)
+        guardrails = replace(self._guardrails)
+        while guardrails.has_turns_remaining():
+            logger.debug(
+                "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
+            )
             content = self._chat_port.send(messages)
+            guardrails = guardrails.advance_turn()
             if not content:
-                empty_consecutive += 1
-                if empty_consecutive >= self._max_empty_responses:
+                decision, guardrails = guardrails.record_empty_response()
+                if decision is ConversationDecision.EXCEEDED_EMPTY:
                     raise LlmUnavailableError(
-                        f"LLM returned empty response {empty_consecutive} "
-                        f"consecutive times at turn {turn + 1}"
+                        f"LLM returned empty response "
+                        f"{guardrails.consecutive_empty} consecutive times "
+                        f"at turn {guardrails.turn}"
                     )
                 logger.debug(
-                    "Empty response at turn %d; reprompting", turn + 1
+                    "Empty response at turn %d; reprompting", guardrails.turn
                 )
                 messages.append(ConversationMessage(
                     role="user",
@@ -241,29 +250,26 @@ class AgentConversationService(RunAgentConversationUseCase):
                 ))
                 continue
 
-            empty_consecutive = 0
+            guardrails = guardrails.mark_consecutive_success()
 
             parsed = self._command_bus.dispatch(
                 ParseReviewTurnCommand(content=content)
             )
             self._publish(ReviewTurnParsedEvent(
-                turn_number=turn + 1, result=parsed
+                turn_number=guardrails.turn, result=parsed
             ))
 
             if parsed.kind == "unparseable":
-                unparseable_consecutive += 1
-                if (
-                    unparseable_consecutive
-                    >= self._max_unparseable_responses
-                ):
+                decision, guardrails = guardrails.record_unparseable_response()
+                if decision is ConversationDecision.EXCEEDED_UNPARSEABLE:
                     raise LlmUnavailableError(
                         f"LLM returned unparseable response "
-                        f"{unparseable_consecutive} consecutive times "
-                        f"at turn {turn + 1}"
+                        f"{guardrails.consecutive_unparseable} consecutive "
+                        f"times at turn {guardrails.turn}"
                     )
                 logger.debug(
                     "Unparseable response at turn %d; reprompting",
-                    turn + 1,
+                    guardrails.turn,
                 )
                 messages.append(ConversationMessage(
                     role="user",
@@ -276,43 +282,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                     ),
                 ))
                 continue
-            unparseable_consecutive = 0
 
             messages.append(ConversationMessage(
                 role="assistant", content=content
             ))
-
-            if parsed.kind == "verdict":
-                if tool_calls > 0:
-                    logger.debug("Got verdict at turn %d", turn + 1)
-                    phase_result = self._build_phase_result(
-                        parsed, repo_path, changed_files
-                    )
-                    self._log_conversation(
-                        phase_name, messages, turn + 1, phase_result,
-                        repo_path=repo_path,
-                    )
-                    self._publish(ConversationCompletedEvent(
-                        phase_result=phase_result
-                    ))
-                    return phase_result
-                logger.debug(
-                    "Verdict at turn %d with no tool exploration; "
-                    "demanding exploration",
-                    turn + 1,
-                )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "You reached a verdict without inspecting the "
-                        "repository. Before concluding, you MUST use the "
-                        "exploration tools (read_file, search_codebase, "
-                        "list_directory, run_git) to inspect the changed "
-                        "files. Do that now, then provide your final JSON "
-                        "verdict."
-                    ),
-                ))
-                continue
 
             if parsed.kind == "tool_call" and parsed.tool_call is not None:
                 tool_call = parsed.tool_call
@@ -322,7 +295,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                     str(tool_call.arguments)[:200],
                 )
                 result = tool_execution.execute_tool(tool_call)
-                tool_calls += 1
+                guardrails = guardrails.record_tool_call()
                 result_json = json.dumps({
                     "status": result.status,
                     "data": result.data,
@@ -337,8 +310,42 @@ class AgentConversationService(RunAgentConversationUseCase):
                     role="user",
                     content=result_json,
                 ))
+                continue
+
+            if parsed.kind == "verdict":
+                decision, guardrails = guardrails.judge_verdict()
+                if decision is ConversationDecision.ACCEPT_VERDICT:
+                    logger.debug("Got verdict at turn %d", guardrails.turn)
+                    phase_result = self._build_phase_result(
+                        parsed, repo_path, changed_files
+                    )
+                    self._log_conversation(
+                        phase_name, messages, guardrails.turn, phase_result,
+                        repo_path=repo_path,
+                    )
+                    self._publish(ConversationCompletedEvent(
+                        phase_result=phase_result
+                    ))
+                    return phase_result
+                logger.debug(
+                    "Verdict at turn %d with no tool exploration; "
+                    "demanding exploration",
+                    guardrails.turn,
+                )
+                messages.append(ConversationMessage(
+                    role="user",
+                    content=(
+                        "You reached a verdict without inspecting the "
+                        "repository. Before concluding, you MUST use the "
+                        "exploration tools (read_file, search_codebase, "
+                        "list_directory, run_git) to inspect the changed "
+                        "files. Do that now, then provide your final JSON "
+                        "verdict."
+                    ),
+                ))
+                continue
         self._log_conversation(
-            phase_name, messages, self._max_turns, None,
+            phase_name, messages, self._guardrails.max_turns, None,
             repo_path=repo_path,
         )
         fd, dump_path = tempfile.mkstemp(
@@ -353,8 +360,8 @@ class AgentConversationService(RunAgentConversationUseCase):
                 default=str,
             )
         raise LlmUnavailableError(
-            f"Phase exceeded max turns ({self._max_turns}) without a verdict. "
-            f"Full conversation dumped to {dump_path}"
+            f"Phase exceeded max turns ({self._guardrails.max_turns}) "
+            f"without a verdict. Full conversation dumped to {dump_path}"
         )
 
     def _build_phase_result(
