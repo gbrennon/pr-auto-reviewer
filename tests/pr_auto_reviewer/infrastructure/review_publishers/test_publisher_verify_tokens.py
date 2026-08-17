@@ -29,8 +29,7 @@ def _build_review(verdict: ReviewVerdict = ReviewVerdict.APPROVED) -> CodeReview
         reason="LGTM",
         summary="All good",
         items=[
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MINOR,
                 category=IssueCategory.STYLE,
                 file_path="src/foo.py",

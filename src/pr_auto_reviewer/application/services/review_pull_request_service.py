@@ -277,24 +277,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         )
         return review
 
-    def _renumber_items(self, items: list[ReviewItem]) -> list[ReviewItem]:
-        renumbered: list[ReviewItem] = []
-        for number, item in enumerate(items, 1):
-            renumbered.append(
-                ReviewItem(
-                    number=number,
-                    severity=item.severity,
-                    category=item.category,
-                    file_path=item.file_path,
-                    line=item.line,
-                    description=item.description,
-                    id=item.id,
-                    current_code=item.current_code,
-                    suggested_fix=item.suggested_fix,
-                )
-            )
-        return renumbered
-
     def _find_noisy_info_logs(self, diff_text: str) -> list[ReviewItem]:
         current_file = ""
         items: list[ReviewItem] = []
@@ -321,7 +303,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             suggested_fix = current_code.replace("logger.info(", "logger.debug(", 1)
             items.append(
                 ReviewItem(
-                    number=len(items) + 1,
                     severity=ItemSeverity.MINOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path=current_file or None,
@@ -352,7 +333,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             item for item in review.items
             if item.current_code not in log_code
         ]
-        merged_items = self._renumber_items(merged_items[:8])
+        merged_items = merged_items[:8]
 
         summary = review.summary or (
             "The PR adds diagnostic logging that would be visible during normal "

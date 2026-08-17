@@ -18,18 +18,20 @@ class _StubIssueTracker(IssueTrackerPort):
     """Stub tracker that records calls and returns canned issues."""
 
     def __init__(self, platform_id: int) -> None:
-        self.create_calls: list[tuple[str, str, str]] = []
+        self.create_calls: list[tuple[str, str, str, str]] = []
         self._next_id = platform_id
 
-    def create(self, repository: str, title: str, body: str) -> Issue:
-        self.create_calls.append((repository, title, body))
+    def create(
+        self, repository: str, title: str, body: str, source_item_id: str = ""
+    ) -> Issue:
+        self.create_calls.append((repository, title, body, source_item_id))
         return Issue(
             id=self._next_id,
             repository=repository,
             title=title,
             body=body,
             source_pr_id=_SOURCE_PR,
-            source_item_number=1,
+            source_item_id=source_item_id,
         )
 
 

@@ -20,24 +20,24 @@ class TestIssue:
             title="Fix SQL injection in main.py",
             body="## Review Item 1\n\nFound a security issue...",
             source_pr_id=pr_id,
-            source_item_number=3,
+            source_item_id="id-3",
         )
         assert issue.id == 100
         assert issue.repository == "owner/repo"
         assert issue.title == "Fix SQL injection in main.py"
         assert "security" in issue.body
         assert issue.source_pr_id == pr_id
-        assert issue.source_item_number == 3
+        assert issue.source_item_id == "id-3"
 
     def test_identity_by_id(self) -> None:
         pr_id = PullRequestId(repository="r", number=1)
         a = Issue(
             id=100, repository="r", title="Issue A", body="body A",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         b = Issue(
             id=200, repository="r", title="Issue A", body="body A",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         assert a.id != b.id
 
@@ -47,11 +47,11 @@ class TestIssue:
 
         issue_a = Issue(
             id=1, repository="r", title="t", body="b",
-            source_pr_id=pr_a, source_item_number=1,
+            source_pr_id=pr_a, source_item_id="id-1",
         )
         issue_b = Issue(
             id=2, repository="r", title="t", body="b",
-            source_pr_id=pr_b, source_item_number=1,
+            source_pr_id=pr_b, source_item_id="id-1",
         )
         assert issue_a.source_pr_id == pr_a
         assert issue_b.source_pr_id == pr_b
@@ -61,7 +61,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         original = Issue(
             id=100, repository="r", title="t", body="b",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         assert original.is_closed() is False
         closed = original.close()
@@ -72,7 +72,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         original = Issue(
             id=100, repository="r", title="t", body="original body",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         updated = original.update_body("updated body")
         assert original.body == "original body"
@@ -82,7 +82,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         issue = Issue(
             id=100, repository="r", title="t", body="b",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         with pytest.raises(InvalidIssueBodyError, match="non-empty"):
             issue.update_body("")
@@ -91,7 +91,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         issue = Issue(
             id=100, repository="r", title="t", body="b",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         issue = issue.close()
         issue = issue.close()
@@ -101,7 +101,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         issue = Issue(
             id=100, repository="r", title="t", body="b",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         with pytest.raises(FrozenInstanceError):
             issue.id = 200
@@ -110,7 +110,7 @@ class TestIssue:
         pr_id = PullRequestId(repository="r", number=1)
         issue = Issue(
             id=100, repository="r", title="t", body="b",
-            source_pr_id=pr_id, source_item_number=1,
+            source_pr_id=pr_id, source_item_id="id-1",
         )
         with pytest.raises(FrozenInstanceError):
             issue.source_pr_id = PullRequestId(repository="x", number=99)

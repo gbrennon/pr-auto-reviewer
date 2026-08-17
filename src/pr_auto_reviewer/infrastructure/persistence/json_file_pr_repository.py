@@ -99,11 +99,11 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                 model_used=r.get("model_used", ""),
                 items=[
                     ReviewItem(
-                        number=i["number"],
                         severity=ItemSeverity.from_value(i.get("severity")),
                         category=IssueCategory.from_value(i.get("category")),
                         file_path=i.get("file_path"),
                         description=i.get("description", ""),
+                        id=i.get("id", ""),
                     )
                     for i in r.get("items", [])
                 ],
@@ -156,7 +156,7 @@ class JsonFilePullRequestRepository(PullRequestRepository):
                     "model_used": r.model_used,
                     "items": [
                         {
-                            "number": i.number,
+                            "id": i.id,
                             "severity": i.severity.value,
                             "category": i.category.value,
                             "file_path": i.file_path,

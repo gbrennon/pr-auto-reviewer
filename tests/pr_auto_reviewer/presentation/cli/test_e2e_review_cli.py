@@ -158,7 +158,6 @@ class TestReviewCliJsonOutput:
         "model_used",
     }
     _ITEM_KEYS: ClassVar[set[str]] = {
-        "number",
         "severity",
         "category",
         "file_path",
@@ -199,7 +198,6 @@ class TestReviewCliJsonOutput:
             summary="Found 1 minor issue and 1 suggestion in the diff.",
             items=[
                 ReviewItem(
-                    number=1,
                     severity=ItemSeverity.MINOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/network.py",

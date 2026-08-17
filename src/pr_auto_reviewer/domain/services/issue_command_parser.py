@@ -9,11 +9,11 @@ from ..value_objects.issue_command import IssueCommand
 
 class IssueCommandParser:
     """Pure domain service. Detects command syntax in a comment body
-    (e.g. ``/create issue 1,3`` or ``/create-issue for 1,3``) and returns
+    (e.g. ``/create issue a3f2,b7d1``) and returns
     an IssueCommand VO, or None."""
 
     _COMMAND_PATTERN = re.compile(
-        r"/?\s*create[- ]?issue(?:\s+for)?\s+(?P<numbers>[\d,\s]+)",
+        r"/?\s*create[- ]?issue(?:\s+for)?\s+(?P<ids>[a-zA-Z0-9\-]+(?:\s*,\s*[a-zA-Z0-9\-]+)*)",
         re.IGNORECASE,
     )
 
@@ -22,17 +22,17 @@ class IssueCommandParser:
         if not match:
             return None
 
-        raw = match.group("numbers")
-        numbers: list[int] = []
+        raw = match.group("ids")
+        ids: list[str] = []
         for part in raw.split(","):
             part = part.strip()
-            if part.isdigit():
-                numbers.append(int(part))
+            if part:
+                ids.append(part)
 
-        if not numbers:
+        if not ids:
             return None
 
         return IssueCommand(
             comment_id=comment_id,
-            item_numbers=numbers,
+            item_ids=ids,
         )

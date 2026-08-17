@@ -16,13 +16,13 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 def _review_item(
     description: str,
     *,
-    number: int = 1,
+    item_id: str = "id-1",
     severity: ItemSeverity = ItemSeverity.MINOR,
     category: IssueCategory = IssueCategory.BUG,
     file_path: str | None = "x.py",
 ) -> ReviewItem:
     return ReviewItem(
-        number=number,
+        id=item_id,
         severity=severity,
         category=category,
         file_path=file_path,
@@ -72,7 +72,7 @@ class TestFindingAggregator:
         )
 
         assert len(review.items) == 1
-        assert review.items[0].number == 1
+        assert review.items[0].id  # ID is generated
 
     def test_duplicate_suffix_is_stripped_before_dedup(
         self, mock_reason_builder,

@@ -158,7 +158,6 @@ class TestTerminalJsonNoEmptyFields:
             summary="lacks error handling",
             items=[
                 ReviewItem(
-                    number=1,
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/a.py",
@@ -345,8 +344,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             reason="Found 1 critical (1 maintainability) and 2 major.",
             summary="Found 3 issue(s) (3 blocking across 3 file(s)).",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.CRITICAL,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/a.py",
@@ -354,8 +352,7 @@ class TestOrchestratorCommentedIsFailureMarker:
                     current_code="def f():",
                     suggested_fix="Add validation.",
                 ),
-                ReviewItem(
-                    number=2,
+                ReviewItem(id="id-2",
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/b.py",

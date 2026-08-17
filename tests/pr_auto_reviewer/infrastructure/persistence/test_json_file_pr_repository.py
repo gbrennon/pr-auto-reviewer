@@ -76,14 +76,14 @@ class TestJsonFilePullRequestRepository:
 
     @staticmethod
     def _item(
-        number: int = 1,
+        item_id: str = "id-1",
         severity: ItemSeverity = ItemSeverity.MAJOR,
         category: str = "security",
         file_path: str = "src/auth.py",
         description: str = "Missing input validation",
     ) -> ReviewItem:
         return ReviewItem(
-            number=number,
+            id=item_id,
             severity=severity,
             category=category,
             file_path=file_path,
@@ -120,9 +120,9 @@ class TestJsonFilePullRequestRepository:
             summary="LGTM",
             model_used="llama3",
             items=[
-                self._item(number=1, severity=ItemSeverity.CRITICAL),
+                self._item(item_id="id-1", severity=ItemSeverity.CRITICAL),
                 self._item(
-                    number=2,
+                    item_id="id-2",
                     severity=ItemSeverity.MINOR,
                     category="style",
                     file_path="src/main.py",
@@ -214,7 +214,7 @@ class TestJsonFilePullRequestRepository:
     def test_file_schema_matches_spec(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         review = self._review(
-            items=[self._item(number=1, severity=ItemSeverity.MAJOR)],
+            items=[self._item(item_id="id-1", severity=ItemSeverity.MAJOR)],
         )
         pr = self._pr(
             reviews=(review,),

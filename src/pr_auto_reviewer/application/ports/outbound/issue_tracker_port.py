@@ -6,5 +6,7 @@ from ....domain.entities.issue import Issue
 
 
 class IssueTrackerPort(Protocol):
-    def create(self, repository: str, title: str, body: str) -> Issue:
+    def create(
+        self, repository: str, title: str, body: str, source_item_id: str = ""
+    ) -> Issue:
         ...

@@ -456,8 +456,7 @@ class TestReviewPullRequestService:
             verdict=ReviewVerdict.APPROVED,
             summary="LLM finding",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity="minor",
                     category="quality",
                     file_path="src/other.py",
@@ -579,8 +578,7 @@ class TestReviewPullRequestService:
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="Needs work",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity="blocker",
                     category="bug",
                     file_path="src/other.py",
@@ -588,8 +586,7 @@ class TestReviewPullRequestService:
                     current_code="x = None; x.foo()",
                     suggested_fix="guard with if x is not None",
                 ),
-                ReviewItem(
-                    number=2,
+                ReviewItem(id="id-2",
                     severity="major",
                     category="quality",
                     file_path="src/other.py",
@@ -597,8 +594,7 @@ class TestReviewPullRequestService:
                     current_code="sleep(300)",
                     suggested_fix="sleep(TIMEOUT)",
                 ),
-                ReviewItem(
-                    number=3,
+                ReviewItem(id="id-3",
                     severity="minor",
                     category="style",
                     file_path="src/other.py",
@@ -606,8 +602,7 @@ class TestReviewPullRequestService:
                     current_code="x = 1",
                     suggested_fix="count = 1",
                 ),
-                ReviewItem(
-                    number=4,
+                ReviewItem(id="id-4",
                     severity="minor",
                     category="quality",
                     file_path="src/other.py",
@@ -665,3 +660,32 @@ class TestReviewPullRequestServiceTokenVerifier:
         service.execute(cmd)
 
         mock_token_verifier.verify.assert_called_with(cmd.pr_id)
+
+    def test_single_turn_review_when_no_command_bus(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """Test review flow when no command_bus is available (single-turn review)."""
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=None,  # No command bus → single-turn review
+        ).execute(cmd)
+
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        mock_pr_repository.save.assert_called_once()
+        assert mock_pr_repository.save.call_args.args[0].head_sha == cmd.head_sha
