@@ -1,18 +1,15 @@
-"""Application-layer tests for ProcessIssueCommandsService using injected stubs."""
+"""Application-layer tests for ProcessIssueCommandsService using injected mocks."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
-from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
-    ProcessIssueCommandsCommand,
-)
-from pr_auto_reviewer.application.services import ProcessIssueCommandsService
 from pr_auto_reviewer.application.serializers.issue_body_builder import (
     IssueBodyBuilder,
 )
+from pr_auto_reviewer.application.services import ProcessIssueCommandsService
 from pr_auto_reviewer.domain import (
     CommentId,
     CommitSha,
@@ -25,136 +22,144 @@ from pr_auto_reviewer.domain import (
     PullRequestNotFoundError,
     ReviewItem,
 )
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
+    ProcessIssueCommandsCommand,
+)
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-
-from tests.pr_auto_reviewer.application.stubs import (
-    StubPullRequestRepository,
-    StubReviewReader,
-    StubCommentReader,
-    StubCommentPublisher,
-    StubIssueTracker,
-)
 
 
 class TestProcessIssueCommandsService:
 
-    def test_processes_issue_command_and_creates_issues(self, _pr_id, _sha, _pr, _item):
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader(
-            [
-                PrComment(
-                    id=CommentId(value="c1"),
-                    body="/create issue 1",
-                    created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                )
-            ]
+    def test_processes_issue_command_and_creates_issues(
+        self, _pr_id, _sha, _pr, _item,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
         )
-        comment_publisher = StubCommentPublisher()
-        tracker = StubIssueTracker(
-            [
-                Issue(
-                    id=101,
-                    repository="owner/repo",
-                    title="[MAJOR] bug: broken",
-                    body="body",
-                    source_pr_id=_pr_id,
-                    source_item_number=1,
-                )
-            ]
+        mock_comment_reader.get_comments.return_value = [
+            PrComment(
+                id=CommentId(value="c1"),
+                body="/create issue 1",
+                created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            )
+        ]
+        mock_issue_tracker.create.return_value = Issue(
+            id=101,
+            repository="owner/repo",
+            title="[MAJOR] bug: broken",
+            body="body",
+            source_pr_id=_pr_id,
+            source_item_number=1,
         )
 
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            comment_publisher,
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
 
-        assert len(tracker.create_calls) == 1
-        assert len(comment_publisher.post_calls) == 1
+        mock_issue_tracker.create.assert_called_once()
+        mock_comment_publisher.post.assert_called_once()
 
-    def test_skips_already_processed_comment(self, _pr_id, _sha, _pr, _item):
+    def test_skips_already_processed_comment(
+        self, _pr_id, _sha, _pr, _item,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
         processed = _pr.mark_comment_processed(CommentId(value="c1"))
-        pr_repo = StubPullRequestRepository(initial=processed)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader(
-            [
-                PrComment(
-                    id=CommentId(value="c1"),
-                    body="/create-issue 1",
-                    created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                )
-            ]
+        mock_pr_repository.find.return_value = processed
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
         )
-        comment_publisher = StubCommentPublisher()
-        tracker = StubIssueTracker()
+        mock_comment_reader.get_comments.return_value = [
+            PrComment(
+                id=CommentId(value="c1"),
+                body="/create-issue 1",
+                created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            )
+        ]
 
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            comment_publisher,
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
 
-        assert len(tracker.create_calls) == 0
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_noop_when_no_review(self, _pr_id, _sha, _pr):
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body=None)
-        tracker = StubIssueTracker()
+    def test_noop_when_no_review(
+        self, _pr_id, _sha, _pr,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = None
 
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            StubCommentReader(),
-            StubCommentPublisher(),
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
-        assert len(tracker.create_calls) == 0
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_noop_when_no_comments(self, _pr_id, _sha, _pr):
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader([])
-        tracker = StubIssueTracker()
+    def test_noop_when_no_comments(
+        self, _pr_id, _sha, _pr,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
+        )
+        mock_comment_reader.get_comments.return_value = []
 
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            StubCommentPublisher(),
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
-        assert len(tracker.create_calls) == 0
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_raises_when_pr_not_found(self, _pr_id, _sha):
-        pr_repo = StubPullRequestRepository(initial=None)
+    def test_raises_when_pr_not_found(
+        self, _pr_id, _sha,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
+        mock_pr_repository.find.return_value = None
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            StubReviewReader(),
-            StubCommentReader(),
-            StubCommentPublisher(),
-            StubIssueTracker(),
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
@@ -162,107 +167,117 @@ class TestProcessIssueCommandsService:
         with pytest.raises(PullRequestNotFoundError):
             svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
 
-    def test_noop_when_review_items_empty(self, _pr_id, _sha, _pr):
+    def test_noop_when_review_items_empty(
+        self, _pr_id, _sha, _pr,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
         """When review body parses to zero items, execution returns early."""
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="No structured review items")
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "No structured review items"
+        )
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            StubCommentReader(),
-            StubCommentPublisher(),
-            StubIssueTracker(),
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
-        # No exception, just early return
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_skips_non_command_comment(self, _pr_id, _sha, _pr, _item):
+    def test_skips_non_command_comment(
+        self, _pr_id, _sha, _pr, _item,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
         """A regular comment without /create-issue syntax is skipped."""
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader(
-            [
-                PrComment(
-                    id=CommentId(value="c2"),
-                    body="This is just a regular comment",
-                    created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                )
-            ]
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
         )
-        comment_publisher = StubCommentPublisher()
-        tracker = StubIssueTracker()
+        mock_comment_reader.get_comments.return_value = [
+            PrComment(
+                id=CommentId(value="c2"),
+                body="This is just a regular comment",
+                created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            )
+        ]
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            comment_publisher,
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
-        assert len(tracker.create_calls) == 0
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_publishes_invalid_items_message(self, _pr_id, _sha, _pr, _item):
+    def test_publishes_invalid_items_message(
+        self, _pr_id, _sha, _pr, _item,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
         """When comment references non-existent item numbers, error message posted."""
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader(
-            [
-                PrComment(
-                    id=CommentId(value="c2"),
-                    body="/create-issue 99",
-                    created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                )
-            ]
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
         )
-        comment_publisher = StubCommentPublisher()
-        tracker = StubIssueTracker()
+        mock_comment_reader.get_comments.return_value = [
+            PrComment(
+                id=CommentId(value="c2"),
+                body="/create-issue 99",
+                created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            )
+        ]
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            comment_publisher,
-            tracker,
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),
         )
         svc.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
-        assert len(comment_publisher.post_calls) == 1
-        assert len(tracker.create_calls) == 0
+        mock_comment_publisher.post.assert_called_once()
+        mock_issue_tracker.create.assert_not_called()
 
-    def test_raises_on_issue_creation_error(self, _pr_id, _sha, _pr, _item):
+    def test_raises_on_issue_creation_error(
+        self, _pr_id, _sha, _pr, _item,
+        mock_pr_repository, mock_review_reader, mock_comment_reader,
+        mock_comment_publisher, mock_issue_tracker,
+    ):
         """When issue tracker raises IssueCreationError, it is re-raised."""
-        pr_repo = StubPullRequestRepository(initial=_pr)
-        review_reader = StubReviewReader(body="1. [bug] [MAJOR] x.py\n\nbroken")
-        comment_reader = StubCommentReader(
-            [
-                PrComment(
-                    id=CommentId(value="c2"),
-                    body="/create issue 1",
-                    created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                )
-            ]
+        mock_pr_repository.find.return_value = _pr
+        mock_review_reader.get_latest_review.return_value = (
+            "1. [bug] [MAJOR] x.py\n\nbroken"
         )
-        comment_publisher = StubCommentPublisher()
-
-        class RaisingIssueTracker(StubIssueTracker):
-            def create(self, repository, title, body):
-                raise IssueCreationError(
-                    repository=repository, item_number=1, reason="test error"
-                )
+        mock_comment_reader.get_comments.return_value = [
+            PrComment(
+                id=CommentId(value="c2"),
+                body="/create issue 1",
+                created_at=datetime(2025, 1, 1, tzinfo=UTC),
+            )
+        ]
+        mock_issue_tracker.create.side_effect = IssueCreationError(
+            repository="owner/repo", item_number=1, reason="test error",
+        )
 
         svc = ProcessIssueCommandsService(
-            pr_repo,
-            review_reader,
-            comment_reader,
-            comment_publisher,
-            RaisingIssueTracker(),
+            mock_pr_repository,
+            mock_review_reader,
+            mock_comment_reader,
+            mock_comment_publisher,
+            mock_issue_tracker,
             ReviewItemParser(),
             IssueCommandParser(),
             IssueBodyBuilder(),

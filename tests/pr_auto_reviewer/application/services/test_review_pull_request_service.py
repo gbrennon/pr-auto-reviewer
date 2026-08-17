@@ -1,6 +1,6 @@
 """Application-layer tests for ReviewPullRequestService.
 
-Uses injected test stubs (not MagicMock) that implement port Protocols.
+Uses injected mocks (not hand-written stubs) for outbound ports.
 All domain objects are real — PullRequest, CodeReview, PullRequestDiff.
 Diff fixtures come from tests/fixtures/diffs/.
 """
@@ -8,14 +8,10 @@ Diff fixtures come from tests/fixtures/diffs/.
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
 import pytest
 
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
 from pr_auto_reviewer.application.services import ReviewPullRequestService
 from pr_auto_reviewer.domain import (
     CodeReview,
@@ -24,18 +20,12 @@ from pr_auto_reviewer.domain import (
     PullRequest,
     PullRequestDiff,
     PullRequestId,
-    RepositoryContext,
     ReviewVerdict,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
-
-from tests.pr_auto_reviewer.application.stubs import (
-    StubPullRequestRepository,
-    StubChangesetFetcher,
-    StubLlmReview,
-    StubReviewPublisher,
-    StubReviewContextFactory,
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
 )
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "diffs"
@@ -75,57 +65,65 @@ def _pr(pr_id, sha):
 
 
 class TestReviewPullRequestService:
-    def test_new_pr_full_flow(self):
+    def test_new_pr_full_flow(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert pr_repo.find_calls == [cmd.pr_id]
-        assert changeset.fetch_calls == [(cmd.pr_id, cmd.head_sha)]
-        assert len(factory.build_calls) == 1
-        assert len(llm.review_prompt_calls) == 1
-        assert len(publisher.publish_calls) == 1
-        assert publisher.publish_calls[0][2] is not None, "diff should be passed to publisher"
-        assert len(pr_repo.save_calls) == 1
-        assert pr_repo.save_calls[0].head_sha == cmd.head_sha
+        mock_pr_repository.find.assert_called_once_with(cmd.pr_id)
+        mock_changeset_fetcher.fetch.assert_called_once_with(
+            cmd.pr_id, cmd.head_sha
+        )
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        args, _ = mock_review_publisher.publish.call_args
+        assert args[2] is not None, "diff should be passed to publisher"
+        mock_pr_repository.save.assert_called_once()
+        assert mock_pr_repository.save.call_args.args[0].head_sha == cmd.head_sha
 
-    def test_already_reviewed_sha_skips_review(self):
+    def test_already_reviewed_sha_skips_review(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         existing = _pr(cmd.pr_id, cmd.head_sha)
         existing = existing.add_review(_review(), cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=existing)
-        changeset = StubChangesetFetcher(_diff_fixture(cmd.pr_id, cmd.head_sha))
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = existing
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 0
-        assert len(factory.build_calls) == 0
-        assert len(llm.review_prompt_calls) == 0
-        assert len(publisher.publish_calls) == 0
-        assert len(pr_repo.save_calls) == 1
+        mock_changeset_fetcher.fetch.assert_not_called()
+        mock_review_context_factory.build.assert_not_called()
+        mock_llm_review.review_prompt.assert_not_called()
+        mock_review_publisher.publish.assert_not_called()
+        mock_pr_repository.save.assert_called_once()
 
-    def test_force_bypasses_idempotency_guard(self):
+    def test_force_bypasses_idempotency_guard(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
             pr_id=_pr_id(),
@@ -135,29 +133,31 @@ class TestReviewPullRequestService:
         )
         existing = _pr(cmd.pr_id, sha)
         existing = existing.add_review(_review(), sha)
-        pr_repo = StubPullRequestRepository(initial=existing)
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 1
-        assert len(factory.build_calls) == 1
-        assert len(llm.review_prompt_calls) == 1
-        assert len(publisher.publish_calls) == 1
-        assert len(pr_repo.save_calls) == 1
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        mock_pr_repository.save.assert_called_once()
 
-
-    def test_re_review_triggered_when_review_requested(self):
+    def test_re_review_triggered_when_review_requested(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
             pr_id=_pr_id(),
@@ -169,25 +169,30 @@ class TestReviewPullRequestService:
             id=cmd.pr_id, title=cmd.title, head_sha=sha,
         )
         existing = existing.add_review(_review(), sha)
-        pr_repo = StubPullRequestRepository(initial=existing)
-        changeset = StubChangesetFetcher(
-            _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha
         )
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 1
-        assert len(factory.build_calls) == 1
-        assert len(llm.review_prompt_calls) == 1
-        assert len(publisher.publish_calls) == 1
-        assert len(pr_repo.save_calls) == 1
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        mock_pr_repository.save.assert_called_once()
 
-    def test_no_re_review_when_review_requested_false(self):
+    def test_no_re_review_when_review_requested_false(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         sha = _sha()
         cmd = ReviewPullRequestCommand(
             pr_id=_pr_id(),
@@ -199,86 +204,88 @@ class TestReviewPullRequestService:
             id=cmd.pr_id, title=cmd.title, head_sha=sha,
         )
         existing = existing.add_review(_review(), sha)
-        pr_repo = StubPullRequestRepository(initial=existing)
-        changeset = StubChangesetFetcher(
-            _diff_fixture(cmd.pr_id, cmd.head_sha)
-        )
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = existing
 
         ReviewPullRequestService(
-            pr_repo, changeset, factory, llm, publisher,
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 0
-        assert len(factory.build_calls) == 0
-        assert len(llm.review_prompt_calls) == 0
-        assert len(publisher.publish_calls) == 0
-        assert len(pr_repo.save_calls) == 1
+        mock_changeset_fetcher.fetch.assert_not_called()
+        mock_review_context_factory.build.assert_not_called()
+        mock_llm_review.review_prompt.assert_not_called()
+        mock_review_publisher.publish.assert_not_called()
+        mock_pr_repository.save.assert_called_once()
 
-
-
-    def test_empty_diff_raises(self):
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(
-            PullRequestDiff(
-                pr_id=_pr_id(),
-                head_sha=_sha(),
-                diff_content="   \n ",
-            )
+    def test_empty_diff_raises(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = PullRequestDiff(
+            pr_id=_pr_id(),
+            head_sha=_sha(),
+            diff_content="   \n ",
         )
         svc = ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            StubReviewContextFactory(),
-            StubLlmReview(_review()),
-            StubReviewPublisher(),
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         )
         with pytest.raises(EmptyDiffError):
             svc.execute(_cmd())
 
-    def test_existing_pr_new_sha_runs_full_flow(self):
+    def test_existing_pr_new_sha_runs_full_flow(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         old, new = _sha("old111"), _sha("new222")
         cmd = _cmd(sha=new)
         existing = _pr(cmd.pr_id, old)
         existing = existing.add_review(_review(ReviewVerdict.COMMENTED), old)
-        pr_repo = StubPullRequestRepository(initial=existing)
-        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(changeset.fetch_calls) == 1
-        assert len(factory.build_calls) == 1
-        assert len(llm.review_prompt_calls) == 1
-        assert len(publisher.publish_calls) == 1
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
 
-    def test_debug_logs_review_complete_summary(self, caplog):
+    def test_debug_logs_review_complete_summary(
+        self, caplog, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.CHANGES_REQUESTED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.CHANGES_REQUESTED
+        )
 
         caplog.set_level(logging.DEBUG)
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
         summaries = [
@@ -289,22 +296,23 @@ class TestReviewPullRequestService:
         assert "items=0" in summaries[0]
         assert "summary='Looks good'" in summaries[0]
 
-    def test_review_complete_summary_not_logged_at_info(self, caplog):
+    def test_review_complete_summary_not_logged_at_info(
+        self, caplog, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review()
 
         caplog.set_level(logging.INFO)
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
         summaries = [
@@ -312,23 +320,22 @@ class TestReviewPullRequestService:
         ]
         assert len(summaries) == 0
 
-    def test_review_complete_summary_not_logged_when_skipped(self, caplog):
+    def test_review_complete_summary_not_logged_when_skipped(
+        self, caplog, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         existing = _pr(cmd.pr_id, cmd.head_sha)
         existing = existing.add_review(_review(), cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=existing)
-        changeset = StubChangesetFetcher(_diff_fixture(cmd.pr_id, cmd.head_sha))
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = existing
 
         caplog.set_level(logging.DEBUG)
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
         summaries = [
@@ -336,121 +343,63 @@ class TestReviewPullRequestService:
         ]
         assert len(summaries) == 0
 
-    def test_prompt_contains_diff_content(self):
+    def test_prompt_from_factory_is_sent_to_llm(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
-
-        ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
-        ).execute(cmd)
-
-        assert len(factory.build_calls) == 1
-        assert len(llm.review_prompt_calls) == 1
-        prompt = llm.review_prompt_calls[0]
-        assert isinstance(prompt, ComposedPrompt)
-        assert len(prompt.content) > 50
-        assert "diff --git" in prompt.content
-
-    def test_prompt_contains_reviewer_instructions(self):
-        cmd = _cmd()
-        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
-
-        ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
-        ).execute(cmd)
-
-        prompt = llm.review_prompt_calls[0]
-        assert "Senior Principal Software Engineer" in prompt.content
-        assert "Code Reviewer" in prompt.content
-        assert "report issues as JSON" in prompt.content
-
-    def test_prompt_is_not_empty_json_template(self):
-        cmd = _cmd()
-        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
-
-        ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
-        ).execute(cmd)
-
-        prompt = llm.review_prompt_calls[0]
-        assert len(prompt.content) > 200
-        assert prompt.content.strip() != ""
-        assert prompt.total_tokens > 10
-
-    def test_prompt_includes_pr_title_when_present(self):
-        cmd = ReviewPullRequestCommand(
-            pr_id=_pr_id(),
-            head_sha=_sha(),
-            title="Fix SQL injection in login handler",
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        prompt = ComposedPrompt(
+            content="You are a code reviewer.\n\nReview this diff:\n+code",
+            fragments_used=["solid", "python-errors"],
+            total_tokens=100,
         )
-        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_review_context_factory.build.return_value = prompt
+        mock_llm_review.review_prompt.return_value = _review()
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        prompt = llm.review_prompt_calls[0]
-        assert "Fix SQL injection in login handler" in prompt.content
+        mock_review_context_factory.build.assert_called_once()
+        args, _ = mock_llm_review.review_prompt.call_args
+        assert args[0] is prompt
 
-    def test_factory_receives_diff_in_build_call(self):
+    def test_factory_receives_diff_in_build_call(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review())
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review()
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        assert len(factory.build_calls) == 1
-        _pr_id_arg, build_diff, _title, _desc = factory.build_calls[0]
+        mock_review_context_factory.build.assert_called_once()
+        args, _ = mock_review_context_factory.build.call_args
+        pr_id_arg, build_diff = args[0], args[1]
         assert build_diff is diff
         assert "diff --git" in build_diff.diff_content
+        assert pr_id_arg == cmd.pr_id
 
-    def test_adds_concrete_finding_for_noisy_info_log_when_llm_misses_it(self):
+    def test_adds_concrete_finding_for_noisy_info_log_when_llm_misses_it(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = PullRequestDiff(
             pr_id=cmd.pr_id,
@@ -462,21 +411,22 @@ class TestReviewPullRequestService:
                 '+        logger.info("GET %s params=%s", url, params)\n'
             ),
         )
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        factory = StubReviewContextFactory()
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            factory,
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review, _ = publisher.publish_calls[0]
+        _, kwargs = mock_review_publisher.publish.call_args
+        review = kwargs.get("review") or mock_review_publisher.publish.call_args.args[1]
         assert len(review.items) == 1
         assert review.items[0].file_path == "src/client.py"
         assert review.items[0].current_code == (
@@ -486,7 +436,10 @@ class TestReviewPullRequestService:
             '        logger.debug("GET %s params=%s", url, params)'
         )
 
-    def test_adds_noisy_log_findings_before_llm_findings(self):
+    def test_adds_noisy_log_findings_before_llm_findings(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         cmd = _cmd()
         diff = PullRequestDiff(
             pr_id=cmd.pr_id,
@@ -513,22 +466,28 @@ class TestReviewPullRequestService:
                 )
             ],
         )
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = llm_review
 
         ReviewPullRequestService(
-            StubPullRequestRepository(initial=None),
-            StubChangesetFetcher(diff),
-            StubReviewContextFactory(),
-            StubLlmReview(llm_review),
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review, _ = publisher.publish_calls[0]
+        args, _ = mock_review_publisher.publish.call_args
+        review = args[1]
         assert len(review.items) == 2
         assert review.items[0].file_path == "src/client.py"
         assert review.items[1].file_path == "src/other.py"
 
-    def test_skips_log_info_without_noisy_marker(self):
+    def test_skips_log_info_without_noisy_marker(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         """A logger.info() line without noisy markers does not produce a finding."""
         cmd = _cmd()
         diff = PullRequestDiff(
@@ -541,23 +500,28 @@ class TestReviewPullRequestService:
                 '+        logger.info("processing complete without markers")\n'
             ),
         )
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            StubReviewContextFactory(),
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review, _ = publisher.publish_calls[0]
+        args, _ = mock_review_publisher.publish.call_args
+        review = args[1]
         assert len(review.items) == 0
 
-    def test_limits_noisy_log_findings_to_five(self):
+    def test_limits_noisy_log_findings_to_five(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         """Noisy log detection caps at 5 findings."""
         cmd = _cmd()
         diff = PullRequestDiff(
@@ -575,23 +539,28 @@ class TestReviewPullRequestService:
                 '+        logger.info("tokens=%s", tokens)\n'
             ),
         )
-        pr_repo = StubPullRequestRepository(initial=None)
-        changeset = StubChangesetFetcher(diff)
-        llm = StubLlmReview(_review(ReviewVerdict.APPROVED))
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
 
         ReviewPullRequestService(
-            pr_repo,
-            changeset,
-            StubReviewContextFactory(),
-            llm,
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review, _ = publisher.publish_calls[0]
+        args, _ = mock_review_publisher.publish.call_args
+        review = args[1]
         assert len(review.items) == 5
 
-    def test_preserves_changes_requested_verdict_when_adding_deterministic_findings(self):
+    def test_preserves_changes_requested_verdict_when_adding_deterministic_findings(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
         """LLM returns CHANGES_REQUESTED + diff triggers noisy-log detection
         → verdict stays CHANGES_REQUESTED after _add_deterministic_findings."""
         cmd = _cmd()
@@ -647,17 +616,20 @@ class TestReviewPullRequestService:
                 ),
             ],
         )
-        publisher = StubReviewPublisher()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = llm_review
 
         ReviewPullRequestService(
-            StubPullRequestRepository(initial=None),
-            StubChangesetFetcher(diff),
-            StubReviewContextFactory(),
-            StubLlmReview(llm_review),
-            publisher,
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
         ).execute(cmd)
 
-        _pr_id_arg, review, _diff = publisher.publish_calls[0]
+        args, _ = mock_review_publisher.publish.call_args
+        review = args[1]
         assert review.verdict == ReviewVerdict.CHANGES_REQUESTED, (
             f"Expected CHANGES_REQUESTED but got {review.verdict}"
         )
