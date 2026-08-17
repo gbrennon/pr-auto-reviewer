@@ -6,6 +6,7 @@ from typing import Protocol
 
 from pr_auto_reviewer.domain.fragments.entities.prompt_fragment import PromptFragment
 
+
 class FragmentRepositoryPort(Protocol):
     """Port for loading prompt fragments from storage.
 

@@ -11,6 +11,9 @@ from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case 
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
     ReviewPullRequestUseCase,
 )
+from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
+    ConversationLoggerPort,
+)
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
@@ -18,26 +21,29 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
 from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
     TokenVerifierPort,
 )
+from pr_auto_reviewer.application.serializers.issue_body_builder import (
+    IssueBodyBuilder,
+)
 from pr_auto_reviewer.application.services.process_issue_commands_service import (
     ProcessIssueCommandsService,
 )
 from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
-from pr_auto_reviewer.application.serializers.issue_body_builder import (
-    IssueBodyBuilder,
-)
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
 from pr_auto_reviewer.infrastructure.config import load_config
 from pr_auto_reviewer.infrastructure.container import Container
+from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
 )
-from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
 from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
 logger = logging.getLogger(__name__)
@@ -56,7 +62,7 @@ class ApplicationComponents:
     notifier: NotifierPort | None = None
     token_verifier: TokenVerifierPort | None = None
     command_bus: InMemoryCommandBus | None = None
-    conversation_logger: ConversationLogger | None = None
+    conversation_logger: ConversationLoggerPort | None = None
 
 class CompositionRoot:
     """Wires infrastructure, application and presentation layers.
@@ -65,8 +71,22 @@ class CompositionRoot:
     fully-wired presentation-layer entry points.
     """
 
-    @staticmethod
-    def _setup_logging(debug: bool) -> None:
+    def __init__(self, config_path: str | None = None) -> None:
+        _ = config_path
+        config = load_config()
+        self._setup_logging(config.debug)
+        self._container = Container(config)
+        self._components = self._wire_components()
+
+    @property
+    def components(self) -> ApplicationComponents:
+        return self._components
+
+    @property
+    def container(self) -> Container:
+        return self._container
+
+    def _setup_logging(self, debug: bool) -> None:
         log_level = logging.DEBUG if debug else logging.INFO
         logging.basicConfig(
             level=log_level,
@@ -77,6 +97,27 @@ class CompositionRoot:
         if not debug:
             logging.getLogger("urllib3").setLevel(logging.WARNING)
             logging.getLogger("requests").setLevel(logging.WARNING)
+
+    def run_daemon(self) -> None:
+        config = self._container.config if hasattr(self, '_container') else load_config()
+
+        daemon_config = PollingDaemonConfig(
+            poll_interval_seconds=config.poll_interval,
+            repos_filter=config.repos_filter or None,
+            run_once=config.run_once,
+            force_pr=config.force_pr,
+        )
+
+        daemon = PollingDaemon(
+            config=daemon_config,
+            repo_lister=self._components.repo_lister,
+            pr_lister=self._components.pr_lister,
+            review_service=self._components.review_service,
+            notifier=self._components.notifier,
+            update_tracker=RepoUpdateTracker(),
+        )
+
+        daemon.start()
 
     def _wire_components(self) -> ApplicationComponents:
         c = self._container
@@ -130,42 +171,6 @@ class CompositionRoot:
             notifier=c.notifier,
             token_verifier=c.token_verifier,
         )
-
-    def __init__(self, config_path: str | None = None) -> None:
-        _ = config_path
-        config = load_config()
-        self._setup_logging(config.debug)
-        self._container = Container(config)
-        self._components = self._wire_components()
-
-    @property
-    def components(self) -> ApplicationComponents:
-        return self._components
-
-    @property
-    def container(self) -> Container:
-        return self._container
-
-    def run_daemon(self) -> None:
-        config = self._container.config if hasattr(self, '_container') else load_config()
-
-        daemon_config = PollingDaemonConfig(
-            poll_interval_seconds=config.poll_interval,
-            repos_filter=config.repos_filter or None,
-            run_once=config.run_once,
-            force_pr=config.force_pr,
-        )
-
-        daemon = PollingDaemon(
-            config=daemon_config,
-            repo_lister=self._components.repo_lister,
-            pr_lister=self._components.pr_lister,
-            review_service=self._components.review_service,
-            notifier=self._components.notifier,
-            update_tracker=RepoUpdateTracker(),
-        )
-
-        daemon.start()
 
 def bootstrap() -> ApplicationComponents:
     """Backward-compatible entry point.  Delegates to CompositionRoot."""

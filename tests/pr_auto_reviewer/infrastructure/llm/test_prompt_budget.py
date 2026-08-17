@@ -1,5 +1,5 @@
-import pytest
 from pr_auto_reviewer.infrastructure.llm.prompt_budget import PromptBudget
+
 
 def test_estimate_and_consume_and_remaining():
     text = "x" * 100

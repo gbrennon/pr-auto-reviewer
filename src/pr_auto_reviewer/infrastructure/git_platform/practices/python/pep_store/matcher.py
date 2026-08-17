@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class PepMatcher:
     def applies(self, pep_version: str | None, target: tuple[int, int]) -> bool:
         if pep_version is None:

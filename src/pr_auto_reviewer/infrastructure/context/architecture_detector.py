@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+
 class ArchitectureDetector:
-    _ARCHITECTURES: list[tuple[str, list[str], list[str]]] = [
+    _ARCHITECTURES: ClassVar[list[tuple[str, list[str], list[str]]]] = [
         (
             "cqrs",
             ["src/commands/", "commands/", "src/queries/", "queries/"],

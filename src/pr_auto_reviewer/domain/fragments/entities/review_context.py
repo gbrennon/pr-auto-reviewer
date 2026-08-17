@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class ReviewContext:
     """Context about the code being reviewed, used to select and render fragments.

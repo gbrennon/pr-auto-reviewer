@@ -6,9 +6,6 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
-    ParseReviewTurnCommand,
-)
 from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case import (
     ParseReviewTurnUseCase,
 )
@@ -17,6 +14,9 @@ from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
 )
 from pr_auto_reviewer.domain.agent.tool_call import ToolCall
 from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,13 @@ class TurnParser(ParseReviewTurnUseCase):
     blocks. Does NOT validate items against disk — that is the caller's
     responsibility.
     """
+
+    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
+        "read_file": ["file", "file_path"],
+        "list_directory": ["path", "directory_path"],
+        "search_codebase": ["pattern"],
+        "run_git": ["command"],
+    }
 
     def __init__(self, parser: ResponseParserPort) -> None:
         self._parser = parser
@@ -224,13 +231,6 @@ class TurnParser(ParseReviewTurnUseCase):
                 except json.JSONDecodeError:
                     pass
         return None
-
-    _DICT_ARG_KEYS: ClassVar[dict[str, list[str]]] = {
-        "read_file": ["file", "file_path"],
-        "list_directory": ["path", "directory_path"],
-        "search_codebase": ["pattern"],
-        "run_git": ["command"],
-    }
 
     def _extract_dict_args(
         self, action: str, raw_args: dict[str, Any]

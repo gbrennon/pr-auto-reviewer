@@ -13,11 +13,12 @@ import pytest
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 from pr_auto_reviewer.domain.value_objects.repository_context import (
     RepositoryContext,
 )
+from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
 from tests.fixtures.auto_fixtures import discovered_pairs
+
 
 class TestFixturePairs:
     """Auto-discovered tests for each captured fixture pair."""

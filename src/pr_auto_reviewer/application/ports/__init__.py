@@ -1,10 +1,14 @@
-from .inbound import ProcessIssueCommandsUseCase, RegisterIssuePort, ReviewPullRequestUseCase
+from .inbound import (
+    ProcessIssueCommandsUseCase,
+    RegisterIssuePort,
+    ReviewPullRequestUseCase,
+)
 from .outbound import (
-    ComposeReviewPromptPort,
     ChangesetFetcherPort,
     CommandBusPort,
     CommentPublisherPort,
     CommentReaderPort,
+    ComposeReviewPromptPort,
     FragmentRepositoryPort,
     IssueTrackerPort,
     LlmReviewPort,
@@ -32,6 +36,6 @@ __all__ = [
     "RegisterIssuePort",
     "RepositoryContextPort",
     "ReviewPublisherPort",
-    "ReviewReaderPort",
     "ReviewPullRequestUseCase",
+    "ReviewReaderPort",
 ]

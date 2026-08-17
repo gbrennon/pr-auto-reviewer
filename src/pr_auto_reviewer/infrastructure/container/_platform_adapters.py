@@ -5,21 +5,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure.container._platform_clients import (
-    PlatformClients,
-)
 from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolver import (
     HttpsCloneUrlResolver,
 )
 from pr_auto_reviewer.infrastructure.clone_url_resolvers.ssh_clone_url_resolver import (
     SshCloneUrlResolver,
 )
+from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    PlatformClients,
+)
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
     ForgejoCommentPublisher,
 )
 from pr_auto_reviewer.infrastructure.forgejo.comment_reader import (
     ForgejoCommentReader,
+)
+from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
+    ForgejoReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import (
     ForgejoIssueTracker,
@@ -33,14 +36,28 @@ from pr_auto_reviewer.infrastructure.forgejo.repo_lister import (
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
 )
-from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
-    ForgejoReviewPublisher,
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
+    CompositeChangesetFetcher,
+    CompositeCommentPublisher,
+    CompositeCommentReader,
+    CompositeIssueTracker,
+    CompositePrLister,
+    CompositeRepoLister,
+    CompositeRepositoryContext,
+    CompositeReviewReader,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
+    CompositeReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.github.comment_publisher import (
     GithubCommentPublisher,
 )
 from pr_auto_reviewer.infrastructure.github.comment_reader import (
     GithubCommentReader,
+)
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.github.issue_tracker import (
     GithubIssueTracker,
@@ -54,39 +71,19 @@ from pr_auto_reviewer.infrastructure.github.repo_lister import (
 from pr_auto_reviewer.infrastructure.github.review_reader import (
     GithubReviewReader,
 )
-from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
-    GithubReviewPublisher,
-)
-from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
-    TerminalReviewPublisherAdapter,
-)
 from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher import (
     LocalChangesetFetcher,
 )
 from pr_auto_reviewer.infrastructure.local_repository.local_repository_context import (
     LocalRepositoryContext,
 )
-from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
-    CompositeReviewPublisher,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform import (
-    CompositeRepoLister,
-    CompositePrLister,
-    CompositeChangesetFetcher,
-    CompositeRepositoryContext,
-    CompositeReviewReader,
-    CompositeCommentReader,
-    CompositeCommentPublisher,
-    CompositeIssueTracker,
+from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
+    TerminalReviewPublisherAdapter,
 )
 
 if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
         ChangesetFetcherPort,
-    )
-    from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
-        LocalRepositoryPort,
     )
     from pr_auto_reviewer.application.ports.outbound.comment_publisher_port import (
         CommentPublisherPort,
@@ -96,6 +93,9 @@ if TYPE_CHECKING:
     )
     from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
         IssueTrackerPort,
+    )
+    from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
+        LocalRepositoryPort,
     )
     from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
         RepositoryContextPort,

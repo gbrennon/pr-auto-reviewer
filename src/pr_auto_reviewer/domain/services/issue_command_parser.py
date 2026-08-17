@@ -6,6 +6,7 @@ import re
 
 from ..value_objects.issue_command import IssueCommand
 
+
 class IssueCommandParser:
     """Pure domain service. Detects command syntax in a comment body
     (e.g. ``/create issue 1,3`` or ``/create-issue for 1,3``) and returns

@@ -1,5 +1,7 @@
 """Tests for TokenDefaults."""
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from pr_auto_reviewer.infrastructure.client.token_defaults import TokenDefaults
@@ -14,7 +16,7 @@ class TestTokenDefaults:
 
     def test_is_frozen_dataclass(self):
         d = TokenDefaults(owner_token="t")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             d.owner_token = "new"  # type: ignore[misc]
 
     def test_accepts_custom_values(self):

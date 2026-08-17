@@ -5,25 +5,26 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import requests
 
-from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
-    RateLimitSnapshot,
-)
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
+)
+from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
+    RateLimitSnapshot,
 )
 from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import (
     RateLimitTracker,
 )
+
 if TYPE_CHECKING:
+    from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
     from pr_auto_reviewer.infrastructure.client.preflight_verifier import (
         PreflightVerifier,
     )
     from pr_auto_reviewer.infrastructure.client.token_resolver import TokenResolver
-    from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
 
 logger = logging.getLogger(__name__)
@@ -64,10 +65,10 @@ class GitPlatformHttpClient:
         response = requests.get(url, headers=request_headers, params=params, timeout=30)
         try:
             response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             self._log_response_detail("GET", label, url, response)
             logger.error("GET%s %s failed with %s: %s", label, url, response.status_code, response.text)
-            raise e
+            raise
 
         self._log_response_detail("GET", label, url, response)
         return response.json()
@@ -85,10 +86,10 @@ class GitPlatformHttpClient:
         response = requests.get(url, headers=request_headers, timeout=30)
         try:
             response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             self._log_response_detail("GET_RAW", label, url, response)
             logger.error("GET_RAW%s %s failed with %s: %s", label, url, response.status_code, response.text)
-            raise e
+            raise
 
         self._log_response_detail("GET_RAW", label, url, response)
         return response.text
@@ -110,10 +111,10 @@ class GitPlatformHttpClient:
         )
         try:
             response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             self._log_response_detail("POST", label, url, response)
             logger.error("POST%s %s failed with %s: %s", label, url, response.status_code, response.text)
-            raise e
+            raise
 
         self._log_response_detail("POST", label, url, response)
         return response.json()
@@ -231,7 +232,7 @@ class GitPlatformHttpClient:
             logger.warning("Failed to save verified token cache: %s", exc)
 
     def _write_http_log(self, method: str, label: str, url: str, response) -> None:
-        timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = _dt.datetime.now(_dt.UTC).strftime("%Y%m%d_%H%M%S_%f")
         clean_label = label.replace("[", "").replace("]", "").replace("/", "_")
         filename = f"/tmp/http-{timestamp}-{clean_label}-{response.status_code}.log"
         try:

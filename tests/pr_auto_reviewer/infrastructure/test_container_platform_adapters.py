@@ -3,23 +3,27 @@ dataclass is populated with the correct adapter instances for each
 platform + output-mode combination."""
 
 from __future__ import annotations
+
 from typing import cast
 
 import pytest
 
 from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure.container._platform_clients import (
-    wire_platform_clients,
-)
 from pr_auto_reviewer.infrastructure.container._platform_adapters import (
     PlatformAdapters,
     wire_platform_adapters,
+)
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    wire_platform_clients,
 )
 from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
     ForgejoCommentPublisher,
 )
 from pr_auto_reviewer.infrastructure.forgejo.comment_reader import (
     ForgejoCommentReader,
+)
+from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
+    ForgejoReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import (
     ForgejoIssueTracker,
@@ -29,14 +33,42 @@ from pr_auto_reviewer.infrastructure.forgejo.repo_lister import ForgejoRepoListe
 from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
 )
-from pr_auto_reviewer.infrastructure.forgejo.forgejo_review_publisher import (
-    ForgejoReviewPublisher,
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_changeset_fetcher import (
+    CompositeChangesetFetcher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_publisher import (
+    CompositeCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_reader import (
+    CompositeCommentReader,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_issue_tracker import (
+    CompositeIssueTracker,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_lister import (
+    CompositePrLister,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_lister import (
+    CompositeRepoLister,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repository_context import (
+    CompositeRepositoryContext,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
+    CompositeReviewPublisher,
+)
+from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_reader import (
+    CompositeReviewReader,
 )
 from pr_auto_reviewer.infrastructure.github.comment_publisher import (
     GithubCommentPublisher,
 )
 from pr_auto_reviewer.infrastructure.github.comment_reader import (
     GithubCommentReader,
+)
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher,
 )
 from pr_auto_reviewer.infrastructure.github.issue_tracker import (
     GithubIssueTracker,
@@ -46,47 +78,15 @@ from pr_auto_reviewer.infrastructure.github.repo_lister import GithubRepoLister
 from pr_auto_reviewer.infrastructure.github.review_reader import (
     GithubReviewReader,
 )
-from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
-    GithubReviewPublisher,
-)
-from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
-    TerminalReviewPublisherAdapter,
-)
-from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_publisher import (
-    CompositeReviewPublisher,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_changeset_fetcher import (
-    CompositeChangesetFetcher,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_lister import (
-    CompositeRepoLister,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_lister import (
-    CompositePrLister,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repository_context import (
-    CompositeRepositoryContext,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_review_reader import (
-    CompositeReviewReader,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_reader import (
-    CompositeCommentReader,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_comment_publisher import (
-    CompositeCommentPublisher,
-)
-from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_issue_tracker import (
-    CompositeIssueTracker,
-)
 from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
     LocalGitRepository,
 )
 from pr_auto_reviewer.infrastructure.local_repository.local_repository_context import (
     LocalRepositoryContext,
 )
-
+from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
+    TerminalReviewPublisherAdapter,
+)
 
 # ── parametrized adapter type-check data ──────────────────────────────────
 

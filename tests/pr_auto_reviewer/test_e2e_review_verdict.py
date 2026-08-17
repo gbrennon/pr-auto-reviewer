@@ -1,41 +1,45 @@
-"""Integration tests for the review verdict pipeline.
+"""Integration tests for the reself, view verdict pipeline.
 
 Uses test stubs (not MagicMock) that implement port Protocols.
 Real domain objects throughout — PullRequestDiff, CodeReview, ReviewItem.
 """
 
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
-import pytest
 
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
+import pytest
+import requests as req
+
 from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter import OllamaLlmAdapter
-
-from tests.pr_auto_reviewer.application.stubs import (
-    StubChangesetFetcher,
-    StubLlmReview,
-    StubPullRequestRepository,
-    StubReviewContextFactory,
-    StubReviewPublisher,
+from pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter import (
+    OllamaLlmAdapter,
+)
+from tests.fakes import (
+    FakeChangesetFetcher,
+    FakeLlmReview,
+    FakePullRequestRepository,
+    FakeReviewContextFactory,
+    FakeReviewPublisher,
 )
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -74,15 +78,15 @@ class TestReviewVerdict:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        fetcher = StubChangesetFetcher(diff)
+        fetcher = FakeChangesetFetcher(diff)
 
         review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
-        llm_stub = StubLlmReview(review)
-        publisher = StubReviewPublisher()
-        ctx_factory = StubReviewContextFactory()
+        llm_stub = FakeLlmReview(review)
+        publisher = FakeReviewPublisher()
+        ctx_factory = FakeReviewContextFactory()
 
         service = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
+            pr_repository=FakePullRequestRepository(),
             changeset_fetcher=fetcher,
             review_context_factory=ctx_factory,
             llm_review=llm_stub,
@@ -125,13 +129,13 @@ class TestReviewVerdict:
             ],
         )
 
-        fetcher = StubChangesetFetcher(diff)
-        llm_stub = StubLlmReview(review)
-        publisher = StubReviewPublisher()
-        ctx_factory = StubReviewContextFactory()
+        fetcher = FakeChangesetFetcher(diff)
+        llm_stub = FakeLlmReview(review)
+        publisher = FakeReviewPublisher()
+        ctx_factory = FakeReviewContextFactory()
 
         service = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
+            pr_repository=FakePullRequestRepository(),
             changeset_fetcher=fetcher,
             review_context_factory=ctx_factory,
             llm_review=llm_stub,
@@ -160,9 +164,9 @@ class TestReviewVerdict:
         )
         review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
 
-        fetcher = StubChangesetFetcher(diff)
-        llm_stub = StubLlmReview(review)
-        publisher = StubReviewPublisher()
+        fetcher = FakeChangesetFetcher(diff)
+        llm_stub = FakeLlmReview(review)
+        publisher = FakeReviewPublisher()
         expected_prompt = ComposedPrompt(
             content="You are a code reviewer.\n\n"
                     "## Full File Contents\n"
@@ -172,10 +176,10 @@ class TestReviewVerdict:
             fragments_used=["solid"],
             total_tokens=50,
         )
-        ctx_factory = StubReviewContextFactory(prompt=expected_prompt)
+        ctx_factory = FakeReviewContextFactory(prompt=expected_prompt)
 
         service = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
+            pr_repository=FakePullRequestRepository(),
             changeset_fetcher=fetcher,
             review_context_factory=ctx_factory,
             llm_review=llm_stub,
@@ -199,19 +203,19 @@ class TestReviewVerdict:
         diff = PullRequestDiff(
             pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
         )
-        fetcher = StubChangesetFetcher(diff)
-        ctx_factory = StubReviewContextFactory()
+        fetcher = FakeChangesetFetcher(diff)
+        ctx_factory = FakeReviewContextFactory()
 
-        publisher1 = StubReviewPublisher()
+        publisher1 = FakeReviewPublisher()
         approved_review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             summary="Minor issues only",
             model_used="code-review",
         )
-        llm_stub1 = StubLlmReview(approved_review)
+        llm_stub1 = FakeLlmReview(approved_review)
 
         service1 = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
+            pr_repository=FakePullRequestRepository(),
             changeset_fetcher=fetcher,
             review_context_factory=ctx_factory,
             llm_review=llm_stub1,
@@ -223,16 +227,16 @@ class TestReviewVerdict:
         published1: CodeReview = publisher1.publish_calls[0][1]
         assert published1.verdict == ReviewVerdict.APPROVED
 
-        publisher2 = StubReviewPublisher()
+        publisher2 = FakeReviewPublisher()
         cr_review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="Critical found",
             model_used="code-review",
         )
-        llm_stub2 = StubLlmReview(cr_review)
+        llm_stub2 = FakeLlmReview(cr_review)
 
         service2 = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
+            pr_repository=FakePullRequestRepository(),
             changeset_fetcher=fetcher,
             review_context_factory=ctx_factory,
             llm_review=llm_stub2,
@@ -251,6 +255,11 @@ class TestLlmUnavailable:
     MagicMock is used ONLY for mock_response objects at the HTTP boundary.
     """
 
+    def _cmd(self, pr_id: PullRequestId, head_sha: CommitSha) -> ReviewPullRequestCommand:
+        return ReviewPullRequestCommand(
+            pr_id=pr_id, head_sha=head_sha, title="Test",
+        )
+
     @pytest.fixture
     def pr_id(self) -> PullRequestId:
         return PullRequestId(repository="owner/repo", number=1)
@@ -258,28 +267,6 @@ class TestLlmUnavailable:
     @pytest.fixture
     def head_sha(self) -> CommitSha:
         return CommitSha("abc123")
-
-    @pytest.fixture
-    def _diff(self, pr_id: PullRequestId, head_sha: CommitSha) -> PullRequestDiff:
-        return PullRequestDiff(
-            pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
-        )
-
-    @pytest.fixture
-    def _svc(self, _diff: PullRequestDiff) -> ReviewPullRequestService:
-        return ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
-            changeset_fetcher=StubChangesetFetcher(_diff),
-            review_context_factory=StubReviewContextFactory(),
-            llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
-            review_publisher=StubReviewPublisher(),
-        )
-
-    @staticmethod
-    def _cmd(pr_id: PullRequestId, head_sha: CommitSha) -> ReviewPullRequestCommand:
-        return ReviewPullRequestCommand(
-            pr_id=pr_id, head_sha=head_sha, title="Test",
-        )
 
     def test_connection_refused(
         self,
@@ -289,8 +276,6 @@ class TestLlmUnavailable:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Connection refused → LlmUnavailableError."""
-        import requests as req
-
         def _raise(*a, **kw):
             raise req.ConnectionError("Connection refused")
 
@@ -307,8 +292,6 @@ class TestLlmUnavailable:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Request timeout → LlmUnavailableError."""
-        import requests as req
-
         def _raise(*a, **kw):
             raise req.Timeout("Read timed out")
 
@@ -325,8 +308,6 @@ class TestLlmUnavailable:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """HTTP 500 error → LlmUnavailableError."""
-        import requests as req
-
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = req.HTTPError(
             "500 Server Error",
@@ -346,12 +327,10 @@ class TestLlmUnavailable:
         """Malformed JSON body → LlmUnavailableError."""
 
         class _FakeResponse:
-            @staticmethod
-            def raise_for_status() -> None:
+            def raise_for_status(self) -> None:
                 pass
 
-            @staticmethod
-            def json():
+            def json(self):
                 raise json.JSONDecodeError("bad json", "{bad", 0)
 
         monkeypatch.setattr("requests.post", lambda *a, **kw: _FakeResponse())
@@ -399,8 +378,6 @@ class TestLlmUnavailable:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """DNS resolution failure → LlmUnavailableError."""
-        import requests as req
-
         def _raise(*a, **kw):
             raise req.ConnectionError("Failed to resolve 'localhost'")
 
@@ -417,14 +394,12 @@ class TestLlmUnavailable:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When LLM fails, review publisher is never called."""
-        import requests as req
-
-        publisher = StubReviewPublisher()
+        publisher = FakeReviewPublisher()
 
         service = ReviewPullRequestService(
-            pr_repository=StubPullRequestRepository(),
-            changeset_fetcher=StubChangesetFetcher(_diff),
-            review_context_factory=StubReviewContextFactory(),
+            pr_repository=FakePullRequestRepository(),
+            changeset_fetcher=FakeChangesetFetcher(_diff),
+            review_context_factory=FakeReviewContextFactory(),
             llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
             review_publisher=publisher,
         )
@@ -438,3 +413,19 @@ class TestLlmUnavailable:
             service.execute(self._cmd(pr_id, head_sha))
 
         assert publisher.publish_calls == []
+
+    @pytest.fixture
+    def _diff(self, pr_id: PullRequestId, head_sha: CommitSha) -> PullRequestDiff:
+        return PullRequestDiff(
+            pr_id=pr_id, head_sha=head_sha, diff_content="+new line",
+        )
+
+    @pytest.fixture
+    def _svc(self, _diff: PullRequestDiff) -> ReviewPullRequestService:
+        return ReviewPullRequestService(
+            pr_repository=FakePullRequestRepository(),
+            changeset_fetcher=FakeChangesetFetcher(_diff),
+            review_context_factory=FakeReviewContextFactory(),
+            llm_review=OllamaLlmAdapter("http://localhost:11434", "code-review"),
+            review_publisher=FakeReviewPublisher(),
+        )

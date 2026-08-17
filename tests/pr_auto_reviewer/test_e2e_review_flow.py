@@ -9,9 +9,18 @@ import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort, RepoInfo, RepoListerPort
-from pr_auto_reviewer.presentation.polling_daemon import PollingDaemon, PollingDaemonConfig
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
+from pr_auto_reviewer.presentation.polling_daemon import (
+    PollingDaemon,
+    PollingDaemonConfig,
+)
+from pr_auto_reviewer.presentation.ports import (
+    OpenPullRequest,
+    PrListerPort,
+    RepoInfo,
+    RepoListerPort,
+)
+
 
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:
@@ -430,7 +439,9 @@ class TestPR18DiffE2E:
         review_flow_fixtures: dict,
     ) -> None:
         """Test review flow with PR18 diff content."""
-        from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
+        from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
+            PullRequestDiff,
+        )
 
         pr18_diff = review_flow_fixtures.get("pr18_diff", "")
 
@@ -450,7 +461,9 @@ class TestPR18DiffE2E:
         review_flow_fixtures: dict,
     ) -> None:
         """Test that PR18 tree paths detect clean architecture."""
-        from pr_auto_reviewer.infrastructure.context.architecture_detector import ArchitectureDetector
+        from pr_auto_reviewer.infrastructure.context.architecture_detector import (
+            ArchitectureDetector,
+        )
 
         tree_paths = [
             "evals/evaluators/factory.py",

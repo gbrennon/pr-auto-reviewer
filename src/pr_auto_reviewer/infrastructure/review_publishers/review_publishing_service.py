@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 import re
 
+import requests
+
 from pr_auto_reviewer.domain.exceptions.review_publish_error import (
     ReviewPublishError,
 )
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
     PullRequestDiff,
 )
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -34,6 +36,49 @@ class ReviewPublishingService:
     ) -> None:
         self._client = client
         self._owner_client = owner_client
+
+    def _is_diff_metadata_line(self, line: str) -> bool:
+        return line.startswith((
+            "index ",
+            "new file mode ",
+            "deleted file mode ",
+            "old mode ",
+            "new mode ",
+            "similarity index ",
+            "dissimilarity index ",
+            "rename from ",
+            "rename to ",
+            "copy from ",
+            "copy to ",
+        ))
+
+    def _verify_remaining_snippet_lines(self,
+        lines: list[str],
+        start: int,
+        remaining: list[str],
+    ) -> bool:
+        if not remaining:
+            return True
+        idx = 0
+        for line in lines[start:]:
+            if line.startswith("diff --git"):
+                return False
+            if line.startswith("@@"):
+                continue
+            if self._is_diff_metadata_line(line):
+                continue
+            if line.startswith(("--- ", "+++ ")):
+                continue
+            content = line[1:] if line[:1] in ("-", "+") else line
+            if not content.strip():
+                continue
+            if remaining[idx] in content:
+                idx += 1
+                if idx == len(remaining):
+                    return True
+            else:
+                return False
+        return False
 
     def verify_tokens(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for both reviewer and owner tokens
@@ -77,7 +122,7 @@ class ReviewPublishingService:
                 if isinstance(body, str):
                     total += len(parser.parse(body))
             return total
-        except Exception:
+        except (requests.RequestException, ValueError):
             return 0
 
     # -- comment publishing -------------------------------------------------
@@ -89,7 +134,7 @@ class ReviewPublishingService:
                 comments_path, {"body": body}, repo=pr_id.repository,
             )
             logger.debug("Comment posted: %s", response)
-        except Exception as exc:
+        except requests.RequestException as exc:
             logger.warning(
                 "Failed to post comment on %s (non-fatal): %s", pr_id, exc,
             )
@@ -125,7 +170,7 @@ class ReviewPublishingService:
                     repo=pr_id.repository,
                 )
                 payload["commit_id"] = pr_info["head"]["sha"]
-        except Exception as exc:
+        except (requests.RequestException, KeyError, TypeError) as exc:
             raise ReviewPublishError(
                 f"Failed to resolve commit_id for formal review of {pr_id}: {exc}",
             ) from exc
@@ -147,7 +192,7 @@ class ReviewPublishingService:
                 logger.info(
                     "Added %d inline comments to formal review", len(inline),
                 )
-        except Exception as exc:
+        except (requests.RequestException, ValueError) as exc:
             logger.warning(
                 "Failed to resolve inline comments for formal review: %s", exc,
             )
@@ -184,6 +229,102 @@ class ReviewPublishingService:
                 diff_text, items, suggestions,
             )
         return self._build_github_inline_comments(diff_text, items, suggestions)
+
+    # -- diff position lookup -----------------------------------------------
+
+    def find_diff_position(
+        self,
+        diff_text: str,
+        file_path: str | None,
+        current_code: str,
+    ) -> dict[str, int | None] | None:
+        """Locate a code snippet within a unified diff.
+
+        Returns ``{"position": …, "old_line": …, "new_line": …}`` or
+        ``None`` when the snippet cannot be found.
+
+        All non-blank lines of *current_code* must match consecutive
+        content lines in the diff.  Single-line snippets degenerate to
+        the original behaviour.
+        """
+        if not file_path or not current_code:
+            return None
+
+        lines = diff_text.splitlines()
+        in_target_file = False
+        position = 0
+        old_line = 0
+        new_line = 0
+
+        snippet_lines = [
+            line.strip() for line in current_code.splitlines() if line.strip()
+        ]
+        if not snippet_lines:
+            return None
+        target_snippet = snippet_lines[0]
+
+        for i, line in enumerate(lines):
+            if line.startswith("diff --git"):
+                in_target_file = file_path in line
+                position = 0
+                old_line = 0
+                new_line = 0
+                continue
+
+            if not in_target_file:
+                continue
+
+            if line.startswith("@@"):
+                m = re.search(r"-(\d+)(?:,\d+)? \+(\d+)", line)
+                if m:
+                    old_line = int(m.group(1)) - 1
+                    new_line = int(m.group(2)) - 1
+                position += 1
+                continue
+
+            if self._is_diff_metadata_line(line):
+                continue
+
+            if line.startswith(("--- ", "+++ ")):
+                continue
+
+            position += 1
+            if line.startswith("-"):
+                old_line += 1
+                content = line[1:]
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": old_line,
+                        "new_line": None,
+                    }
+            elif line.startswith("+"):
+                new_line += 1
+                content = line[1:]
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": None,
+                        "new_line": new_line,
+                    }
+            else:
+                old_line += 1
+                new_line += 1
+                content = line
+                if target_snippet in content and self._verify_remaining_snippet_lines(
+                    lines, i + 1, snippet_lines[1:]
+                ):
+                    return {
+                        "position": position,
+                        "old_line": old_line,
+                        "new_line": new_line,
+                    }
+
+        return None
 
     def _build_github_inline_comments(
         self, diff_text: str, items: list, suggestions: list,
@@ -258,147 +399,3 @@ class ReviewPublishingService:
                     }
                 )
         return comments
-
-    # -- diff position lookup -----------------------------------------------
-
-    def find_diff_position(
-        self,
-        diff_text: str,
-        file_path: str | None,
-        current_code: str,
-    ) -> dict[str, int | None] | None:
-        """Locate a code snippet within a unified diff.
-
-        Returns ``{"position": …, "old_line": …, "new_line": …}`` or
-        ``None`` when the snippet cannot be found.
-
-        All non-blank lines of *current_code* must match consecutive
-        content lines in the diff.  Single-line snippets degenerate to
-        the original behaviour.
-        """
-        if not file_path or not current_code:
-            return None
-
-        lines = diff_text.splitlines()
-        in_target_file = False
-        position = 0
-        old_line = 0
-        new_line = 0
-
-        snippet_lines = [
-            line.strip() for line in current_code.splitlines() if line.strip()
-        ]
-        if not snippet_lines:
-            return None
-        target_snippet = snippet_lines[0]
-
-        for i, line in enumerate(lines):
-            if line.startswith("diff --git"):
-                in_target_file = file_path in line
-                position = 0
-                old_line = 0
-                new_line = 0
-                continue
-
-            if not in_target_file:
-                continue
-
-            if line.startswith("@@"):
-                m = re.search(r"-(\d+)(?:,\d+)? \+(\d+)", line)
-                if m:
-                    old_line = int(m.group(1)) - 1
-                    new_line = int(m.group(2)) - 1
-                position += 1
-                continue
-
-            if self._is_diff_metadata_line(line):
-                continue
-
-            if line.startswith(("--- ", "+++ ")):
-                continue
-
-            position += 1
-            if line.startswith("-"):
-                old_line += 1
-                content = line[1:]
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": old_line,
-                            "new_line": None,
-                        }
-            elif line.startswith("+"):
-                new_line += 1
-                content = line[1:]
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": None,
-                            "new_line": new_line,
-                        }
-            else:
-                old_line += 1
-                new_line += 1
-                content = line
-                if target_snippet in content:
-                    if self._verify_remaining_snippet_lines(
-                        lines, i + 1, snippet_lines[1:]
-                    ):
-                        return {
-                            "position": position,
-                            "old_line": old_line,
-                            "new_line": new_line,
-                        }
-
-        return None
-
-    @staticmethod
-    def _is_diff_metadata_line(line: str) -> bool:
-        return line.startswith((
-            "index ",
-            "new file mode ",
-            "deleted file mode ",
-            "old mode ",
-            "new mode ",
-            "similarity index ",
-            "dissimilarity index ",
-            "rename from ",
-            "rename to ",
-            "copy from ",
-            "copy to ",
-        ))
-
-    @staticmethod
-    def _verify_remaining_snippet_lines(
-        lines: list[str],
-        start: int,
-        remaining: list[str],
-    ) -> bool:
-        if not remaining:
-            return True
-        idx = 0
-        for line in lines[start:]:
-            if line.startswith("diff --git"):
-                return False
-            if line.startswith("@@"):
-                continue
-            if ReviewPublishingService._is_diff_metadata_line(line):
-                continue
-            if line.startswith(("--- ", "+++ ")):
-                continue
-            content = line[1:] if line[:1] in ("-", "+") else line
-            if not content.strip():
-                continue
-            if remaining[idx] in content:
-                idx += 1
-                if idx == len(remaining):
-                    return True
-            else:
-                return False
-        return False

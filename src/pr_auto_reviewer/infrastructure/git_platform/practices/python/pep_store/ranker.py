@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-from .types import PepEntry, _TYPE_PRIORITY
+from .types import _TYPE_PRIORITY, PepEntry
+
 
 class PepRanker:
-
-    def _parse_version(self, raw: str) -> tuple[int, int]:
-        parts = raw.strip().split(".")
-        if len(parts) < 2:
-            raise ValueError(f"Not a valid version: {raw!r}")
-        return int(parts[0]), int(parts[1])
     def score(self, pep: PepEntry, target: tuple[int, int]) -> int:
         result = 0
         pep_type = (pep.get("type") or "").strip()
@@ -28,3 +23,9 @@ class PepRanker:
                     break
 
         return result
+
+    def _parse_version(self, raw: str) -> tuple[int, int]:
+        parts = raw.strip().split(".")
+        if len(parts) < 2:
+            raise ValueError(f"Not a valid version: {raw!r}")
+        return int(parts[0]), int(parts[1])

@@ -6,6 +6,7 @@ from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
     IssueTrackerPort,
 )
 from pr_auto_reviewer.domain.entities.issue import Issue
+
 from ._parse_platform_prefix import split_repository_prefix
 
 

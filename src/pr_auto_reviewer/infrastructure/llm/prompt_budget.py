@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+
 @dataclass
 class PromptBudget:
     max_tokens: int
@@ -15,8 +16,8 @@ class PromptBudget:
     def remaining_tokens(self) -> int:
         return max(0, self.max_tokens - self._consumed)
 
-    @staticmethod
-    def estimate_tokens(text: str) -> int:
+    @classmethod
+    def estimate_tokens(cls, text: str) -> int:
         return len(text) // 4
 
     def consume(self, text: str) -> int:

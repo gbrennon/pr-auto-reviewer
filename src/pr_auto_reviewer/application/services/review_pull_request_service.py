@@ -5,15 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
-from ...domain.exceptions.empty_diff_error import EmptyDiffError
 from ...domain.entities.review_praise import ReviewPraise
+from ...domain.exceptions.empty_diff_error import EmptyDiffError
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.issue_category import IssueCategory
@@ -21,13 +25,13 @@ from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_verdict import ReviewVerdict
-from ..ports.outbound.pull_request_repository import PullRequestRepository
+from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
-from ..ports.outbound.review_context_factory_port import ReviewContextFactoryPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
+from ..ports.outbound.pull_request_repository import PullRequestRepository
+from ..ports.outbound.review_context_factory_port import ReviewContextFactoryPort
 from ..ports.outbound.review_publisher_port import ReviewPublisherPort
 from ..ports.outbound.token_verifier_port import TokenVerifierPort
-from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -423,8 +427,8 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         """
         item_by_id = {item.id: item for item in review.items if item.id}
         lines = [
-            "This PR cannot be approved because the following blocking "
-            "issues remain unresolved:",
+            ("This PR cannot be approved because the following blocking "
+             "issues remain unresolved:"),
             "",
         ]
         for id_ in sorted(unresolved_ids):

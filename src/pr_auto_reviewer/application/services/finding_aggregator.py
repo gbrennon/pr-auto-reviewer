@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
-    AggregateReviewFindingsCommand,
-)
 from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
     AggregateReviewFindingsUseCase,
 )
@@ -16,6 +13,9 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.entities.review_suggestion import (
     ReviewSuggestion,
+)
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
+    AggregateReviewFindingsCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
@@ -36,16 +36,8 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
     def __init__(self, reason_builder: ReasonBuilderPort) -> None:
         self._reason_builder = reason_builder
 
-    def execute(
-        self, command: AggregateReviewFindingsCommand
-    ) -> CodeReview:
-        """Deduplicate *command.items* and build a ``CodeReview``."""
-        return self._merge(
-            command.items, command.phase_result, command.model_used
-        )
-
-    @staticmethod
-    def _build_summary(merged: list[ReviewItem]) -> str:
+    @classmethod
+    def _build_summary(cls, merged: list[ReviewItem]) -> str:
         """Build a short human-readable summary from the merged items."""
         files = sorted({item.file_path for item in merged if item.file_path})
         blocking = sum(1 for item in merged if item.is_blocking)
@@ -56,6 +48,14 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         if files:
             base += " Files: " + ", ".join(files[:5])
         return base
+
+    def execute(
+        self, command: AggregateReviewFindingsCommand
+    ) -> CodeReview:
+        """Deduplicate *command.items* and build a ``CodeReview``."""
+        return self._merge(
+            command.items, command.phase_result, command.model_used
+        )
 
     def _merge(
         self,

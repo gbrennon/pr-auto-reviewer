@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 
 from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
     LocalRepositoryPort,
@@ -12,10 +13,14 @@ from pr_auto_reviewer.application.ports.outbound.repository_context_port import 
 )
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
-from pr_auto_reviewer.infrastructure.context.architecture_detector import ArchitectureDetector
+from pr_auto_reviewer.infrastructure.context.architecture_detector import (
+    ArchitectureDetector,
+)
 from pr_auto_reviewer.infrastructure.context.context_serializer import ContextSerializer
 from pr_auto_reviewer.infrastructure.context.language_detector import LanguageDetector
-from pr_auto_reviewer.infrastructure.context.python_version_detector import PythonVersionDetector
+from pr_auto_reviewer.infrastructure.context.python_version_detector import (
+    PythonVersionDetector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +66,7 @@ class LocalRepositoryContext(RepositoryContextPort):
             )
             repository_structure = "\n".join(tree_paths)
             architecture_hint = self._architecture_detector.detect(tree_paths)
-        except Exception:
+        except (RuntimeError, subprocess.TimeoutExpired):
             logger.warning(
                 "Failed to list tree for %s, using defaults", pr_id, exc_info=True,
             )
@@ -75,7 +80,10 @@ class LocalRepositoryContext(RepositoryContextPort):
                     repo_path, filename, ref=target_branch or "HEAD",
                 )
                 break
-            except Exception:
+            except (RuntimeError, subprocess.TimeoutExpired):
+                logger.debug(
+                    "Failed to read %s from %s", filename, pr_id, exc_info=True,
+                )
                 continue
 
         python_version = self._python_version_detector.detect(tree_paths)

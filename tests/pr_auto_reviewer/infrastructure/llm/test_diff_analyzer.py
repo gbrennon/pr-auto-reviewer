@@ -1,5 +1,7 @@
 import pytest
+
 from pr_auto_reviewer.infrastructure.llm.diff_analyzer import DiffAnalyzer
+
 
 @pytest.fixture
 def sample_diff():

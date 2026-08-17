@@ -1,14 +1,18 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import (
+    CodeReview,
+    CommentId,
+    CommitSha,
+    ItemSeverity,
     PullRequest,
     PullRequestId,
-    CommitSha,
-    CodeReview,
-    ReviewVerdict,
     ReviewItem,
-    ItemSeverity,
-    CommentId,
+    ReviewVerdict,
 )
+
 
 class TestPullRequest:
     """Tests for PullRequest aggregate root entity (immutable)."""
@@ -209,7 +213,7 @@ class TestPullRequest:
             title="Test",
             head_sha=CommitSha(value="abc"),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             pr.id = PullRequestId(repository="x", number=2)
 
     def test_immutable_field_reassignment(self) -> None:
@@ -218,7 +222,7 @@ class TestPullRequest:
             title="Test",
             head_sha=CommitSha(value="abc"),
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             pr.head_sha = CommitSha(value="def")
 
     def test_unresolved_blocking_ids_defaults_to_empty(self) -> None:

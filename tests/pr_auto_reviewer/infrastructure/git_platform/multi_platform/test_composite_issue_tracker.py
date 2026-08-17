@@ -11,7 +11,6 @@ from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_issue
     CompositeIssueTracker,
 )
 
-
 _SOURCE_PR = PullRequestId(repository="owner/repo", number=1)
 
 

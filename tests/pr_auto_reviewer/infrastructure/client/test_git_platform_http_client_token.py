@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import json
-from typing import Any
+import os
 
 import pytest
 
@@ -19,8 +18,7 @@ from pr_auto_reviewer.infrastructure.client.token_resolver import (
     TokenDefaults,
     TokenResolver,
 )
-
-from tests.fakes.token_fakes import FakeTokenResolver, FakeVerifier
+from tests.fakes import FakeTokenResolver, FakeVerifier
 
 
 class TestGitPlatformHttpClientTokens:

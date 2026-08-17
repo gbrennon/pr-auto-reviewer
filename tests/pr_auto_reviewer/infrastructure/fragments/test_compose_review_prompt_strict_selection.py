@@ -6,15 +6,12 @@ from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewCont
 from pr_auto_reviewer.infrastructure.fragments.compose_review_prompt_adapter import (
     ComposeReviewPromptAdapter,
 )
-
-from tests.fakes.fragment_repository_fakes import StubFragmentRepository
-
-
+from tests.fakes import FakeFragmentRepository
 
 
 class TestStrictSelection:
     def test_strict_selection_includes_explicit_and_content_matches(self):
-        repo = StubFragmentRepository(
+        repo = FakeFragmentRepository(
             by_language=[
                 PromptFragment(
                     id="lang1",
@@ -68,7 +65,7 @@ class TestStrictSelection:
         u1 = PromptFragment(id="u1", content="alpha", language=None, priority=10, category="misc")
         u2 = PromptFragment(id="u2", content="beta", language=None, priority=20, category="misc")
 
-        repo = StubFragmentRepository(by_language=[], universal=[u1, u2])
+        repo = FakeFragmentRepository(by_language=[], universal=[u1, u2])
 
         context = ReviewContext(language="ruby", file_paths=["a.rb"], diff="+nothing")
 

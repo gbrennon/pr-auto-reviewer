@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class GitProvider(str, Enum):
     FORGEJO = "forgejo"
     GITHUB = "github"
@@ -8,8 +9,7 @@ class GitProvider(str, Enum):
     OTHER = "other"
     BOTH = "both"
 
-    @staticmethod
-    def parse(value: str | None) -> "GitProvider":
+    def parse(value: str | None) -> GitProvider:
         if isinstance(value, GitProvider):
             return value
         v = (value or "").strip().lower()

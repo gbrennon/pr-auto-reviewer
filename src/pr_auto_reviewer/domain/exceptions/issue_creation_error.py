@@ -2,6 +2,7 @@
 
 from .domain_error import DomainError
 
+
 class IssueCreationError(DomainError):
     """Raised when the issue tracker port fails to create an issue."""
 

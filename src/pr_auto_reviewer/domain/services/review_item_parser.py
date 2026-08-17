@@ -8,6 +8,7 @@ from ..entities.review_item import ReviewItem
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
 
+
 class ReviewItemParser:
     """Pure domain service. Receives the markdown body of a posted review
     and returns a structured list of ReviewItem. Contains all parsing rules
@@ -19,6 +20,23 @@ class ReviewItemParser:
         r"(?:\n\n(?P<description>[^\n]+))?",
         re.MULTILINE,
     )
+
+    @classmethod
+    def _extract_fields(cls,
+        file_info: str | None, description: str | None,
+    ) -> tuple[str | None, str, str]:
+        if description is not None:
+            file_path, line = _split_file_info(file_info)
+            return file_path, line, description.strip()
+
+        if file_info:
+            file_info = file_info.strip()
+            if ":" in file_info and file_info.rsplit(":", 1)[1].isdigit():
+                fp, ln = file_info.rsplit(":", 1)
+                return fp, ln, ""
+            return None, "", file_info
+
+        return None, "", ""
 
     def parse(self, raw_body: str) -> list[ReviewItem]:
         items: list[ReviewItem] = []
@@ -36,23 +54,6 @@ class ReviewItemParser:
                 line=line,
             ))
         return items
-
-    @staticmethod
-    def _extract_fields(
-        file_info: str | None, description: str | None,
-    ) -> tuple[str | None, str, str]:
-        if description is not None:
-            file_path, line = _split_file_info(file_info)
-            return file_path, line, description.strip()
-
-        if file_info:
-            file_info = file_info.strip()
-            if ":" in file_info and file_info.rsplit(":", 1)[1].isdigit():
-                fp, ln = file_info.rsplit(":", 1)
-                return fp, ln, ""
-            return None, "", file_info
-
-        return None, "", ""
 
 
 def _split_file_info(file_info: str | None) -> tuple[str | None, str]:

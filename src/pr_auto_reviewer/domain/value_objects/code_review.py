@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 
-from .review_verdict import ReviewVerdict
 from ..entities.review_item import ReviewItem
-from ..entities.review_suggestion import ReviewSuggestion
 from ..entities.review_praise import ReviewPraise
+from ..entities.review_suggestion import ReviewSuggestion
+from .review_verdict import ReviewVerdict
+
 
 @dataclass(frozen=True)
 class CodeReview:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from dataclasses import replace
 
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (

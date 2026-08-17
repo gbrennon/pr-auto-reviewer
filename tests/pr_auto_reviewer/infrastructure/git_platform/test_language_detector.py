@@ -2,6 +2,7 @@ from pr_auto_reviewer.infrastructure.context.language_detector import (
     LanguageDetector,
 )
 
+
 class TestLanguageDetector:
 
     def test_detect_when_single_extension_then_returns_language(self):

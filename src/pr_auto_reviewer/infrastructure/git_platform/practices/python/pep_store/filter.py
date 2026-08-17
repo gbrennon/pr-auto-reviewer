@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .types import PepEntry, _EXCLUDED_STATUSES, _EXCLUDED_TOPICS
+from .types import _EXCLUDED_STATUSES, _EXCLUDED_TOPICS, PepEntry
+
 
 class PepFilter:
     def is_relevant(self, pep: PepEntry) -> bool:
@@ -14,7 +15,4 @@ class PepFilter:
             return False
         if status in _EXCLUDED_STATUSES:
             return False
-        if pep_type == "Standards Track" and status != "Final":
-            return False
-
-        return True
+        return not (pep_type == "Standards Track" and status != "Final")

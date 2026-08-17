@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.presentation.ports import RepoInfo, RepoListerPort
+import requests
+
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.presentation.ports import RepoInfo, RepoListerPort
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,6 @@ class ForgejoRepoLister(RepoListerPort):
             logger.info("ForgejoRepoLister.list_repos return: %d repos", len(result))
             return result
 
-        except Exception as exc:
+        except (requests.RequestException, OSError, TypeError) as exc:
             logger.warning("Failed to list repos: %s", exc)
             return []

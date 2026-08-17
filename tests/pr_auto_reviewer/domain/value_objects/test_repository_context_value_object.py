@@ -1,5 +1,9 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import RepositoryContext
+
 
 class TestRepositoryContext:
     """Tests for RepositoryContext value object."""
@@ -37,7 +41,7 @@ class TestRepositoryContext:
 
     def test_immutability(self) -> None:
         ctx = RepositoryContext(architecture_hint="hexagonal")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             ctx.architecture_hint = "changed"
 
     def test_hash_consistency(self) -> None:

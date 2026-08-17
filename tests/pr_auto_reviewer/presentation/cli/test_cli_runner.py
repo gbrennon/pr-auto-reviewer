@@ -6,7 +6,9 @@ import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
+
 
 class MockPrLister(PrListerPort):
     def __init__(self, prs: list[OpenPullRequest]) -> None:
@@ -51,9 +53,7 @@ class TestCliRunner:
         mock_process_commands_service: MagicMock,
         mock_review_reader: MagicMock,
         mock_review_item_parser: MagicMock,
-    ) -> "CliRunner":
-        from pr_auto_reviewer.presentation.cli.runner import CliRunner
-
+    ) -> CliRunner:
         pr_lister = MockPrLister([])
         return CliRunner(
             review_service=mock_review_service,
@@ -63,25 +63,25 @@ class TestCliRunner:
             review_item_parser=mock_review_item_parser,
         )
 
-    def test_creation(self, runner: "CliRunner") -> None:
+    def test_creation(self, runner: CliRunner) -> None:
         """Creates CliRunner with all dependencies."""
         assert runner is not None
 
-    def test_run_routes_to_review(self, runner: "CliRunner") -> None:
+    def test_run_routes_to_review(self, runner: CliRunner) -> None:
         """Routes review command correctly."""
         with patch.object(runner, "_run_review", return_value=0) as mock:
             result = runner.run(["cli", "review"])
             assert result == 0
             mock.assert_called_once()
 
-    def test_run_routes_to_process_commands(self, runner: "CliRunner") -> None:
+    def test_run_routes_to_process_commands(self, runner: CliRunner) -> None:
         """Routes process-commands command correctly."""
         with patch.object(runner, "_run_process_commands", return_value=0) as mock:
             result = runner.run(["cli", "process-commands"])
             assert result == 0
             mock.assert_called_once()
 
-    def test_run_routes_to_list_items(self, runner: "CliRunner") -> None:
+    def test_run_routes_to_list_items(self, runner: CliRunner) -> None:
         """Routes list-items command correctly."""
         with patch.object(runner, "_run_list_items", return_value=0) as mock:
             result = runner.run(["cli", "list-items"])

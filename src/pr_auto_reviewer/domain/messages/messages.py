@@ -3,6 +3,7 @@
 from ..entities.issue import Issue
 from ..entities.review_item import ReviewItem
 
+
 def invalid_items_message(
     invalid: list[int], available: list[ReviewItem]
 ) -> str:

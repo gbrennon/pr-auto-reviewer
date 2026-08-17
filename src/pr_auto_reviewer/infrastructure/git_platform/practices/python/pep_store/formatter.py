@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .types import PepEntry
 
+
 class PepFormatter:
     def format(self, peps: list[PepEntry], python_version: str) -> str:
         lines: list[str] = [

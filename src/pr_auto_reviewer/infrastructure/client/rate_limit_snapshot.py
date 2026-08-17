@@ -18,8 +18,8 @@ class RateLimitSnapshot:
         self.reset = reset
         self.resource = resource
 
-    @staticmethod
-    def from_response_headers(headers: dict[str, str]) -> RateLimitSnapshot:
+    @classmethod
+    def from_response_headers(cls,headers: dict[str, str]) -> RateLimitSnapshot:
         return RateLimitSnapshot(
             limit=int(headers.get("x-ratelimit-limit", 0)),
             remaining=int(headers.get("x-ratelimit-remaining", 0)),

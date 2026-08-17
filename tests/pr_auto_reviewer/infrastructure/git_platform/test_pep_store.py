@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pr_auto_reviewer.infrastructure.git_platform.practices.python.pep_store import PepStore
+from pr_auto_reviewer.infrastructure.git_platform.practices.python.pep_store import (
+    PepStore,
+)
 
 _SAMPLE_PEPS: dict[str, dict[str, Any]] = {
     "8": {

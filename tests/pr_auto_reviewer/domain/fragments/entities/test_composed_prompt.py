@@ -4,6 +4,7 @@ import pytest
 
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 
+
 class TestComposedPrompt:
     """Tests for ComposedPrompt immutable value object."""
 

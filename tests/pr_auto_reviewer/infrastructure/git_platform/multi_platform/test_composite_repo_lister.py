@@ -1,11 +1,11 @@
 
-import pytest
 
-from pr_auto_reviewer.presentation.ports.repo_info import RepoInfo
-from pr_auto_reviewer.presentation.ports.repo_lister_port import RepoListerPort
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_repo_lister import (
     CompositeRepoLister,
 )
+from pr_auto_reviewer.presentation.ports.repo_info import RepoInfo
+from pr_auto_reviewer.presentation.ports.repo_lister_port import RepoListerPort
+
 
 class StubRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:

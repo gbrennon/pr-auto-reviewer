@@ -1,5 +1,9 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
+
 from pr_auto_reviewer.domain import CommentId, InvalidCommentIdError
+
 
 class TestCommentId:
     """Tests for CommentId value object."""
@@ -21,7 +25,7 @@ class TestCommentId:
 
     def test_immutability(self) -> None:
         cid = CommentId(value="c_abc123")
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             cid.value = "changed"
 
     def test_str_representation(self) -> None:

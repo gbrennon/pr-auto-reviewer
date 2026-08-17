@@ -15,19 +15,20 @@ from pathlib import Path
 import pytest
 
 from pr_auto_reviewer.domain import (
+    CodeReview,
+    CommentId,
+    CommitSha,
+    ItemSeverity,
     PullRequest,
     PullRequestId,
-    CommitSha,
-    CodeReview,
-    ReviewVerdict,
     ReviewItem,
-    ItemSeverity,
-    CommentId,
+    ReviewVerdict,
 )
 from pr_auto_reviewer.domain.exceptions import RepositoryCorruptedError
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
+
 
 class TestJsonFilePullRequestRepository:
     """Complex TDD test suite for the JSON file persistence adapter."""

@@ -1,5 +1,5 @@
-import pytest
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+
 
 class TestGitProvider:
 

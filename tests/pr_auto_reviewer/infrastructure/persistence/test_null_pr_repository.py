@@ -1,20 +1,16 @@
 import pytest
+
+from pr_auto_reviewer.domain import (
+    CommitSha,
+    PullRequest,
+    PullRequestId,
+)
 from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
     NullPullRequestRepository,
 )
-from pr_auto_reviewer.domain import (
-    PullRequest, PullRequestId, CommitSha, CodeReview, ReviewVerdict,
-)
+
 
 class TestNullPullRequestRepository:
-
-    @pytest.fixture
-    def _repo(self):
-        return NullPullRequestRepository()
-
-    @pytest.fixture
-    def _pr_id(self):
-        return PullRequestId(repository="owner/repo", number=1)
 
     def test_find_always_returns_none(self, _repo, _pr_id):
         assert _repo.find(_pr_id) is None
@@ -71,3 +67,11 @@ class TestNullPullRequestRepository:
         _repo.save(pr)
         _repo.reset()
         assert _repo.find(_pr_id) is None
+
+    @pytest.fixture
+    def _repo(self):
+        return NullPullRequestRepository()
+
+    @pytest.fixture
+    def _pr_id(self):
+        return PullRequestId(repository="owner/repo", number=1)

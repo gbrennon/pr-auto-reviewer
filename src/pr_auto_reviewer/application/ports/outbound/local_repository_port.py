@@ -13,6 +13,12 @@ class LocalRepositoryPort(Protocol):
     contents from a local clone instead of HTTP API calls.
     """
 
+
+    @property
+    def last_clone_path(self) -> Path | None:
+        """The path of the most recent clone, or None."""
+        ...
+
     def clone(self, pr_id: PullRequestId, clone_url: str) -> Path:
         """Clone the repository and fetch the PR ref. Idempotent.
 
@@ -52,10 +58,4 @@ class LocalRepositoryPort(Protocol):
 
         Returns a list of relative file paths.
         """
-        ...
-
-
-    @property
-    def last_clone_path(self) -> Path | None:
-        """The path of the most recent clone, or None."""
         ...

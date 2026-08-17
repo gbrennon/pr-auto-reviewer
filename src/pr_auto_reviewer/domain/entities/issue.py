@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ..value_objects.pull_request_id import PullRequestId
 from ..exceptions import InvalidIssueBodyError
+from ..value_objects.pull_request_id import PullRequestId
+
 
 @dataclass(frozen=True)
 class Issue:

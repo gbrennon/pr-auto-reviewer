@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 class TokenBudgetManager:
     """Manages token budget for prompt composition.
 
@@ -16,10 +17,6 @@ class TokenBudgetManager:
     def __init__(self, max_tokens: int) -> None:
         self._max_tokens = max_tokens
         self._consumed_tokens = 0
-
-    def _estimate_tokens(self, text: str) -> int:
-        """Return an estimated token count for *text* (``len(text) // 4``)."""
-        return len(text) // 4
 
     def fits_budget(self, text: str) -> bool:
         """Return ``True`` if *text* fits within the remaining budget."""
@@ -50,3 +47,7 @@ class TokenBudgetManager:
     def reset(self) -> None:
         """Reset consumed tokens to zero (start a new budget cycle)."""
         self._consumed_tokens = 0
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Return an estimated token count for *text* (``len(text) // 4``)."""
+        return len(text) // 4

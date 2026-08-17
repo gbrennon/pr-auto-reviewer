@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from pr_auto_reviewer.infrastructure.forgejo.pr_lister import (
     ForgejoPrLister,
 )
 from pr_auto_reviewer.presentation.ports import OpenPullRequest
-
-from tests.fakes.http_client import FakeGitPlatformHttpClient
+from tests.fakes import FakeGitPlatformHttpClient
 from tests.fixtures.pr_lister_fixtures import pr_dict, pr_dicts
+
 
 def _adapter(api_data):
     return ForgejoPrLister(FakeGitPlatformHttpClient(api_data))
@@ -77,5 +79,5 @@ class TestForgejoPrLister:
         pr = adapter.list_open("o/r")[0]
         d = {pr: 1}
         assert d[pr] == 1
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             pr.title = "mutated"

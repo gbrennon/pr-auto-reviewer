@@ -5,42 +5,41 @@ from __future__ import annotations
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.config import Config
-from pr_auto_reviewer.infrastructure.container._platform_clients import (
-    PlatformClients,
-    wire_platform_clients,
-)
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
-)
-from pr_auto_reviewer.infrastructure.client.token_resolver import TokenResolver
-from pr_auto_reviewer.infrastructure.client.preflight.requests_http_client import (
-    RequestsHttpClient,
 )
 from pr_auto_reviewer.infrastructure.client.preflight.preflight_verifier import (
     PreflightVerifier,
 )
-from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
-from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
-
-from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
-    OrgTokenOverrides,
+from pr_auto_reviewer.infrastructure.client.preflight.requests_http_client import (
+    RequestsHttpClient,
 )
+from pr_auto_reviewer.infrastructure.client.token_resolver import TokenResolver
+from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.config.org_token_entry import (
     OrgTokenEntry,
 )
+from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
+    OrgTokenOverrides,
+)
+from pr_auto_reviewer.infrastructure.container._platform_clients import (
+    PlatformClients,
+    wire_platform_clients,
+)
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
 
 # ── defaults for every config value not being varied ──────────────────────
-DEFAULT_FORGEJO = dict(
-    forgejo_owner_token="fj-own",
-    forgejo_reviewer_token="fj-rev",
-    forgejo_reviewer_username="fj-bot",
-)
-DEFAULT_GITHUB = dict(
-    github_owner_token="gh-own",
-    github_reviewer_token="gh-rev",
-    github_reviewer_username="gh-bot",
-)
+DEFAULT_FORGEJO = {
+    "forgejo_owner_token": "fj-own",
+    "forgejo_reviewer_token": "fj-rev",
+    "forgejo_reviewer_username": "fj-bot",
+}
+DEFAULT_GITHUB = {
+    "github_owner_token": "gh-own",
+    "github_reviewer_token": "gh-rev",
+    "github_reviewer_username": "gh-bot",
+}
 
 
 class TestWirePlatformClients:

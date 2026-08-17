@@ -2,7 +2,10 @@
 
 import pytest
 
-from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import InMemoryCommandBus
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
+
 
 class _RecordingHandler:
     """Stub handler that records received commands."""
@@ -11,16 +14,16 @@ class _RecordingHandler:
         self.commands: list = []
         self.call_count = 0
 
+    def __call__(self, command) -> None:
+        self.commands.append(command)
+        self.call_count += 1
+
     def assert_called_once(self) -> None:
         assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"
 
     def assert_called_once_with(self, command) -> None:
         assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"
         assert self.commands[0] is command, f"Expected {command}, got {self.commands[0]}"
-
-    def __call__(self, command) -> None:
-        self.commands.append(command)
-        self.call_count += 1
 
 class SomeCommand:
     """Test command class."""
