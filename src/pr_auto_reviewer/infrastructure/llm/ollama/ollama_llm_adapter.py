@@ -6,9 +6,6 @@ import time
 from typing import Any
 
 import requests
-from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
-    RetryPromptBuilder,
-)
 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
@@ -17,8 +14,14 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import ReviewResponseParser
+from pr_auto_reviewer.infrastructure.llm.response_normalizer import (
+    RetryPromptBuilder,
+)
 from pr_auto_reviewer.infrastructure.llm.retry_orchestrator import RetryOrchestrator
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
+
 logger = logging.getLogger(__name__)
 
 _SEP = "=" * 72

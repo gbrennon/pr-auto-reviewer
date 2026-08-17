@@ -8,7 +8,8 @@ from .filter import PepFilter
 from .formatter import PepFormatter
 from .matcher import PepMatcher
 from .ranker import PepRanker
-from .types import PepEntry, _MAX_PEPS
+from .types import _MAX_PEPS, PepEntry
+
 
 class PepStore:
     def __init__(

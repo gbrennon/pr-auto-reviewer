@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import requests as _requests
-
 
 class TestHelpers:
     """Helper methods for test data generation."""

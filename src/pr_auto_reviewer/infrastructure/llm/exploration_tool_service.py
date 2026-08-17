@@ -11,6 +11,7 @@ from typing import Any
 
 from pr_auto_reviewer.domain.agent.tool_call import ToolCall
 from pr_auto_reviewer.domain.agent.tool_result import ToolResult
+
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
@@ -48,8 +49,7 @@ class ExplorationToolService:
         self._repo_root = resolved
         self._changed_files = changed_files or []
 
-    @staticmethod
-    def _parse_read_args(args: str) -> tuple[str, int | None, int | None]:
+    def _parse_read_args(self, args: str) -> tuple[str, int | None, int | None]:
         """Parse the read_file argument string.
 
         Returns: ``(path, start_line | None, end_line | None)``.
@@ -153,6 +153,7 @@ class ExplorationToolService:
                 text=True,
                 cwd=str(self._repo_root),
                 timeout=15,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {"status": "error", "error": "Search timed out"}
@@ -230,6 +231,7 @@ class ExplorationToolService:
                 text=True,
                 cwd=str(self._repo_root),
                 timeout=30,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {"status": "error", "error": "Git command timed out"}

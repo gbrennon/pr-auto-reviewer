@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
     CommentReaderPort,
@@ -45,11 +45,9 @@ class GithubCommentReader(CommentReaderPort):
             body = entry.get("body", "")
             created_str = entry.get("created_at", "")
             try:
-                created_at = datetime.fromisoformat(
-                    created_str.replace("Z", "+00:00")
-                )
+                created_at = datetime.fromisoformat(created_str)
             except (ValueError, TypeError):
-                created_at = datetime.min
+                created_at = datetime.min.replace(tzinfo=UTC)
 
             comments.append(
                 PrComment(

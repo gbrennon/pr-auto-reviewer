@@ -6,13 +6,11 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
+    TokenVerifierPort,
+)
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
-)
-from pr_auto_reviewer.infrastructure.client.token_resolver import (
-    TokenDefaults,
-    TokenResolver,
 )
 from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers import (
     ForgejoAuthHeaders,
@@ -20,17 +18,19 @@ from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers impor
 from pr_auto_reviewer.infrastructure.client.preflight.github_auth_headers import (
     GitHubAuthHeaders,
 )
-from pr_auto_reviewer.infrastructure.client.preflight.requests_http_client import (
-    RequestsHttpClient,
-)
 from pr_auto_reviewer.infrastructure.client.preflight.preflight_verifier import (
     PreflightVerifier,
 )
+from pr_auto_reviewer.infrastructure.client.preflight.requests_http_client import (
+    RequestsHttpClient,
+)
+from pr_auto_reviewer.infrastructure.client.token_resolver import (
+    TokenDefaults,
+    TokenResolver,
+)
+from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
-from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
-    TokenVerifierPort,
-)
 
 
 @dataclasses.dataclass

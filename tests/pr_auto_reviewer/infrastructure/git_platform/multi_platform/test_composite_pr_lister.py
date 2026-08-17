@@ -1,13 +1,13 @@
 
-import pytest
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
-from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
 from pr_auto_reviewer.infrastructure.git_platform.multi_platform.composite_pr_lister import (
     CompositePrLister,
 )
+from pr_auto_reviewer.presentation.ports.open_pull_request import OpenPullRequest
+from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
+
 
 def _make_open_pr(repository: str, number: int, sha: str) -> OpenPullRequest:
     return OpenPullRequest(

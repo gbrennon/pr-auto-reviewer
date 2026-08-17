@@ -3,6 +3,7 @@ from pr_auto_reviewer.infrastructure.context.context_serializer import (
     ContextSerializer,
 )
 
+
 def _ctx(**kwargs):
     return RepositoryContext(architecture_hint=kwargs.pop("architecture_hint", ""), **kwargs)
 

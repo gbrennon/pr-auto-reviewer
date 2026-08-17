@@ -1,26 +1,20 @@
 """Tests for OllamaExploratoryChatAdapter multi-turn functionality."""
 
 from __future__ import annotations
-from pathlib import Path
 
 import json
-import time as _time
 import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
 import requests as _requests
 
-from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from tests.pr_auto_reviewer.infrastructure.llm._test_helpers import (
     TestHelpers,
     _FakeStreamingResponse,

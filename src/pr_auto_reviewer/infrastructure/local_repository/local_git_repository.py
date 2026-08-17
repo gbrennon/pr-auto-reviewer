@@ -28,8 +28,7 @@ class LocalGitRepository(LocalRepositoryPort):
     def last_clone_path(self) -> Path | None:
         return self._last_clone_path
 
-    @staticmethod
-    def _ssh_env() -> dict[str, str]:
+    def _ssh_env(self) -> dict[str, str]:
         env = os.environ.copy()
         env["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
         return env
@@ -159,6 +158,7 @@ class LocalGitRepository(LocalRepositoryPort):
             text=True,
             timeout=timeout,
             env=self._ssh_env(),
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(

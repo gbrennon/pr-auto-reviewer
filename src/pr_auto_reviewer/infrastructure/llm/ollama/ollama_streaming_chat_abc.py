@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class OllamaStreamingChatABC(ABC):
@@ -34,7 +34,7 @@ class OllamaStreamingChatABC(ABC):
 
     @property
     @abstractmethod
-    def json_schema(self) -> Dict[str, Any]:
+    def json_schema(self) -> dict[str, Any]:
         """JSON‑Schema object passed as the ``format`` parameter to Ollama.
 
         When supplied, the underlying inference engine masks invalid tokens
@@ -46,7 +46,7 @@ class OllamaStreamingChatABC(ABC):
     def send_message(
         self,
         message: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """Send *message* to Ollama and stream the full accumulated response.
 
@@ -73,7 +73,7 @@ class OllamaStreamingChatABC(ABC):
         repo_path: str,
         pr_number: int,
         diff_content: str,
-    ) -> "OllamaReviewStream":
+    ) -> OllamaReviewStream:
         """Stream a full PR review across multiple LLM turns.
 
         Parameters
@@ -101,8 +101,8 @@ class OllamaStreamingChatABC(ABC):
         """
 
     def parse_streaming_response(
-        self, raw_lines: List[str], model: str
-    ) -> tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]:
+        self, raw_lines: list[str], model: str
+    ) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
         """Parse a list of raw streaming lines into items and metadata.
 
         The default implementation accumulates lines, performs a single
@@ -142,7 +142,7 @@ class OllamaStreamingChatABC(ABC):
                 "praise": [],
             }
 
-        items: Optional[List[Dict[str, Any]]] = None
+        items: list[dict[str, Any]] | None = None
         items_raw = data.get("items") or data.get("findings") or data.get("issues")
         if isinstance(items_raw, list):
             items = [
@@ -159,7 +159,7 @@ class OllamaStreamingChatABC(ABC):
                 if isinstance(item, dict)
             ]
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "verdict": data.get("verdict", "commented"),
             "reason": data.get("reason", ""),
             "summary": data.get("summary", ""),
@@ -183,9 +183,9 @@ class OllamaReviewStream:
         self.turn_number: int = 1
         self.content: str = ""
         self.kind: str = "initial"
-        self.parsed: Optional[Dict[str, Any]] = None
-        self._items: Optional[List[Dict[str, Any]]] = None
-        self._metadata: Dict[str, Any] = {
+        self.parsed: dict[str, Any] | None = None
+        self._items: list[dict[str, Any]] | None = None
+        self._metadata: dict[str, Any] = {
             "verdict": "commented",
             "reason": "",
             "summary": "",
@@ -194,11 +194,11 @@ class OllamaReviewStream:
         }
 
     @property
-    def items(self) -> Optional[List[Dict[str, Any]]]:
+    def items(self) -> list[dict[str, Any]] | None:
         return self._items
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         return self._metadata
 
     def advance(self, content: str, kind: str) -> None:

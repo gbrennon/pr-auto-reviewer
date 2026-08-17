@@ -4,9 +4,9 @@ import io
 import time
 from pathlib import Path
 
+from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import RateLimitSnapshot
 from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import RateLimitTracker
-from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
 from tests.fixtures.rate_limit_fixtures import RateLimitFixtures as F
 
 

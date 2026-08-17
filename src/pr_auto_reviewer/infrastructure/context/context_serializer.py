@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
+
 class ContextSerializer:
     def serialize(
         self,

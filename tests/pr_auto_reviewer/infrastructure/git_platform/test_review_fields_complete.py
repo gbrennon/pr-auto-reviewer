@@ -18,6 +18,7 @@ from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFacto
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
@@ -25,8 +26,6 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
-
-_review_to_json = TerminalReviewPublisherAdapter._review_to_json
 
 
 class TestItemDictNormalization:
@@ -140,9 +139,19 @@ class TestFactoryKeepsUnverifiedItems:
 
 
 class TestTerminalJsonNoEmptyFields:
-    """Final JSON must never contain empty nested fields."""
+    """Final JSON output must never contain empty nested fields."""
 
-    def test_full_review_has_no_empty_values(self) -> None:
+    def _publish_json(self, tmp_path: Path, review: CodeReview) -> dict:
+        out_file = tmp_path / "review.txt"
+        adapter = TerminalReviewPublisherAdapter(output_path=str(out_file))
+        pr_id = PullRequestId(repository="o/r", number=1)
+        adapter.publish(pr_id, review)
+        mark = "--- JSON ---\n"
+        content = out_file.read_text()
+        payload = content.split(mark, 1)[1].split("\n===", 1)[0]
+        return json.loads(payload)
+
+    def test_full_review_has_no_empty_values(self, tmp_path: Path) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="lacks error handling",
@@ -169,7 +178,7 @@ class TestTerminalJsonNoEmptyFields:
             praise=[ReviewPraise(description="Good structure.")],
             model_used="code-review:latest",
         )
-        payload = json.loads(_review_to_json(review))
+        payload = self._publish_json(tmp_path, review)
         assert payload["verdict"] == "changes_requested"
         assert payload["reason"] != ""
         assert payload["summary"] != ""
@@ -189,7 +198,7 @@ class TestTerminalJsonNoEmptyFields:
 
         _assert_no_empty(payload)
 
-    def test_string_suggestion_omits_empty_code_fields(self) -> None:
+    def test_string_suggestion_omits_empty_code_fields(self, tmp_path: Path) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
@@ -199,7 +208,7 @@ class TestTerminalJsonNoEmptyFields:
             )],
             model_used="m",
         )
-        payload = json.loads(_review_to_json(review))
+        payload = self._publish_json(tmp_path, review)
         suggestion = payload["suggestions"][0]
         assert suggestion["description"]
         assert "current_code" not in suggestion
@@ -207,7 +216,7 @@ class TestTerminalJsonNoEmptyFields:
         assert "file" not in suggestion
         assert "line" not in suggestion
 
-    def test_praise_omits_empty_file(self) -> None:
+    def test_praise_omits_empty_file(self, tmp_path: Path) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
@@ -215,7 +224,7 @@ class TestTerminalJsonNoEmptyFields:
             praise=[ReviewPraise(description="Good structure.")],
             model_used="m",
         )
-        payload = json.loads(_review_to_json(review))
+        payload = self._publish_json(tmp_path, review)
         praise = payload["praise"][0]
         assert praise["description"]
         assert "file" not in praise
@@ -226,16 +235,16 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     @staticmethod
     def _build_review_orchestrator():
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
         from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
             MultiPhaseReviewOrchestrator,
         )
+        from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
         from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
             ParseReviewTurnCommand,
         )
-        from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
         from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
             ReviewResponseParser,
         )
@@ -253,11 +262,11 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     def test_legit_llm_verdict_survives_no_items_path(self) -> None:
         from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
         from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 
         orchestrator, bus = self._build_review_orchestrator()
 
@@ -291,11 +300,11 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     def test_comment_stays_marker_with_diagnostics(self) -> None:
         from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
         from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 
         orchestrator, bus = self._build_review_orchestrator()
 

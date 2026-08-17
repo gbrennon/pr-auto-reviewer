@@ -12,19 +12,19 @@ import os
 import tempfile
 from pathlib import Path
 
-
-from ...domain.entities.pull_request import PullRequest
-from ...domain.entities.review_item import ReviewItem
-from ...domain.value_objects.pull_request_id import PullRequestId
-from ...domain.value_objects.commit_sha import CommitSha
-from ...domain.value_objects.code_review import CodeReview
-from ...domain.value_objects.review_verdict import ReviewVerdict
-from ...domain.value_objects.item_severity import ItemSeverity
-from ...domain.value_objects.issue_category import IssueCategory
-from ...domain.value_objects.comment_id import CommentId
 from ...application.ports.outbound.pull_request_repository import (
     PullRequestRepository,
 )
+from ...domain.entities.pull_request import PullRequest
+from ...domain.entities.review_item import ReviewItem
+from ...domain.value_objects.code_review import CodeReview
+from ...domain.value_objects.comment_id import CommentId
+from ...domain.value_objects.commit_sha import CommitSha
+from ...domain.value_objects.issue_category import IssueCategory
+from ...domain.value_objects.item_severity import ItemSeverity
+from ...domain.value_objects.pull_request_id import PullRequestId
+from ...domain.value_objects.review_verdict import ReviewVerdict
+
 logger = logging.getLogger(__name__)
 
 _STATE_KEY_SEPARATOR = "/"

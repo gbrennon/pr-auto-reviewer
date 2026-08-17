@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.fixtures.config_fixtures import ConfigFixtures as F
-
 
 class TestLoadConfig:
 
@@ -193,9 +191,6 @@ class TestLoadConfig:
         which accepts hyphenated keys that systemd's EnvironmentFile= would
         reject.  Verify they reach Config.org_token_overrides intact."""
         from pr_auto_reviewer.infrastructure.config.config import load_config
-        from pr_auto_reviewer.infrastructure.config.org_token_entry import (
-            OrgTokenEntry,
-        )
 
         # Ensure Path.exists returns True so _load_production actually
         # calls dotenv_values (the real ~/.config/… path won't exist in CI).

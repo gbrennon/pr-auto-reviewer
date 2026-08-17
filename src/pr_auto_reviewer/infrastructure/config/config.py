@@ -63,8 +63,7 @@ class ConfigLoader:
         self._detector = EnvironmentDetector()
         self._builder = ConfigBuilder()
 
-    @staticmethod
-    def _merge_command_line_env(values: dict[str, str]) -> None:
+    def _merge_command_line_env(self, values: dict[str, str]) -> None:
         for key in _COMMAND_LINE_KEYS:
             if key in os.environ:
                 values[key] = os.environ[key]

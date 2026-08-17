@@ -1,10 +1,14 @@
 import pytest
+
+from pr_auto_reviewer.domain import (
+    CommitSha,
+    PullRequest,
+    PullRequestId,
+)
 from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
     NullPullRequestRepository,
 )
-from pr_auto_reviewer.domain import (
-    PullRequest, PullRequestId, CommitSha, CodeReview, ReviewVerdict,
-)
+
 
 class TestNullPullRequestRepository:
 

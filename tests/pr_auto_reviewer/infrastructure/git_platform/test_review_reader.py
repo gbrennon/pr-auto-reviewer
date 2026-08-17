@@ -5,6 +5,7 @@ from pr_auto_reviewer.infrastructure.forgejo.review_reader import (
     ForgejoReviewReader,
 )
 
+
 class TestForgejoReviewReader:
     """Tests for ForgejoReviewReader using captured fixture data."""
 

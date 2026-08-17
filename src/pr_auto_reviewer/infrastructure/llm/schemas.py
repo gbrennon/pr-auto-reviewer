@@ -47,7 +47,7 @@ class ReviewItemSchema(BaseModel):
         return str(v).strip()
 
     @classmethod
-    def from_parser_dict(cls, data: dict[str, object]) -> "ReviewItemSchema":
+    def from_parser_dict(cls, data: dict[str, object]) -> ReviewItemSchema:
         """Construct from a parser-produced dict, tolerating missing keys."""
         return cls(
             file=str(data.get("file", "")),

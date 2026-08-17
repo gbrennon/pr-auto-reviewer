@@ -1,26 +1,22 @@
 """Tests for OllamaExploratoryChatAdapter full-review retry logic."""
 
 from __future__ import annotations
-from pathlib import Path
 
-import json
-import time as _time
-import tempfile
-from typing import Any, cast
+from typing import cast
 
 import pytest
 import requests as _requests
 
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_exploratory_chat_adapter import (
     OllamaExploratoryChatAdapter,
 )
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from tests.pr_auto_reviewer.infrastructure.llm._test_helpers import (
     TestHelpers,
     _FakeStreamingResponse,
@@ -253,27 +249,31 @@ class TestRuleOfTrialsFullRetry:
 
 
 class TestBuildFeedbackContext:
-    """Tests for _build_feedback_context static method."""
+    """Tests for _build_feedback_context instance method."""
 
-    def test_round_1_includes_escalation_and_verdict(self) -> None:
+    def test_round_1_includes_escalation_and_verdict(
+        self, adapter: OllamaExploratoryChatAdapter
+    ) -> None:
         result = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found across all review phases.",
             model_used="test-model",
         )
-        context = OllamaExploratoryChatAdapter._build_feedback_context(result, 1)
+        context = adapter._build_feedback_context(result, 1)
         assert "Attempt #1" in context
         assert "This is unusual for a real code change" in context
         assert "approved" in context
         assert "No issues found across all review phases." in context
 
-    def test_round_2_includes_harder_escalation_and_verdict(self) -> None:
+    def test_round_2_includes_harder_escalation_and_verdict(
+        self, adapter: OllamaExploratoryChatAdapter
+    ) -> None:
         result = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="Prior attempt found nothing.",
             model_used="test-model",
         )
-        context = OllamaExploratoryChatAdapter._build_feedback_context(result, 2)
+        context = adapter._build_feedback_context(result, 2)
         assert "Attempt #2" in context
         assert "This is your 2nd attempt" in context
         assert "Every prior attempt also found nothing" in context
