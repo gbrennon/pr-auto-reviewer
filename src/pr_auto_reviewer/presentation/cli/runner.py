@@ -291,7 +291,7 @@ class CliRunner:
         for item in items:
             file_path = item.file_path or ""
             print(
-                f"{item.number:<4} | {item.severity.value.upper():<10} | "
+                f"{item.id:<4} | {item.severity.value.upper():<10} | "
                 f"{item.category:<12} | {file_path:<30} | {item.description}"
             )
 

@@ -13,23 +13,21 @@ from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
 
 def _item(
-    number: int,
+    item_id: str = "id-1",
     *,
     severity: ItemSeverity = ItemSeverity.MAJOR,
     category: IssueCategory = IssueCategory.BUG,
     file_path: str | None = "src/a.py",
     current_code: str = "bad",
     suggested_fix: str = "good",
-    id_: str = "",
 ) -> ReviewItem:
     return ReviewItem(
-        number=number,
+        id=item_id,
         severity=severity,
         category=category,
         file_path=file_path,
-        description=f"finding {number}",
+        description=f"finding {item_id}",
         line="42",
-        id=id_ or f"id{number}",
         current_code=current_code,
         suggested_fix=suggested_fix,
     )
@@ -99,10 +97,10 @@ class TestFindingVerifierExecute:
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
         blocking = [
-            _item(1, id_="aa11", current_code="bad", suggested_fix="good"),
-            _item(2, id_="bb22", current_code="bad", suggested_fix="good"),
+            _item(item_id="aa11", current_code="bad", suggested_fix="good"),
+            _item(item_id="bb22", current_code="bad", suggested_fix="good"),
         ]
-        minor = _item(3, severity=ItemSeverity.MINOR, id_="cc33")
+        minor = _item(item_id="cc33", severity=ItemSeverity.MINOR)
         verifier = _verifier(mock_chat_port, mock_tool_factory, [
             json.dumps({
                 "results": [
@@ -129,7 +127,7 @@ class TestFindingVerifierExecute:
     def test_drops_verified_item_whose_code_matches_fix(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
-        items = [_item(1, current_code="same", suggested_fix="same")]
+        items = [_item(item_id="id-1", current_code="same", suggested_fix="same")]
         verifier = _verifier(mock_chat_port, mock_tool_factory, [
             json.dumps({
                 "results": [
@@ -149,7 +147,7 @@ class TestFindingVerifierExecute:
     def test_returns_all_when_everything_verified(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
-        items = [_item(1)]
+        items = [_item(item_id="id-1")]
         verifier = _verifier(mock_chat_port, mock_tool_factory, [
             json.dumps({
                 "results": [

@@ -55,7 +55,7 @@ class TestRetryPromptBuilder:
         builder = RetryPromptBuilder()
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MINOR, category="bug",
+            items=[ReviewItem(id="id-1,", severity=ItemSeverity.MINOR, category="bug",
                               description="", file_path="f.py", current_code="c", suggested_fix="x")],
             model_used="m",
         )
@@ -66,7 +66,7 @@ class TestRetryPromptBuilder:
         builder = RetryPromptBuilder()
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MINOR, category="bug",
+            items=[ReviewItem(id="id-1,", severity=ItemSeverity.MINOR, category="bug",
                               description="d", file_path="f.py", current_code="", suggested_fix="x")],
             model_used="m",
         )
@@ -77,7 +77,7 @@ class TestRetryPromptBuilder:
         builder = RetryPromptBuilder()
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MINOR, category="bug",
+            items=[ReviewItem(id="id-1,", severity=ItemSeverity.MINOR, category="bug",
                               description="d", file_path="f.py", current_code="c", suggested_fix="")],
             model_used="m",
         )
@@ -88,7 +88,7 @@ class TestRetryPromptBuilder:
         builder = RetryPromptBuilder()
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MINOR, category="bug",
+            items=[ReviewItem(id="id-1,", severity=ItemSeverity.MINOR, category="bug",
                               description="d", file_path="", current_code="c", suggested_fix="x")],
             model_used="m",
         )
@@ -99,7 +99,7 @@ class TestRetryPromptBuilder:
         builder = RetryPromptBuilder()
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MINOR, category="bug",
+            items=[ReviewItem(id="id-1,", severity=ItemSeverity.MINOR, category="bug",
                               description="d", file_path="f.py", current_code="c", suggested_fix="x")],
             model_used="m",
         )

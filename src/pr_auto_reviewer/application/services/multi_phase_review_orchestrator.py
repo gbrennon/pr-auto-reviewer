@@ -430,8 +430,6 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     ) -> CodeReview:
         """Rebuild a CodeReview after verification dropped some items."""
         previous_items = len(previous.items) if previous is not None else 0
-        for i, item in enumerate(verified_items, 1):
-            object.__setattr__(item, "number", i)
 
         review_items = [
             item for item in verified_items if isinstance(item, ReviewItem)

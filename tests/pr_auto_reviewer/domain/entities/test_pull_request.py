@@ -166,8 +166,7 @@ class TestPullRequest:
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="Fix security issue",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.CRITICAL,
                     category="security",
                     file_path="src/main.py",

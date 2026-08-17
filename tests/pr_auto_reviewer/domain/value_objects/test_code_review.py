@@ -15,8 +15,7 @@ class TestCodeReview:
 
     def test_creation_with_items(self) -> None:
         items = [
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.CRITICAL,
                 category="security",
                 file_path="x.py",
@@ -53,8 +52,7 @@ class TestCodeReview:
         assert a != b
 
     def test_equality_different_items(self) -> None:
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.MINOR,
             category="style",
             file_path="x.py",

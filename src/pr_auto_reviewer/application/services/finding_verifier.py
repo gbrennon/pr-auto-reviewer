@@ -102,9 +102,9 @@ class FindingVerifier(VerifyFindingsUseCase):
             item_suggested = item.suggested_fix.strip()
             if item_current == item_suggested and item_current:
                 logger.debug(
-                    "Item %d: current_code == suggested_fix; "
+                    "Item %s: current_code == suggested_fix; "
                     "treating as unverified",
-                    item.number,
+                    item.id,
                 )
                 continue
             verified_blocking.append(item)

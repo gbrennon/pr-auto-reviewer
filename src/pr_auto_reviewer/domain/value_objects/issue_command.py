@@ -12,4 +12,4 @@ class IssueCommand:
     """
 
     comment_id: str
-    item_numbers: list[int] = field(default_factory=list)
+    item_ids: list[str] = field(default_factory=list)

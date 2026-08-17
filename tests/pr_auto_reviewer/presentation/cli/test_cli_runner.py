@@ -211,8 +211,7 @@ class TestCliRunner:
         mock_review_reader.get_latest_review.return_value = "1. [security] [MAJOR] src/auth.py\n\nvulnerability"
 
         mock_items = [
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MAJOR,
                 category="security",
                 file_path="src/auth.py",
@@ -475,8 +474,7 @@ class TestCliRunner:
         mock_review_reader.get_latest_review.return_value = raw_body
 
         mock_items = [
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MAJOR,
                 category="security",
                 file_path="src/auth.py",

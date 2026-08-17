@@ -16,8 +16,7 @@ class TestVerdictFor:
 
     @staticmethod
     def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
-        return ReviewItem(
-            number=1,
+        return ReviewItem(id="id-1",
             severity=severity,
             category=category,
             file_path="src/a.py",
@@ -45,8 +44,7 @@ class TestIsCoherent:
 
     @staticmethod
     def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
-        return ReviewItem(
-            number=1,
+        return ReviewItem(id="id-1",
             severity=severity,
             category=category,
             file_path="src/a.py",
@@ -86,8 +84,7 @@ class TestReconcile:
 
     @staticmethod
     def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
-        return ReviewItem(
-            number=1,
+        return ReviewItem(id="id-1",
             severity=severity,
             category=category,
             file_path="src/a.py",

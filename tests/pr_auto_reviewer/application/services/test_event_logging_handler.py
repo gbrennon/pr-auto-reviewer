@@ -27,8 +27,7 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 
 def _review_item() -> ReviewItem:
-    return ReviewItem(
-        number=1,
+    return ReviewItem(id="id-1",
         severity=ItemSeverity.MINOR,
         category=IssueCategory.QUALITY,
         file_path="src/main.py",
