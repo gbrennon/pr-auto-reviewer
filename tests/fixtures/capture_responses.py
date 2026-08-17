@@ -2,23 +2,33 @@
 
 from __future__ import annotations
 
-import json, os, sys
+import json
+import os
+import sys
 from pathlib import Path
+
+import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from pr_auto_reviewer.infrastructure.client.git_platform_http_client import GitPlatformHttpClient
-from pr_auto_reviewer.infrastructure.forgejo.comment_reader import ForgejoCommentReader
-from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import ForgejoCommentPublisher
-from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import ForgejoIssueTracker
-from pr_auto_reviewer.infrastructure.github.github_review_publisher import GithubReviewPublisher as GitReviewPublisherAdapter
-from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewReader
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
+    GitPlatformHttpClient,
+)
+from pr_auto_reviewer.infrastructure.forgejo.comment_publisher import (
+    ForgejoCommentPublisher,
+)
+from pr_auto_reviewer.infrastructure.forgejo.comment_reader import ForgejoCommentReader
+from pr_auto_reviewer.infrastructure.forgejo.issue_tracker import ForgejoIssueTracker
+from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewReader
+from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
+    GithubReviewPublisher as GitReviewPublisherAdapter,
+)
 
 TOKEN = os.getenv("FORGEJO_OWNER_TOKEN")
 if not TOKEN:
@@ -54,19 +64,19 @@ for s in scenarios:
         r = client.get(f"/repos/{repo}/pulls/{n}")
         http_fix[f"{L}_get_pull"] = {"path": f"/repos/{repo}/pulls/{n}", "number": r.get("number"), "title": r.get("title")}
         print(f"  {L}: GET pull OK")
-    except Exception as e:
+    except requests.RequestException as e:
         print(f"  {L}: GET pull ERR {e}")
     try:
         txt = client.get_raw(f"/repos/{repo}/pulls/{n}.diff")
         http_fix[f"{L}_get_raw"] = {"path": f"/repos/{repo}/pulls/{n}.diff", "len": len(txt)}
         print(f"  {L}: GET_RAW diff OK ({len(txt)} chars)")
-    except Exception as e:
+    except requests.RequestException as e:
         print(f"  {L}: GET_RAW diff ERR {e}")
     try:
         r = client.get("/users/search", q="gbrennon", limit=1)
         http_fix[f"{L}_get_params"] = {"path": "/users/search", "has_data": bool(r.get("data"))}
         print(f"  {L}: GET /users/search OK")
-    except Exception as e:
+    except requests.RequestException as e:
         print(f"  {L}: GET /users/search ERR {e}")
 save_json("http_client_fixtures.json", http_fix)
 
@@ -81,7 +91,7 @@ for s in scenarios:
         cmt_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"], "count": len(comments),
                        "comments": [{"id": str(c.id), "body": c.body, "created_at": c.created_at.isoformat()} for c in comments]}
         print(f"  {L}: {len(comments)} comments OK")
-    except Exception as e:
+    except requests.RequestException as e:
         cmt_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"], "error": str(e)}
         print(f"  {L}: ERR {e}")
 save_json("comment_reader_fixtures.json", cmt_fix)
@@ -96,28 +106,10 @@ for s in scenarios:
         body = rr.get_latest_review(pid)
         rr_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"], "has_review": body is not None}
         print(f"  {L}: review={'present' if body else 'none'} OK")
-    except Exception as e:
+    except requests.RequestException as e:
         rr_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"], "error": str(e)}
         print(f"  {L}: ERR {e}")
 save_json("review_reader_fixtures.json", rr_fix)
-
-print("4. Repository context ...")
-rc_fix = {}
-for s in scenarios:
-    L = s["label"]
-    pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
-    try:
-        ctx = rc.fetch(pid)
-        rc_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"],
-                      "architecture_hint": ctx.architecture_hint,
-                      "has_conventions": ctx.conventions is not None,
-                      "has_structure": ctx.repository_structure is not None,
-                      "structure_lines": len(ctx.repository_structure.split(chr(10))) if ctx.repository_structure else 0}
-        print(f"  {L}: arch={ctx.architecture_hint} OK")
-    except Exception as e:
-        rc_fix[L] = {"repo": s["repo"], "pr_number": s["pr_number"], "error": str(e)}
-        print(f"  {L}: ERR {e}")
-save_json("repository_context_fixtures.json", rc_fix)
 
 print("5. Comment publisher ...")
 cp = ForgejoCommentPublisher(client)
@@ -127,8 +119,8 @@ pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
 try:
     cp.post(pid, "Test from capture script")
     cp_fix["private"] = {"repo": s["repo"], "pr_number": s["pr_number"], "success": True}
-    print(f"  private: posted OK")
-except Exception as e:
+    print("  private: posted OK")
+except requests.RequestException as e:
     cp_fix["private"] = {"repo": s["repo"], "pr_number": s["pr_number"], "success": False, "error": str(e)}
     print(f"  private: ERR {e}")
 save_json("comment_publisher_fixtures.json", cp_fix)
@@ -142,17 +134,17 @@ try:
     issue = it.create(repository=repo, title="Test issue from capture script", body="Please ignore.")
     it_fix["private"] = {"repo": repo, "issue_number": issue.id, "title": issue.title}
     print(f"  private: created #{issue.id} OK")
-except Exception as e:
+except requests.RequestException as e:
     it_fix["private"] = {"repo": repo, "error": str(e)}
     print(f"  private: ERR {e}")
 save_json("issue_tracker_fixtures.json", it_fix)
 
 print("7. Review publisher ...")
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.comment_id import CommentId
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 rp = GitReviewPublisherAdapter(client, reviewer_username="gbrennon")
 rp_fix = {}
@@ -166,8 +158,8 @@ review = CodeReview(
 try:
     rp.publish(pid, review)
     rp_fix["private"] = {"repo": s["repo"], "pr_number": s["pr_number"], "success": True}
-    print(f"  private: published OK")
-except Exception as e:
+    print("  private: published OK")
+except requests.RequestException as e:
     rp_fix["private"] = {"repo": s["repo"], "pr_number": s["pr_number"], "success": False, "error": str(e)}
     print(f"  private: ERR {e}")
 save_json("review_publisher_fixtures.json", rp_fix)

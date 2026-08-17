@@ -123,7 +123,6 @@ def _make_ollama_fake_post(response_fixture: str, *, raise_exc: Exception | None
     _fixtures_dir = _Path(__file__).parent / "fixtures" / "ollama_responses"
 
     def _fake_post(url, *, json=None, timeout=None, **kwargs):
-        import requests as _requests
         if raise_exc is not None:
             raise raise_exc
         fixture_path = _fixtures_dir / response_fixture

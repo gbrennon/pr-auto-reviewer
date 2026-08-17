@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def pr_dict(number: int, title: str = "Test", draft: bool = False) -> dict:
     return {
         "number": number,
