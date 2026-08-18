@@ -9,22 +9,30 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 
 logger = logging.getLogger(__name__)
 
-_TEMPLATES_DIR = Path(__file__).parent.parent / "llm" / "templates"
-_jinja_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(str(_TEMPLATES_DIR)),
-    keep_trailing_newline=True,
-)
 
-class ReviewBodyFormatter:
-    def format(self, review: CodeReview, start_number: int = 0) -> str:
+class ReviewBodyRenderer:
+    """Renders review bodies using Jinja2 templates.
+
+    Dependency-injected template directory allows flexible template
+    locations without hardcoding paths in the class.
+    """
+
+    def __init__(self, template_dir: Path) -> None:
+        self._template_dir = template_dir
+        _jinja_env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(str(template_dir)),
+            keep_trailing_newline=True,
+        )
+        self._template = _jinja_env.get_template("review_output.j2")
+
+    def render(self, review: CodeReview) -> str:
         verdict_text = review.verdict.value.replace("_", " ").title()
 
-        idx = start_number
         numbered_items = []
         for item in review.items:
             numbered_items.append(
                 {
-                    "number": idx,
+                    "id": item.id,
                     "severity": item.severity,
                     "category": item.category,
                     "file_path": item.file_path,
@@ -34,7 +42,6 @@ class ReviewBodyFormatter:
                     "suggested_fix": item.suggested_fix,
                 }
             )
-            idx += 1
 
         numbered_praise = []
         for p in review.praise:
@@ -47,17 +54,15 @@ class ReviewBodyFormatter:
         numbered_suggestions = []
         for s in suggestions_raw:
             numbered_suggestions.append({
-                "number": idx,
+                "id": s.id,
                 "description": s.description,
                 "file": s.file,
                 "line": s.line,
                 "current_code": s.current_code,
                 "suggested_code": s.suggested_code,
             })
-            idx += 1
 
-        template = _jinja_env.get_template("review_output.j2")
-        return template.render(
+        return self._template.render(
             review=review,
             verdict_text=verdict_text,
             items=numbered_items,

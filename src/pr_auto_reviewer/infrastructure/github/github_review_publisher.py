@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
@@ -13,8 +11,14 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.review_publishers.github_verdict_event_mapper import (
+    GithubVerdictEventMapper,
+)
 from pr_auto_reviewer.infrastructure.review_publishers._review_processor import (
     ReviewPublisherProcessor,
+)
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
@@ -28,13 +32,17 @@ class GithubReviewPublisher(ReviewPublisherPort):
 
     def __init__(
         self,
+        body_renderer: ReviewBodyRenderer,
         client: GitPlatformHttpClient,
         owner_client: GitPlatformHttpClient,
         review_mode: str = "formal",
     ) -> None:
         self._review_mode = review_mode
         self._publishing = ReviewPublishingService(client, owner_client)
-        self._processor = ReviewPublisherProcessor(self._publishing)
+        self._processor = ReviewPublisherProcessor(
+            body_renderer,
+            GithubVerdictEventMapper(),
+        )
 
     def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)

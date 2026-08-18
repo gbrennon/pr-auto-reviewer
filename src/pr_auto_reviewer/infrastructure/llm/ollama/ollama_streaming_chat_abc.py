@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, AsyncIterator
 
 
 class OllamaStreamingChatABC(ABC):
@@ -73,7 +73,7 @@ class OllamaStreamingChatABC(ABC):
         repo_path: str,
         pr_number: int,
         diff_content: str,
-    ) -> OllamaReviewStream:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream a full PR review across multiple LLM turns.
 
         Parameters
@@ -99,6 +99,7 @@ class OllamaStreamingChatABC(ABC):
         that includes the fully‑accumulated, fully‑validated JSON object
         under the key ``"parsed"``.
         """
+        yield {}
 
     def parse_streaming_response(
         self, raw_lines: list[str], model: str
@@ -207,20 +208,16 @@ class OllamaReviewStream:
         self.kind = kind
 
         if kind == "complete":
-            # On the final turn, attempt to validate the accumulated
-            # content as JSON (the engine already guarantees it when
-            # json_schema was supplied, but we defensively try).
             try:
-                self._parsed = json.loads(self.content)
-                self._items = self._parsed.get("items") or self._parsed.get("findings") or self._parsed.get("issues")
+                parsed = json.loads(self.content)
+                self.parsed = parsed
+                self._items = parsed.get("items") or parsed.get("findings") or parsed.get("issues")
                 self._metadata = {
-                    "verdict": self._parsed.get("verdict", "commented"),
-                    "reason": self._parsed.get("reason", ""),
-                    "summary": self._parsed.get("summary", ""),
-                    "suggestions": self._parsed.get("suggestions", []),
-                    "praise": self._parsed.get("praise", []),
+                    "verdict": parsed.get("verdict", "commented"),
+                    "reason": parsed.get("reason", ""),
+                    "summary": parsed.get("summary", ""),
+                    "suggestions": parsed.get("suggestions", []),
+                    "praise": parsed.get("praise", []),
                 }
             except json.JSONDecodeError:
-                # Keep whatever we had; the engine should have masked
-                # invalid tokens, but fallback gracefully.
-                pass
+                return

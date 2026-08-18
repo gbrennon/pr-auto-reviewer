@@ -91,8 +91,8 @@ from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
-from pr_auto_reviewer.infrastructure.review_publishers._shared import (
-    ReasonBuilder,
+from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
+    ReasonFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -237,7 +237,7 @@ def wire_core_services(
             repo_path, changed_files=changed_files
         ),
     )
-    aggregator = FindingAggregator(ReasonBuilder())
+    aggregator = FindingAggregator(ReasonFactory())
     orchestrator = MultiPhaseReviewOrchestrator(
         command_bus=command_bus,
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(

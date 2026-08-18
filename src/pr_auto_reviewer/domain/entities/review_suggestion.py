@@ -10,6 +10,7 @@ class ReviewSuggestion:
     Immutable. Suggests an improvement without being a blocking issue.
     """
 
+    id: str = ""
     description: str = ""
     file: str = ""
     line: str = ""
