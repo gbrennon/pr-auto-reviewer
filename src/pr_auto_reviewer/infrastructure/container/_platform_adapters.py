@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolver import (
@@ -77,6 +78,9 @@ from pr_auto_reviewer.infrastructure.local_repository.local_changeset_fetcher im
 from pr_auto_reviewer.infrastructure.local_repository.local_repository_context import (
     LocalRepositoryContext,
 )
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
+)
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
@@ -109,6 +113,9 @@ if TYPE_CHECKING:
     from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
 
+_BODY_TEMPLATE_DIR = Path("src/pr_auto_reviewer/infrastructure/templates")
+
+
 @dataclass
 class PlatformAdapters:
     """All platform-specific adapters wired for the current config."""
@@ -130,6 +137,7 @@ def wire_platform_adapters(
     local_repository: LocalRepositoryPort,
 ) -> PlatformAdapters:
     """Build and wire all platform-specific adapters from the given clients."""
+    body_renderer = ReviewBodyRenderer(template_dir=_BODY_TEMPLATE_DIR)
     repos_filter = config.repos_filter or None
     if config.platform_mode == GitProvider.BOTH:
         gb_owner = clients.http_client
@@ -162,17 +170,22 @@ def wire_platform_adapters(
             ),
             changeset_fetcher=changeset_fetcher,
             review_publisher=(
-                TerminalReviewPublisherAdapter(config.output_path)
+                TerminalReviewPublisherAdapter(
+                    body_renderer=body_renderer,
+                    output_path=config.output_path,
+                )
                 if is_terminal
                 else CompositeReviewPublisher(
                     {
                         "github": GithubReviewPublisher(
-                            gb_reviewer,
+                            body_renderer=body_renderer,
+                            client=gb_reviewer,
                             owner_client=gb_owner,
                             review_mode=config.github_review_mode,
                         ),
                         "forgejo": ForgejoReviewPublisher(
-                            fj_reviewer,
+                            body_renderer=body_renderer,
+                            client=fj_reviewer,
                             owner_client=fj_owner,
                         ),
                     }
@@ -233,15 +246,20 @@ def wire_platform_adapters(
         repository_context=LocalRepositoryContext(local_repository),
         changeset_fetcher=changeset_fetcher,
         review_publisher=(
-            TerminalReviewPublisherAdapter(config.output_path)
+            TerminalReviewPublisherAdapter(
+                body_renderer=body_renderer,
+                output_path=config.output_path,
+            )
             if is_terminal
             else GithubReviewPublisher(
-                reviewer_client,
+                body_renderer=body_renderer,
+                client=reviewer_client,
                 owner_client=http_client,
             )
             if is_github
             else ForgejoReviewPublisher(
-                reviewer_client,
+                body_renderer=body_renderer,
+                client=reviewer_client,
                 owner_client=http_client,
             )
         ),
