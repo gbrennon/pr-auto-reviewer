@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
@@ -25,7 +26,8 @@ class GithubReviewReader(ReviewReaderPort):
 
         path = f"/repos/{pr_id.repository}/pulls/{pr_id.number}/reviews"
         logger.info("Fetching latest review for %s", pr_id)
-        reviews = self._client.get(path, limit=10, repo=pr_id.repository)
+        reviews_response = self._client.get(path, limit=10, repo=pr_id.repository)
+        reviews = cast("list[dict[str, Any]] | dict[str, Any]", reviews_response)
 
         if isinstance(reviews, list):
             sorted_reviews = sorted(
@@ -38,7 +40,7 @@ class GithubReviewReader(ReviewReaderPort):
                 logger.debug(
                     "Latest review body: %s chars", len(body) if body else 0,
                 )
-                logger.info("GithubReviewReader return: body=%s chars", len(body))
+                logger.info("GithubReviewReader return: body=%s chars", len(body) if body else 0)
                 return body
             logger.debug("No reviews found for %s", pr_id)
         elif isinstance(reviews, dict) and reviews:
