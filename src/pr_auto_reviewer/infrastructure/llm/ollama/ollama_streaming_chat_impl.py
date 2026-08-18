@@ -23,15 +23,13 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+import httx
 
 from .ollama_streaming_chat_abc import (
     OllamaReviewStream,
     OllamaStreamingChatABC,
 )
 
-# ---------------------------------------------------------------------------
-# JSON schema describing the expected review output
-# ---------------------------------------------------------------------------
 
 _REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -74,10 +72,6 @@ _REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "required": ["verdict", "reason", "summary"],
 }
 
-
-# ---------------------------------------------------------------------------
-# Helper: build the diff + schema prompt
-# ---------------------------------------------------------------------------
 
 def _format_diff(diff_content: str) -> str:
     """Return the diff wrapped in a minimal code‑block fence.
@@ -122,10 +116,6 @@ will guarantee validity; do not add any text before or after the JSON.
     return prompt
 
 
-# ---------------------------------------------------------------------------
-# Concrete implementation
-# ---------------------------------------------------------------------------
-
 class OllamaStreamingChatClient(OllamaStreamingChatABC):
     """Ollama streaming chat client using ``/api/chat`` with GBNF schema."""
 
@@ -151,10 +141,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         self._host = host.rstrip("/")
         self._timeout = timeout
 
-    # ------------------------------------------------------------------
-    # Abstract property implementations
-    # ------------------------------------------------------------------
-
     @property
     def model(self) -> str:
         return self._model
@@ -166,10 +152,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
     @property
     def json_schema(self) -> dict[str, Any]:
         return _REVIEW_JSON_SCHEMA
-
-    # ------------------------------------------------------------------
-    # send_message — blocking, single‑turn
-    # ------------------------------------------------------------------
 
     def send_message(
         self,
@@ -198,13 +180,11 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         str
             The complete model response text.
         """
-        # Build the messages list
         messages: list[dict[str, Any]] = []
 
         if conversation_history:
             messages.extend(conversation_history)
         else:
-            # Default system prompt — brief and schema-aware
             messages.append(
                 {
                     "role": "system",
@@ -214,10 +194,8 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                 }
             )
 
-        # User message = the provided text
         messages.append({"role": "user", "content": message})
 
-        # Build the POST body
         body: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -226,8 +204,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             "options": {"temperature": 0.0, "num_predict": 512},
         }
 
-        # Perform the HTTP POST
-        import httpx
 
         url = f"{self._host}/api/chat"
         accumulated_chunks: list[str] = []
@@ -256,10 +232,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                     break
 
         return "".join(accumulated_chunks).strip()
-
-    # ------------------------------------------------------------------
-    # start_review — async generator of turns
-    # ------------------------------------------------------------------
 
     async def start_review(
         self,
@@ -425,10 +397,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             "turn_number": review_stream.turn_number,
             "parsed": review_stream.parsed,
         }
-
-    # ------------------------------------------------------------------
-    # _classify_turn — determine the kind of a streaming turn
-    # ------------------------------------------------------------------
 
     def _classify_turn(
         self,
