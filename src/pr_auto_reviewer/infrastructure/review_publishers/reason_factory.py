@@ -1,24 +1,12 @@
-"""Shared constants and helpers for the review-publisher family."""
+"""ReasonFactory — builds an expressive reason string from review items."""
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
-    ReviewBodyFormatter,
-)
-
-_VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
-    ReviewVerdict.APPROVED: "APPROVE",
-    ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
-    ReviewVerdict.COMMENTED: "COMMENT",
-}
-
-_body_formatter = ReviewBodyFormatter()
 
 
-class ReasonBuilder:
+class ReasonFactory:
     """Builds an expressive reason string from a list of review items."""
 
-    def build(self, items: list[ReviewItem]) -> str:
+    def make(self, items: list[ReviewItem]) -> str:
         """Group items by severity and category into a human-readable sentence.
 
         Returns ``"No issues found."`` when the item list is empty.
@@ -57,6 +45,3 @@ class ReasonBuilder:
             return f"Found {severity_strings[0]} and {severity_strings[1]}."
         *init, last = severity_strings
         return f"Found {', '.join(init)}, and {last}."
-
-
-_reason_builder = ReasonBuilder()

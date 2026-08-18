@@ -11,12 +11,13 @@ from .local_repository_port import LocalRepositoryPort
 from .notifier_port import NotifierPort
 from .prompt_renderer_port import PromptRendererPort
 from .pull_request_repository import PullRequestRepository
-from .reason_builder_port import ReasonBuilderPort
+from .reason_factory_port import ReasonFactoryPort
 from .repository_context_port import RepositoryContextPort
 from .response_parser_port import ResponseParserPort
 from .review_publisher_port import ReviewPublisherPort
 from .review_reader_port import ReviewReaderPort
 from .tool_execution_port import ToolExecutionPort
+from .verdict_event_mapper_port import VerdictEventMapperPort
 
 __all__ = [
     "AgentChatPort",
@@ -32,10 +33,11 @@ __all__ = [
     "NotifierPort",
     "PromptRendererPort",
     "PullRequestRepository",
-    "ReasonBuilderPort",
+    "ReasonFactoryPort",
     "RepositoryContextPort",
     "ResponseParserPort",
     "ReviewPublisherPort",
     "ReviewReaderPort",
     "ToolExecutionPort",
+    "VerdictEventMapperPort",
 ]

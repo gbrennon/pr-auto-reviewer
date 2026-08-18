@@ -82,8 +82,8 @@ def mock_response_parser() -> MagicMock:
 
 
 @pytest.fixture
-def mock_reason_builder() -> MagicMock:
-    """Mock ReasonBuilderPort."""
+def mock_reason_factory() -> MagicMock:
+    """Mock ReasonFactoryPort."""
     return MagicMock()
 
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
     AggregateReviewFindingsUseCase,
 )
-from pr_auto_reviewer.application.ports.outbound.reason_builder_port import (
-    ReasonBuilderPort,
+from pr_auto_reviewer.application.ports.outbound.reason_factory_port import (
+    ReasonFactoryPort,
 )
 from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
@@ -36,8 +36,8 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
         ". This was previously identified but may have additional instances."
     )
 
-    def __init__(self, reason_builder: ReasonBuilderPort) -> None:
-        self._reason_builder = reason_builder
+    def __init__(self, reason_factory: ReasonFactoryPort) -> None:
+        self._reason_factory = reason_factory
 
     @classmethod
     def _build_summary(cls, merged: list[ReviewItem]) -> str:
@@ -93,7 +93,7 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
 
         verdict = SubReviewGuardrails().verdict_for(merged)
 
-        reason = self._reason_builder.build(merged)
+        reason = self._reason_factory.make(merged)
         summary = ""
         suggestions: list[ReviewSuggestion] = []
         praise: list[ReviewPraise] = []

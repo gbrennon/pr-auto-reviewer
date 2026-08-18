@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-import json
 import logging
 import sys
 from pathlib import Path
@@ -8,67 +5,43 @@ from pathlib import Path
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
     ReviewPublisherPort,
 )
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.review_publishers._shared import _body_formatter
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
+)
+from pr_auto_reviewer.infrastructure.review_publishers.review_json_serializer import (
+    ReviewJsonSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
+
 class TerminalReviewPublisherAdapter(ReviewPublisherPort):
-    def __init__(self, output_path: str | None = None) -> None:
+    """Publish a review to the terminal as human-readable text plus JSON.
+
+    Body formatting and JSON serialization are delegated to collaborators
+    ``ReviewBodyRenderer`` and ``ReviewJsonSerializer``.
+    """
+
+    def __init__(
+        self,
+        body_renderer: ReviewBodyRenderer,
+        output_path: str | None = None,
+    ) -> None:
+        self._body_renderer = body_renderer
         self._output_path = output_path
+        self._serializer = ReviewJsonSerializer()
 
-    def _review_to_json(self, review: CodeReview) -> str:
-        def _compact(payload: dict[str, object]) -> dict[str, object]:
-            return {
-                key: value
-                for key, value in payload.items()
-                if value not in ("", None)
-            }
-
-        def _convert(item):
-            if isinstance(item, ReviewItem):
-                return _compact({
-                    "severity": item.severity.value,
-                    "category": item.category.value,
-                    "file_path": item.file_path,
-                    "description": item.description,
-                    "line": item.line,
-                    "id": item.id,
-                    "current_code": item.current_code,
-                    "suggested_fix": item.suggested_fix,
-                })
-            if isinstance(item, ReviewSuggestion):
-                return _compact({
-                    "file": item.file, "line": item.line,
-                    "description": item.description,
-                    "current_code": item.current_code,
-                    "suggested_code": item.suggested_code,
-                })
-            if isinstance(item, ReviewPraise):
-                return _compact({
-                    "file": item.file, "description": item.description,
-                })
-            return item
-
-        data = {
-            "verdict": review.verdict.value,
-            "reason": review.reason,
-            "summary": review.summary,
-            "items": [_convert(it) for it in review.items],
-            "suggestions": [_convert(s) for s in review.suggestions],
-            "praise": [_convert(p) for p in review.praise],
-            "model_used": review.model_used,
-        }
-        return json.dumps(data, indent=2, ensure_ascii=False)
-
-    def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
-        body = _body_formatter.format(review)
-        json_text = self._review_to_json(review)
+    def publish(
+        self,
+        pr_id: PullRequestId,
+        review: CodeReview,
+        diff: PullRequestDiff | None = None,
+    ) -> None:
+        body = self._body_renderer.render(review)
+        json_text = self._serializer.serialize(review)
 
         output_lines = [
             f"\n{'=' * 60}",
