@@ -429,6 +429,7 @@ class TestReviewPullRequestService:
         _, kwargs = mock_review_publisher.publish.call_args
         review = kwargs.get("review") or mock_review_publisher.publish.call_args.args[1]
         assert len(review.items) == 1
+        assert review.items[0].id
         assert review.items[0].file_path == "src/client.py"
         assert review.items[0].current_code == (
             '        logger.info("GET %s params=%s", url, params)'
