@@ -42,7 +42,7 @@ No notable patterns or practices to highlight.
 ### Suggestions
 {% if suggestions %}
 {% for s in suggestions %}
-{{ s.number }}.{% if s.file %} {{ s.file }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
+{{ s.id }}.{% if s.file %} {{ s.file }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
 
 {{ s.description }}
 {% if s.current_code %}

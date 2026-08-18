@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
-import httx
+from typing import Any, AsyncIterator
+import httpx
 
 from .ollama_streaming_chat_abc import (
     OllamaReviewStream,
@@ -71,16 +71,6 @@ _REVIEW_JSON_SCHEMA: dict[str, Any] = {
     },
     "required": ["verdict", "reason", "summary"],
 }
-
-
-def _format_diff(diff_content: str) -> str:
-    """Return the diff wrapped in a minimal code‑block fence.
-
-    Ollama expects the user message to contain the actual content;
-    we wrap it so the model treats it as code to review rather than
-    conversational text.
-    """
-    return f"```diff\n{diff_content}\n```"
 
 
 def _build_review_prompt(diff_content: str, json_schema: dict[str, Any]) -> str:
@@ -200,7 +190,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "format": json.dumps(_REVIEW_JSON_SCHEMA),  # GBNF mask
+            "format": json.dumps(_REVIEW_JSON_SCHEMA),
             "options": {"temperature": 0.0, "num_predict": 512},
         }
 
@@ -218,12 +208,8 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                 try:
                     data = json.loads(line)
                 except json.JSONDecodeError:
-                    # Skip malformed lines (should not happen with
-                    # schema-enforced output, but be defensive)
                     continue
 
-                # Ollama streams chunks in {"message": {"role": "...",
-                # "content": "..."}, "done": bool} format
                 msg = data.get("message", {})
                 content = msg.get("content", "") or msg.get("thinking", "")
                 if content:
@@ -238,7 +224,7 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         repo_path: str,
         pr_number: int,
         diff_content: str,
-    ) -> OllamaReviewStream:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream a full PR review.
 
         This is an **async generator** that yields ``dict`` turns, each
@@ -278,11 +264,8 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         """
         review_stream = OllamaReviewStream()
 
-        # Compose the prompt
         prompt = _build_review_prompt(diff_content, self.json_schema)
 
-        # Run the streaming send in a thread pool so we can async‑yield
-        # off the main event loop.
         loop = asyncio.get_running_loop()
 
         accumulated: list[str] = []
@@ -323,7 +306,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                         if content:
                             accumulated.append(content)
 
-                        # Classify the turn kind based on the response
                         kind = self._classify_turn(
                             content, data, verdict_seen
                         )
@@ -336,14 +318,9 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                         if done:
                             break
 
-        # Offload the blocking HTTP I/O to a thread pool
         await loop.run_in_executor(None, _stream_lines)
 
-        # After the stream ends, the final turn should be "complete"
-        # with accumulated content that is valid JSON.  Yield any
-        # remaining state and return the stream.
         if review_stream.kind != "complete" or not accumulated:
-            # Fallback: yield what we have
             review_stream.advance("", "complete")
             review_stream.parsed = {
                 "verdict": "commented",
@@ -353,19 +330,11 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
                 "items": [],
             }
 
-        # Yield all turns that were collected during the stream.
-        # The stream helper already called review_stream.advance() for
-        # each line, so we need to re-yield the state.  We reconstruct
-        # the turn sequence from the accumulated content.
-        # Reset and re-yield from the beginning
         review_stream.turn_number = 1
         review_stream.content = ""
         review_stream.kind = "initial"
         review_stream.parsed = None
 
-        # Re-process accumulated lines into turns
-        # (Simplified: just yield a single complete turn with the full
-        # accumulated content as the parsed JSON attempt.)
         try:
             parsed = json.loads("".join(accumulated))
         except json.JSONDecodeError:
@@ -389,8 +358,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             "praise": parsed.get("praise", []),
         }
 
-        # Yield each intermediate turn we recorded during streaming.
-        # For simplicity, yield the final complete turn.
         yield {
             "content": "".join(accumulated),
             "kind": "complete",
@@ -422,27 +389,19 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
             One of ``"tool_call"``, ``"verdict"``, ``"unparseable"``,
             or ``"complete"``.
         """
-        # Check for tool calls — Ollama may include a "tool_calls" key
-        # in the response when the model requests file reads, etc.
         tool_calls = data.get("tool_calls")
         if tool_calls:
             return "tool_call"
 
         content_lower = content.lower().strip()
 
-        # Check for verdict markers before we look for JSON
         if not verdict_seen and (
             content_lower.startswith("verdict:")
             or content_lower in {"approved", "changes requested", "commented"}
         ):
             return "verdict"
 
-        # Try to see if the content is (or leads to) valid JSON.
-        # Since the engine enforces the schema, any non-empty accumulation
-        # that isn't a tool call or verdict marker should eventually be
-        # valid JSON at the end of the stream.
         if content.strip().startswith("{") or content.strip().startswith("["):
             return "complete"
 
-        # Default: continue streaming
         return "unparseable"

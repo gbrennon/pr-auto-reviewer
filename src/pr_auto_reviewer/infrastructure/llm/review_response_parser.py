@@ -124,8 +124,21 @@ class ReviewResponseParser:
             first_para = ReviewResponseParser._extract_first_paragraph(content)
             summary = first_para if first_para else content.strip()[:500]
         items_data = ReviewResponseParser._parse_markdown_items(content)
-        suggestions = ReviewResponseParser._extract_suggestions_md(content)
-        praise = ReviewResponseParser._extract_praise_md(content)
+        suggestions = [
+            ReviewSuggestion(
+                description=str(s.get("description", "")),
+                file=str(s.get("file", "")),
+                line=str(s.get("line", "")),
+            )
+            for s in ReviewResponseParser._extract_suggestions_md(content)
+        ]
+        praise = [
+            ReviewPraise(
+                description=str(p.get("description", "")),
+                file=str(p.get("file", "")),
+            )
+            for p in ReviewResponseParser._extract_praise_md(content)
+        ]
         return CodeReview(
             verdict=verdict,
             reason=reason,
@@ -140,7 +153,6 @@ class ReviewResponseParser:
     def _merge_json_markdown(
         cls, json_result: CodeReview, markdown_result: CodeReview, model: str
     ) -> CodeReview:
-        # Handle summary (string type)
         summary_is_string = isinstance(json_result.summary, str)
         summary_empty = (not summary_is_string or not json_result.summary.strip())
         summary = (
@@ -148,7 +160,6 @@ class ReviewResponseParser:
             if summary_empty and isinstance(markdown_result.summary, str) and markdown_result.summary.strip()
             else json_result.summary
         )
-        # Handle praise (list type)
         praise_is_list = isinstance(json_result.praise, list)
         praise_empty = (not praise_is_list or not json_result.praise)
         praise = (
@@ -156,7 +167,6 @@ class ReviewResponseParser:
             if praise_empty and isinstance(markdown_result.praise, list) and markdown_result.praise
             else json_result.praise
         )
-        # Handle suggestions (list type)
         suggestions_is_list = isinstance(json_result.suggestions, list)
         suggestions_empty = (not suggestions_is_list or not json_result.suggestions)
         suggestions = (
@@ -164,7 +174,6 @@ class ReviewResponseParser:
             if suggestions_empty and isinstance(markdown_result.suggestions, list) and markdown_result.suggestions
             else json_result.suggestions
         )
-        # Handle verdict and reason (string type)
         verdict_is_string = isinstance(json_result.verdict, str)
         reason_is_string = isinstance(json_result.reason, str)
         return CodeReview(
@@ -176,25 +185,6 @@ class ReviewResponseParser:
             praise=praise,
             model_used=model,
         )
-
-    @classmethod
-    def _extract_suggestions_md(cls, content: str) -> list[dict[str, str]]:
-        section_match = re.search(
-            r"## Suggestions\n(.*?)(?=\n## |\Z)", content, re.DOTALL
-        )
-        if not section_match:
-            return []
-        section = section_match.group(1)
-        results: list[dict[str, str]] = []
-        for line in section.strip().split("\n"):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            parsed = ReviewResponseParser._parse_md_suggestion_line(stripped)
-            if parsed is None:
-                continue
-            results.append(parsed)
-        return results
 
     @classmethod
     def _parse_markdown_items(cls, content: str) -> list[ReviewItem]:
@@ -443,8 +433,13 @@ class ReviewResponseParser:
                         ReviewResponseParser._LINE_RANGE):
             m = re.search(pattern, context)
             if m:
-                start = m.group(1)
-                end = m.group(2) if m.lastindex and m.lastindex >= 2 and m.group(2) else ""
+                if pattern is ReviewResponseParser._FILE_LINE:
+                    start = m.group(2)
+                    end_offset = 3
+                else:
+                    start = m.group(1)
+                    end_offset = 2
+                end = m.group(end_offset) if m.lastindex and m.lastindex >= end_offset and m.group(end_offset) else ""
                 return f"{start}-{end}" if end else start
         return ""
 
