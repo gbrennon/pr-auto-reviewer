@@ -26,6 +26,10 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
+from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
+
+
+_BODY = FakeReviewBodyRendererFactory.make()
 
 
 class TestItemDictNormalization:
@@ -143,7 +147,10 @@ class TestTerminalJsonNoEmptyFields:
 
     def _publish_json(self, tmp_path: Path, review: CodeReview) -> dict:
         out_file = tmp_path / "review.txt"
-        adapter = TerminalReviewPublisherAdapter(output_path=str(out_file))
+        adapter = TerminalReviewPublisherAdapter(
+            body_renderer=_BODY,
+            output_path=str(out_file),
+        )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         mark = "--- JSON ---\n"

@@ -2,6 +2,7 @@
 
 import pytest
 import requests
+from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
@@ -14,12 +15,11 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
-    ReviewBodyFormatter,
-)
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import ReviewBodyRenderer
 
 GitReviewPublisherAdapter = GithubReviewPublisher
-format_review_body = ReviewBodyFormatter().format
+format_review_body = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates")).render
+_BODY = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates"))
 
 class TestGitReviewPublisherAdapter:
     """Tests for GitReviewPublisherAdapter using captured fixture data."""
@@ -53,7 +53,7 @@ index def456..ghi789 100644
 
     @pytest.fixture
     def adapter(self, patched_private_client):
-        return GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        return GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
 
     def test_publish(self, adapter):
         """Publish sends a formal PR review."""
@@ -108,7 +108,7 @@ index def456..ghi789 100644
             call_paths.append(path)
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -215,7 +215,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: self.DIFF)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
             items=[ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
@@ -240,7 +240,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(requests.exceptions.HTTPError("diff fetch failed")))
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -252,7 +252,7 @@ index def456..ghi789 100644
             raise requests.exceptions.HTTPError("403 Forbidden")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -265,7 +265,7 @@ index def456..ghi789 100644
             raise requests.exceptions.HTTPError("500 Internal Server Error")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -280,7 +280,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get",
                             lambda path, **kw: (_ for _ in ()).throw(requests.exceptions.HTTPError("boom")))
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
@@ -298,7 +298,7 @@ index def456..ghi789 100644
             patched_private_client, "get", lambda path, **kw: reviews,
         )
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
@@ -310,7 +310,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         caplog.set_level("DEBUG")
         adapter._publishing.publish_comment(
@@ -322,7 +322,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         def raise_err(*_a, **_kw):
             raise requests.exceptions.HTTPError("post failed")
@@ -336,7 +336,7 @@ index def456..ghi789 100644
         self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
@@ -365,7 +365,7 @@ index def456..ghi789 100644
         self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
@@ -397,7 +397,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.COMMENTED, summary="s",
@@ -429,7 +429,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
@@ -458,7 +458,7 @@ index def456..ghi789 100644
     ):
         """Suggestions missing file or code are skipped."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/f.py b/f.py\n"
@@ -479,7 +479,7 @@ index def456..ghi789 100644
     ):
         """Suggestions build GitHub-style inline comments."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
