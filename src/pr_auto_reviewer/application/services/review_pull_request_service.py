@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from typing import Any
 
 from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
@@ -313,6 +314,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                     ),
                     current_code=current_code,
                     suggested_fix=suggested_fix,
+                    id=format(_uuid.uuid7().int, "04x")[:4],
                 )
             )
             if len(items) >= 5:
