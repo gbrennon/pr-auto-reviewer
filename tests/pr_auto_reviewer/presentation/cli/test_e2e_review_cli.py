@@ -42,6 +42,10 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
 )
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
+from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
+
+
+_BODY = FakeReviewBodyRendererFactory.make()
 
 _DIFF_TEXT = (
     "diff --git a/src/network.py b/src/network.py\n"
@@ -246,7 +250,10 @@ class TestReviewCliJsonOutput:
             changeset_fetcher=FakeChangesetFetcher(diff),
             review_context_factory=FakeReviewContextFactory(),
             llm_review=FakeLlmReview(review),
-            review_publisher=TerminalReviewPublisherAdapter(output_path=None),
+            review_publisher=TerminalReviewPublisherAdapter(
+                body_renderer=_BODY,
+                output_path=None,
+            ),
         )
         return CliRunner(
             review_service=review_service,
@@ -315,3 +322,63 @@ class TestReviewCliJsonOutput:
         assert praise["file"]
 
         self._assert_no_defaults(payload)
+
+    @staticmethod
+    def _extract_human_body(output: str) -> str:
+        """Parse the human-readable block printed before the JSON marker."""
+        human_section = output.split("--- HUMAN-READABLE ---", 1)[1]
+        return human_section.split("--- JSON ---", 1)[0].strip()
+
+    def test_review_command_shows_non_empty_item_id_in_body_and_json(self) -> None:
+        """The review command output labels every item by a non-empty id, both
+        in the human-readable body and in the JSON block."""
+        import uuid as _uuid
+
+        item_id = format(_uuid.uuid7().int, "04x")[:4]
+        pr_id = PullRequestId(repository="owner/repo", number=42)
+        head_sha = CommitSha("a" * 40)
+        open_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=head_sha,
+            title="Add network helper",
+            description="Introduces a small fetch helper.",
+            is_draft=False,
+            target_branch="main",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Missing error handling.",
+            summary="One issue found.",
+            items=[
+                ReviewItem(
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.MAINTAINABILITY,
+                    file_path="src/network.py",
+                    description="Prefer a context manager.",
+                    line="3-5",
+                    id=item_id,
+                    current_code="response = requests.get(url)",
+                    suggested_fix="with requests.get(url, timeout=10) as response:",
+                )
+            ],
+            suggestions=[],
+            praise=[],
+            model_used="code-review:latest",
+        )
+        runner = self._build_runner(open_pr, review)
+
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            exit_code = runner._run_review(
+                ["--repo", "owner/repo", "--pr", "42", "--force"]
+            )
+
+        assert exit_code == 0
+        output = buffer.getvalue()
+
+        human_body = self._extract_human_body(output)
+        assert f"\n{item_id}. [" in human_body
+
+        payload = self._extract_json(output)
+        assert payload["items"][0]["id"] == item_id
+        assert payload["items"][0]["id"]
