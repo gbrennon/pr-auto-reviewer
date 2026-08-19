@@ -603,7 +603,7 @@ class TestParseTopLevel:
         result = ReviewResponseParser().parse(raw, "m")
 
         assert len(result.suggestions) == 2
-        assert result.suggestions[1].file == "a.py"
+        assert result.suggestions[1].file_path == "a.py"
 
     def test_parse_when_json_praise_mixed_then_parsed(self) -> None:
         raw = '{"verdict": "commented", "praise": ["textual", {"description": "desc", "file": "a.py"}]}'
@@ -611,7 +611,7 @@ class TestParseTopLevel:
         result = ReviewResponseParser().parse(raw, "m")
 
         assert len(result.praise) == 2
-        assert result.praise[1].file == "a.py"
+        assert result.praise[1].file_path == "a.py"
 
     def test_clean_response_when_stop_token_then_truncated(self) -> None:
         parser = ReviewResponseParser()

@@ -181,7 +181,7 @@ class TestFindingAggregator:
 
         assert len(review.suggestions) == 1
         assert review.suggestions[0].description == "Add bounds check"
-        assert review.suggestions[0].file == "x.py"
+        assert review.suggestions[0].file_path == "x.py"
         assert len(review.praise) == 1
         assert review.praise[0].description == "Clean structure"
 
@@ -198,3 +198,37 @@ class TestFindingAggregator:
         )
 
         assert review.reason == "LLM reason"
+
+    def test_suggestions_come_from_suggestions_phase_result(
+        self, mock_reason_factory,
+    ) -> None:
+        """suggestions_phase_result feeds suggestions; verdict/reason/summary/praise stay on phase_result."""
+        items = [_review_item("Off-by-one in loop")]
+        phase_result = PhaseResult(
+            items=items,
+            llm_verdict="approved",
+            llm_summary="From last phase",
+            llm_suggestions=[{"description": "last phase suggestion"}],
+            llm_praise=[{"description": "last phase praise"}],
+        )
+        architect_result = PhaseResult(
+            llm_suggestions=[{"description": "architect suggestion"}],
+        )
+        mock_reason_factory.make.return_value = "Stub reason"
+        aggregator = FindingAggregator(mock_reason_factory)
+
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(
+                items=items,
+                phase_result=phase_result,
+                suggestions_phase_result=architect_result,
+            )
+        )
+
+        assert [s.description for s in review.suggestions] == [
+            "architect suggestion"
+        ]
+        assert len(review.praise) == 1
+        assert review.praise[0].description == "last phase praise"
+        assert review.summary == "From last phase"
+        assert review.verdict == ReviewVerdict.APPROVED

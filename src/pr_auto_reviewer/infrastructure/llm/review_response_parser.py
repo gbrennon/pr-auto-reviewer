@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -125,17 +123,28 @@ class ReviewResponseParser:
             summary = first_para if first_para else content.strip()[:500]
         items_data = ReviewResponseParser._parse_markdown_items(content)
         suggestions = [
-            ReviewSuggestion(
+            ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=str(s.get("file", "")),
                 description=str(s.get("description", "")),
-                file=str(s.get("file", "")),
                 line=str(s.get("line", "")),
+                id=s.get("id", ""),
+                current_code=s.get("current_code", ""),
+                suggested_fix=s.get("suggested_code", ""),
             )
             for s in ReviewResponseParser._extract_suggestions_md(content)
         ]
         praise = [
-            ReviewPraise(
+            ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=str(p.get("file", "")),
                 description=str(p.get("description", "")),
-                file=str(p.get("file", "")),
+                line="",
+                id="",
+                current_code="",
+                suggested_fix=str(p.get("description", "")),
             )
             for p in ReviewResponseParser._extract_praise_md(content)
         ]
@@ -343,11 +352,45 @@ class ReviewResponseParser:
                 file_path = candidate.lstrip("/")
         line = cls._extract_line_range(chunk) or ""
         description = cls._prose_description(slim, chunk)
+        current_code, suggested_fix = cls._extract_code_blocks(chunk)
         return {
             "file": file_path,
             "line": line,
             "description": description,
+            "current_code": current_code,
+            "suggested_fix": suggested_fix,
         }
+
+    @classmethod
+    def _extract_code_blocks(cls, chunk: str) -> tuple[str, str]:
+        """Extract current_code and suggested_fix from code blocks in chunk."""
+        current_code = ""
+        suggested_fix = ""
+        # Find all code blocks
+        code_blocks = re.findall(r"```(?:[a-zA-Z0-9]+)?\s*\n(.*?)```", chunk, re.DOTALL)
+        for i, block in enumerate(code_blocks):
+            block = block.strip()
+            # Look for markers indicating current vs suggested
+            lower = block.lower()
+            if any(marker in lower for marker in ("current", "before", "old", "original")):
+                current_code = block
+            elif any(marker in lower for marker in ("suggested", "after", "new", "fix", "fixed")):
+                suggested_fix = block
+            elif i == 0 and not current_code:
+                # First block without markers - assume current
+                current_code = block
+            elif i == 1 and not suggested_fix:
+                # Second block without markers - assume suggested
+                suggested_fix = block
+        # Fallback: if we have current but no suggested, use description or current as suggested
+        if current_code and not suggested_fix:
+            # Try to find a second code block or use first as both
+            if len(code_blocks) > 1:
+                suggested_fix = code_blocks[1].strip()
+            else:
+                # No second block - current is the fix (it's a one-line change)
+                suggested_fix = current_code
+        return current_code, suggested_fix
 
     @classmethod
     def _prose_description(cls, title: str, chunk: str) -> str:
@@ -1103,22 +1146,29 @@ class ReviewResponseParser:
             summary=str(data.get("summary", "")),
             items=items,
             suggestions=[
-                ReviewSuggestion(description=str(s)) if isinstance(s, str)
-                else ReviewSuggestion(
-                    description=str(s.get("description", "")),
-                    file=str(s.get("file", "")),
-                    line=str(s.get("line", "")),
-                    current_code=str(s.get("current_code", "")),
-                    suggested_code=str(s.get("suggested_code", "")),
+                ReviewItem(
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=str(s.get("file", "") if isinstance(s, dict) else ""),
+                    description=str(s.get("description", "") if isinstance(s, dict) else s),
+                    line=str(s.get("line", "") if isinstance(s, dict) else ""),
+                    id=s.get("id", s.get("_id", "")) if isinstance(s, dict) else "",
+                    current_code=str(s.get("current_code", "")) if isinstance(s, dict) else "",
+                    suggested_fix=str(s.get("suggested_code", "")) if isinstance(s, dict) else "",
                 )
                 for s in data.get("suggestions", [])
                 if isinstance(s, (str, dict))
             ],
             praise=[
-                ReviewPraise(description=str(p)) if isinstance(p, str)
-                else ReviewPraise(
-                    description=str(p.get("description", "")),
-                    file=str(p.get("file", "")),
+                ReviewItem(
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=str(p.get("file", "") if isinstance(p, dict) else ""),
+                    description=str(p.get("description", "") if isinstance(p, dict) else p),
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix=str(p.get("description", "")) if isinstance(p, dict) else p,
                 )
                 for p in data.get("praise", [])
                 if isinstance(p, (str, dict))

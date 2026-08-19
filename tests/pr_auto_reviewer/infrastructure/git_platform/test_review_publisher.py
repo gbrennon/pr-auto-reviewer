@@ -5,8 +5,7 @@ import requests
 from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -305,7 +304,6 @@ index def456..ghi789 100644
         )
         assert result == 4
 
-
     def test_publish_comment_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
@@ -377,8 +375,16 @@ index def456..ghi789 100644
             "+return True\n"
         )
         suggestions = [
-            ReviewSuggestion(file="src/main.py", current_code="return True",
-                             description="Use a constant instead"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="src/main.py",
+                description="Use a constant instead",
+                line="",
+                id="a1b2",
+                current_code="return True",
+                suggested_fix="Use a constant instead",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="forgejo",
@@ -409,7 +415,16 @@ index def456..ghi789 100644
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],
-            praise=[ReviewPraise(description="nice")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="nice",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="nice",
+                )],
             model_used="m",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -441,7 +456,16 @@ index def456..ghi789 100644
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],
-            praise=[ReviewPraise(description="nice")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="nice",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="nice",
+                )],
             model_used="m",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -466,8 +490,26 @@ index def456..ghi789 100644
             "+x\n"
         )
         suggestions = [
-            ReviewSuggestion(file="", current_code="x", description="no file"),
-            ReviewSuggestion(file="f.py", current_code="", description="no code"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="",
+                description="no file",
+                line="",
+                id="",
+                current_code="x",
+                suggested_fix="no file",
+            ),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="f.py",
+                description="no code",
+                line="",
+                id="",
+                current_code="",
+                suggested_fix="no code",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="github",
@@ -488,8 +530,16 @@ index def456..ghi789 100644
             "+return True\n"
         )
         suggestions = [
-            ReviewSuggestion(file="src/main.py", current_code="return True",
-                             description="Use a constant"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="src/main.py",
+                description="Use a constant",
+                line="",
+                id="a1b2",
+                current_code="return True",
+                suggested_fix="Use a constant",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="github",

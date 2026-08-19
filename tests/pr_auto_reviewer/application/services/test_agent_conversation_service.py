@@ -193,78 +193,6 @@ class TestConversationLoopGuardrails:
         )
         assert result == ""
 
-    def test_ground_suggestion_with_valid_file(
-        self, mock_chat_port, mock_command_bus,
-    ) -> None:
-        original_is_file = Path.is_file
-        original_locate = ReviewItemFactory._locate_symbol_range
-        original_read = ReviewItemFactory._read_evidence
-        try:
-            # Only src/client.py "exists" in the repo
-            Path.is_file = lambda self: "src/client.py" in str(self)
-            ReviewItemFactory._locate_symbol_range = lambda *a, **kw: "10"
-            ReviewItemFactory._read_evidence = lambda *a, **kw: "some code"
-            service = AgentConversationService(
-                chat_port=mock_chat_port, command_bus=mock_command_bus
-            )
-            suggestion = {"file": "src/client.py", "description": "get_user"}
-            repo_root = Path("/repos/owner_repo_42")
-            changed_files = ["src/client.py"]
-            result = service._ground_suggestion(suggestion, repo_root, changed_files)
-            assert result is not None
-            assert "file" in result or "line" in result
-        finally:
-            Path.is_file = original_is_file
-            ReviewItemFactory._locate_symbol_range = original_locate
-            ReviewItemFactory._read_evidence = original_read
-
-    def test_ground_suggestion_with_unknown_file(
-        self, mock_chat_port, mock_command_bus,
-    ) -> None:
-        original_is_file = Path.is_file
-        original_locate = ReviewItemFactory._locate_symbol_range
-        original_read = ReviewItemFactory._read_evidence
-        try:
-            # Only "resolve" files that exist in the repo path
-            Path.is_file = lambda self: "src/client.py" in str(self)
-            ReviewItemFactory._locate_symbol_range = lambda *a, **kw: None
-            ReviewItemFactory._read_evidence = lambda *a, **kw: ""
-            service = AgentConversationService(
-                chat_port=mock_chat_port, command_bus=mock_command_bus
-            )
-            suggestion = {"file": "src/unknown.py", "description": "get_user"}
-            repo_root = Path("/repos/owner_repo_42")
-            changed_files = ["src/client.py"]
-            result = service._ground_suggestion(suggestion, repo_root, changed_files)
-            assert result is None
-        finally:
-            Path.is_file = original_is_file
-            ReviewItemFactory._locate_symbol_range = original_locate
-            ReviewItemFactory._read_evidence = original_read
-
-    def test_ground_suggestion_empty_file(
-        self, mock_chat_port, mock_command_bus,
-    ) -> None:
-        original_is_file = Path.is_file
-        original_locate = ReviewItemFactory._locate_symbol_range
-        original_read = ReviewItemFactory._read_evidence
-        try:
-            Path.is_file = lambda self: False
-            ReviewItemFactory._locate_symbol_range = lambda *a, **kw: None
-            ReviewItemFactory._read_evidence = lambda *a, **kw: ""
-            service = AgentConversationService(
-                chat_port=mock_chat_port, command_bus=mock_command_bus
-            )
-            suggestion = {"file": "", "description": "get_user"}
-            repo_root = Path("/repos/owner_repo_42")
-            changed_files = ["src/client.py"]
-            result = service._ground_suggestion(suggestion, repo_root, changed_files)
-            assert result is None
-        finally:
-            Path.is_file = original_is_file
-            ReviewItemFactory._locate_symbol_range = original_locate
-            ReviewItemFactory._read_evidence = original_read
-
     def test_log_conversation_debug_emits(
         self, mock_chat_port, mock_command_bus, caplog,
     ) -> None:
@@ -391,6 +319,36 @@ class TestConversationLoopGuardrails:
         try:
             result = service._build_phase_result(parsed, Path("/tmp"), ["src/a.py"])
             assert result.items == []
+        finally:
+            ReviewItemFactory.create = original_create
+
+    def test_build_phase_result_does_not_demote_rejected_items_to_suggestions(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """Rejected raw items stay out of suggestions; only explicit LLM suggestions pass through."""
+        parsed = TurnParseResult(
+            kind="verdict",
+            raw_items=[
+                {"description": "rejected issue", "file": "src/a.py", "line": "10", "current_code": "x"},
+            ],
+            metadata={
+                "verdict": "approved",
+                "reason": "LGTM",
+                "suggestions": [{"description": "real suggestion"}],
+            },
+        )
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus
+        )
+        original_create = ReviewItemFactory.create
+        ReviewItemFactory.create = lambda *a, **kw: ([], [])
+        try:
+            result = service._build_phase_result(
+                parsed, Path("/tmp"), ["src/a.py"]
+            )
+            assert [s["description"] for s in result.llm_suggestions] == [
+                "real suggestion"
+            ]
         finally:
             ReviewItemFactory.create = original_create
 

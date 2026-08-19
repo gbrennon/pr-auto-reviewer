@@ -20,10 +20,9 @@ from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
     SubReviewGuardrails,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import (
-    ReviewSuggestion,
-)
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
@@ -45,7 +44,6 @@ from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
 from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
     PhaseCompletedEvent,
 )
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
 )
@@ -86,6 +84,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             repo_path=command.repo_path,
             changed_files=command.changed_files,
             model=command.model,
+            existing_item_ids=command.existing_item_ids,
         )
 
     def _run_phases_full_retry(
@@ -94,8 +93,10 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         repo_path: Path,
         changed_files: list[str],
         model: str,
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
         """Orchestrate all phases with full-review retry and feedback loop."""
+        repo_name, pr_id_str = self._extract_repo_and_pr(repo_path)
         best_attempt_items: list[ReviewItem] = []
         result: CodeReview | None = None
 
@@ -108,7 +109,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             attempt_items: list[ReviewItem] = []
             try:
                 result = self._run_phases(
-                    plan, repo_path, changed_files, model, attempt_items
+                    plan, repo_path, changed_files, model, attempt_items, existing_item_ids=existing_item_ids
                 )
                 if result.items:
                     return result
@@ -150,7 +151,10 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     CodeReview,
                     self._command_bus.dispatch(
                         AggregateReviewFindingsCommand(
-                            items=best_attempt_items, model_used=model
+                            items=best_attempt_items,
+                            model_used=model,
+                            repo_name=repo_name,
+                            pr_id=pr_id_str,
                         )
                     ),
                 )
@@ -176,7 +180,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
         if not result.items:
             result = self._run_feedback_loop(
-                plan, repo_path, changed_files, model, result
+                plan, repo_path, changed_files, model, result, existing_item_ids
             )
 
         return result
@@ -188,6 +192,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         changed_files: list[str],
         model: str,
         previous_result: CodeReview,
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
         """Re-run phases with the prior review output as feedback context."""
         best = previous_result
@@ -207,6 +212,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     changed_files,
                     model,
                     initial_feedback=context,
+                    existing_item_ids=existing_item_ids,
                 )
             except LlmUnavailableError:
                 logger.warning(
@@ -269,10 +275,12 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         model: str,
         accumulated_items: list[ReviewItem] | None = None,
         initial_feedback: str = "",
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
         last_phase_result: PhaseResult | None = None
+        phase_results: dict[str, PhaseResult] = {}
         previous_findings: str = ""
 
         for phase in plan.phases:
@@ -291,12 +299,18 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     previous_findings or "No findings from prior phases.",
                 )
 
+            # Combine existing IDs from command with IDs from items accumulated so far
+            existing_ids = frozenset(
+                item.id for item in all_items if item.id
+            ) | existing_item_ids
             phase_result = self._run_phase_with_retry(
                 phase_name=phase.phase_name,
                 phase_prompt=phase_prompt,
                 repo_path=repo_path,
                 changed_files=changed_files,
+                existing_item_ids=existing_ids,
             )
+            phase_results[phase.phase_id] = phase_result
             existing_keys = {
                 (item.file_path or "", item.description)
                 for item in all_items
@@ -343,12 +357,19 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 len(all_items),
             )
 
+        suggestion_phase_id = getattr(plan, "suggestions_phase_id", None)
+        suggestions_source = (
+            phase_results.get(suggestion_phase_id)
+            if suggestion_phase_id
+            else None
+        ) or last_phase_result
+
         if not all_items:
             verdict = ReviewVerdict.COMMENTED
             reason = "No issues found across all review phases."
             summary = "No issues found across all review phases."
-            suggestions: list[ReviewSuggestion] = []
-            praise_list: list[ReviewPraise] = []
+            suggestions: list[ReviewItem] = []
+            praise_list: list[ReviewItem] = []
 
             if last_phase_result is not None:
                 coerced = ReviewVerdict.coerce(
@@ -360,16 +381,27 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
                     summary = last_phase_result.llm_summary
-                for s in last_phase_result.llm_suggestions:
-                    suggestions.append(ReviewSuggestion(
-                        file=s.get("file", ""),
-                        line=s.get("line", ""),
+                for s in suggestions_source.llm_suggestions:
+                    suggestions.append(ReviewItem(
+                        severity=ItemSeverity.INFO,
+                        category=IssueCategory.GENERAL,
+                        file_path=s.get("file", ""),
                         description=s.get("description", ""),
+                        line=s.get("line", ""),
+                        id=s.get("id", ""),
+                        current_code=s.get("current_code", ""),
+                        suggested_fix=s.get("suggested_code", ""),
                     ))
                 for p in last_phase_result.llm_praise:
-                    praise_list.append(ReviewPraise(
-                        file=p.get("file", ""),
+                    praise_list.append(ReviewItem(
+                        severity=ItemSeverity.INFO,
+                        category=IssueCategory.GENERAL,
+                        file_path=p.get("file", ""),
                         description=p.get("description", ""),
+                        line="",
+                        id="",
+                        current_code="",
+                        suggested_fix=p.get("description", ""),
                     ))
 
             if verdict == ReviewVerdict.COMMENTED:
@@ -403,6 +435,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             AggregateReviewFindingsCommand(
                 items=all_items,
                 phase_result=last_phase_result,
+                suggestions_phase_result=suggestions_source,
                 model_used=model,
             )
         )
@@ -482,6 +515,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         phase_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
         """Run a single phase with per-phase retry on exhaustion."""
         tool_service = self._tool_factory(
@@ -496,6 +530,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         changed_files=changed_files,
                         tool_execution=tool_service,
                         phase_name=phase_name,
+                        existing_item_ids=existing_item_ids,
                     )
                 )
             except LlmUnavailableError as exc:
@@ -517,6 +552,18 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
     def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
         return "Phase exceeded max turns" in str(exc)
+
+    def _extract_repo_and_pr(self, repo_path: Path) -> tuple[str, str]:
+        """Extract (repo_name, pr_id) from repo_path."""
+        if repo_path is None:
+            return "", ""
+        path_str = str(repo_path)
+        import re
+        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", path_str)
+        if match:
+            return f"{match.group(1)}/{match.group(2)}", match.group(3)
+        # Fallback: use last path component
+        return path_str.rsplit("/", 1)[-1], ""
 
     def _publish(self, event: Any) -> None:
         """Publish an event to the bus."""

@@ -47,7 +47,7 @@ class ReviewBodyRenderer:
         for p in review.praise:
             numbered_praise.append({
                 "description": p.description,
-                "file": p.file,
+                "file_path": p.file_path,
             })
 
         suggestions_raw = getattr(review, "suggestions", [])
@@ -56,10 +56,10 @@ class ReviewBodyRenderer:
             numbered_suggestions.append({
                 "id": s.id,
                 "description": s.description,
-                "file": s.file,
+                "file_path": s.file_path,
                 "line": s.line,
                 "current_code": s.current_code,
-                "suggested_code": s.suggested_code,
+                "suggested_fix": s.suggested_fix,
             })
 
         return self._template.render(

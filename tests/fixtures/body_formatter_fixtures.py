@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -40,8 +39,26 @@ class BodyFormatterFixtures:
                     suggested_fix='msg = f"Hello {name}"',
                 ),
             ],
-            praise=[ReviewSuggestion(description="Clean separation of concerns")],
-            suggestions=[ReviewSuggestion(description="Consider adding integration tests")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Clean separation of concerns",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Clean separation of concerns",
+                )],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Consider adding integration tests",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Consider adding integration tests",
+                )],
         )
 
     @staticmethod

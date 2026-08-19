@@ -7,6 +7,7 @@ the command must carry every attribute filled — no default or empty values.
 """
 
 import json
+import uuid
 from contextlib import redirect_stdout
 from io import StringIO
 from typing import ClassVar
@@ -26,8 +27,6 @@ from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
@@ -172,13 +171,23 @@ class TestReviewCliJsonOutput:
         "suggested_fix",
     }
     _SUGGESTION_KEYS: ClassVar[set[str]] = {
-        "file",
-        "line",
+        "severity",
+        "category",
+        "file_path",
         "description",
+        "line",
+        "id",
         "current_code",
-        "suggested_code",
+        "suggested_fix",
     }
-    _PRAISE_KEYS: ClassVar[set[str]] = {"file", "description"}
+    _PRAISE_KEYS: ClassVar[set[str]] = {
+        "severity",
+        "category",
+        "file_path",
+        "description",
+        "suggested_fix",
+        "id",
+    }  # Praise carries a unique id; empty line and current_code are dropped by _compact
 
     @classmethod
     def _assert_no_defaults(cls, value) -> None:
@@ -215,20 +224,27 @@ class TestReviewCliJsonOutput:
                 ),
             ],
             suggestions=[
-                ReviewSuggestion(
-                    file="src/network.py",
-                    line="3",
+                ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="src/network.py",
                     description="Add an explicit timeout to every outbound request.",
+                    line="3",
+                    id="a1b2",
                     current_code="response = requests.get(url)",
-                    suggested_code="response = requests.get(url, timeout=10)",
+                    suggested_fix="response = requests.get(url, timeout=10)",
                 ),
             ],
-            praise=[
-                ReviewPraise(
-                    file="src/network.py",
-                    description="Small, focused helper that is easy to unit test.",
-                ),
-            ],
+            praise=[ReviewItem(
+                severity="info",
+                category="general",
+                file_path="src/network.py",
+                description="Small, focused helper that is easy to unit test.",
+                line="",
+                id="",
+                current_code="",
+                suggested_fix="Small, focused helper that is easy to unit test.",
+            )],
             model_used="code-review:latest",
         )
 
@@ -314,12 +330,14 @@ class TestReviewCliJsonOutput:
         suggestion = payload["suggestions"][0]
         assert set(suggestion) == self._SUGGESTION_KEYS
         assert suggestion["current_code"]
-        assert suggestion["suggested_code"]
+        assert suggestion["suggested_fix"]
         assert suggestion["line"]
+        assert suggestion["id"]
 
         praise = payload["praise"][0]
         assert set(praise) == self._PRAISE_KEYS
-        assert praise["file"]
+        assert praise["file_path"]
+        assert praise["id"]
 
         self._assert_no_defaults(payload)
 
@@ -332,9 +350,8 @@ class TestReviewCliJsonOutput:
     def test_review_command_shows_non_empty_item_id_in_body_and_json(self) -> None:
         """The review command output labels every item by a non-empty id, both
         in the human-readable body and in the JSON block."""
-        import uuid as _uuid
 
-        item_id = format(_uuid.uuid7().int, "04x")[:4]
+        item_id = format(uuid.uuid7().int, "04x")[:4]
         pr_id = PullRequestId(repository="owner/repo", number=42)
         head_sha = CommitSha("a" * 40)
         open_pr = OpenPullRequest(
@@ -381,4 +398,57 @@ class TestReviewCliJsonOutput:
 
         payload = self._extract_json(output)
         assert payload["items"][0]["id"] == item_id
-        assert payload["items"][0]["id"]
+        assert payload["items"][0]["id"] == item_id
+
+    def test_review_command_shows_non_empty_suggestion_id_in_body_and_json(self) -> None:
+        """The review command labels every suggestion by a non-empty id, both
+        in the human-readable body and in the JSON block."""
+
+        suggestion_id = format(uuid.uuid7().int, "04x")[:4]
+        pr_id = PullRequestId(repository="owner/repo", number=42)
+        head_sha = CommitSha("a" * 40)
+        open_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=head_sha,
+            title="Add network helper",
+            description="Introduces a small fetch helper.",
+            is_draft=False,
+            target_branch="main",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Missing error handling.",
+            summary="One suggestion found.",
+            items=[],
+            suggestions=[
+                ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="src/network.py",
+                    description="Add an explicit timeout.",
+                    line="3",
+                    id=suggestion_id,
+                    current_code="response = requests.get(url)",
+                    suggested_fix="response = requests.get(url, timeout=10)",
+                )
+            ],
+            praise=[],
+            model_used="code-review:latest",
+        )
+        runner = self._build_runner(open_pr, review)
+
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            exit_code = runner._run_review(
+                ["--repo", "owner/repo", "--pr", "42", "--force"]
+            )
+
+        assert exit_code == 0
+        output = buffer.getvalue()
+
+        human_body = self._extract_human_body(output)
+        assert f"\n{suggestion_id}. " in human_body
+
+        payload = self._extract_json(output)
+        assert payload["suggestions"][0]["id"] == suggestion_id
+        assert payload["suggestions"][0]["id"] == suggestion_id

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import logging
-import uuid as _uuid
 from typing import Any
 
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
@@ -17,8 +15,8 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
-from ...domain.entities.review_praise import ReviewPraise
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
+from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.issue_category import IssueCategory
@@ -52,6 +50,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         token_verifier: TokenVerifierPort | None = None,
         command_bus: Any = None,
         conversation_logger: Any = None,
+        plan: ReviewPlan | None = None,
     ) -> None:
         self._pr_repository = pr_repository
         self._changeset_fetcher = changeset_fetcher
@@ -61,6 +60,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         self._token_verifier = token_verifier
         self._command_bus = command_bus
         self._conversation_logger = conversation_logger
+        self._plan = plan
 
     def execute(self, command: ReviewPullRequestCommand) -> None:
         self._log_start(command)
@@ -90,6 +90,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         else:
             review = self._run_single_turn_review(composed)
         review = self._add_deterministic_findings(review, diff)
+        review = ReviewItemFactory.ensure_unique_ids(review)
 
         blocking_ids = self._extract_blocking_ids(review)
 
@@ -208,31 +209,6 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         )
         return review
 
-    def _build_review_plan(self) -> ReviewPlan:
-        """Build a ReviewPlan with phases corresponding to sub-agent roles.
-
-        The plan consists of 5 phases: Advisor, Engineer, Architect,
-        Security Review, and Performance Analysis. Each phase provides
-        a different perspective on the code review.
-        """
-        phases: list[ReviewPhase] = []
-        phase_configs = [
-            ("advisor", "Advisor Review"),
-            ("engineer", "Engineer Review"),
-            ("architect", "Architect Review"),
-            ("security", "Security Review"),
-            ("performance", "Performance Analysis"),
-        ]
-        for phase_id, phase_name in phase_configs:
-            phases.append(
-                ReviewPhase(
-                    phase_id=phase_id,
-                    phase_name=phase_name,
-                    system_prompt="",
-                )
-            )
-        return ReviewPlan(phases=tuple(phases), methodology="sub-agent-multi-phase")
-
     def _run_multi_phase_review(
         self, composed: Any, command: ReviewPullRequestCommand,
     ) -> CodeReview:
@@ -242,6 +218,12 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
         executes the orchestrator, keeping this inbound service decoupled
         from the other inbound use case.
         """
+        if self._plan is None:
+            logger.warning(
+                "No review plan wired; falling back to single-turn review"
+            )
+            return self._run_single_turn_review(composed)
+        plan = self._plan
         diff = self._fetch_diff(command)
         if diff.clone_path is None:
             logger.warning(
@@ -251,13 +233,31 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             return self._run_single_turn_review(composed)
 
         changed_files: list[str] = sorted(diff.file_contents.keys()) if diff.file_contents else []
-        plan = self._build_review_plan()
+
+        # Load existing PR to get existing review item IDs for unique ID generation
+        existing_pr = self._pr_repository.find(command.pr_id)
+        existing_item_ids = frozenset()
+        if existing_pr is not None:
+            existing_ids = set()
+            for review in existing_pr.reviews:
+                for item in review.items:
+                    if item.id:
+                        existing_ids.add(item.id)
+                for suggestion in review.suggestions:
+                    if suggestion.id:
+                        existing_ids.add(suggestion.id)
+                for praise in review.praise:
+                    if praise.id:
+                        existing_ids.add(praise.id)
+            existing_item_ids = frozenset(existing_ids)
+
         return self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=plan,
                 repo_path=diff.clone_path,
                 changed_files=changed_files,
                 model="code-review:latest",
+                existing_item_ids=existing_item_ids,
             )
         )
 
@@ -314,7 +314,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                     ),
                     current_code=current_code,
                     suggested_fix=suggested_fix,
-                    id=format(_uuid.uuid7().int, "04x")[:4],
+                    id=ReviewItemFactory._generate_id(),
                 )
             )
             if len(items) >= 5:
@@ -343,11 +343,18 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             "behind debug or verbose logging."
         )
         praise = review.praise or [
-            ReviewPraise(
+            ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path="",
                 description=(
                     "The logging additions are consistently placed around the "
                     "operations they observe."
-                )
+                ),
+                line="",
+                id="",
+                current_code="",
+                suggested_fix="",
             )
         ]
         return CodeReview(
