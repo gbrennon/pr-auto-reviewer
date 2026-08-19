@@ -56,10 +56,32 @@ When your review is complete, respond with a single JSON object:
       "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
     }
   ],
-  "suggestions": [],
+  "suggestions": [
+    {
+      "file": "path/to/file.py",
+      "description": "A non-blocking design or architecture improvement: extracting an interface or port, decoupling modules, moving logic to the correct layer, replacing inheritance with composition, reducing coupling, or introducing a pattern. Never a bug report and never a duplicate of an item."
+    }
+  ],
   "praise": []
 }
 ```
+
+## SUGGESTIONS RULES
+
+`suggestions` are advisory improvements to the codebase's design or
+architecture. They are the only phase that emits suggestions, so they must be
+explicitly stated. Follow these rules:
+
+1. A suggestion is an improvement opportunity, never a defect. Bugs,
+   violations, and required changes belong in `items`.
+2. Never repeat an `item` as a suggestion. If a finding is worth fixing, keep
+   it in `items` only.
+3. Do not include `current_code` or `suggested_fix` code dumps in a
+   suggestion. Describe the improvement in prose; an optional `suggested_fix`
+   may sketch the target structure, not a diff.
+4. Prefer a concrete `file` (the module the improvement applies to). If the
+   improvement spans the whole repository, use an empty `file` and describe
+   the architectural direction.
 
 You MUST inspect the changed files with `read_file` before concluding. If you
 find nothing after inspection, return a verdict of `approved` with an empty
