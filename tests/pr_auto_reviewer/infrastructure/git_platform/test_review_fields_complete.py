@@ -12,13 +12,11 @@ from pathlib import Path
 
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
-from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
@@ -175,13 +173,25 @@ class TestTerminalJsonNoEmptyFields:
                     suggested_fix="Add validation.",
                 ),
             ],
-            suggestions=[ReviewSuggestion(
-                file="src/a.py",
-                line="10-14",
-                description="Add validation.",
-                current_code="def f():",
-            )],
-            praise=[ReviewPraise(description="Good structure.")],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="src/a.py",
+                    line="10-14",
+                    description="Add validation.",
+                    current_code="def f():",
+                    suggested_fix="Add validation.",
+                )],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Good structure.",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Good structure.",
+                )],
             model_used="code-review:latest",
         )
         payload = self._publish_json(tmp_path, review)
@@ -209,9 +219,16 @@ class TestTerminalJsonNoEmptyFields:
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
             summary="ok",
-            suggestions=[ReviewSuggestion(
-                description="Implement rate limiting for LLM calls",
-            )],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Implement rate limiting for LLM calls",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Implement rate limiting for LLM calls",
+                )],
             model_used="m",
         )
         payload = self._publish_json(tmp_path, review)
@@ -227,7 +244,16 @@ class TestTerminalJsonNoEmptyFields:
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
             summary="ok",
-            praise=[ReviewPraise(description="Good structure.")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Good structure.",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Good structure.",
+                )],
             model_used="m",
         )
         payload = self._publish_json(tmp_path, review)

@@ -3,8 +3,6 @@
 import json
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -32,16 +30,27 @@ def _full_review() -> CodeReview:
             ),
         ],
         suggestions=[
-            ReviewSuggestion(
-                id="s0",
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="b.py",
                 description="rename variable",
-                file="b.py",
                 line="3",
+                id="s0",
                 current_code="tmp",
-                suggested_code="count",
+                suggested_fix="count",
             ),
         ],
-        praise=[ReviewPraise(file="c.py", description="great design")],
+        praise=[ReviewItem(
+            severity="info",
+            category="general",
+            file_path="c.py",
+            description="great design",
+            line="",
+            id="",
+            current_code="",
+            suggested_fix="great design",
+        )],
         model_used="test-model",
     )
 
@@ -55,6 +64,9 @@ class TestReviewJsonSerializer:
         assert data["reason"] == "Found issues."
         assert data["summary"] == "Review summary"
         assert data["model_used"] == "test-model"
+        assert data["items"] != []
+        assert data["suggestions"] != []
+        assert data["praise"] != []
 
     def test_serializes_nested_item_fields(self) -> None:
         data = json.loads(ReviewJsonSerializer().serialize(_full_review()))
@@ -74,16 +86,19 @@ class TestReviewJsonSerializer:
         data = json.loads(ReviewJsonSerializer().serialize(_full_review()))
         suggestion = data["suggestions"][0]
         assert suggestion == {
-            "file": "b.py",
-            "line": "3",
+            "severity": "info",
+            "category": "general",
+            "file_path": "b.py",
             "description": "rename variable",
+            "line": "3",
+            "id": "s0",
             "current_code": "tmp",
-            "suggested_code": "count",
+            "suggested_fix": "count",
         }
 
     def test_serializes_nested_praise_fields(self) -> None:
         data = json.loads(ReviewJsonSerializer().serialize(_full_review()))
-        assert data["praise"] == [{"file": "c.py", "description": "great design"}]
+        assert data["praise"] == [{"severity": "info", "category": "general", "file_path": "c.py", "description": "great design", "suggested_fix": "great design"}]
 
     def test_top_level_empty_fields_are_preserved_as_empty(self) -> None:
         review = CodeReview(

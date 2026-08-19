@@ -3,15 +3,12 @@
 from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import ReviewBodyRenderer
 
 from tests.fixtures.body_formatter_fixtures import BodyFormatterFixtures as F
-
 
 class TestReviewBodyRenderer:
     def test_format_review_with_items(self):

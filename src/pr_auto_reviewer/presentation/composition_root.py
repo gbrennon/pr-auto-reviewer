@@ -131,6 +131,7 @@ class CompositionRoot:
             token_verifier=c.token_verifier,
             command_bus=c.command_bus,
             conversation_logger=c.conversation_logger,
+            plan=c.review_plan,
         )
 
         review_item_parser = ReviewItemParser()
