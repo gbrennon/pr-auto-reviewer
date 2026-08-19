@@ -10,12 +10,14 @@ from unittest.mock import patch
 
 from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 
-class TestReviewItemFactoryExtractSymbols:
-    """Tests for _extract_symbols classmethod."""
+class TestReviewItemFactory:
+    """Tests for ReviewItemFactory domain service."""
 
     def test_extract_backticked_symbols(self) -> None:
         """Test extracting backticked symbol names."""
@@ -29,33 +31,26 @@ class TestReviewItemFactoryExtractSymbols:
         result = ReviewItemFactory._extract_symbols(
             "function process_data() failed"
         )
-        # Should find "process_data" or similar
         assert len(result) > 0
 
     def test_filter_symbols_min_length(self) -> None:
         """Test that symbols shorter than 2 chars are filtered out."""
         result = ReviewItemFactory._extract_symbols("a b c")
-        # Single chars should be filtered
         assert all(len(s) > 1 for s in result)
 
-
-class TestReviewItemFactoryGenerateID:
-    """Tests for _generate_id classmethod."""
-
     def test_generate_id_format(self) -> None:
-        """Test generated ID is 4 hex characters."""
+        """Test generated ID format."""
         result = ReviewItemFactory._generate_id()
-        assert len(result) == 4
-        # Should be valid hex
+        assert len(result) == 6
         int(result, 16)
 
-
-class TestReviewItemFactoryResolveFilePath:
-    """Tests for _resolve_file_path classmethod."""
+        # Method no longer accepts repo/pr params - always returns short format
+        result_without_params = ReviewItemFactory._generate_id()
+        assert len(result_without_params) == 6
+        int(result_without_params, 16)
 
     def test_resolve_exact_path(self) -> None:
         """Test resolving an exact repo-relative path."""
-        # Create a temp file for testing
         with Path("/tmp/test_resolve.py").open("w") as f:
             f.write("x = 1\n")
 
@@ -70,7 +65,6 @@ class TestReviewItemFactoryResolveFilePath:
 
     def test_resolve_partial_path(self) -> None:
         """Test resolving a partial path against changed files."""
-        import os
         os.makedirs("/tmp/pkg", exist_ok=True)
         with Path("/tmp/pkg/module.py").open("w") as f:
             f.write("y = 2\n")
@@ -82,7 +76,6 @@ class TestReviewItemFactoryResolveFilePath:
             result_path, result_str = ReviewItemFactory._resolve_file_path(
                 "module.py", Path("/tmp"), ["module.py"]
             )
-            # Should find module.py since it matches exactly
             assert result_str == "module.py"
         finally:
             Path("/tmp/pkg/module.py").unlink(missing_ok=True)
@@ -95,10 +88,6 @@ class TestReviewItemFactoryResolveFilePath:
             "nonexistent.py", Path("/tmp"), ["other.py"]
         )
         assert result_path is None
-
-
-class TestReviewItemFactoryCreate:
-    """Tests for create classmethod."""
 
     def test_create_with_valid_items(self) -> None:
         """Test creating ReviewItems from valid dicts."""
@@ -116,7 +105,6 @@ class TestReviewItemFactoryCreate:
         repo_path = "/tmp/test_repo"
         changed_files = ["src/main.py"]
 
-        # Create a temp file
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
         (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
@@ -133,15 +121,13 @@ class TestReviewItemFactoryCreate:
 
     def test_create_skips_non_dict(self) -> None:
         """Test that non-dict items are skipped with warning."""
-        item_dicts = [ "not a dict", 123, None ]
+        item_dicts = ["not a dict", 123, None]
 
         with patch("pr_auto_reviewer.domain.services.review_item_factory.logger.warning") as mock_warn:
             items, skip_reasons = ReviewItemFactory.create(
                 item_dicts, "/tmp", None
             )
-            # Non-dict items should be skipped
             assert len(items) == 0
-            # Warning should have been logged
             assert mock_warn.call_count >= 1
 
     def test_create_skips_empty_description(self) -> None:
@@ -165,7 +151,6 @@ class TestReviewItemFactoryCreate:
             items, skip_reasons = ReviewItemFactory.create(
                 item_dicts, repo_path, ["src/main.py"]
             )
-            # Should be skipped due to empty description
             assert len(skip_reasons) > 0
             assert len(items) == 0
         finally:
@@ -192,7 +177,6 @@ class TestReviewItemFactoryCreate:
             items, skip_reasons = ReviewItemFactory.create(
                 item_dicts, repo_path, ["src/main.py"]
             )
-            # Should be skipped due to fabricated narrative
             assert len(skip_reasons) > 0
             assert len(items) == 0
         finally:
@@ -217,7 +201,6 @@ class TestReviewItemFactoryCreate:
             items, skip_reasons = ReviewItemFactory.create(
                 item_dicts, repo_path, ["src/main.py"]
             )
-            # Should be skipped due to file not found
             assert len(skip_reasons) > 0
             assert len(items) == 0
         finally:
@@ -252,7 +235,6 @@ class TestReviewItemFactoryCreate:
                     item_dicts, repo_path, ["src/main.py"]
                 )
                 assert len(items) == 2
-                # Each item should have a unique ID
                 item_ids = [item.id for item in items]
                 assert len(set(item_ids)) == 2, f"Expected 2 unique IDs, got {item_ids}"
             finally:
@@ -288,9 +270,47 @@ class TestReviewItemFactoryCreate:
             assert item.description == "Logger at info level"
             assert item.severity == ItemSeverity.MINOR
             assert item.category == IssueCategory.MAINTAINABILITY
-            # Line gets populated from symbol location when not provided
             assert item.line == "1-1"
             assert item.current_code == "logger.info('test')"
             assert item.suggested_fix == "logger.debug('test')"
         finally:
             shutil.rmtree(repo_path, ignore_errors=True)
+
+
+class TestEnsureUniqueIds:
+    """Tests for ReviewItemFactory.ensure_unique_ids."""
+
+    def _item(self, id: str) -> ReviewItem:
+        return ReviewItem(
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.GENERAL,
+            file_path=None,
+            description="",
+            id=id,
+        )
+
+    def test_duplicate_and_empty_ids_become_globally_unique(self) -> None:
+        """Items, suggestions, and praise share one id space with no collisions."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            items=[self._item("a1"), self._item("a1"), self._item("")],
+            suggestions=[self._item("a1"), self._item("b2")],
+            praise=[self._item("")],
+        )
+
+        result = ReviewItemFactory.ensure_unique_ids(review)
+
+        all_items = result.items + result.suggestions + result.praise
+        assert all(item.id for item in all_items)
+        assert len({item.id for item in all_items}) == len(all_items)
+
+    def test_preserves_existing_unique_id(self) -> None:
+        """A unique, truthy id is left untouched."""
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            items=[self._item("b2")],
+        )
+
+        result = ReviewItemFactory.ensure_unique_ids(review)
+
+        assert result.items[0].id == "b2"
