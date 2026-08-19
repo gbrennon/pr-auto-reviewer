@@ -145,7 +145,11 @@ def _build_review_plan() -> ReviewPlan:
             phase_name=phase_name,
             system_prompt=prompt,
         ))
-    return ReviewPlan(phases=tuple(phases), methodology=_METHODOLOGY)
+    return ReviewPlan(
+        phases=tuple(phases),
+        methodology=_METHODOLOGY,
+        suggestions_phase_id="architecture-review",
+    )
 
 if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
@@ -187,6 +191,7 @@ class CoreServices:
     conversation_logger: MarkdownConversationLogger
     notifier: NotifierPort
     fragment_repository: FragmentRepositoryPort
+    review_plan: ReviewPlan
     fragment_renderer: PromptRendererPort
     fragment_max_tokens: int | None
     review_context_factory: ReviewContextFactoryPort
@@ -309,6 +314,7 @@ def wire_core_services(
         conversation_logger=conversation_logger,
         notifier=notifier,
         fragment_repository=fragment_repository,
+        review_plan=plan,
         fragment_renderer=fragment_renderer,
         fragment_max_tokens=fragment_max_tokens,
         review_context_factory=review_context_factory,

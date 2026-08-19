@@ -50,6 +50,7 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
 from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
     TokenVerifierPort,
 )
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
@@ -169,6 +170,10 @@ class Container:
     def fragment_max_tokens(self) -> int | None:
         return self._fragment_max_tokens
 
+    @property
+    def review_plan(self) -> ReviewPlan:
+        return self._review_plan
+
     def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
         clients = wire_platform_clients(self._config)
@@ -205,3 +210,4 @@ class Container:
         self._fragment_renderer = core.fragment_renderer
         self._fragment_max_tokens = core.fragment_max_tokens
         self._review_context_factory = core.review_context_factory
+        self._review_plan = core.review_plan

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -46,6 +47,7 @@ CORE_SERVICES_INSTANCE_TYPES = [
     ("fragment_repository", FileSystemFragmentRepository),
     ("fragment_renderer", Jinja2Renderer),
     ("review_context_factory", ReviewContextFactory),
+    ("review_plan", ReviewPlan),
 ]
 
 
@@ -112,8 +114,22 @@ class TestWireCoreServices:
             "fragment_repository",
             "fragment_renderer",
             "review_context_factory",
+            "review_plan",
         ]:
             assert getattr(result, attr) is not None, f"{attr} is None"
+
+    def test_review_plan_sources_suggestions_from_architect_phase(
+        self,
+        forgejo_config: Config,
+        repo_context,
+    ) -> None:
+        result = wire_core_services(forgejo_config, repo_context)
+
+        assert result.review_plan.suggestions_phase_id == "architecture-review"
+        assert any(
+            phase.phase_id == "architecture-review"
+            for phase in result.review_plan.phases
+        )
 
     def test_llm_review_uses_config_llm_host(
         self,
