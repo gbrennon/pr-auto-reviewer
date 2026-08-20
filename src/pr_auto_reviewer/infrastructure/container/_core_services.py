@@ -7,7 +7,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
@@ -25,6 +25,10 @@ from pr_auto_reviewer.application.services.multi_phase_review_orchestrator impor
     MultiPhaseReviewOrchestrator,
 )
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
+from pr_auto_reviewer.domain.agent.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.agent.architect_agent import ArchitectAgent
+from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
+from pr_auto_reviewer.domain.agent.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -104,10 +108,10 @@ _PHASE_PROMPT_DIR = (
     / "universal"
 )
 
-_PHASES: list[tuple[str, str]] = [
-    ("bug-hunt-diff", "Bug Hunt — Diff"),
-    ("bug-hunt-branch", "Bug Hunt — Branch"),
-    ("architecture-review", "Architecture Review"),
+_PHASES: list[tuple[str, str, Any]] = [
+    ("bug-hunt-diff", "Bug Hunt — Diff", EngineerAgent()),
+    ("bug-hunt-branch", "Bug Hunt — Branch", EngineerAgent()),
+    ("architecture-review", "Architecture Review", ArchitectAgent()),
 ]
 
 _METHODOLOGY = (
@@ -136,7 +140,7 @@ _METHODOLOGY = (
 def _build_review_plan() -> ReviewPlan:
     """Load phase prompts from disk and build a ``ReviewPlan``."""
     phases: list[ReviewPhase] = []
-    for phase_id, phase_name in _PHASES:
+    for phase_id, phase_name, role in _PHASES:
         path = _PHASE_PROMPT_DIR / f"{phase_id}.md"
         raw = path.read_text()
         prompt = ReviewResponseParser.strip_frontmatter(raw)
@@ -144,11 +148,19 @@ def _build_review_plan() -> ReviewPlan:
             phase_id=phase_id,
             phase_name=phase_name,
             system_prompt=prompt,
+            role=role,
         ))
     return ReviewPlan(
         phases=tuple(phases),
         methodology=_METHODOLOGY,
         suggestions_phase_id="architecture-review",
+        manager_brief=(
+            "Manager brief: this staged review assigns one focused task "
+            "to each phase. Follow the phase instructions exactly; do "
+            "not re-review findings other phases own. " + (
+                ManagerAgent().description + " " + AdvisorAgent().description
+            )
+        ),
     )
 
 if TYPE_CHECKING:
