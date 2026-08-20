@@ -6,10 +6,13 @@ Each scenario is a dict you fill in to add a test case:
 * ``owner`` — owner username.
 * ``repo`` — repository name.
 * ``pr_id`` — pull request number.
-* ``terminal_output`` — path to a captured terminal output file (optional).
-  When the file exists, the captured-behavior e2e test parses its
-  ``--- JSON ---`` block and asserts no default values. When missing, those
-  tests skip and only the VCR record/replay test runs.
+* ``review_output`` — the value for ``REVIEW_OUTPUT`` (default ``"terminal"``).
+  Accepts anything the app understands: ``terminal``, ``file:<path>``, or a
+  platform name (e.g. ``forgejo``) to publish a real review.
+* ``output_path`` — optional captured-output file path (``tests/fixtures/terminal/``).
+  When set, the captured-behavior e2e test reads its ``--- JSON ---`` block
+  and asserts no default values.
+* ``terminal_output`` — retained alias for ``output_path`` (optional).
 
 Adding a row here automatically expands every e2e test that parametrizes
 over :data:`E2E_REVIEW_SCENARIOS` — no other code change needed.
@@ -30,7 +33,12 @@ class ReviewScenario(TypedDict, total=False):
     owner: str
     repo: str
     pr_id: int
+    review_output: str
+    output_path: str
     terminal_output: str
+
+
+DEFAULT_REVIEW_OUTPUT = "terminal"
 
 
 E2E_REVIEW_SCENARIOS: list[ReviewScenario] = [
@@ -39,15 +47,24 @@ E2E_REVIEW_SCENARIOS: list[ReviewScenario] = [
         "owner": "gbrennon",
         "repo": "pr-auto-reviewer",
         "pr_id": 146,
-        # Capture a REVIEW_OUTPUT=terminal run, put it under tests/fixtures/terminal/
-        # and set its path here to activate the terminal-output assertion:
-        # "terminal_output": str(TERMINAL_ROOT / "forgejo_gbrennon_pr-auto-reviewer_146.txt"),
+        "review_output": "terminal",
+        # Capture a REVIEW_OUTPUT=terminal run into tests/fixtures/terminal/
+        # and set its path here to activate the no-defaults assertion:
+        # "output_path": str(TERMINAL_ROOT / "forgejo_gbrennon_pr-auto-reviewer_146.txt"),
     },
     {
         "platform": "github",
         "owner": "gbrennon",
         "repo": "pr-auto-reviewer",
         "pr_id": 1,
+        "review_output": "terminal",
+    },
+    {
+        "platform": "forgejo",
+        "owner": "gbrennon",
+        "repo": "pr-auto-reviewer",
+        "pr_id": 146,
+        "review_output": "file:reviews/forgejo_146.md",
     },
 ]
 
@@ -60,9 +77,17 @@ def scenario_repo_spec(scenario: ReviewScenario) -> str:
     return f"{platform}:{owner}/{repo}"
 
 
+def scenario_review_output(scenario: ReviewScenario) -> str:
+    """Return the ``REVIEW_OUTPUT`` value for *scenario* (default ``terminal``)."""
+    return scenario.get("review_output") or DEFAULT_REVIEW_OUTPUT
+
+
 def scenario_terminal_path(scenario: ReviewScenario) -> Path | None:
-    """Return the captured terminal-output path for *scenario*, or None."""
-    raw = scenario.get("terminal_output")
+    """Return the captured terminal-output path for *scenario*, or None.
+
+    Honors ``output_path`` first, then the legacy ``terminal_output`` alias.
+    """
+    raw = scenario.get("output_path") or scenario.get("terminal_output")
     if not raw:
         return None
     path = Path(raw).expanduser()

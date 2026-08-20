@@ -29,14 +29,17 @@ import json
 import os
 from typing import Any
 
+from httpx import get
 import pytest
 import vcr
 
+from pr_auto_reviewer.presentation.composition_root import bootstrap
 from scripts.review_behavior_checks import ReviewPayloadBehaviorChecker
 from tests.e2e.scenarios import (
     E2E_REVIEW_SCENARIOS,
     ReviewScenario,
     scenario_repo_spec,
+    scenario_review_output,
 )
 
 CASSETTES_DIR = "tests/e2e/cassettes"
@@ -57,22 +60,23 @@ def _vcr_for(cassette_name: str) -> vcr.VCR:
     return vcr.VCR(
         serializer="yaml",
         cassette_library_dir=CASSETTES_DIR,
-        record_mode="once",
+        record_mode=vcr.record_mode.RecordMode.ONCE,
         match_on=["uri", "method"],
         filter_headers=["Authorization", "authorization", "token"],
         filter_query_parameters=["token", "access_token"],
     )
 
 
-def _run_cli_like(repo_spec: str, pr_number: int) -> str:
-    """Run the review entrypoint in-process exactly like the CLI, returning stdout.
+def _run_cli_like(repo_spec: str, pr_number: int, review_output: str) -> str:
+    """Run the review entrypoint in-process like the CLI, returning stdout.
 
-    Mirrors ``REVIEW_OUTPUT=terminal uv run pr-auto-reviewer review --force
-    -r <repo_spec> -p <pr>`` so vcrpy can intercept the HTTP calls.
+    Mirrors ``REVIEW_OUTPUT=<mode> uv run pr-auto-reviewer review --force
+    -r <repo_spec> -p <pr>`` so vcrpy can intercept the HTTP calls. The
+    ``REVIEW_OUTPUT`` value is per-scenario (``terminal``, ``file:<path>``,
+    or a platform name).
     """
-    from pr_auto_reviewer.presentation.composition_root import bootstrap
 
-    os.environ["REVIEW_OUTPUT"] = "terminal"
+    os.environ["REVIEW_OUTPUT"] = review_output
     argv = [
         "pr-auto-reviewer",
         "review",
@@ -113,14 +117,18 @@ class TestReviewHttpRecording:
     )
     def test_review_flow_captured_or_replayed(self, scenario: ReviewScenario) -> None:
         repo_spec = scenario_repo_spec(scenario)
-        pr_number = int(scenario["pr_id"])
+        pr_number = scenario.get("pr_id", 1)
+        review_output = scenario_review_output(scenario)
         cassette = _cassette_name(
-            scenario["platform"], scenario["owner"], scenario["repo"], pr_number,
+            scenario.get("platform", "platform"),
+            scenario.get("owner", "owner"),
+            scenario.get("repo", "repo"),
+            pr_number,
         )
         vcr_instance = _vcr_for(cassette)
 
         with vcr_instance.use_cassette(cassette):
-            output = _run_cli_like(repo_spec, pr_number)
+            output = _run_cli_like(repo_spec, pr_number, review_output)
             review_payload = _terminal_review_payload(output)
 
         violations = ReviewPayloadBehaviorChecker().violations(review_payload)
