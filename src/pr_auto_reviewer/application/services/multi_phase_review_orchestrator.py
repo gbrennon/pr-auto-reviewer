@@ -282,16 +282,24 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         last_phase_result: PhaseResult | None = None
         phase_results: dict[str, PhaseResult] = {}
         previous_findings: str = ""
+        phase_sequence = list(plan.phases)
 
-        for phase in plan.phases:
+        for phase in phase_sequence:
             logger.info("Starting phase: %s", phase.phase_name)
             phase_prompt = (
                 plan.methodology + "\n\n" + phase.system_prompt
             )
 
+            role_brief = phase.role_brief()
+            if role_brief:
+                phase_prompt = role_brief + "\n\n" + phase_prompt
+
+            manager_brief = getattr(plan, "manager_brief", "")
+            if manager_brief and phase is phase_sequence[0]:
+                phase_prompt = manager_brief + "\n\n" + phase_prompt
+
             if initial_feedback:
                 phase_prompt = initial_feedback + "\n\n" + phase_prompt
-                initial_feedback = ""
 
             if _FINDINGS_MARKER in phase_prompt:
                 phase_prompt = phase_prompt.replace(

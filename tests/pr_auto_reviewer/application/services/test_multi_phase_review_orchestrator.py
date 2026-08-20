@@ -268,6 +268,104 @@ class TestMultiPhaseReviewOrchestrator:
         assert "Attempt #1" in context
         assert "No issues found" in context
 
+    def test_feedback_prepended_to_every_phase_not_just_first(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """Escalation reaches ALL phases in a feedback round, so logs differ."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="EEP",
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="AAP",
+                ),
+            ),
+            methodology="MM",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+        feedback = orchestrator._build_feedback_context(
+            _code_review(verdict=ReviewVerdict.COMMENTED), 1
+        )
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+            initial_feedback=feedback,
+        )
+
+        prompts = [
+            call[0][0].system_prompt
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call[0][0], RunAgentConversationCommand)
+        ]
+        assert len(prompts) == 2  # one conversation command per phase
+        phase_prompts = [p for p in prompts if "EEP" in p or "AAP" in p]
+        assert len(phase_prompts) == 2
+        assert all(feedback in p for p in phase_prompts)
+
+    def test_role_brief_and_manager_brief_reach_phase_prompts(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """Phase role and plan manager brief are composed into phase prompts."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="EEP", role=EngineerAgent(),
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="AAP",
+                ),
+            ),
+            methodology="MM",
+            manager_brief="MANAGER BRIEF TEXT",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+        )
+
+        prompts = [
+            call[0][0].system_prompt
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call[0][0], RunAgentConversationCommand)
+        ]
+        assert len(prompts) == 2
+        phase_prompts = [p for p in prompts if "EEP" in p or "AAP" in p]
+        assert phase_prompts[0].startswith("MANAGER BRIEF TEXT")
+        assert "Your role: engineer" in phase_prompts[0]
+        assert "Your role: engineer" not in phase_prompts[1]
+
     def test__run_phases_with_feedback(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
