@@ -1,9 +1,6 @@
-"""Capture and verification scripts package.
+"""Shared scripts package importable from the repo root.
 
-Run scripts via module invocation from the repo root so both
-``scripts.*`` and ``tests.*`` resolve:
+Run via module invocation so both ``scripts.*`` and ``tests.*`` resolve:
 
-.. code-block:: bash
-
-    uv run python -m scripts.capture_conversation_fixtures ...
+    uv run python -m scripts.<name>
 """
