@@ -122,10 +122,20 @@ are never promoted into suggestions — a suggestion is an improvement
 
 Each phase is a `ReviewPhase` whose `system_prompt` comes from a prompt
 fragment (`infrastructure/fragments/content/universal/*.md`). Roles are
-expressed through these prompts; the `SubAgent` role classes in the
-domain model describe intent (role, responsibility, behavior) and stay
-in sync with the fragments. To change what a sub-agent does, edit its
-fragment; to change which phase produces what, edit the plan builder.
+expressed through these prompts AND the `SubAgent` role classes in the
+domain model, which now attach to phases via `ReviewPhase.role` and are
+composed into the phase prompt as a role brief. The plan also carries a
+`manager_brief` that opens the first phase.
+
+To change what a sub-agent does, edit its fragment; to change which
+phase produces what, edit the plan builder.
+
+The role team is documented per page in [docs/sub-agents/](sub-agents/README.md):
+
+- [manager](sub-agents/manager.md) — plans, assigns, owns technical context
+- [advisor](sub-agents/advisor.md) — watches focus, grades, re-prompts
+- [engineer](sub-agents/engineer.md) — principal-engineer bug/quality review
+- [architect](sub-agents/architect.md) — structure, conventions, suggestions
 
 ---
 
