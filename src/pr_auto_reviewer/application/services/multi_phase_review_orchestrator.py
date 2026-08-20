@@ -384,7 +384,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     last_phase_result.llm_verdict
                 )
                 if coerced is not None and coerced is not ReviewVerdict.COMMENTED:
-                    verdict = coerced
+                    # A change request is only coherent when it names items.
+                    if coerced is not ReviewVerdict.CHANGES_REQUESTED:
+                        verdict = coerced
                 if last_phase_result.llm_reason:
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:

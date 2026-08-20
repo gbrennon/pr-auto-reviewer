@@ -543,3 +543,41 @@ class TestMultiPhaseReviewOrchestrator:
         ]
         assert len(result.praise) == 1
         assert result.praise[0].description == "clean architecture"
+
+    def test_zero_items_never_publishes_changes_requested(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """A CHANGES_REQUESTED LLM verdict with no items stays comment-only."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="",
+                ),
+            ),
+            methodology="m",
+            suggestions_phase_id="architect",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        architect_result = _phase_result(
+            verdict="changes_requested",
+            items=[],
+            reason="the code is wrong",
+        )
+        mock_command_bus.dispatch.side_effect = [
+            architect_result,
+            MagicMock(),
+        ]
+
+        result = orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+        )
+
+        assert result.verdict == ReviewVerdict.COMMENTED
+        assert result.items == []
+        assert result.reason == "the code is wrong"
