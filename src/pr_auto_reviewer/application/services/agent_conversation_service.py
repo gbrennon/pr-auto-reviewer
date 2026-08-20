@@ -179,6 +179,8 @@ class AgentConversationService(RunAgentConversationUseCase):
         ]
 
         guardrails = replace(self._guardrails)
+        seen_tool_calls: set[tuple[str, str]] = set()
+        verdict_nudged = False
         while guardrails.has_turns_remaining():
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
@@ -251,6 +253,29 @@ class AgentConversationService(RunAgentConversationUseCase):
                     tool_call.tool_name,
                     str(tool_call.arguments)[:200],
                 )
+                call_key = (
+                    tool_call.tool_name,
+                    json.dumps(
+                        tool_call.arguments, sort_keys=True, default=str
+                    ),
+                )
+                if call_key in seen_tool_calls:
+                    logger.debug(
+                        "Tool call repeated (%s); refusing and reprompting",
+                        tool_call.tool_name,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You already ran that exact tool call and its "
+                            "result is in the conversation above. Do not "
+                            "repeat it. Use a different changed file from "
+                            "the list, or provide your final verdict JSON "
+                            "now."
+                        ),
+                    ))
+                    continue
+                seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
                 guardrails = guardrails.record_tool_call()
                 result_json = json.dumps({
@@ -267,6 +292,23 @@ class AgentConversationService(RunAgentConversationUseCase):
                     role="user",
                     content=result_json,
                 ))
+                if guardrails.should_force_verdict() and not verdict_nudged:
+                    verdict_nudged = True
+                    logger.debug(
+                        "Tool budget reached (%d); nudging verdict",
+                        guardrails.tool_calls,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You have explored enough. Conclude now with "
+                            "your final review as a single JSON object: "
+                            '"verdict" ("approved" | "changes_requested" | '
+                            '"commented"), "reason", "items", "suggestions", '
+                            'and "praise". Only include findings you can '
+                            "confirm from the files you read."
+                        ),
+                    ))
                 continue
 
             if parsed.kind == "verdict":

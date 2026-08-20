@@ -381,3 +381,86 @@ class TestConversationLoopGuardrails:
                 repo_path=Path("/repos/owner_repo_42"),
             )
         # ensure no crash
+
+    def test_repeated_tool_call_is_refused_and_reprompted(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """A repeated exact tool call is refused and does not execute again."""
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        repeated = ToolCall(
+            tool_name="read_file", arguments={"file": "src/a.py"}
+        )
+        repeated_parse = TurnParseResult(
+            kind="tool_call", tool_call=repeated,
+        )
+        mock_chat_port.send.side_effect = [
+            "first", "second", "third", "verdict",
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            repeated_parse,
+            None,
+            repeated_parse,
+            None,
+            _verdict_parse(),
+            None,
+            None,
+        ]
+
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus
+        )
+        result = service.execute(_command(tool_execution))
+
+        assert result.llm_verdict == "approved"
+        # Duplicate call never reaches the executor
+        assert tool_execution.execute_tool.call_count == 1
+        refusal_seen = any(
+            "You already ran that exact tool call" in message.content
+            for call in mock_chat_port.send.call_args_list
+            for message in call[0][0]
+        )
+        assert refusal_seen
+
+    def test_verdict_nudged_once_after_tool_budget(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """At the tool budget the model is nudged to conclude, once."""
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=30,
+        )
+        # Budget is 8 tool calls; use 8 DISTINCT calls so none are refused.
+        tool_parses = [
+            TurnParseResult(
+                kind="tool_call",
+                tool_call=ToolCall(
+                    tool_name="read_file",
+                    arguments={"file": f"src/file_{i}.py"},
+                ),
+            )
+            for i in range(8)
+        ]
+        sends = [f"tool-{i}" for i in range(8)] + ["verdict"]
+        mock_chat_port.send.side_effect = sends
+        mock_command_bus.dispatch.side_effect = (
+            [item for tp in tool_parses for item in (tp, None)]
+            + [_verdict_parse(), None, None]
+        )
+
+        result = service.execute(_command(tool_execution))
+
+        assert result.llm_verdict == "approved"
+        assert tool_execution.execute_tool.call_count == 8
+        final_messages = mock_chat_port.send.call_args_list[-1][0][0]
+        nudge_count = sum(
+            "You have explored enough. Conclude now" in message.content
+            for message in final_messages
+        )
+        assert nudge_count == 1
