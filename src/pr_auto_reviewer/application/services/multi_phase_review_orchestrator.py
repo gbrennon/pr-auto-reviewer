@@ -379,14 +379,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             suggestions: list[ReviewItem] = []
             praise_list: list[ReviewItem] = []
 
+            coerced = (
+                ReviewVerdict.coerce(last_phase_result.llm_verdict)
+                if last_phase_result is not None
+                else None
+            )
+
             if last_phase_result is not None:
-                coerced = ReviewVerdict.coerce(
-                    last_phase_result.llm_verdict
-                )
-                if coerced is not None and coerced is not ReviewVerdict.COMMENTED:
-                    # A change request is only coherent when it names items.
-                    if coerced is not ReviewVerdict.CHANGES_REQUESTED:
-                        verdict = coerced
                 if last_phase_result.llm_reason:
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
@@ -414,7 +413,16 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         suggested_fix=p.get("description", ""),
                     ))
 
-            if verdict == ReviewVerdict.COMMENTED:
+            # A real, non-blank model verdict with zero items is a clean
+            # approval: nothing was found to flag. Only a blank/commented
+            # model verdict (or no phase result at all) is a pipeline failure.
+            if coerced is not None and coerced is not ReviewVerdict.COMMENTED:
+                verdict = ReviewVerdict.APPROVED
+                if not reason:
+                    reason = "Review completed without action items."
+                if not summary:
+                    summary = reason
+            else:
                 if not reason:
                     reason = (
                         "Application could not extract a structured verdict "
@@ -426,11 +434,6 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     "LLM output. This is a pipeline failure signal, not a "
                     "clean review."
                 )
-            else:
-                if not reason:
-                    reason = "Review completed without action items."
-                if not summary:
-                    summary = reason
 
             return CodeReview(
                 verdict=verdict,

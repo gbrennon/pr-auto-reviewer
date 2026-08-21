@@ -547,7 +547,11 @@ class TestMultiPhaseReviewOrchestrator:
     def test_zero_items_never_publishes_changes_requested(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        """A CHANGES_REQUESTED LLM verdict with no items stays comment-only."""
+        """A CHANGES_REQUESTED LLM verdict with no items reads as a clean approval.
+
+        Nothing was flagged, so a blocking CHANGES_REQUESTED is incoherent;
+        the empty review resolves to APPROVED instead.
+        """
         from unittest.mock import MagicMock
         from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
         plan = ReviewPlan(
@@ -578,6 +582,6 @@ class TestMultiPhaseReviewOrchestrator:
             plan, Path("/tmp"), ["src/main.py"], "test",
         )
 
-        assert result.verdict == ReviewVerdict.COMMENTED
+        assert result.verdict == ReviewVerdict.APPROVED
         assert result.items == []
         assert result.reason == "the code is wrong"
