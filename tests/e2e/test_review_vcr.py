@@ -4,18 +4,19 @@ from pathlib import Path
 
 import pytest
 
+from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.composition_root import bootstrap
-from tests.e2e.scenarios import _get_normalized_scenarios
+from tests.e2e.scenarios import ReviewScenario, _get_normalized_scenarios
 
 
-def _cassette_name(scenario: dict) -> str:
+def _cassette_name(scenario: ReviewScenario) -> str:
     """Generate cassette filename from scenario params."""
     return f"review_{scenario['platform']}_{scenario['owner']}_{scenario['repo']}_pr{scenario['pr_id']}"
 
 
 @pytest.fixture
-def vcr_config(scenario):
+def vcr_config(scenario: ReviewScenario):
     return {
         "cassette_library_dir": "tests/e2e/cassettes/test_review_vcr",
         "match_on": ["method", "scheme", "host", "port", "path", "query"],
@@ -26,7 +27,7 @@ def vcr_config(scenario):
 def _read_review_body(
     review_output: str,
     pr_id: PullRequestId,
-    review_reader,
+    review_reader: ReviewReaderPort,
 ) -> str | None:
     """Read the published review body from the output file or the platform."""
     if review_output.startswith("file:"):
