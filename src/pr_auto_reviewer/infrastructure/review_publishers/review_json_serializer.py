@@ -3,8 +3,6 @@
 import json
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 
 
@@ -40,28 +38,13 @@ class ReviewJsonSerializer:
 
     def _convert(self, item: object) -> object:
         """Shape a review artifact into its JSON-safe dictionary form."""
-        if isinstance(item, ReviewItem):
-            return self._compact({
-                "severity": item.severity.value,
-                "category": item.category.value,
-                "file_path": item.file_path,
-                "description": item.description,
-                "line": item.line,
-                "id": item.id,
-                "current_code": item.current_code,
-                "suggested_fix": item.suggested_fix,
-            })
-        if isinstance(item, ReviewSuggestion):
-            return self._compact({
-                "file": item.file,
-                "line": item.line,
-                "description": item.description,
-                "current_code": item.current_code,
-                "suggested_code": item.suggested_code,
-            })
-        if isinstance(item, ReviewPraise):
-            return self._compact({
-                "file": item.file,
-                "description": item.description,
-            })
-        return item
+        return self._compact({
+            "severity": item.severity.value,
+            "category": item.category.value,
+            "file_path": item.file_path,
+            "description": item.description,
+            "line": item.line,
+            "id": item.id,
+            "current_code": item.current_code,
+            "suggested_fix": item.suggested_fix,
+        })

@@ -346,7 +346,7 @@ class ReviewPublishingService:
                 )
 
         for s in suggestions:
-            s_file = s.file
+            s_file = s.file_path
             s_code = s.current_code
             if not s_file or not s_code:
                 continue
@@ -383,7 +383,7 @@ class ReviewPublishingService:
                 )
 
         for s in suggestions:
-            s_file = s.file
+            s_file = s.file_path
             s_code = s.current_code
             if not s_file or not s_code:
                 continue

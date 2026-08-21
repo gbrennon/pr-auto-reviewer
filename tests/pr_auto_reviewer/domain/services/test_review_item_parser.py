@@ -191,6 +191,22 @@ class TestReviewItemParser:
         assert isinstance(result, list)
         assert all(isinstance(ri, ReviewItem) for ri in result)
 
+    def test_parse_id_prefixed_items_preserves_ids(self) -> None:
+        parser = ReviewItemParser()
+        raw = (
+            "1a020a. [maintainability] [MINOR] Cargo.toml:22-28\n\n"
+            "Workspace configuration is incomplete\n"
+            "b3c4d5. [security] [CRITICAL] src/auth.py:10\n\n"
+            "SQL injection risk"
+        )
+        result = parser.parse(raw)
+        assert len(result) == 2
+        assert result[0].id == "1a020a"
+        assert result[1].id == "b3c4d5"
+        assert result[0].severity == ItemSeverity.MINOR
+        assert result[0].category == "maintainability"
+        assert result[1].severity == ItemSeverity.CRITICAL
+
     def test_parse_full_review_body(self) -> None:
         parser = ReviewItemParser()
         raw = (

@@ -89,6 +89,7 @@ class AgentConversationService(RunAgentConversationUseCase):
             changed_files=command.changed_files,
             tool_execution=command.tool_execution,
             phase_name=command.phase_name,
+            existing_item_ids=command.existing_item_ids,
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
@@ -114,51 +115,6 @@ class AgentConversationService(RunAgentConversationUseCase):
             if basename in text or (stem and stem in text):
                 return candidate
         return ""
-
-    def _ground_suggestion(
-        self,
-        suggestion: dict[str, str],
-        repo_root: Path,
-        changed_files: list[str],
-    ) -> dict[str, str] | None:
-        """Fill line and current_code for a suggestion from repository files."""
-        file_path = str(suggestion.get("file", ""))
-        full_path: Path | None = None
-        resolved = file_path
-        if file_path:
-            candidate = repo_root / file_path
-            if candidate.is_file():
-                full_path = candidate
-            else:
-                for changed in changed_files:
-                    if changed.endswith(file_path) or file_path.endswith(changed):
-                        candidate = repo_root / changed
-                        if candidate.is_file():
-                            full_path = candidate
-                            resolved = changed
-                            break
-        if full_path is None:
-            return None
-        description = str(suggestion.get("description", ""))
-        line_str = str(
-            ReviewItemFactory._locate_symbol_range(full_path, description) or ""
-        )
-        current_code = ""
-        if line_str or ReviewItemFactory._extract_symbols(description):
-            current_code = str(
-                ReviewItemFactory._read_evidence(
-                    full_path, repo_root, line_str, description
-                )
-                or ""
-            )
-        result: dict[str, str] = {}
-        if resolved:
-            result["file"] = resolved
-        if line_str:
-            result["line"] = line_str
-        if current_code:
-            result["current_code"] = current_code
-        return result or None
 
     def _log_conversation_debug(
         self,
@@ -190,6 +146,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         changed_files: list[str],
         tool_execution: Any,
         phase_name: str = "",
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
         """Run a single-phase multi-turn conversation.
 
@@ -222,6 +179,8 @@ class AgentConversationService(RunAgentConversationUseCase):
         ]
 
         guardrails = replace(self._guardrails)
+        seen_tool_calls: set[tuple[str, str]] = set()
+        verdict_nudged = False
         while guardrails.has_turns_remaining():
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
@@ -294,6 +253,29 @@ class AgentConversationService(RunAgentConversationUseCase):
                     tool_call.tool_name,
                     str(tool_call.arguments)[:200],
                 )
+                call_key = (
+                    tool_call.tool_name,
+                    json.dumps(
+                        tool_call.arguments, sort_keys=True, default=str
+                    ),
+                )
+                if call_key in seen_tool_calls:
+                    logger.debug(
+                        "Tool call repeated (%s); refusing and reprompting",
+                        tool_call.tool_name,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You already ran that exact tool call and its "
+                            "result is in the conversation above. Do not "
+                            "repeat it. Use a different changed file from "
+                            "the list, or provide your final verdict JSON "
+                            "now."
+                        ),
+                    ))
+                    continue
+                seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
                 guardrails = guardrails.record_tool_call()
                 result_json = json.dumps({
@@ -310,6 +292,23 @@ class AgentConversationService(RunAgentConversationUseCase):
                     role="user",
                     content=result_json,
                 ))
+                if guardrails.should_force_verdict() and not verdict_nudged:
+                    verdict_nudged = True
+                    logger.debug(
+                        "Tool budget reached (%d); nudging verdict",
+                        guardrails.tool_calls,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You have explored enough. Conclude now with "
+                            "your final review as a single JSON object: "
+                            '"verdict" ("approved" | "changes_requested" | '
+                            '"commented"), "reason", "items", "suggestions", '
+                            'and "praise". Only include findings you can '
+                            "confirm from the files you read."
+                        ),
+                    ))
                 continue
 
             if parsed.kind == "verdict":
@@ -317,7 +316,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 if decision is ConversationDecision.ACCEPT_VERDICT:
                     logger.debug("Got verdict at turn %d", guardrails.turn)
                     phase_result = self._build_phase_result(
-                        parsed, repo_path, changed_files
+                        parsed, repo_path, changed_files, existing_ids=existing_item_ids
                     )
                     self._log_conversation(
                         phase_name, messages, guardrails.turn, phase_result,
@@ -365,64 +364,21 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _build_phase_result(
-        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str]
+        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str], existing_ids: frozenset[str] = frozenset()
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
         metadata = parsed.metadata or {}
+
         review_items, skip_reasons = ReviewItemFactory().create(
-            raw_items, repo_path, changed_files
+            raw_items, repo_path, changed_files, existing_ids=existing_ids
         )
         suggestions = list(metadata.get("suggestions", []))
-        repo_root = Path(repo_path) if repo_path else None
         for s in suggestions:
             if not str(s.get("file", "")).strip():
                 s["file"] = self._find_mentioned_file(
                     str(s.get("description", "")), changed_files
                 )
-            if (
-                repo_root is not None
-                and str(s.get("file", "")).strip()
-                and not str(s.get("line", "")).strip()
-                and not str(s.get("current_code", "")).strip()
-            ):
-                grounded = self._ground_suggestion(
-                    s, repo_root, changed_files
-                )
-                if grounded is not None:
-                    s.update(grounded)
-        accepted_descriptions = {item.description for item in review_items}
-        for item_dict in raw_items:
-            if not isinstance(item_dict, dict):
-                continue
-            description = str(item_dict.get("description", "")).strip()
-            if not description:
-                continue
-            if description in accepted_descriptions:
-                continue
-            if any(
-                s.get("description") == description for s in suggestions
-            ):
-                continue
-            suggestion = {
-                "file": str(
-                    item_dict.get("file", "")
-                ) or self._find_mentioned_file(description, changed_files),
-                "line": str(item_dict.get("line", "")),
-                "description": description,
-            }
-            if (
-                repo_root is not None
-                and str(suggestion["file"]).strip()
-                and not str(suggestion["line"]).strip()
-                and not str(item_dict.get("current_code", "")).strip()
-            ):
-                grounded = self._ground_suggestion(
-                    suggestion, repo_root, changed_files
-                )
-                if grounded is not None:
-                    suggestion.update(grounded)
-            suggestions.append(suggestion)
         return PhaseResult(
             items=review_items,
             llm_verdict=metadata.get("verdict") or None,

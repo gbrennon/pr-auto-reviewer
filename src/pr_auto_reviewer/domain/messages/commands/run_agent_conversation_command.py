@@ -21,3 +21,4 @@ class RunAgentConversationCommand:
     changed_files: list[str]
     tool_execution: Any
     phase_name: str = ""
+    existing_item_ids: frozenset[str] = frozenset()

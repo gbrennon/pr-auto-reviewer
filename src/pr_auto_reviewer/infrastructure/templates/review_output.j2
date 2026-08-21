@@ -34,7 +34,7 @@ No issues found.
 ### Praise
 {% if praise %}
 {% for p in praise %}
--{% if p.file %} {{ p.file }}:{% endif %} {{ p.description }}
+-{% if p.file_path %} {{ p.file_path }}:{% endif %} {{ p.description }}
 {% endfor %}
 {% else %}
 No notable patterns or practices to highlight.
@@ -42,7 +42,7 @@ No notable patterns or practices to highlight.
 ### Suggestions
 {% if suggestions %}
 {% for s in suggestions %}
-{{ s.id }}.{% if s.file %} {{ s.file }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
+{{ s.id }}.{% if s.file_path %} {{ s.file_path }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
 
 {{ s.description }}
 {% if s.current_code %}
@@ -51,10 +51,10 @@ No notable patterns or practices to highlight.
 {{ s.current_code }}
 ```
 {% endif %}
-{% if s.suggested_code %}
+{% if s.suggested_fix %}
 #### Suggested:
 ```
-{{ s.suggested_code }}
+{{ s.suggested_fix }}
 ```
 {% endif %}
 {% endfor %}

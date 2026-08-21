@@ -41,6 +41,16 @@ class SubAgent(ABC):
     def behavior(self) -> str:
         """Return the agent's behavior description."""
 
+    @property
+    def interaction(self) -> str:
+        """Return how the agent interacts with peer sub-agents (empty by default)."""
+        return ""
+
+    @property
+    def description(self) -> str:
+        """Return a longer human-readable description (falls back to ``describe``)."""
+        return self.describe()
+
     def describe(self) -> str:
         """Return a human-readable summary of the agent's role."""
         return f"{self.role}: {self.responsibility} — {self.behavior}"

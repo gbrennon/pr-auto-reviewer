@@ -6,8 +6,6 @@ and items must be identified by ``id``, never ``number``.
 """
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -39,16 +37,27 @@ def _full_review() -> CodeReview:
             ),
         ],
         suggestions=[
-            ReviewSuggestion(
-                id="s1",
-                description="suggestion description",
-                file="c.py",
-                line="9",
-                current_code="tmp code",
-                suggested_code="clean code",
-            ),
-        ],
-        praise=[ReviewPraise(file="d.py", description="praised design")],
+                ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="c.py",
+                    description="suggestion description",
+                    line="9",
+                    current_code="tmp code",
+                    suggested_fix="clean code",
+                    id="s1",
+                ),
+            ],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="d.py",
+                    description="praised design",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="praised design",
+                )],
         model_used="model-x",
     )
 

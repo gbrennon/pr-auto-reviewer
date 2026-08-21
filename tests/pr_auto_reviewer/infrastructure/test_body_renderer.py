@@ -4,11 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import ReviewBodyRenderer
@@ -49,17 +47,25 @@ class TestReviewBodyRenderer:
     def test_render_includes_suggestion_ids(self, renderer: ReviewBodyRenderer) -> None:
         """Suggestion IDs are rendered in the output."""
         suggestions = [
-            ReviewSuggestion(
-                id="s1",
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="badwolf_gtk/scripts/install.sh",
                 description="Fix the typo in the file path",
-                file="badwolf_gtk/scripts/install.sh",
                 line="92-107",
+                id="s1",
+                current_code="",
+                suggested_fix="",
             ),
-            ReviewSuggestion(
-                id="s2",
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="badwolf_gtk/scripts/install.sh",
                 description="Add a check for DEST_THEME_DIR",
-                file="badwolf_gtk/scripts/install.sh",
                 line="92-107",
+                id="s2",
+                current_code="",
+                suggested_fix="",
             ),
         ]
         review = CodeReview(
@@ -73,9 +79,15 @@ class TestReviewBodyRenderer:
 
     def test_render_includes_praise_file(self, renderer: ReviewBodyRenderer) -> None:
         """Praise items display their associated file."""
-        praise = ReviewPraise(
+        praise = ReviewItem(
+            severity="info",
+            category="general",
+            file_path="auth.py",
             description="Great function",
-            file="auth.py",
+            line="",
+            id="",
+            current_code="",
+            suggested_fix="Great function",
         )
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
@@ -87,9 +99,11 @@ class TestReviewBodyRenderer:
 
     def test_render_without_ids_uses_empty_default(self, renderer: ReviewBodyRenderer) -> None:
         """When no IDs are set, the template renders gracefully."""
-        suggestion = ReviewSuggestion(
+        suggestion = ReviewItem(
+            severity="info",
+            category="general",
+            file_path="test.py",
             description="No ID set",
-            file="test.py",
             line="10",
         )
         review = CodeReview(

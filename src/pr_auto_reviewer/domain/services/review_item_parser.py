@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import uuid as _uuid
 
 from ..entities.review_item import ReviewItem
 from ..value_objects.issue_category import IssueCategory
@@ -16,7 +15,7 @@ class ReviewItemParser:
     — no I/O, no ports."""
 
     _ITEM_PATTERN = re.compile(
-        r"^(?P<number>\d+)\.\s+\[(?P<category>[^\]]+)\]\s+\[(?P<severity>[A-Z]+)\]"
+        r"^(?P<id>[0-9a-f]+)\.\s+\[(?P<category>[^\]]+)\]\s+\[(?P<severity>[A-Z]+)\]"
         r"(?: (?P<file_info>[^\n]+))?"
         r"(?:\n\n(?P<description>[^\n]+))?",
         re.MULTILINE,
@@ -46,14 +45,13 @@ class ReviewItemParser:
                 match.group("file_info"), match.group("description"),
             )
 
-            item_id = format(_uuid.uuid7().int, "04x")[:4]
             items.append(ReviewItem(
                 severity=ItemSeverity.from_value(match.group("severity")),
                 category=IssueCategory.from_value(match.group("category")),
                 file_path=file_path,
                 description=description,
                 line=line,
-                id=item_id,
+                id=match.group("id"),
             ))
         return items
 

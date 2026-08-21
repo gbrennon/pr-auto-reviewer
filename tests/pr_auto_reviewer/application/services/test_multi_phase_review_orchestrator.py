@@ -12,8 +12,6 @@ from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.agent.sub_review_guardrails import SubReviewGuardrails
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -117,7 +115,7 @@ class TestMultiPhaseReviewOrchestrator:
         from types import SimpleNamespace
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
         result = orchestrator.execute(
-            type("Cmd", (), {
+            type("Cmd", (), {"existing_item_ids": frozenset(), 
                 "plan": plan,
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -144,7 +142,7 @@ class TestMultiPhaseReviewOrchestrator:
 
         orchestrator._run_phases = failing_run_phases
         result = orchestrator.execute(
-            type("Cmd", (), {
+            type("Cmd", (), {"existing_item_ids": frozenset(), 
                 "plan": plan,
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -168,7 +166,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.COMMENTED,
             reason="No issues found",
             summary="No issues found",
@@ -196,7 +194,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -226,14 +224,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First round returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.COMMENTED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -270,6 +268,104 @@ class TestMultiPhaseReviewOrchestrator:
         assert "Attempt #1" in context
         assert "No issues found" in context
 
+    def test_feedback_prepended_to_every_phase_not_just_first(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """Escalation reaches ALL phases in a feedback round, so logs differ."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="EEP",
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="AAP",
+                ),
+            ),
+            methodology="MM",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+        feedback = orchestrator._build_feedback_context(
+            _code_review(verdict=ReviewVerdict.COMMENTED), 1
+        )
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+            initial_feedback=feedback,
+        )
+
+        prompts = [
+            call[0][0].system_prompt
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call[0][0], RunAgentConversationCommand)
+        ]
+        assert len(prompts) == 2  # one conversation command per phase
+        phase_prompts = [p for p in prompts if "EEP" in p or "AAP" in p]
+        assert len(phase_prompts) == 2
+        assert all(feedback in p for p in phase_prompts)
+
+    def test_role_brief_and_manager_brief_reach_phase_prompts(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """Phase role and plan manager brief are composed into phase prompts."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="EEP", role=EngineerAgent(),
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="AAP",
+                ),
+            ),
+            methodology="MM",
+            manager_brief="MANAGER BRIEF TEXT",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+        )
+
+        prompts = [
+            call[0][0].system_prompt
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call[0][0], RunAgentConversationCommand)
+        ]
+        assert len(prompts) == 2
+        phase_prompts = [p for p in prompts if "EEP" in p or "AAP" in p]
+        assert phase_prompts[0].startswith("MANAGER BRIEF TEXT")
+        assert "Your role: engineer" in phase_prompts[0]
+        assert "Your role: engineer" not in phase_prompts[1]
+
     def test__run_phases_with_feedback(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
@@ -282,14 +378,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.COMMENTED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -380,7 +476,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -388,7 +484,7 @@ class TestMultiPhaseReviewOrchestrator:
         )
 
         result = orchestrator.execute(
-            type("Cmd", (), {
+            type("Cmd", (), {"existing_item_ids": frozenset(), 
                 "plan": {"phases": plan, "methodology": "sub-agent-multi-phase"},
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -398,3 +494,94 @@ class TestMultiPhaseReviewOrchestrator:
 
         assert result.verdict == ReviewVerdict.APPROVED.value
         assert len(result.items) == 1
+
+    def test_run_phases_sources_suggestions_from_plan_suggestions_phase(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """The architect phase's llm_suggestions feed the final review's suggestions."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="",
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="",
+                ),
+            ),
+            methodology="m",
+            suggestions_phase_id="architect",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        engineer_result = _phase_result(
+            suggestions=[{"description": "engineer suggestion"}],
+        )
+        architect_result = _phase_result(
+            verdict="approved",
+            suggestions=[{"description": "architect suggestion"}],
+            praise=[{"description": "clean architecture"}],
+        )
+        mock_command_bus.dispatch.side_effect = [
+            engineer_result,
+            MagicMock(),
+            architect_result,
+            MagicMock(),
+        ]
+
+        result = orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+        )
+
+        assert [s.description for s in result.suggestions] == [
+            "architect suggestion"
+        ]
+        assert len(result.praise) == 1
+        assert result.praise[0].description == "clean architecture"
+
+    def test_zero_items_never_publishes_changes_requested(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """A CHANGES_REQUESTED LLM verdict with no items reads as a clean approval.
+
+        Nothing was flagged, so a blocking CHANGES_REQUESTED is incoherent;
+        the empty review resolves to APPROVED instead.
+        """
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="",
+                ),
+            ),
+            methodology="m",
+            suggestions_phase_id="architect",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        architect_result = _phase_result(
+            verdict="changes_requested",
+            items=[],
+            reason="the code is wrong",
+        )
+        mock_command_bus.dispatch.side_effect = [
+            architect_result,
+            MagicMock(),
+        ]
+
+        result = orchestrator._run_phases(
+            plan, Path("/tmp"), ["src/main.py"], "test",
+        )
+
+        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.items == []
+        assert result.reason == "the code is wrong"

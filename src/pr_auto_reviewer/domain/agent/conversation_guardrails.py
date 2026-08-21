@@ -22,6 +22,7 @@ class ConversationGuardrails:
     max_empty_responses: int = 3
     max_unparseable_responses: int = 3
     exploration_required: bool = True
+    max_tool_calls: int = 8
 
     turn: int = 0
     consecutive_empty: int = 0
@@ -72,6 +73,15 @@ class ConversationGuardrails:
     def record_tool_call(self) -> ConversationGuardrails:
         """Return a new state with the executed-tool-call count incremented."""
         return replace(self, tool_calls=self.tool_calls + 1)
+
+    def should_force_verdict(self) -> bool:
+        """Return whether the model explored enough and must conclude now.
+
+        Guards against exploration loops: after ``max_tool_calls`` tool
+        executions the phase must render a verdict instead of issuing
+        more tool calls.
+        """
+        return self.tool_calls >= self.max_tool_calls
 
     def judge_verdict(
         self,

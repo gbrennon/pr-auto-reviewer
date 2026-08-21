@@ -13,3 +13,4 @@ HANDOFF.md
 *.cover
 *.cover
 __pycache__/
+reviews/
