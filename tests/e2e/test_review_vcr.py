@@ -1,135 +1,101 @@
-"""Record-and-replay E2E tests using vcrpy — real captures, offline replay.
-
-vcrpy with ``record_mode="once"`` is self-managing — no flags:
-
-* First run (no cassette): vcrpy **automatically records** the real HTTP
-  interactions (Forgejo/Codeberg + Ollama) into ``tests/e2e/cassettes/``.
-* Later runs (cassette exists): vcrpy **replays** the recorded interaction,
-  so no request reaches ollama/codeberg/github.
-
-This is the Ruby-VCR pattern: the first decorated call exercises the real
-services once; every later call relies on the recorded fixture.
-
-Scenarios come from :data:`tests.e2e.scenarios.E2E_REVIEW_SCENARIOS` — add a
-row there (platform, owner, repo, pr_id) to add a capture/replay case:
-
-    forgejo:gbrennon/pr-auto-reviewer #146  ->  review_forgejo_yaml cassette
-
-The in-process driver mirrors exactly the CLI the user runs:
-
-    REVIEW_OUTPUT=terminal uv run pr-auto-reviewer review --force \\
-        -r forgejo:gbrennon/pr-auto-reviewer -p 146
-"""
-
-from __future__ import annotations
-
-import contextlib
-import io
 import json
-import os
-from typing import Any
+import re
+from pathlib import Path
 
-from httpx import get
 import pytest
-import vcr
 
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.composition_root import bootstrap
-from scripts.review_behavior_checks import ReviewPayloadBehaviorChecker
-from tests.e2e.scenarios import (
-    E2E_REVIEW_SCENARIOS,
-    ReviewScenario,
-    scenario_repo_spec,
-    scenario_review_output,
-)
-
-CASSETTES_DIR = "tests/e2e/cassettes"
+from tests.e2e.scenarios import _get_normalized_scenarios
 
 
-def _cassette_name(platform: str, owner: str, repo: str, pr_id: int) -> str:
-    """Return the cassette filename for a scenario."""
-    safe = f"{platform}_{owner}_{repo}_pr{pr_id}".replace("/", "_")
-    return f"review_{safe}.yaml"
+def _cassette_name(scenario: dict) -> str:
+    """Generate cassette filename from scenario params."""
+    return f"review_{scenario['platform']}_{scenario['owner']}_{scenario['repo']}_pr{scenario['pr_id']}"
 
 
-def _vcr_for(cassette_name: str) -> vcr.VCR:
-    """Return a VCR instance that auto-records when *cassette_name* is missing.
-
-    ``record_mode="once"``: records only when the cassette does not exist;
-    thereafter replays, never touching the network.
-    """
-    return vcr.VCR(
-        serializer="yaml",
-        cassette_library_dir=CASSETTES_DIR,
-        record_mode=vcr.record_mode.RecordMode.ONCE,
-        match_on=["uri", "method"],
-        filter_headers=["Authorization", "authorization", "token"],
-        filter_query_parameters=["token", "access_token"],
-    )
+@pytest.fixture
+def vcr_config(scenario):
+    return {
+        "cassette_library_dir": "tests/e2e/cassettes/test_review_vcr",
+        "match_on": ["method", "scheme", "host", "port", "path", "query"],
+        "cassette_name": _cassette_name(scenario),
+    }
 
 
-def _run_cli_like(repo_spec: str, pr_number: int, review_output: str) -> str:
-    """Run the review entrypoint in-process like the CLI, returning stdout.
-
-    Mirrors ``REVIEW_OUTPUT=<mode> uv run pr-auto-reviewer review --force
-    -r <repo_spec> -p <pr>`` so vcrpy can intercept the HTTP calls. The
-    ``REVIEW_OUTPUT`` value is per-scenario (``terminal``, ``file:<path>``,
-    or a platform name).
-    """
-
-    os.environ["REVIEW_OUTPUT"] = review_output
-    argv = [
-        "pr-auto-reviewer",
-        "review",
-        "--force",
-        "--repo",
-        repo_spec,
-        "--pr",
-        str(pr_number),
-    ]
-    components = bootstrap()
-    buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
-        exit_code = components.cli_runner.run(argv)
-    output = buffer.getvalue()
-    os.environ.pop("REVIEW_OUTPUT", None)
-    assert exit_code == 0, f"review exited {exit_code}\n=====\n{output[-2000:]}"
-    return output
+def _read_review_body(
+    review_output: str,
+    pr_id: PullRequestId,
+    review_reader,
+) -> str | None:
+    """Read the published review body from the output file or the platform."""
+    if review_output.startswith("file:"):
+        output_path = Path(review_output.removeprefix("file:"))
+        if output_path.exists():
+            return output_path.read_text(encoding="utf-8")
+        return None
+    return review_reader.get_latest_review(pr_id)
 
 
-def _terminal_review_payload(output: str) -> dict[str, Any]:
-    """Extract the ``--- JSON ---`` review payload from terminal output."""
-    marker = "--- JSON ---"
-    if marker not in output:
-        pytest.fail(f"terminal output has no JSON section:\n{output[-1500:]}")
-    section = output.split(marker, 1)[1]
-    section = section.split("\n" + "=" * 30, 1)[0].strip()
-    return json.loads(section)
+def _review_json(raw_body: str) -> dict:
+    """Extract the JSON block from a published review body."""
+    match = re.search(r"--- JSON ---\n\n(\{.*\})", raw_body, re.DOTALL)
+    assert match is not None, "published review has no JSON block"
+    return json.loads(match.group(1))
+
+
+def _all_review_ids(payload: dict) -> list[str]:
+    """Collect every item id from the published JSON payload."""
+    ids: list[str] = []
+    for section in ("items", "suggestions", "praise"):
+        ids.extend(item.get("id", "") for item in payload.get(section, []))
+    return ids
 
 
 @pytest.mark.e2e
-class TestReviewHttpRecording:
-    """Auto-record once, then replay the review HTTP interaction offline."""
+@pytest.mark.vcr
+class TestReviewFlowVCR:
+    @pytest.fixture
+    def components(self, scenario, monkeypatch):
+        monkeypatch.setenv("REVIEW_OUTPUT", scenario["review_output"])
+        return bootstrap()
 
     @pytest.mark.parametrize(
         "scenario",
-        E2E_REVIEW_SCENARIOS,
+        _get_normalized_scenarios(),
         ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
     )
-    def test_review_flow_captured_or_replayed(self, scenario: ReviewScenario) -> None:
-        repo_spec = scenario_repo_spec(scenario)
-        pr_number = scenario.get("pr_id", 1)
-        review_output = scenario_review_output(scenario)
-        cassette = _cassette_name(
-            scenario.get("platform", "platform"),
-            scenario.get("owner", "owner"),
-            scenario.get("repo", "repo"),
-            pr_number,
+    def test_review_flow(self, components, scenario: dict) -> None:
+        repo_spec = f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
+        pr_id = PullRequestId(repository=repo_spec, number=scenario["pr_id"])
+
+        review_argv = [
+            "pr-auto-reviewer",
+            "review",
+            "--repo",
+            repo_spec,
+            "--pr",
+            str(scenario["pr_id"]),
+            "--force",
+        ]
+        exit_code = components.cli_runner.run(review_argv)
+        assert exit_code == 0
+
+        raw_body = _read_review_body(
+            scenario["review_output"],
+            pr_id,
+            components.review_reader,
         )
-        vcr_instance = _vcr_for(cassette)
+        assert raw_body is not None
 
-        with vcr_instance.use_cassette(cassette):
-            output = _run_cli_like(repo_spec, pr_number, review_output)
-            review_payload = _terminal_review_payload(output)
+        payload = _review_json(raw_body)
+        assert len(payload["items"]) == scenario["expected_items"]
 
-        violations = ReviewPayloadBehaviorChecker().violations(review_payload)
-        assert not violations, "\n".join(violations)
+        items = components.review_item_parser.parse(raw_body)
+        assert len(items) == scenario["expected_items"]
+
+        item_ids = _all_review_ids(payload)
+        assert len(item_ids) == len(set(item_ids)), (
+            f"duplicate ids in published review: {item_ids}"
+        )
+        assert all(item_ids), "published review contains empty item ids"
