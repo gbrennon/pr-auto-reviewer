@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid as _uuid
 from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -123,8 +122,32 @@ class ReviewResponseParser:
             first_para = ReviewResponseParser._extract_first_paragraph(content)
             summary = first_para if first_para else content.strip()[:500]
         items_data = ReviewResponseParser._parse_markdown_items(content)
-        suggestions = ReviewResponseParser._extract_suggestions_md(content)
-        praise = ReviewResponseParser._extract_praise_md(content)
+        suggestions = [
+            ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=str(s.get("file", "")),
+                description=str(s.get("description", "")),
+                line=str(s.get("line", "")),
+                id=s.get("id", ""),
+                current_code=s.get("current_code", ""),
+                suggested_fix=s.get("suggested_code", ""),
+            )
+            for s in ReviewResponseParser._extract_suggestions_md(content)
+        ]
+        praise = [
+            ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=str(p.get("file", "")),
+                description=str(p.get("description", "")),
+                line="",
+                id="",
+                current_code="",
+                suggested_fix=str(p.get("description", "")),
+            )
+            for p in ReviewResponseParser._extract_praise_md(content)
+        ]
         return CodeReview(
             verdict=verdict,
             reason=reason,
@@ -139,7 +162,6 @@ class ReviewResponseParser:
     def _merge_json_markdown(
         cls, json_result: CodeReview, markdown_result: CodeReview, model: str
     ) -> CodeReview:
-        # Handle summary (string type)
         summary_is_string = isinstance(json_result.summary, str)
         summary_empty = (not summary_is_string or not json_result.summary.strip())
         summary = (
@@ -147,7 +169,6 @@ class ReviewResponseParser:
             if summary_empty and isinstance(markdown_result.summary, str) and markdown_result.summary.strip()
             else json_result.summary
         )
-        # Handle praise (list type)
         praise_is_list = isinstance(json_result.praise, list)
         praise_empty = (not praise_is_list or not json_result.praise)
         praise = (
@@ -155,7 +176,6 @@ class ReviewResponseParser:
             if praise_empty and isinstance(markdown_result.praise, list) and markdown_result.praise
             else json_result.praise
         )
-        # Handle suggestions (list type)
         suggestions_is_list = isinstance(json_result.suggestions, list)
         suggestions_empty = (not suggestions_is_list or not json_result.suggestions)
         suggestions = (
@@ -163,7 +183,6 @@ class ReviewResponseParser:
             if suggestions_empty and isinstance(markdown_result.suggestions, list) and markdown_result.suggestions
             else json_result.suggestions
         )
-        # Handle verdict and reason (string type)
         verdict_is_string = isinstance(json_result.verdict, str)
         reason_is_string = isinstance(json_result.reason, str)
         return CodeReview(
@@ -177,36 +196,17 @@ class ReviewResponseParser:
         )
 
     @classmethod
-    def _extract_suggestions_md(cls, content: str) -> list[dict[str, str]]:
-        section_match = re.search(
-            r"## Suggestions\n(.*?)(?=\n## |\Z)", content, re.DOTALL
-        )
-        if not section_match:
-            return []
-        section = section_match.group(1)
-        results: list[dict[str, str]] = []
-        for line in section.strip().split("\n"):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            parsed = ReviewResponseParser._parse_md_suggestion_line(stripped)
-            if parsed is None:
-                continue
-            results.append(parsed)
-        return results
-
-    @classmethod
     def _parse_markdown_items(cls, content: str) -> list[ReviewItem]:
         pattern = re.compile(
             r"^-\s*\[(\w+)\]\s+(\w+)\s+\(([^)]+)\)\s+(.+)$",
             re.MULTILINE,
         )
         items: list[ReviewItem] = []
-        for i, match in enumerate(pattern.finditer(content), 1):
+        for match in pattern.finditer(content):
             severity_raw, category_raw, file_path, description = match.groups()
+            item_id = format(_uuid.uuid7().int, "04x")[:4]
             items.append(
                 ReviewItem(
-                    number=i,
                     severity=ItemSeverity.from_value(severity_raw),
                     category=IssueCategory.from_value(category_raw),
                     file_path=file_path.strip(),
@@ -214,6 +214,7 @@ class ReviewResponseParser:
                     line="",
                     current_code="",
                     suggested_fix="",
+                    id=item_id,
                 )
             )
         return items
@@ -351,11 +352,45 @@ class ReviewResponseParser:
                 file_path = candidate.lstrip("/")
         line = cls._extract_line_range(chunk) or ""
         description = cls._prose_description(slim, chunk)
+        current_code, suggested_fix = cls._extract_code_blocks(chunk)
         return {
             "file": file_path,
             "line": line,
             "description": description,
+            "current_code": current_code,
+            "suggested_fix": suggested_fix,
         }
+
+    @classmethod
+    def _extract_code_blocks(cls, chunk: str) -> tuple[str, str]:
+        """Extract current_code and suggested_fix from code blocks in chunk."""
+        current_code = ""
+        suggested_fix = ""
+        # Find all code blocks
+        code_blocks = re.findall(r"```(?:[a-zA-Z0-9]+)?\s*\n(.*?)```", chunk, re.DOTALL)
+        for i, block in enumerate(code_blocks):
+            block = block.strip()
+            # Look for markers indicating current vs suggested
+            lower = block.lower()
+            if any(marker in lower for marker in ("current", "before", "old", "original")):
+                current_code = block
+            elif any(marker in lower for marker in ("suggested", "after", "new", "fix", "fixed")):
+                suggested_fix = block
+            elif i == 0 and not current_code:
+                # First block without markers - assume current
+                current_code = block
+            elif i == 1 and not suggested_fix:
+                # Second block without markers - assume suggested
+                suggested_fix = block
+        # Fallback: if we have current but no suggested, use description or current as suggested
+        if current_code and not suggested_fix:
+            # Try to find a second code block or use first as both
+            if len(code_blocks) > 1:
+                suggested_fix = code_blocks[1].strip()
+            else:
+                # No second block - current is the fix (it's a one-line change)
+                suggested_fix = current_code
+        return current_code, suggested_fix
 
     @classmethod
     def _prose_description(cls, title: str, chunk: str) -> str:
@@ -441,8 +476,13 @@ class ReviewResponseParser:
                         ReviewResponseParser._LINE_RANGE):
             m = re.search(pattern, context)
             if m:
-                start = m.group(1)
-                end = m.group(2) if m.lastindex and m.lastindex >= 2 and m.group(2) else ""
+                if pattern is ReviewResponseParser._FILE_LINE:
+                    start = m.group(2)
+                    end_offset = 3
+                else:
+                    start = m.group(1)
+                    end_offset = 2
+                end = m.group(end_offset) if m.lastindex and m.lastindex >= end_offset and m.group(end_offset) else ""
                 return f"{start}-{end}" if end else start
         return ""
 
@@ -1088,7 +1128,6 @@ class ReviewResponseParser:
             else:
                 category_value = ReviewResponseParser._infer_type(description, severity_value)
             review_item = ReviewItem(
-                number=i,
                 severity=ItemSeverity.from_value(severity_value),
                 category=IssueCategory.from_value(category_value),
                 file_path=str(item_dict.get("file", "")),
@@ -1096,6 +1135,7 @@ class ReviewResponseParser:
                 line=str(item_dict.get("line", "")),
                 current_code=str(item_dict.get("current_code", "")),
                 suggested_fix=str(item_dict.get("suggested_fix", "")),
+                id=format(_uuid.uuid7().int, "04x")[:4],
             )
             if not review_item.file_path and not review_item.description:
                 continue
@@ -1106,22 +1146,29 @@ class ReviewResponseParser:
             summary=str(data.get("summary", "")),
             items=items,
             suggestions=[
-                ReviewSuggestion(description=str(s)) if isinstance(s, str)
-                else ReviewSuggestion(
-                    description=str(s.get("description", "")),
-                    file=str(s.get("file", "")),
-                    line=str(s.get("line", "")),
-                    current_code=str(s.get("current_code", "")),
-                    suggested_code=str(s.get("suggested_code", "")),
+                ReviewItem(
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=str(s.get("file", "") if isinstance(s, dict) else ""),
+                    description=str(s.get("description", "") if isinstance(s, dict) else s),
+                    line=str(s.get("line", "") if isinstance(s, dict) else ""),
+                    id=s.get("id", s.get("_id", "")) if isinstance(s, dict) else "",
+                    current_code=str(s.get("current_code", "")) if isinstance(s, dict) else "",
+                    suggested_fix=str(s.get("suggested_code", "")) if isinstance(s, dict) else "",
                 )
                 for s in data.get("suggestions", [])
                 if isinstance(s, (str, dict))
             ],
             praise=[
-                ReviewPraise(description=str(p)) if isinstance(p, str)
-                else ReviewPraise(
-                    description=str(p.get("description", "")),
-                    file=str(p.get("file", "")),
+                ReviewItem(
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=str(p.get("file", "") if isinstance(p, dict) else ""),
+                    description=str(p.get("description", "") if isinstance(p, dict) else p),
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix=str(p.get("description", "")) if isinstance(p, dict) else p,
                 )
                 for p in data.get("praise", [])
                 if isinstance(p, (str, dict))

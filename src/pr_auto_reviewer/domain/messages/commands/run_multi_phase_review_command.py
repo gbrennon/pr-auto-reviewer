@@ -16,3 +16,4 @@ class RunMultiPhaseReviewCommand:
     repo_path: Path
     changed_files: list[str]
     model: str
+    existing_item_ids: frozenset[str] = frozenset()

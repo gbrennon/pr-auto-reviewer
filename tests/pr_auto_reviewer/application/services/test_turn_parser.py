@@ -119,8 +119,8 @@ class TestTurnParser:
 
         assert result.metadata is not None
         assert result.metadata["suggestions"] == [
-            {"file": "", "line": "", "description": "do this"},
-            {"file": "", "line": "", "description": "do that"},
+            {"file": "", "line": "", "description": "do this", "current_code": "", "suggested_fix": ""},
+            {"file": "", "line": "", "description": "do that", "current_code": "", "suggested_fix": ""},
         ]
 
     def test_items_as_dict_yield_no_string_suggestions(self) -> None:
@@ -262,7 +262,7 @@ class TestTurnParser:
         assert result.metadata["reason"] == "because"
         assert result.metadata["summary"] == "sum"
         assert result.metadata["suggestions"] == [
-            {"file": "", "line": "", "description": "s"}
+            {"file": "", "line": "", "description": "s", "current_code": "", "suggested_fix": ""}
         ]
         assert result.metadata["praise"] == [{"file": "", "description": "p"}]
 

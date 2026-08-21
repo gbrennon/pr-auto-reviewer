@@ -3,8 +3,6 @@
 from dataclasses import dataclass, field
 
 from ..entities.review_item import ReviewItem
-from ..entities.review_praise import ReviewPraise
-from ..entities.review_suggestion import ReviewSuggestion
 from .review_verdict import ReviewVerdict
 
 
@@ -20,6 +18,6 @@ class CodeReview:
     reason: str = ""
     summary: str = ""
     items: list[ReviewItem] = field(default_factory=list)
-    suggestions: list[ReviewSuggestion] = field(default_factory=list)
-    praise: list[ReviewPraise] = field(default_factory=list)
+    suggestions: list[ReviewItem] = field(default_factory=list)
+    praise: list[ReviewItem] = field(default_factory=list)
     model_used: str = ""

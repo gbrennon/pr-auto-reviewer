@@ -66,6 +66,14 @@ class TestReviewVerdict:
     def head_sha(self) -> CommitSha:
         return CommitSha("abc123def456")
 
+    @pytest.fixture
+    def pr_id_fixture(self) -> PullRequestId:
+        return PullRequestId(repository="owner/repo", number=1)
+
+    @pytest.fixture
+    def head_sha_fixture(self) -> CommitSha:
+        return CommitSha("abc123def456")
+
     def test_shell_with_shebang_is_approved(
         self, pr_id: PullRequestId, head_sha: CommitSha,
     ) -> None:
@@ -119,8 +127,7 @@ class TestReviewVerdict:
             verdict=ReviewVerdict.APPROVED,
             model_used="code-review",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.MINOR,
                     category=IssueCategory.QUALITY,
                     file_path="scripts/deploy.sh",
@@ -247,6 +254,112 @@ class TestReviewVerdict:
         ))
         published2 = publisher2.publish_calls[0][1]
         assert published2.verdict == ReviewVerdict.CHANGES_REQUESTED
+
+
+    @pytest.mark.parametrize(
+        "platform,pr_id,cli_args",
+        [
+            ("forgejo", "gbrennon/dotfiles", ["-r", "forgejo:gbrennon/dotfiles", "-p", "63"]),
+            ("github", "gbrennon/ratatui", ["-r", "github:ratatui/ratatui", "-p", "1"]),
+        ],
+    )
+    def test_e2e_review_terminal(
+        self,
+        platform: str,
+        pr_id: str,
+        cli_args: list[str],
+        pr_id_fixture: PullRequestId,
+        head_sha_fixture: CommitSha,
+    ) -> None:
+        """E2E review flow with terminal output for specific PRs.
+
+        Uses ``review_output = terminal`` and the appropriate platform CLI args.
+        """
+        diff = PullRequestDiff(
+            pr_id=pr_id_fixture,
+            head_sha=head_sha_fixture,
+            diff_content=_load_fixture("diffs/sample-service.diff"),
+        )
+        fetcher = FakeChangesetFetcher(diff)
+
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="Good changes, approved",
+            model_used="code-review",
+        )
+        llm_stub = FakeLlmReview(review)
+        publisher = FakeReviewPublisher()
+        ctx_factory = FakeReviewContextFactory()
+
+        service = ReviewPullRequestService(
+            pr_repository=FakePullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub,
+            review_publisher=publisher,
+        )
+        service.execute(ReviewPullRequestCommand(
+            pr_id=pr_id_fixture, head_sha=head_sha_fixture, title="Review",
+        ))
+
+        assert len(publisher.publish_calls) == 1
+        published: CodeReview = publisher.publish_calls[0][1]
+        assert published.verdict == ReviewVerdict.APPROVED
+        assert published.model_used == "code-review"
+        assert len(published.items) == 0  # Clean review → no items
+
+    def test_e2e_review_terminal_with_items(
+        self,
+        pr_id_fixture: PullRequestId,
+        head_sha_fixture: CommitSha,
+    ) -> None:
+        """E2E review with items appearing in terminal output."""
+        diff = PullRequestDiff(
+            pr_id=pr_id_fixture,
+            head_sha=head_sha_fixture,
+            diff_content=_load_fixture("diffs/shell-missing-shebang.diff"),
+            file_contents={
+                "scripts/deploy.sh": _load_fixture(
+                    "diffs/shell-missing-shebang.full",
+                ),
+            },
+        )
+        fetcher = FakeChangesetFetcher(diff)
+
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="Missing shebang detected",
+            model_used="code-review",
+            items=[
+                ReviewItem(
+                    id="id-1",
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.QUALITY,
+                    file_path="scripts/deploy.sh",
+                    description="Missing shebang in deploy script",
+                ),
+            ],
+        )
+        llm_stub = FakeLlmReview(review)
+        publisher = FakeReviewPublisher()
+        ctx_factory = FakeReviewContextFactory()
+
+        service = ReviewPullRequestService(
+            pr_repository=FakePullRequestRepository(),
+            changeset_fetcher=fetcher,
+            review_context_factory=ctx_factory,
+            llm_review=llm_stub,
+            review_publisher=publisher,
+        )
+        service.execute(ReviewPullRequestCommand(
+            pr_id=pr_id_fixture, head_sha=head_sha_fixture, title="Review",
+        ))
+
+        assert len(publisher.publish_calls) == 1
+        published: CodeReview = publisher.publish_calls[0][1]
+        assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(published.items) == 1
+        assert published.items[0].description == "Missing shebang in deploy script"
 
 class TestLlmUnavailable:
     """Error-path tests with a REAL OllamaLlmAdapter + monkeypatched requests.post.

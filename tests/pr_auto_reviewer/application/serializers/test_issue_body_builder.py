@@ -14,8 +14,7 @@ class TestIssueBodyBuilder:
     def test_basic_build_title_contains_severity_and_category(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=42)
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.CRITICAL,
             category="security",
             file_path="src/main.py",
@@ -28,8 +27,7 @@ class TestIssueBodyBuilder:
     def test_basic_build_body_contains_all_fields(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=42)
-        item = ReviewItem(
-            number=3,
+        item = ReviewItem(id="id-3",
             severity=ItemSeverity.MAJOR,
             category="bug",
             file_path="src/utils.py",
@@ -37,7 +35,7 @@ class TestIssueBodyBuilder:
         )
         _, body = builder.build(pr_id, item)
         assert "owner/repo#42" in body
-        assert "Review Item #3" in body
+        assert "Review Item id-3" in body
         assert "MAJOR" in body
         assert "bug" in body
         assert "`src/utils.py`" in body
@@ -46,8 +44,7 @@ class TestIssueBodyBuilder:
     def test_file_path_none_shows_no_specific_file(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
-        item = ReviewItem(
-            number=2,
+        item = ReviewItem(id="id-2",
             severity=ItemSeverity.INFO,
             category="style",
             file_path=None,
@@ -60,8 +57,7 @@ class TestIssueBodyBuilder:
     def test_severity_is_uppercase_in_output(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.MINOR,
             category="docs",
             file_path="README.md",
@@ -76,8 +72,7 @@ class TestIssueBodyBuilder:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
         long_desc = "A" * 200
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.INFO,
             category="general",
             file_path=None,
@@ -95,8 +90,7 @@ class TestIssueBodyBuilder:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
         short_desc = "Fix typo"
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.MAJOR,
             category="bug",
             file_path="x.py",
@@ -108,8 +102,7 @@ class TestIssueBodyBuilder:
     def test_body_contains_formatted_location_with_file_path(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.CRITICAL,
             category="security",
             file_path="src/auth/login.py",
@@ -121,8 +114,7 @@ class TestIssueBodyBuilder:
     def test_body_includes_current_code_and_suggested_fix(self) -> None:
         builder = IssueBodyBuilder()
         pr_id = PullRequestId(repository="owner/repo", number=1)
-        item = ReviewItem(
-            number=1,
+        item = ReviewItem(id="id-1",
             severity=ItemSeverity.MAJOR,
             category="bug",
             file_path="src/main.py",

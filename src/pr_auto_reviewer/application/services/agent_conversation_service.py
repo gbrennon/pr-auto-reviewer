@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,12 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
+)
+from pr_auto_reviewer.domain.agent.conversation_decision import (
+    ConversationDecision,
+)
+from pr_auto_reviewer.domain.agent.conversation_guardrails import (
+    ConversationGuardrails,
 )
 from pr_auto_reviewer.domain.agent.conversation_message import (
     ConversationMessage,
@@ -49,12 +56,10 @@ class AgentConversationService(RunAgentConversationUseCase):
     """Run a multi-turn agentic conversation with tool access.
 
     Orchestrates the loop: send messages → parse response → execute
-    tools → append results → repeat until verdict or exhaustion.
+    tools → append results → repeat until verdict or exhaustion. Every
+    reprompt and termination decision is delegated to
+    ``ConversationGuardrails``.
     """
-
-    _MAX_TURNS = 10
-    _MAX_EMPTY_RESPONSES = 3
-    _MAX_UNPARSEABLE_RESPONSES = 3
 
     def __init__(
         self,
@@ -68,9 +73,11 @@ class AgentConversationService(RunAgentConversationUseCase):
         self._chat_port = chat_port
         self._command_bus = command_bus
         self._conversation_logger = conversation_logger
-        self._max_turns = max_turns
-        self._max_empty_responses = max_empty_responses
-        self._max_unparseable_responses = max_unparseable_responses
+        self._guardrails = ConversationGuardrails(
+            max_turns=max_turns,
+            max_empty_responses=max_empty_responses,
+            max_unparseable_responses=max_unparseable_responses,
+        )
 
     def execute(
         self, command: RunAgentConversationCommand
@@ -82,6 +89,7 @@ class AgentConversationService(RunAgentConversationUseCase):
             changed_files=command.changed_files,
             tool_execution=command.tool_execution,
             phase_name=command.phase_name,
+            existing_item_ids=command.existing_item_ids,
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
@@ -107,51 +115,6 @@ class AgentConversationService(RunAgentConversationUseCase):
             if basename in text or (stem and stem in text):
                 return candidate
         return ""
-
-    def _ground_suggestion(
-        self,
-        suggestion: dict[str, str],
-        repo_root: Path,
-        changed_files: list[str],
-    ) -> dict[str, str] | None:
-        """Fill line and current_code for a suggestion from repository files."""
-        file_path = str(suggestion.get("file", ""))
-        full_path: Path | None = None
-        resolved = file_path
-        if file_path:
-            candidate = repo_root / file_path
-            if candidate.is_file():
-                full_path = candidate
-            else:
-                for changed in changed_files:
-                    if changed.endswith(file_path) or file_path.endswith(changed):
-                        candidate = repo_root / changed
-                        if candidate.is_file():
-                            full_path = candidate
-                            resolved = changed
-                            break
-        if full_path is None:
-            return None
-        description = str(suggestion.get("description", ""))
-        line_str = str(
-            ReviewItemFactory._locate_symbol_range(full_path, description) or ""
-        )
-        current_code = ""
-        if line_str or ReviewItemFactory._extract_symbols(description):
-            current_code = str(
-                ReviewItemFactory._read_evidence(
-                    full_path, repo_root, line_str, description
-                )
-                or ""
-            )
-        result: dict[str, str] = {}
-        if resolved:
-            result["file"] = resolved
-        if line_str:
-            result["line"] = line_str
-        if current_code:
-            result["current_code"] = current_code
-        return result or None
 
     def _log_conversation_debug(
         self,
@@ -183,6 +146,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         changed_files: list[str],
         tool_execution: Any,
         phase_name: str = "",
+        existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
         """Run a single-phase multi-turn conversation.
 
@@ -214,21 +178,25 @@ class AgentConversationService(RunAgentConversationUseCase):
             ),
         ]
 
-        empty_consecutive = 0
-        unparseable_consecutive = 0
-        tool_calls = 0
-        for turn in range(self._max_turns):
-            logger.debug("Turn %d/%d", turn + 1, self._max_turns)
+        guardrails = replace(self._guardrails)
+        seen_tool_calls: set[tuple[str, str]] = set()
+        verdict_nudged = False
+        while guardrails.has_turns_remaining():
+            logger.debug(
+                "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
+            )
             content = self._chat_port.send(messages)
+            guardrails = guardrails.advance_turn()
             if not content:
-                empty_consecutive += 1
-                if empty_consecutive >= self._max_empty_responses:
+                decision, guardrails = guardrails.record_empty_response()
+                if decision is ConversationDecision.EXCEEDED_EMPTY:
                     raise LlmUnavailableError(
-                        f"LLM returned empty response {empty_consecutive} "
-                        f"consecutive times at turn {turn + 1}"
+                        f"LLM returned empty response "
+                        f"{guardrails.consecutive_empty} consecutive times "
+                        f"at turn {guardrails.turn}"
                     )
                 logger.debug(
-                    "Empty response at turn %d; reprompting", turn + 1
+                    "Empty response at turn %d; reprompting", guardrails.turn
                 )
                 messages.append(ConversationMessage(
                     role="user",
@@ -241,29 +209,26 @@ class AgentConversationService(RunAgentConversationUseCase):
                 ))
                 continue
 
-            empty_consecutive = 0
+            guardrails = guardrails.mark_consecutive_success()
 
             parsed = self._command_bus.dispatch(
                 ParseReviewTurnCommand(content=content)
             )
             self._publish(ReviewTurnParsedEvent(
-                turn_number=turn + 1, result=parsed
+                turn_number=guardrails.turn, result=parsed
             ))
 
             if parsed.kind == "unparseable":
-                unparseable_consecutive += 1
-                if (
-                    unparseable_consecutive
-                    >= self._max_unparseable_responses
-                ):
+                decision, guardrails = guardrails.record_unparseable_response()
+                if decision is ConversationDecision.EXCEEDED_UNPARSEABLE:
                     raise LlmUnavailableError(
                         f"LLM returned unparseable response "
-                        f"{unparseable_consecutive} consecutive times "
-                        f"at turn {turn + 1}"
+                        f"{guardrails.consecutive_unparseable} consecutive "
+                        f"times at turn {guardrails.turn}"
                     )
                 logger.debug(
                     "Unparseable response at turn %d; reprompting",
-                    turn + 1,
+                    guardrails.turn,
                 )
                 messages.append(ConversationMessage(
                     role="user",
@@ -276,43 +241,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                     ),
                 ))
                 continue
-            unparseable_consecutive = 0
 
             messages.append(ConversationMessage(
                 role="assistant", content=content
             ))
-
-            if parsed.kind == "verdict":
-                if tool_calls > 0:
-                    logger.debug("Got verdict at turn %d", turn + 1)
-                    phase_result = self._build_phase_result(
-                        parsed, repo_path, changed_files
-                    )
-                    self._log_conversation(
-                        phase_name, messages, turn + 1, phase_result,
-                        repo_path=repo_path,
-                    )
-                    self._publish(ConversationCompletedEvent(
-                        phase_result=phase_result
-                    ))
-                    return phase_result
-                logger.debug(
-                    "Verdict at turn %d with no tool exploration; "
-                    "demanding exploration",
-                    turn + 1,
-                )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "You reached a verdict without inspecting the "
-                        "repository. Before concluding, you MUST use the "
-                        "exploration tools (read_file, search_codebase, "
-                        "list_directory, run_git) to inspect the changed "
-                        "files. Do that now, then provide your final JSON "
-                        "verdict."
-                    ),
-                ))
-                continue
 
             if parsed.kind == "tool_call" and parsed.tool_call is not None:
                 tool_call = parsed.tool_call
@@ -321,8 +253,31 @@ class AgentConversationService(RunAgentConversationUseCase):
                     tool_call.tool_name,
                     str(tool_call.arguments)[:200],
                 )
+                call_key = (
+                    tool_call.tool_name,
+                    json.dumps(
+                        tool_call.arguments, sort_keys=True, default=str
+                    ),
+                )
+                if call_key in seen_tool_calls:
+                    logger.debug(
+                        "Tool call repeated (%s); refusing and reprompting",
+                        tool_call.tool_name,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You already ran that exact tool call and its "
+                            "result is in the conversation above. Do not "
+                            "repeat it. Use a different changed file from "
+                            "the list, or provide your final verdict JSON "
+                            "now."
+                        ),
+                    ))
+                    continue
+                seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
-                tool_calls += 1
+                guardrails = guardrails.record_tool_call()
                 result_json = json.dumps({
                     "status": result.status,
                     "data": result.data,
@@ -337,8 +292,59 @@ class AgentConversationService(RunAgentConversationUseCase):
                     role="user",
                     content=result_json,
                 ))
+                if guardrails.should_force_verdict() and not verdict_nudged:
+                    verdict_nudged = True
+                    logger.debug(
+                        "Tool budget reached (%d); nudging verdict",
+                        guardrails.tool_calls,
+                    )
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "You have explored enough. Conclude now with "
+                            "your final review as a single JSON object: "
+                            '"verdict" ("approved" | "changes_requested" | '
+                            '"commented"), "reason", "items", "suggestions", '
+                            'and "praise". Only include findings you can '
+                            "confirm from the files you read."
+                        ),
+                    ))
+                continue
+
+            if parsed.kind == "verdict":
+                decision, guardrails = guardrails.judge_verdict()
+                if decision is ConversationDecision.ACCEPT_VERDICT:
+                    logger.debug("Got verdict at turn %d", guardrails.turn)
+                    phase_result = self._build_phase_result(
+                        parsed, repo_path, changed_files, existing_ids=existing_item_ids
+                    )
+                    self._log_conversation(
+                        phase_name, messages, guardrails.turn, phase_result,
+                        repo_path=repo_path,
+                    )
+                    self._publish(ConversationCompletedEvent(
+                        phase_result=phase_result
+                    ))
+                    return phase_result
+                logger.debug(
+                    "Verdict at turn %d with no tool exploration; "
+                    "demanding exploration",
+                    guardrails.turn,
+                )
+                messages.append(ConversationMessage(
+                    role="user",
+                    content=(
+                        "You reached a verdict without inspecting the "
+                        "repository. Before concluding, you MUST use the "
+                        "exploration tools (read_file, search_codebase, "
+                        "list_directory, run_git) to inspect the changed "
+                        "files. Do that now, then provide your final JSON "
+                        "verdict."
+                    ),
+                ))
+                continue
         self._log_conversation(
-            phase_name, messages, self._max_turns, None,
+            phase_name, messages, self._guardrails.max_turns, None,
             repo_path=repo_path,
         )
         fd, dump_path = tempfile.mkstemp(
@@ -353,69 +359,26 @@ class AgentConversationService(RunAgentConversationUseCase):
                 default=str,
             )
         raise LlmUnavailableError(
-            f"Phase exceeded max turns ({self._max_turns}) without a verdict. "
-            f"Full conversation dumped to {dump_path}"
+            f"Phase exceeded max turns ({self._guardrails.max_turns}) "
+            f"without a verdict. Full conversation dumped to {dump_path}"
         )
 
     def _build_phase_result(
-        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str]
+        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str], existing_ids: frozenset[str] = frozenset()
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
         metadata = parsed.metadata or {}
+
         review_items, skip_reasons = ReviewItemFactory().create(
-            raw_items, repo_path, changed_files
+            raw_items, repo_path, changed_files, existing_ids=existing_ids
         )
         suggestions = list(metadata.get("suggestions", []))
-        repo_root = Path(repo_path) if repo_path else None
         for s in suggestions:
             if not str(s.get("file", "")).strip():
                 s["file"] = self._find_mentioned_file(
                     str(s.get("description", "")), changed_files
                 )
-            if (
-                repo_root is not None
-                and str(s.get("file", "")).strip()
-                and not str(s.get("line", "")).strip()
-                and not str(s.get("current_code", "")).strip()
-            ):
-                grounded = self._ground_suggestion(
-                    s, repo_root, changed_files
-                )
-                if grounded is not None:
-                    s.update(grounded)
-        accepted_descriptions = {item.description for item in review_items}
-        for item_dict in raw_items:
-            if not isinstance(item_dict, dict):
-                continue
-            description = str(item_dict.get("description", "")).strip()
-            if not description:
-                continue
-            if description in accepted_descriptions:
-                continue
-            if any(
-                s.get("description") == description for s in suggestions
-            ):
-                continue
-            suggestion = {
-                "file": str(
-                    item_dict.get("file", "")
-                ) or self._find_mentioned_file(description, changed_files),
-                "line": str(item_dict.get("line", "")),
-                "description": description,
-            }
-            if (
-                repo_root is not None
-                and str(suggestion["file"]).strip()
-                and not str(suggestion["line"]).strip()
-                and not str(item_dict.get("current_code", "")).strip()
-            ):
-                grounded = self._ground_suggestion(
-                    suggestion, repo_root, changed_files
-                )
-                if grounded is not None:
-                    suggestion.update(grounded)
-            suggestions.append(suggestion)
         return PhaseResult(
             items=review_items,
             llm_verdict=metadata.get("verdict") or None,

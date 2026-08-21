@@ -153,7 +153,7 @@ pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
 review = CodeReview(
     id=CommentId("test-1"), verdict=ReviewVerdict.APPROVED,
     summary="Test review from capture script",
-    items=[ReviewItem(number=1, category="test", severity=ItemSeverity.LOW, description="Test item.", file_path="README.md")],
+    items=[ReviewItem(id="test-001", category="test", severity=ItemSeverity.LOW, description="Test item.", file_path="README.md")],
     pr_id=pid, model_used="test-capture")
 try:
     rp.publish(pid, review)

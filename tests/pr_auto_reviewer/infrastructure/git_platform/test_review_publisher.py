@@ -2,10 +2,10 @@
 
 import pytest
 import requests
+from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -14,12 +14,11 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
-    ReviewBodyFormatter,
-)
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import ReviewBodyRenderer
 
 GitReviewPublisherAdapter = GithubReviewPublisher
-format_review_body = ReviewBodyFormatter().format
+format_review_body = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates")).render
+_BODY = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates"))
 
 class TestGitReviewPublisherAdapter:
     """Tests for GitReviewPublisherAdapter using captured fixture data."""
@@ -53,7 +52,7 @@ index def456..ghi789 100644
 
     @pytest.fixture
     def adapter(self, patched_private_client):
-        return GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        return GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
 
     def test_publish(self, adapter):
         """Publish sends a formal PR review."""
@@ -88,7 +87,7 @@ index def456..ghi789 100644
         """_format_body handles None file_path."""
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED, summary="s",
-            items=[ReviewItem(number=1, category="c", severity=ItemSeverity.INFO,
+            items=[ReviewItem(id="1,", category="c", severity=ItemSeverity.INFO,
                               description="d", file_path=None)],
             model_used="m",
         )
@@ -108,7 +107,7 @@ index def456..ghi789 100644
             call_paths.append(path)
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -215,10 +214,10 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: self.DIFF)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
-            items=[ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+            items=[ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                               description="Use return True", file_path="src/main.py",
                               current_code="return True", suggested_fix="x")],
             model_used="m",
@@ -240,7 +239,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get_raw",
                             lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(requests.exceptions.HTTPError("diff fetch failed")))
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -252,7 +251,7 @@ index def456..ghi789 100644
             raise requests.exceptions.HTTPError("403 Forbidden")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -265,7 +264,7 @@ index def456..ghi789 100644
             raise requests.exceptions.HTTPError("500 Internal Server Error")
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
-        adapter = GitReviewPublisherAdapter(patched_private_client, patched_private_client)
+        adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
         pr_id = PullRequestId(repository="o/r", number=1)
 
@@ -280,7 +279,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "get",
                             lambda path, **kw: (_ for _ in ()).throw(requests.exceptions.HTTPError("boom")))
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
@@ -298,19 +297,18 @@ index def456..ghi789 100644
             patched_private_client, "get", lambda path, **kw: reviews,
         )
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         result = adapter._publishing.count_existing_items(
             PullRequestId(repository="o/r", number=1),
         )
         assert result == 4
 
-
     def test_publish_comment_logs_debug(
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         caplog.set_level("DEBUG")
         adapter._publishing.publish_comment(
@@ -322,7 +320,7 @@ index def456..ghi789 100644
         self, patched_private_client, monkeypatch, caplog,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         def raise_err(*_a, **_kw):
             raise requests.exceptions.HTTPError("post failed")
@@ -336,7 +334,7 @@ index def456..ghi789 100644
         self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
@@ -348,8 +346,7 @@ index def456..ghi789 100644
             "+return True\n"
         )
         items = [
-            ReviewItem(
-                number=1, severity=ItemSeverity.MAJOR, category="bug",
+            ReviewItem(id="id-1", severity=ItemSeverity.MAJOR, category="bug",
                 description="Blocking", file_path="src/main.py",
                 current_code="return True",
             ),
@@ -366,7 +363,7 @@ index def456..ghi789 100644
         self, patched_private_client,
     ):
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
@@ -378,8 +375,16 @@ index def456..ghi789 100644
             "+return True\n"
         )
         suggestions = [
-            ReviewSuggestion(file="src/main.py", current_code="return True",
-                             description="Use a constant instead"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="src/main.py",
+                description="Use a constant instead",
+                line="",
+                id="a1b2",
+                current_code="return True",
+                suggested_fix="Use a constant instead",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="forgejo",
@@ -398,19 +403,28 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.COMMENTED, summary="s",
             items=[
-                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                            description="Blocking", file_path="f.py",
                            current_code="x"),
-                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                ReviewItem(id="2,", severity=ItemSeverity.MINOR, category="style",
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],
-            praise=[ReviewPraise(description="nice")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="nice",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="nice",
+                )],
             model_used="m",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -430,19 +444,28 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED, summary="s",
             items=[
-                ReviewItem(number=1, severity=ItemSeverity.MAJOR, category="bug",
+                ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
                            description="Blocking", file_path="f.py",
                            current_code="x"),
-                ReviewItem(number=2, severity=ItemSeverity.MINOR, category="style",
+                ReviewItem(id="2,", severity=ItemSeverity.MINOR, category="style",
                            description="Nit", file_path="f.py",
                            current_code="x"),
             ],
-            praise=[ReviewPraise(description="nice")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="nice",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="nice",
+                )],
             model_used="m",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -459,7 +482,7 @@ index def456..ghi789 100644
     ):
         """Suggestions missing file or code are skipped."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/f.py b/f.py\n"
@@ -467,8 +490,26 @@ index def456..ghi789 100644
             "+x\n"
         )
         suggestions = [
-            ReviewSuggestion(file="", current_code="x", description="no file"),
-            ReviewSuggestion(file="f.py", current_code="", description="no code"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="",
+                description="no file",
+                line="",
+                id="",
+                current_code="x",
+                suggested_fix="no file",
+            ),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="f.py",
+                description="no code",
+                line="",
+                id="",
+                current_code="",
+                suggested_fix="no code",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="github",
@@ -480,7 +521,7 @@ index def456..ghi789 100644
     ):
         """Suggestions build GitHub-style inline comments."""
         adapter = GitReviewPublisherAdapter(
-            patched_private_client, patched_private_client,
+            _BODY, patched_private_client, patched_private_client,
         )
         diff = (
             "diff --git a/src/main.py b/src/main.py\n"
@@ -489,8 +530,16 @@ index def456..ghi789 100644
             "+return True\n"
         )
         suggestions = [
-            ReviewSuggestion(file="src/main.py", current_code="return True",
-                             description="Use a constant"),
+            ReviewItem(
+                severity="info",
+                category="general",
+                file_path="src/main.py",
+                description="Use a constant",
+                line="",
+                id="a1b2",
+                current_code="return True",
+                suggested_fix="Use a constant",
+            ),
         ]
         result = adapter._publishing.build_inline_comments(
             diff, [], suggestions, platform="github",

@@ -9,7 +9,7 @@ def invalid_items_message(
 ) -> str:
     invalid_list = ", ".join(f"#{n}" for n in invalid)
     available_list = "\n".join(
-        f"- #{item.number}: {item.description[:60]}..."
+        f"- #{item.id}: {item.description[:60]}..."
         for item in available
     )
     return (

@@ -12,13 +12,11 @@ from pathlib import Path
 
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_praise import ReviewPraise
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
-from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
@@ -26,6 +24,10 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import (
     TerminalReviewPublisherAdapter,
 )
+from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
+
+
+_BODY = FakeReviewBodyRendererFactory.make()
 
 
 class TestItemDictNormalization:
@@ -143,7 +145,10 @@ class TestTerminalJsonNoEmptyFields:
 
     def _publish_json(self, tmp_path: Path, review: CodeReview) -> dict:
         out_file = tmp_path / "review.txt"
-        adapter = TerminalReviewPublisherAdapter(output_path=str(out_file))
+        adapter = TerminalReviewPublisherAdapter(
+            body_renderer=_BODY,
+            output_path=str(out_file),
+        )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         mark = "--- JSON ---\n"
@@ -158,7 +163,6 @@ class TestTerminalJsonNoEmptyFields:
             summary="lacks error handling",
             items=[
                 ReviewItem(
-                    number=1,
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/a.py",
@@ -169,13 +173,25 @@ class TestTerminalJsonNoEmptyFields:
                     suggested_fix="Add validation.",
                 ),
             ],
-            suggestions=[ReviewSuggestion(
-                file="src/a.py",
-                line="10-14",
-                description="Add validation.",
-                current_code="def f():",
-            )],
-            praise=[ReviewPraise(description="Good structure.")],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="src/a.py",
+                    line="10-14",
+                    description="Add validation.",
+                    current_code="def f():",
+                    suggested_fix="Add validation.",
+                )],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Good structure.",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Good structure.",
+                )],
             model_used="code-review:latest",
         )
         payload = self._publish_json(tmp_path, review)
@@ -203,9 +219,16 @@ class TestTerminalJsonNoEmptyFields:
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
             summary="ok",
-            suggestions=[ReviewSuggestion(
-                description="Implement rate limiting for LLM calls",
-            )],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Implement rate limiting for LLM calls",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Implement rate limiting for LLM calls",
+                )],
             model_used="m",
         )
         payload = self._publish_json(tmp_path, review)
@@ -221,7 +244,16 @@ class TestTerminalJsonNoEmptyFields:
             verdict=ReviewVerdict.APPROVED,
             reason="ok",
             summary="ok",
-            praise=[ReviewPraise(description="Good structure.")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Good structure.",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Good structure.",
+                )],
             model_used="m",
         )
         payload = self._publish_json(tmp_path, review)
@@ -345,8 +377,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             reason="Found 1 critical (1 maintainability) and 2 major.",
             summary="Found 3 issue(s) (3 blocking across 3 file(s)).",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.CRITICAL,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/a.py",
@@ -354,8 +385,7 @@ class TestOrchestratorCommentedIsFailureMarker:
                     current_code="def f():",
                     suggested_fix="Add validation.",
                 ),
-                ReviewItem(
-                    number=2,
+                ReviewItem(id="id-2",
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.MAINTAINABILITY,
                     file_path="src/b.py",

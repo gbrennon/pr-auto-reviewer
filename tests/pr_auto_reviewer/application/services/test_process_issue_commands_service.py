@@ -40,10 +40,15 @@ class TestProcessIssueCommandsService:
         mock_review_reader.get_latest_review.return_value = (
             "1. [bug] [MAJOR] x.py\n\nbroken"
         )
+        # Parse the review to get the actual generated ID
+        parser = ReviewItemParser()
+        items = parser.parse(mock_review_reader.get_latest_review.return_value)
+        generated_id = items[0].id
+        
         mock_comment_reader.get_comments.return_value = [
             PrComment(
                 id=CommentId(value="c1"),
-                body="/create issue 1",
+                body=f"/create issue {generated_id}",
                 created_at=datetime(2025, 1, 1, tzinfo=UTC),
             )
         ]
@@ -53,7 +58,7 @@ class TestProcessIssueCommandsService:
             title="[MAJOR] bug: broken",
             body="body",
             source_pr_id=_pr_id,
-            source_item_number=1,
+            source_item_id=generated_id,
         )
 
         svc = ProcessIssueCommandsService(
@@ -81,10 +86,15 @@ class TestProcessIssueCommandsService:
         mock_review_reader.get_latest_review.return_value = (
             "1. [bug] [MAJOR] x.py\n\nbroken"
         )
+        # Parse the review to get the actual generated ID
+        parser = ReviewItemParser()
+        items = parser.parse(mock_review_reader.get_latest_review.return_value)
+        generated_id = items[0].id
+        
         mock_comment_reader.get_comments.return_value = [
             PrComment(
                 id=CommentId(value="c1"),
-                body="/create-issue 1",
+                body=f"/create-issue {generated_id}",
                 created_at=datetime(2025, 1, 1, tzinfo=UTC),
             )
         ]
@@ -233,7 +243,7 @@ class TestProcessIssueCommandsService:
         mock_comment_reader.get_comments.return_value = [
             PrComment(
                 id=CommentId(value="c2"),
-                body="/create-issue 99",
+                body="/create-issue invalid-id",
                 created_at=datetime(2025, 1, 1, tzinfo=UTC),
             )
         ]
@@ -261,10 +271,15 @@ class TestProcessIssueCommandsService:
         mock_review_reader.get_latest_review.return_value = (
             "1. [bug] [MAJOR] x.py\n\nbroken"
         )
+        # Parse the review to get the actual generated ID
+        parser = ReviewItemParser()
+        items = parser.parse(mock_review_reader.get_latest_review.return_value)
+        generated_id = items[0].id
+        
         mock_comment_reader.get_comments.return_value = [
             PrComment(
                 id=CommentId(value="c2"),
-                body="/create issue 1",
+                body=f"/create issue {generated_id}",
                 created_at=datetime(2025, 1, 1, tzinfo=UTC),
             )
         ]
@@ -298,8 +313,7 @@ class TestProcessIssueCommandsService:
 
     @pytest.fixture
     def _item(self):
-        return ReviewItem(
-            number=1,
+        return ReviewItem(id="id-1",
             severity=ItemSeverity.MAJOR,
             category="bug",
             file_path="x.py",

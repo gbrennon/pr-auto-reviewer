@@ -1,12 +1,14 @@
 """ReviewItemFactory — construct validated ReviewItem domain objects from parsed dicts."""
 
-import hashlib
 import logging
 import re
+import uuid as _uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
@@ -98,11 +100,50 @@ class ReviewItemFactory:
         return None
 
     @classmethod
-    def _generate_id(cls,file_path: str, description: str, index: int) -> str:
-        """Generate a short 4-character hex ID for a review item."""
-        seed = f"{file_path}:{description}:{index}"
-        digest = hashlib.sha256(seed.encode()).hexdigest()
-        return digest[:4]
+    def _generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
+        """Generate a unique ID for a review item.
+
+        Uses 4 hex characters from uuid7 + 2 hex counter
+        for unique, short IDs without repo prefix.
+        """
+        if not hasattr(cls, '_id_counter'):
+            cls._id_counter = 0
+        cls._id_counter += 1
+        u = _uuid.uuid7()
+        uuid_part = format(u.int, "04x")[:4]
+        counter_part = format(cls._id_counter, "02x")
+        candidate = f"{uuid_part}{counter_part}"
+        
+        # Ensure uniqueness against existing IDs
+        while candidate in existing_ids:
+            cls._id_counter += 1
+            u = _uuid.uuid7()
+            uuid_part = format(u.int, "04x")[:4]
+            counter_part = format(cls._id_counter, "02x")
+            candidate = f"{uuid_part}{counter_part}"
+        
+        return candidate
+
+    @classmethod
+    def ensure_unique_ids(cls, review: CodeReview) -> CodeReview:
+        """Return a CodeReview whose items, suggestions, and praise all carry globally unique ids."""
+
+        used: set[str] = set()
+        items = [cls._ensure_unique_id(item, used) for item in review.items]
+        suggestions = [cls._ensure_unique_id(s, used) for s in review.suggestions]
+        praise = [cls._ensure_unique_id(p, used) for p in review.praise]
+        return replace(review, items=items, suggestions=suggestions, praise=praise)
+
+    @classmethod
+    def _ensure_unique_id(cls, item: ReviewItem, used: set[str]) -> ReviewItem:
+        """Return *item* with a non-empty id unique against *used*, registering it."""
+
+        if item.id and item.id not in used:
+            used.add(item.id)
+            return item
+        candidate = cls._generate_id(frozenset(used))
+        used.add(candidate)
+        return replace(item, id=candidate)
 
     @classmethod
     def _locate_symbol_range(cls,
@@ -216,11 +257,13 @@ class ReviewItemFactory:
         matched = candidates[0][1]
         return repo_root / matched, matched
 
+    @classmethod
     def create(
-        self,
+        cls,
         item_dicts: list[dict[str, Any]],
         repo_path: Path | None,
         changed_files: list[str] | None = None,
+        existing_ids: frozenset[str] = frozenset(),
     ) -> tuple[list[ReviewItem], list[str]]:
         """Construct ReviewItem domain objects from parsed item dicts.
 
@@ -234,7 +277,15 @@ class ReviewItemFactory:
         repository and that ``current_code`` matches the actual file
         content at the claimed line; hallucinated paths are skipped.
         """
-        repo_root = Path(repo_path) if repo_path else None
+        if repo_path is None or repo_path == "":
+            logger.debug("repo_path is None or empty string")
+            repo_root = None
+        elif isinstance(repo_path, Path):
+            logger.debug("repo_path is Path instance")
+            repo_root = repo_path
+        else:
+            logger.debug(f"repo_path is other type: {type(repo_path)}, value: {repo_path!r}")
+            repo_root = Path(repo_path)
         review_items: list[ReviewItem] = []
         skip_reasons: list[str] = []
         default_file = (
@@ -254,7 +305,7 @@ class ReviewItemFactory:
             line_str = str(item_dict.get("line", ""))
 
             if repo_root is not None and not file_path:
-                grounded = self._ground_description(
+                grounded = cls._ground_description(
                     str(item_dict.get("description", "")),
                     repo_root,
                     changed_files,
@@ -268,7 +319,7 @@ class ReviewItemFactory:
 
             full_path: Path | None = None
             if repo_root is not None and file_path:
-                full_path, file_path = self._resolve_file_path(
+                full_path, file_path = cls._resolve_file_path(
                     file_path, repo_root, changed_files
                 )
                 if full_path is None:
@@ -342,7 +393,7 @@ class ReviewItemFactory:
 
                 if any(
                     pattern in description_lower
-                    for pattern in self._FABRICATED_ERROR_PATTERNS
+                    for pattern in cls._FABRICATED_ERROR_PATTERNS
                 ):
                     reason = (
                         f"fabricated narrative in {file_path}: "
@@ -355,20 +406,21 @@ class ReviewItemFactory:
                     continue
 
             if not current_code and full_path is not None:
-                current_code = self._read_evidence(
+                current_code = cls._read_evidence(
                     full_path, repo_root, line_str, description
                 )
 
             if not line_str and full_path is not None:
-                hit = self._locate_symbol_range(full_path, description)
+                hit = cls._locate_symbol_range(full_path, description)
                 if hit is not None:
                     line_str = hit
 
-            item_id = self._generate_id(
-                file_path, description, len(review_items)
-            )
+            # Fallback: if we have current_code but no suggested_fix, use current_code as suggested_fix
+            # This handles cases where the LLM doesn't provide a fix but we can still show the current code
+            if current_code and not suggested_fix:
+                suggested_fix = current_code
+
             review_item = ReviewItem(
-                number=len(review_items) + 1,
                 severity=ItemSeverity.from_value(
                     str(item_dict.get("severity", "info"))
                 ),
@@ -378,7 +430,7 @@ class ReviewItemFactory:
                 file_path=file_path,
                 description=str(item_dict.get("description", "")),
                 line=line_str,
-                id=item_id,
+                id=cls._generate_id(existing_ids),
                 current_code=current_code,
                 suggested_fix=suggested_fix,
             )

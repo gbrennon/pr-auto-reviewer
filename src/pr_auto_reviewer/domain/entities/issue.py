@@ -24,7 +24,7 @@ class Issue:
     title: str
     body: str
     source_pr_id: PullRequestId
-    source_item_number: int
+    source_item_id: str
     _is_closed: bool = False
 
     def close(self) -> Issue:

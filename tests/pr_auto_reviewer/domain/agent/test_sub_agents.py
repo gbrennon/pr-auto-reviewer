@@ -25,9 +25,11 @@ class TestSubAgentContract:
     def test_describe_combines_role_responsibility_and_behavior(self) -> None:
         agent = AdvisorAgent()
         assert agent.describe() == (
-            "advisor: remember focus of tasks interacting with other "
-            "sub agents — send message to other sub agents with "
-            "feedback, prose and remind agents what they should focus"
+            "advisor: prevent other sub agents from being side-tracked "
+            "and keep every phase focused on its assigned task — watch "
+            "sub agents actions, grade them on focus, interrupt drift "
+            "with feedback, and resend the original prompt when a sub "
+            "agent goes off-task"
         )
 
 
@@ -39,13 +41,15 @@ class TestAdvisorAgent:
 
     def test_responsibility(self) -> None:
         assert AdvisorAgent().responsibility == (
-            "remember focus of tasks interacting with other sub agents"
+            "prevent other sub agents from being side-tracked and "
+            "keep every phase focused on its assigned task"
         )
 
     def test_behavior(self) -> None:
         assert AdvisorAgent().behavior == (
-            "send message to other sub agents with feedback, prose and "
-            "remind agents what they should focus"
+            "watch sub agents actions, grade them on focus, interrupt "
+            "drift with feedback, and resend the original prompt when a "
+            "sub agent goes off-task"
         )
 
     def test_immutability(self) -> None:
@@ -87,13 +91,17 @@ class TestEngineerAgent:
 
     def test_responsibility(self) -> None:
         assert EngineerAgent().responsibility == (
-            "exercise changes searching for bugs by using modifications"
+            "exercise the changes searching for bugs and improvements; "
+            "analyze code quality, test coverage, principles; and "
+            "suggest good practices that match the project's existing "
+            "approach"
         )
 
     def test_behavior(self) -> None:
         assert EngineerAgent().behavior == (
-            "read code to search for software engineering misses and "
-            "it can spawn repl to exercise code"
+            "think about what the project is doing and which approach "
+            "was already introduced; never suggest something extremely "
+            "new; prefer clean, decoupled code"
         )
 
     def test_immutability(self) -> None:
@@ -155,12 +163,16 @@ class TestManagerAgent:
 
     def test_responsibility(self) -> None:
         assert ManagerAgent().responsibility == (
-            "orchestrate sub agents in the review workflow"
+            "plan and separate tasks, assign them to sub agents like a "
+            "software development team, and explain requirements and "
+            "acceptance criteria to the advisor"
         )
 
     def test_behavior(self) -> None:
         assert ManagerAgent().behavior == (
-            "communicate and track other sub agents work"
+            "assign refined tasks to sub agents, act at the start of "
+            "the review and between phases, and own the technical "
+            "context so sub agents never review the PR poorly"
         )
 
     def test_immutability(self) -> None:

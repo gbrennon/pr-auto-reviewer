@@ -28,7 +28,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         assert result[0].severity == ItemSeverity.INFO
-        assert result[0].number == 1
+        assert result[0].id  # ID is generated
         assert result[0].category == "general"
         assert result[0].file_path is None
         assert result[0].description == "Something minor"
@@ -39,7 +39,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 1
+        assert item.id  # ID is generated
         assert item.severity == ItemSeverity.CRITICAL
         assert item.category == "security"
         assert item.file_path == "src/main.py"
@@ -52,7 +52,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 2
+        assert item.id  # ID is generated
         assert item.severity == ItemSeverity.MAJOR
         assert item.category == "style"
         assert item.file_path is None
@@ -64,7 +64,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 3
+        assert item.id  # ID is generated
         assert item.severity == ItemSeverity.MINOR
         assert item.category == "docs"
         assert item.file_path == "README.md"
@@ -77,7 +77,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 4
+        assert item.id  # ID is generated
         assert item.severity == ItemSeverity.INFO
         assert item.category == "naming"
         assert item.file_path is None
@@ -92,17 +92,17 @@ class TestReviewItemParser:
         )
         result = parser.parse(raw)
         assert len(result) == 3
-        assert result[0].number == 1
+        assert result[0].id  # ID is generated
         assert result[0].severity == ItemSeverity.CRITICAL
         assert result[0].category == "security"
         assert result[0].file_path == "src/main.py"
         assert result[0].description == "SQL injection risk"
-        assert result[1].number == 2
+        assert result[1].id  # ID is generated
         assert result[1].severity == ItemSeverity.MAJOR
         assert result[1].category == "style"
         assert result[1].file_path is None
         assert result[1].description == "Consider adding type hints"
-        assert result[2].number == 3
+        assert result[2].id  # ID is generated
         assert result[2].severity == ItemSeverity.MINOR
         assert result[2].category == "docs"
         assert result[2].file_path == "README.md"
@@ -116,8 +116,8 @@ class TestReviewItemParser:
         )
         result = parser.parse(raw)
         assert len(result) == 2
-        assert result[0].number == 5
-        assert result[1].number == 6
+        assert result[0].id  # ID is generated
+        assert result[1].id  # ID is generated
 
     def test_parse_mixed_severity_cases(self) -> None:
         """The regex requires uppercase severity; lowercase won't match."""
@@ -132,7 +132,7 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert len(result) == 1
         item = result[0]
-        assert item.number == 1
+        assert item.id  # ID is generated
         assert item.severity == ItemSeverity.MAJOR
         assert item.category == "bug"
         assert item.file_path is None
@@ -181,8 +181,8 @@ class TestReviewItemParser:
         )
         result = parser.parse(raw)
         assert len(result) == 2
-        assert result[0].number == 1
-        assert result[1].number == 2
+        assert result[0].id  # ID is generated
+        assert result[1].id  # ID is generated
 
     def test_return_type_is_list_of_review_items(self) -> None:
         parser = ReviewItemParser()
@@ -190,6 +190,22 @@ class TestReviewItemParser:
         result = parser.parse(raw)
         assert isinstance(result, list)
         assert all(isinstance(ri, ReviewItem) for ri in result)
+
+    def test_parse_id_prefixed_items_preserves_ids(self) -> None:
+        parser = ReviewItemParser()
+        raw = (
+            "1a020a. [maintainability] [MINOR] Cargo.toml:22-28\n\n"
+            "Workspace configuration is incomplete\n"
+            "b3c4d5. [security] [CRITICAL] src/auth.py:10\n\n"
+            "SQL injection risk"
+        )
+        result = parser.parse(raw)
+        assert len(result) == 2
+        assert result[0].id == "1a020a"
+        assert result[1].id == "b3c4d5"
+        assert result[0].severity == ItemSeverity.MINOR
+        assert result[0].category == "maintainability"
+        assert result[1].severity == ItemSeverity.CRITICAL
 
     def test_parse_full_review_body(self) -> None:
         parser = ReviewItemParser()
@@ -209,9 +225,9 @@ class TestReviewItemParser:
         )
         result = parser.parse(raw)
         assert len(result) == 4
-        assert result[0].number == 0
+        assert result[0].id  # ID is generated
         assert result[0].description == "Confirm implementations for all ports"
-        assert result[2].number == 2
+        assert result[2].id  # ID is generated
         assert result[2].severity == ItemSeverity.CRITICAL
         assert result[2].file_path == "src/auth.py"
         assert result[2].line == "10"

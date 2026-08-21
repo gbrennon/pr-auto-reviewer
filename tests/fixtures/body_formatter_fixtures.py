@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.entities.review_suggestion import ReviewSuggestion
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -21,8 +20,7 @@ class BodyFormatterFixtures:
             model_used="code-review:latest",
             summary="Found several issues that need attention.",
             items=[
-                ReviewItem(
-                    number=0,
+                ReviewItem(id="id-0",
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.BUG,
                     file_path="src/app.py",
@@ -31,8 +29,7 @@ class BodyFormatterFixtures:
                     current_code="result = obj.method()",
                     suggested_fix="if obj is not None:\n    result = obj.method()",
                 ),
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity=ItemSeverity.MINOR,
                     category=IssueCategory.STYLE,
                     file_path="src/utils.py",
@@ -42,8 +39,26 @@ class BodyFormatterFixtures:
                     suggested_fix='msg = f"Hello {name}"',
                 ),
             ],
-            praise=[ReviewSuggestion(description="Clean separation of concerns")],
-            suggestions=[ReviewSuggestion(description="Consider adding integration tests")],
+            praise=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Clean separation of concerns",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Clean separation of concerns",
+                )],
+            suggestions=[ReviewItem(
+                    severity="info",
+                    category="general",
+                    file_path="",
+                    description="Consider adding integration tests",
+                    line="",
+                    id="",
+                    current_code="",
+                    suggested_fix="Consider adding integration tests",
+                )],
         )
 
     @staticmethod

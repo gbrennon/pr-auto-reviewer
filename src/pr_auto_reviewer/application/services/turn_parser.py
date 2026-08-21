@@ -258,12 +258,16 @@ class TurnParser(ParseReviewTurnUseCase):
                     "file": str(entry.get("file", "")),
                     "line": str(entry.get("line", "")),
                     "description": str(entry.get("description", "")),
+                    "current_code": str(entry.get("current_code", entry.get("current", ""))),
+                    "suggested_fix": str(entry.get("suggested_fix", entry.get("suggested_code", ""))),
                 })
             elif isinstance(entry, str):
                 result.append({
                     "file": "",
                     "line": "",
                     "description": entry,
+                    "current_code": "",
+                    "suggested_fix": "",
                 })
         return result
 

@@ -15,7 +15,7 @@ class ReviewItemParser:
     — no I/O, no ports."""
 
     _ITEM_PATTERN = re.compile(
-        r"^(?P<number>\d+)\.\s+\[(?P<category>[^\]]+)\]\s+\[(?P<severity>[A-Z]+)\]"
+        r"^(?P<id>[0-9a-f]+)\.\s+\[(?P<category>[^\]]+)\]\s+\[(?P<severity>[A-Z]+)\]"
         r"(?: (?P<file_info>[^\n]+))?"
         r"(?:\n\n(?P<description>[^\n]+))?",
         re.MULTILINE,
@@ -46,12 +46,12 @@ class ReviewItemParser:
             )
 
             items.append(ReviewItem(
-                number=int(match.group("number")),
                 severity=ItemSeverity.from_value(match.group("severity")),
                 category=IssueCategory.from_value(match.group("category")),
                 file_path=file_path,
                 description=description,
                 line=line,
+                id=match.group("id"),
             ))
         return items
 

@@ -20,7 +20,11 @@ from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
 from tests.fakes import SpyClient
+from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
 from tests.fixtures.integration_fixtures import FixtureHttpClient
+
+
+_BODY = FakeReviewBodyRendererFactory.make()
 
 
 def _build_review(verdict: ReviewVerdict = ReviewVerdict.APPROVED) -> CodeReview:
@@ -29,8 +33,7 @@ def _build_review(verdict: ReviewVerdict = ReviewVerdict.APPROVED) -> CodeReview
         reason="LGTM",
         summary="All good",
         items=[
-            ReviewItem(
-                number=1,
+            ReviewItem(id="id-1",
                 severity=ItemSeverity.MINOR,
                 category=IssueCategory.STYLE,
                 file_path="src/foo.py",
@@ -64,6 +67,7 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
+            body_renderer=_BODY,
             client=reviewer_spy,
             owner_client=owner_spy,
         )
@@ -89,6 +93,7 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
+            body_renderer=_BODY,
             client=reviewer_spy,
             owner_client=owner_spy,
         )
@@ -112,6 +117,7 @@ class TestPublisherVerifyTokens:
             fail_verify=_preflight_error(),
         )
         adapter = GithubReviewPublisher(
+            body_renderer=_BODY,
             client=reviewer_spy,
             owner_client=owner_spy,
         )
@@ -136,6 +142,7 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
+            body_renderer=_BODY,
             client=reviewer_spy,
             owner_client=owner_spy,
         )

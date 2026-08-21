@@ -7,7 +7,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
@@ -25,6 +25,10 @@ from pr_auto_reviewer.application.services.multi_phase_review_orchestrator impor
     MultiPhaseReviewOrchestrator,
 )
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
+from pr_auto_reviewer.domain.agent.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.agent.architect_agent import ArchitectAgent
+from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
+from pr_auto_reviewer.domain.agent.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -91,8 +95,8 @@ from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
     JsonFilePullRequestRepository,
 )
-from pr_auto_reviewer.infrastructure.review_publishers._shared import (
-    ReasonBuilder,
+from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
+    ReasonFactory,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,10 +108,10 @@ _PHASE_PROMPT_DIR = (
     / "universal"
 )
 
-_PHASES: list[tuple[str, str]] = [
-    ("bug-hunt-diff", "Bug Hunt — Diff"),
-    ("bug-hunt-branch", "Bug Hunt — Branch"),
-    ("architecture-review", "Architecture Review"),
+_PHASES: list[tuple[str, str, Any]] = [
+    ("bug-hunt-diff", "Bug Hunt — Diff", EngineerAgent()),
+    ("bug-hunt-branch", "Bug Hunt — Branch", EngineerAgent()),
+    ("architecture-review", "Architecture Review", ArchitectAgent()),
 ]
 
 _METHODOLOGY = (
@@ -136,7 +140,7 @@ _METHODOLOGY = (
 def _build_review_plan() -> ReviewPlan:
     """Load phase prompts from disk and build a ``ReviewPlan``."""
     phases: list[ReviewPhase] = []
-    for phase_id, phase_name in _PHASES:
+    for phase_id, phase_name, role in _PHASES:
         path = _PHASE_PROMPT_DIR / f"{phase_id}.md"
         raw = path.read_text()
         prompt = ReviewResponseParser.strip_frontmatter(raw)
@@ -144,8 +148,20 @@ def _build_review_plan() -> ReviewPlan:
             phase_id=phase_id,
             phase_name=phase_name,
             system_prompt=prompt,
+            role=role,
         ))
-    return ReviewPlan(phases=tuple(phases), methodology=_METHODOLOGY)
+    return ReviewPlan(
+        phases=tuple(phases),
+        methodology=_METHODOLOGY,
+        suggestions_phase_id="architecture-review",
+        manager_brief=(
+            "Manager brief: this staged review assigns one focused task "
+            "to each phase. Follow the phase instructions exactly; do "
+            "not re-review findings other phases own. " + (
+                ManagerAgent().description + " " + AdvisorAgent().description
+            )
+        ),
+    )
 
 if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
@@ -187,6 +203,7 @@ class CoreServices:
     conversation_logger: MarkdownConversationLogger
     notifier: NotifierPort
     fragment_repository: FragmentRepositoryPort
+    review_plan: ReviewPlan
     fragment_renderer: PromptRendererPort
     fragment_max_tokens: int | None
     review_context_factory: ReviewContextFactoryPort
@@ -237,7 +254,7 @@ def wire_core_services(
             repo_path, changed_files=changed_files
         ),
     )
-    aggregator = FindingAggregator(ReasonBuilder())
+    aggregator = FindingAggregator(ReasonFactory())
     orchestrator = MultiPhaseReviewOrchestrator(
         command_bus=command_bus,
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
@@ -309,6 +326,7 @@ def wire_core_services(
         conversation_logger=conversation_logger,
         notifier=notifier,
         fragment_repository=fragment_repository,
+        review_plan=plan,
         fragment_renderer=fragment_renderer,
         fragment_max_tokens=fragment_max_tokens,
         review_context_factory=review_context_factory,

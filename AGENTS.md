@@ -1,12 +1,17 @@
-# AI Guardrails — What Must Not Change
+# AI Guardrails — Architecture Rules
 
-This document defines the **immutable boundaries** of this codebase for AI
-agents. Nothing here should change unless official upstream documentation
-proves the assumption is now wrong.
+This file defines the **durable boundaries** of this codebase for AI
+agents: the architecture pattern, layer responsibilities, and coding
+conventions that stay true regardless of feature details. Details that
+change with the code (endpoints, adapters, flow diagrams, mapping
+tables) live in `docs/` — if a rule here seems wrong, re-read the
+referenced documents and the actual code before changing the rule.
 
-For architecture *flow* and *design rationale*, see
-`docs/review-flow-architecture.md`. For verdict-to-event mapping details,
-see `docs/verdict-event-mapping.md`.
+- `docs/architecture.md` — architecture rules, layer responsibilities,
+  invariants, and how to change each layer
+- `docs/review-flow-architecture.md` — runtime flow and adapter wiring
+- `docs/verdict-event-mapping.md` — verdict-to-platform-event mapping
+  and `CodeReview` construction danger zones
 
 ---
 
@@ -14,282 +19,158 @@ see `docs/verdict-event-mapping.md`.
 
 ### 1.1 Hexagonal Boundaries
 
+Four layers; dependencies point **inward**:
+
 ```
 Domain ──── Application ──── Infrastructure ──── Presentation
-  |              |                |                    |
-  entities    use cases       HTTP/LLM/FS            CLI/daemon
-  value objs  ports           adapters               DI wiring
 ```
 
-| Rule | Location to check |
+| Rule | Where to check |
 |---|---|
 | Domain + Application have **zero** imports from Infrastructure or Presentation | `grep -r "infrastructure\|presentation" src/pr_auto_reviewer/domain src/pr_auto_reviewer/application` |
-| All I/O goes through `Protocol`-based ports in `application/ports/` | `src/pr_auto_reviewer/application/ports/` |
-| Infrastructure *implements* ports; never defines new public interfaces Application depends on | All files in `src/pr_auto_reviewer/infrastructure/` |
-| DI wiring happens **only** in `presentation/composition_root.py` | `src/pr_auto_reviewer/presentation/composition_root.py` |
+| All I/O goes through `Protocol`-based outbound ports in `application/ports/outbound/` | the port directory |
+| Infrastructure *implements* ports; it never defines new public interfaces Application depends on | `infrastructure/` |
+| DI wiring happens **only** in `presentation/composition_root.py` (through the DI container) | the composition root |
 
-### 1.2 Frozen Domain Objects
+### 1.2 Layer Responsibilities
 
-All domain value objects are `frozen=True` dataclasses. "Mutation" means
-`dataclasses.replace()`, never attribute assignment.
+- **Domain** — entities, value objects (all `frozen=True`), domain
+  services, messages (commands/events), the agent phase model, and
+  exceptions. Pure business logic; no I/O of any kind.
+- **Application** — use cases, inbound/outbound ports, serializers,
+  event handlers. Orchestration only; it never instantiates or imports
+  concrete infrastructure.
+- **Infrastructure** — adapters implementing the outbound ports (git
+  hosts, LLM, persistence, command bus, conversation logging, tool
+  execution, prompt fragments/renderers). Platform-specific behavior
+  lives here, behind its port.
+- **Presentation** — CLI runner, polling daemon, and the DI
+  container/composition root. The only layer that wires implementations
+  to ports.
 
-```
-src/pr_auto_reviewer/domain/value_objects/code_review.py   # CodeReview
-src/pr_auto_reviewer/domain/value_objects/review_verdict.py # ReviewVerdict
-src/pr_auto_reviewer/domain/value_objects/review_item.py    # ReviewItem
-src/pr_auto_reviewer/domain/value_objects/item_severity.py  # ItemSeverity
-```
+Read `docs/architecture.md` before adding or moving code between layers.
 
-**DO NOT** unfreeze these. **DO NOT** add mutable fields or side-effectful
-`__post_init__`.
+### 1.3 Frozen Domain Objects
 
-### 1.3 Port Signatures
+Domain value objects are `frozen=True` dataclasses. "Mutation" means
+`dataclasses.replace()`, never attribute assignment. **DO NOT** unfreeze
+them, add mutable fields, or add side-effectful `__post_init__`.
 
-All outbound ports are `Protocol` classes. Their method signatures are the
-contract between Application and Infrastructure.
+### 1.4 Port Signatures Are Contracts
 
-```
-src/pr_auto_reviewer/application/ports/outbound/
-├── changeset_fetcher_port.py
-├── fragment_repository_port.py
-├── llm_review_port.py
-├── preflight_filter_port.py
-├── prompt_renderer_port.py
-├── repository_context_port.py
-├── review_context_factory_port.py
-├── review_publisher_port.py
-├── review_repository_port.py
-└── token_verifier_port.py
-```
-
-**DO NOT** change method names, parameter counts, or return types without
-updating every adapter that implements the port.
+Outbound ports are `Protocol` classes; their method signatures are the
+contract between Application and Infrastructure. Changing a method name,
+parameter count, or return type requires updating **every** adapter and
+**every** test fake that implements the port — in the same change.
 
 ---
 
-## 2. External API Contracts
+## 2. Coding Conventions
 
-### 2.1 Forgejo/Codeberg REST API
-
-**Reference:** <https://forgejo.org/docs/latest/user/api-usage/>
-
-| Endpoint | Method | Adapter / File |
-|---|---|---|
-| `/repos/{owner}/{repo}/pulls/{number}.diff` | GET (raw) | `ForgejoChangesetFetcher.fetch()` — `infrastructure/forgejo/changeset_fetcher.py` |
-| `/repos/{owner}/{repo}/pulls/{number}/commits` | GET | `ForgejoChangesetFetcher._fetch_commit_messages()` |
-| `/repos/{owner}/{repo}/raw/{sha}/{file_path}` | GET (raw) | `ForgejoChangesetFetcher.fetch()` |
-| `/repos/{owner}/{repo}/pulls/{number}/reviews` | POST | `ReviewPublishingService.publish_formal_review()` — `infrastructure/review_publishers/review_publishing_service.py` |
-| `/repos/{owner}/{repo}/issues/{number}/comments` | POST | `ReviewPublishingService.publish_comment()` |
-| `/repos/{owner}/{repo}/pulls/{number}/reviews` | GET | `ReviewPublishingService.count_existing_items()` |
-
-**Headers:** `Authorization: token <TOKEN>`; rate limits: `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`.
-
-**Forgejo quirks (DO NOT "fix" — these match the actual API):**
-
-| Quirk | Where |
-|---|---|
-| Verdict event `APPROVE` is sent as `"APPROVED"` (Forgejo rejects `"APPROVE"`) | `ForgejoReviewPublisher.publish()` — `infrastructure/review_publishers/forgejo_review_publisher.py` |
-| Inline comments are embedded in the `POST /reviews` body, not posted separately | `ReviewPublishingService.publish_formal_review()` lines 87-153 |
-| `official=True` is set on the review payload | Same file; GitHub version omits this |
-
-### 2.2 GitHub REST API
-
-**Reference:** <https://docs.github.com/en/rest>
-
-| Endpoint | Method | Adapter / File | GitHub-specific |
-|---|---|---|---|
-| `/repos/{owner}/{repo}/pulls/{number}.diff` | GET (raw) | `GithubChangesetFetcher.fetch()` — `infrastructure/github/changeset_fetcher.py` | `Accept: application/vnd.github.diff` header is **mandatory** — GitHub returns `application/octet-stream` without it |
-| `/repos/{owner}/{repo}/contents/{file_path}?ref={sha}` | GET | Same file | Base64-encoded content in `{content: ...}` |
-
-**GitHub quirks (DO NOT "fix"):**
-
-| Quirk | Where |
-|---|---|
-| No `official` field on review payload — field doesn't exist in GitHub API | `GithubReviewPublisher` omits it |
-| File content fetched from `/contents/` (base64), not `/raw/` (Forgejo path) | `GithubChangesetFetcher.fetch()` |
-| Diff endpoint needs `Accept: application/vnd.github.diff` | `GithubChangesetFetcher.fetch()` |
-
-### 2.3 Ollama LLM API
-
-**Reference:** <https://github.com/ollama/ollama/blob/main/docs/api.md>
-
-**Adapter:** `src/pr_auto_reviewer/infrastructure/llm/ollama_llm_adapter.py`
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/api/generate` | POST | Generate review from composed prompt (streaming) |
-| `/api/tags` | GET | List available models |
-
-**Streaming format assumption:** JSON lines, each `{"response": "...", "done": bool}`.
-The adapter accumulates `response` fields across streaming lines. Don't change
-the parsing without verifying against the current Ollama API spec.
-
-### 2.4 Rate Limit Headers
-
-Parsed by `RateLimitTracker` (`src/pr_auto_reviewer/infrastructure/client/rate_limit_tracker/rate_limit_tracker.py`).
-
-| Header | GitHub | Forgejo |
-|---|---|---|
-| `x-ratelimit-limit` | ✅ | ✅ |
-| `x-ratelimit-remaining` | ✅ | ✅ |
-| `x-ratelimit-reset` | ✅ | ✅ |
-| `x-ratelimit-resource` | ✅ | ❌ |
-
-**DO NOT** rename these without checking that both platforms still send them.
-Rate-limit state is persisted to disk — changing header names silently breaks
-rate-limit tracking.
+- **No comments — docstrings only.** Comments, linter/type-checker
+  suppressions (`# noqa`, `# type: ignore`, `# pyright: ignore`),
+  pragmas, and waivers are prohibited in Python source. When a linter or
+  type checker flags a line, fix the code (narrowing, protocol classes,
+  generics, restructure) — never suppress. Pre-existing suppressions are
+  technical debt; remove them when touching the file.
+- **Classes only — no standalone functions.** Module-level `def` becomes
+  a class method (static, class, or instance); nested functions become
+  private methods. Inline `lambda` arguments to higher-order functions
+  are allowed. Pre-existing standalone functions are technical debt;
+  convert them when touching the file.
+- **Suggestions are architecture-only.** `CodeReview.suggestions` come
+  exclusively from the phase named by `ReviewPlan.suggestions_phase_id`
+  (the architecture phase in the production plan). Never promote
+  rejected or dropped items into suggestions, and never emit
+  code-snippet `current_code`/`suggested_fix` dumps in suggestions —
+  they are design/architecture improvements, not re-stated issues.
+- **Comprehensions over loops.** Prefer list, dict, and set
+  comprehensions over manual accumulation loops when they read clearly.
+  Keep them simple and side-effect free — one level of nesting, no
+  statements inside. If a comprehension becomes hard to read, extract a
+  small helper method instead of forcing it.
+- **Code style.** Expressive, intention-revealing names; short lines and
+  small methods; no magic values — use named constants or enums. When
+  the configured linter flags style, fix the code, never suppress.
+- **Program to interfaces, not implementations.** Design, read, and
+  change code against the ports (the `Protocol` contracts), value-object
+  fields, and public signatures — what the caller needs — not against
+  adapter internals. Prefer touching a port and its contract over a
+  concrete implementation.
+- **Read interfaces, not implementations.** Prefer reading port
+  signatures, value-object definitions, and docstrings over
+  implementation bodies. Open an implementation only when the task
+  actually requires it: fixing a bug, writing tests for it, or
+  explaining/verifying how it works. Reading bodies you don't need
+  burns tokens.
+- **Consult official docs, never guess.** When implementing or
+  refactoring code that interacts with an external dependency (a
+  platform API, a third-party library or service) and that dependency is
+  not available locally, read its official documentation on the web
+  instead of guessing at its behavior. If the user provides a local path
+  (a vendored copy, a checkout, docs on disk), read the path you were
+  given rather than searching the web.
 
 ---
 
-## 3. Critical Internal Contracts
+## 3. Testing
 
-### 3.1 Verdict-to-Event Mapping
-
-**File:** `src/pr_auto_reviewer/infrastructure/review_publishers/_shared.py`
-
-```python
-_VERDICT_TO_EVENT: dict[ReviewVerdict, str] = {
-    ReviewVerdict.APPROVED:          "APPROVE",
-    ReviewVerdict.CHANGES_REQUESTED: "REQUEST_CHANGES",
-    ReviewVerdict.COMMENTED:         "COMMENT",
-}
-```
-
-This is the **single source of truth**. The three values are exhaustive by
-design. Adding a fourth verdict is a breaking change — requires publisher
-updates on both platforms and integration tests for the new path.
-
-For the Forgejo `APPROVE → APPROVED` override, see
-`ForgejoReviewPublisher.publish()`.
-
-### 3.2 CodeReview Construction — Verdict Preservation
-
-`CodeReview` is `frozen=True`. Every construction site is a potential verdict
-mutation point. See `docs/verdict-event-mapping.md` §"Danger Zones" for the
-complete table.
-
-**The rule:** when constructing a `CodeReview` that passes through the LLM's
-output, **always** use `verdict=review.verdict`, never hardcode.
-
-The bug this branch fixed: `_add_deterministic_findings` in
-`src/pr_auto_reviewer/application/services/review_pull_request_service.py`
-hardcoded `verdict=ReviewVerdict.APPROVED`. Codeberg returned HTTP 500 when
-the payload combined an `APPROVED` event with blocking inline comments.
-
-### 3.3 ReviewPublishingService — POST Body Schema
-
-**File:** `src/pr_auto_reviewer/infrastructure/review_publishers/review_publishing_service.py:87-153`
-
-```python
-{
-    "event": verdict_event,      # "APPROVE"/"APPROVED"/"REQUEST_CHANGES"/"COMMENT"
-    "body": body,                 # Markdown review body
-    "commit_id": str(sha),       # HEAD commit SHA
-    "comments": [...],            # Inline comment payloads (optional)
-    "official": True,             # Forgejo only
-}
-```
-
-**DO NOT** change field names or types. **DO NOT** add platform-specific
-fields without a platform-conditional guard.
-
-### 3.4 ChangesetFetcher — Sequential File Fetch
-
-Both fetchers fetch file content **one file at a time**. There is no batch
-endpoint on either platform. This is by design, not a bug.
-
-**DO NOT** attempt to batch or parallelize without:
-1. Confirming an upstream batch endpoint exists.
-2. Understanding that parallel requests can trigger rate-limit exhaustion
-   before the `RateLimitTracker` can back off.
-
-### 3.5 ItemSeverity — Blocking Threshold
-
-**File:** `src/pr_auto_reviewer/domain/value_objects/item_severity.py`
-
-```python
-class ItemSeverity(StrEnum):
-    CRITICAL = "critical"
-    MAJOR = "major"
-    MINOR = "minor"
-    INFO = "info"
-
-    @property
-    def is_blocking(self) -> bool:
-        return self in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR)
-```
-
-`CRITICAL` and `MAJOR` items trigger a formal review (`APPROVED` /
-`CHANGES_REQUESTED`). `MINOR` and `INFO` items go via comment-only path.
-
-**DO NOT** add or remove values from the `is_blocking` tuple without
-understanding the full publisher flow in
-`ReviewPublishingService.publish()`.
+- **Always write tests.** New behavior and bug fixes ship with tests
+  that exercise the behavior. Untested changes do not land.
+- **Test behavior, not internals.** Assert observable outcomes — return
+  values, published payloads, persisted state, side effects the caller
+  sees. Do not assert call counts, private attribute access, or
+  internal implementation steps.
+- **Integrate with the real source, fake the seams.** Infrastructure
+  tests run against the actual external surface (real Forgejo/GitHub
+  API shapes, real Ollama, real files and clones) wired through
+  **fakes/stubs you own** — never mocks of external services.
+- **Don't mock what you don't own.** Mocks are allowed only for pure,
+  in-repo implementations you own with deterministic behavior. External
+  systems (HTTP, LLM, filesystem, git) are never mocked wholesale —
+  implement the port with a fake instead.
+- **Fakes over mocks for ports.** When a test needs a collaborator that
+  implements a port, write a small fake (a real class implementing the
+  port) — not a `MagicMock`.
 
 ---
 
-## 4. Things That Look Like Bugs But Aren't
+## 4. Git Hooks
 
-| Symptom | Why it's correct |
-|---|---|
-| 28 HTTP requests for a 28-file PR | No batch endpoint exists; sequential fetch rate-limited per request |
-| Forgejo sends `"APPROVED"`, GitHub sends `"APPROVE"` | Forgejo rejects `"APPROVE"`; override in `ForgejoReviewPublisher` |
-| `official=True` only on Forgejo reviews | GitHub has no `official` field |
-| Comment-only reviews → issue comments, not formal reviews | By design: no blocking items + `COMMENTED` verdict → comment path |
-| `RateLimitTracker` writes to disk | Persists state across restarts to avoid re-hitting limits on startup |
+- **Never skip git hooks.** Pre-commit, pre-push, and other hooks always
+  run. A failing hook means the change is not ready — fix the underlying
+  issue, never bypass with `--no-verify`.
 
 ---
 
-## 5. When You CAN Change Things
+## 5. Contracts That Must Not Change Casually
 
-- **Infrastructure adapters** — when an upstream API deprecates an endpoint
-  (verified by official docs/changelog) or you're adding a new endpoint
-  alongside the old one.
-- **Domain entities** — when a new business requirement demands it *and* the
-  change preserves backward compatibility with existing ports.
-- **Application services** — when adding deterministic findings or
-  pre/post-processing steps that don't change verdict or item semantics.
+- **Verdict preservation.** Reconstructing a `CodeReview` from LLM
+  output must carry `verdict=review.verdict`, never a hardcoded verdict.
+  The verdict-to-event mapping is a single source of truth; adding a
+  verdict is a breaking change across both platforms (see
+  `docs/verdict-event-mapping.md`).
+- **Blocking threshold.** `ItemSeverity.is_blocking` (CRITICAL/MAJOR, or
+  SECURITY category) decides formal review vs comment-only publishing.
+  Changing it changes the published review flow on every platform.
+- **Platform API payloads.** Endpoints, headers, and review payload
+  schemas are verified against official upstream documentation; quirks
+  the hosts actually exhibit are preserved, not "fixed" (see
+  `docs/review-flow-architecture.md` and `docs/verdict-event-mapping.md`).
+
+---
+
+## 6. When You CAN Change Things
+
+- **Infrastructure adapters** — when an upstream API deprecates an
+  endpoint (verified against official docs) or you add a new adapter.
+- **Domain entities** — when a business requirement demands it and the
+  change preserves compatibility with existing ports.
+- **Application services** — when adding deterministic steps that do
+  not change verdict or item semantics.
 
 **Always** run the full test suite after any change:
+
 ```bash
 python -m pytest tests/ -x -q
 ```
-
-## 6. Code Style Rules
-
-### 6.1 No Comments — Self-Documenting Code Only
-
-Comments of any kind are **PROHIBITED** in Python source files. This includes:
-
-- Inline explanatory comments ("Resolve old blocking items...")
-- Section separator comments ("--- single-platform mode ---")
-- Linter/type-checker suppress comments (`# noqa: E501`, `# type: ignore`, `# pyright: ignore`)
-- Linter pragmas (`# fmt: off`, `# isort: skip`)
-- Security waivers (`# nosec`)
-- Any `#` token that is not part of a string literal
-
-**Allowed:**
-- Docstrings (`"""..."""` / `'''...'''`) at module, class, and function level — these are the **only** form of inline documentation
-- Expressive, intention-revealing names for variables, functions, classes, and modules
-
-**What to do when a linter/type-checker flags a line:**
-- Fix the code so the warning is eliminated, rather than suppressing it
-- If `pyright` reports a type error, restructure the code with explicit type narrowing, protocol classes, or proper generics — never silence it with a comment
-- If a line exceeds the length limit, break it across multiple lines or extract intermediate variables
-
-**Pre-existing suppress comments (`# noqa`, `# type: ignore`, etc.) are technical debt** — remove them when touching the containing file.
-
-### 6.2 Classes Only — No Standalone Functions
-
-Standalone functions (functions defined at module level, outside a class) are **PROHIBITED** in Python source files. All behavior MUST live inside classes.
-
-- Module-level `def` → extract into a class as a method (static, class, or instance as appropriate)
-- Nested functions inside other functions → extract into a private method on the enclosing class
-- `lambda` assigned to a variable → use a named method instead
-
-**Allowed:**
-- Methods on classes (instance, static, class, and private)
-- `lambda` expressions passed inline as arguments to higher-order functions (`map`, `filter`, `sorted(key=...)`)
-- `__init__.py` re-exports and `__all__` lists at module level
-
-**Pre-existing standalone functions are technical debt** — convert them to class methods when touching the containing file or when adding new behavior nearby.

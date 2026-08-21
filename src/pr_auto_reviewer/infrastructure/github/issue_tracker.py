@@ -24,7 +24,9 @@ class GithubIssueTracker(IssueTrackerPort):
     def __init__(self, client: GitPlatformHttpClient) -> None:
         self._client = client
 
-    def create(self, repository: str, title: str, body: str) -> Issue:
+    def create(
+        self, repository: str, title: str, body: str, source_item_id: str = ""
+    ) -> Issue:
         """POST a new issue to *repository* and return the Issue entity."""
 
         path = f"/repos/{repository}/issues"
@@ -49,5 +51,5 @@ class GithubIssueTracker(IssueTrackerPort):
             title=title,
             body=body,
             source_pr_id=PullRequestId(repository=repository, number=1),
-            source_item_number=0,
+            source_item_id=source_item_id,
         )

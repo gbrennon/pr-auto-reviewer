@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 
 from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
@@ -16,6 +14,12 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 from pr_auto_reviewer.infrastructure.review_publishers._review_processor import (
     ReviewPublisherProcessor,
 )
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
+)
+from pr_auto_reviewer.infrastructure.review_publishers.forgejo_verdict_event_mapper import (
+    ForgejoVerdictEventMapper,
+)
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
 )
@@ -28,19 +32,20 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
 
     def __init__(
         self,
+        body_renderer: ReviewBodyRenderer,
         client: GitPlatformHttpClient,
         owner_client: GitPlatformHttpClient,
     ) -> None:
         self._publishing = ReviewPublishingService(client, owner_client)
-        self._processor = ReviewPublisherProcessor(self._publishing)
+        self._processor = ReviewPublisherProcessor(
+            body_renderer,
+            ForgejoVerdictEventMapper(),
+        )
 
     def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
         processed = self._processor.process(pr_id, review)
-
-        if processed.verdict_event == "APPROVE":
-            processed.verdict_event = "APPROVED"
 
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "

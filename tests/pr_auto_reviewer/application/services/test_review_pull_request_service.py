@@ -429,6 +429,7 @@ class TestReviewPullRequestService:
         _, kwargs = mock_review_publisher.publish.call_args
         review = kwargs.get("review") or mock_review_publisher.publish.call_args.args[1]
         assert len(review.items) == 1
+        assert review.items[0].id
         assert review.items[0].file_path == "src/client.py"
         assert review.items[0].current_code == (
             '        logger.info("GET %s params=%s", url, params)'
@@ -456,8 +457,7 @@ class TestReviewPullRequestService:
             verdict=ReviewVerdict.APPROVED,
             summary="LLM finding",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity="minor",
                     category="quality",
                     file_path="src/other.py",
@@ -579,8 +579,7 @@ class TestReviewPullRequestService:
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="Needs work",
             items=[
-                ReviewItem(
-                    number=1,
+                ReviewItem(id="id-1",
                     severity="blocker",
                     category="bug",
                     file_path="src/other.py",
@@ -588,8 +587,7 @@ class TestReviewPullRequestService:
                     current_code="x = None; x.foo()",
                     suggested_fix="guard with if x is not None",
                 ),
-                ReviewItem(
-                    number=2,
+                ReviewItem(id="id-2",
                     severity="major",
                     category="quality",
                     file_path="src/other.py",
@@ -597,8 +595,7 @@ class TestReviewPullRequestService:
                     current_code="sleep(300)",
                     suggested_fix="sleep(TIMEOUT)",
                 ),
-                ReviewItem(
-                    number=3,
+                ReviewItem(id="id-3",
                     severity="minor",
                     category="style",
                     file_path="src/other.py",
@@ -606,8 +603,7 @@ class TestReviewPullRequestService:
                     current_code="x = 1",
                     suggested_fix="count = 1",
                 ),
-                ReviewItem(
-                    number=4,
+                ReviewItem(id="id-4",
                     severity="minor",
                     category="quality",
                     file_path="src/other.py",
@@ -638,6 +634,73 @@ class TestReviewPullRequestService:
             f"Expected 5 items (4 LLM + 1 deterministic), got {len(review.items)}"
         )
 
+    def test_published_review_has_unique_ids_when_llm_duplicates(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """The guard rewrites duplicate/empty LLM ids and keeps publish/persist in sync."""
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/client.py b/src/client.py\n"
+                "+++ b/src/client.py\n"
+                "@@ -1,2 +1,3 @@\n"
+                '+        x = resolve(url, params)\n'
+            ),
+        )
+        llm_review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="LLM finding",
+            items=[
+                ReviewItem(id="dup",
+                    severity="minor",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="one",
+                    current_code="x = 1",
+                    suggested_fix="x = 2",
+                ),
+                ReviewItem(id="dup",
+                    severity="minor",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="two",
+                    current_code="y = 1",
+                    suggested_fix="y = 2",
+                ),
+                ReviewItem(id="",
+                    severity="minor",
+                    category="quality",
+                    file_path="src/other.py",
+                    description="three",
+                    current_code="z = 1",
+                    suggested_fix="z = 2",
+                ),
+            ],
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = llm_review
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        args, _ = mock_review_publisher.publish.call_args
+        review = args[1]
+        assert len({item.id for item in review.items}) == len(review.items)
+        assert all(item.id for item in review.items)
+
+        saved_pr = mock_pr_repository.save.call_args.args[0]
+        saved_items = saved_pr.reviews[-1].items
+        assert {item.id for item in saved_items} == {item.id for item in review.items}
+
 
 class TestReviewPullRequestServiceTokenVerifier:
     def test_execute_with_token_verifier(
@@ -665,3 +728,69 @@ class TestReviewPullRequestServiceTokenVerifier:
         service.execute(cmd)
 
         mock_token_verifier.verify.assert_called_with(cmd.pr_id)
+
+    def test_single_turn_review_when_no_command_bus(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """Test review flow when no command_bus is available (single-turn review)."""
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=None,  # No command bus → single-turn review
+        ).execute(cmd)
+
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        mock_pr_repository.save.assert_called_once()
+        assert mock_pr_repository.save.call_args.args[0].head_sha == cmd.head_sha
+
+    def test_multi_phase_without_plan_falls_back_to_single_turn(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """A command bus with no injected plan must not run empty-prompt phases."""
+        from unittest.mock import MagicMock
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/a.py b/src/a.py\n"
+                "+++ b/src/a.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            ),
+            clone_path="/repos/owner_repo_42",
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        command_bus = MagicMock()
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+        ).execute(cmd)
+
+        mock_llm_review.review_prompt.assert_called_once()
+        command_bus.dispatch.assert_not_called()
