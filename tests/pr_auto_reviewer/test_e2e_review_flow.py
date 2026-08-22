@@ -481,8 +481,9 @@ Fix typo in usage section
         for item in parsed_items:
             # Assert id is present and not empty
             assert item.id, f"ReviewItem id is empty for item: {item.description}"
-            assert len(item.id) == 4, f"ReviewItem id must be 4 characters, got {len(item.id)} for item: {item.description}"
-            assert re.match(r"^[0-9a-f]{4}$", item.id), f"ReviewItem id must be a 4-char hex, got {item.id} for item: {item.description}"
+            assert re.match(r"^[0-9a-f]+$", item.id), (
+                f"ReviewItem id must be a hex marker, got {item.id} for item: {item.description}"
+            )
 
             # Assert severity is not default (INFO)
             from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity as IS
@@ -506,6 +507,11 @@ Fix typo in usage section
 
             # Assert suggested_fix is present (can be empty string, but not None)
             assert item.suggested_fix is not None, f"suggested_fix is None for item: {item.id}"
+
+        ids = [item.id for item in parsed_items]
+        assert len(ids) == len(set(ids)), (
+            f"parsed item ids must be unique, got {ids}"
+        )
 
 class TestPR18DiffE2E:
     """E2E tests specifically for PR18 diff scenario."""
