@@ -50,7 +50,7 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
 from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
     TokenVerifierPort,
 )
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )

@@ -25,12 +25,12 @@ from pr_auto_reviewer.application.services.multi_phase_review_orchestrator impor
     MultiPhaseReviewOrchestrator,
 )
 from pr_auto_reviewer.application.services.turn_parser import TurnParser
-from pr_auto_reviewer.domain.agent.advisor_agent import AdvisorAgent
-from pr_auto_reviewer.domain.agent.architect_agent import ArchitectAgent
-from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
-from pr_auto_reviewer.domain.agent.manager_agent import ManagerAgent
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
+from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
+from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )

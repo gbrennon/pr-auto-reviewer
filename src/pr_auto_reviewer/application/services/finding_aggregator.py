@@ -11,8 +11,8 @@ from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_ca
 from pr_auto_reviewer.application.ports.outbound.reason_factory_port import (
     ReasonFactoryPort,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
     SubReviewGuardrails,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem

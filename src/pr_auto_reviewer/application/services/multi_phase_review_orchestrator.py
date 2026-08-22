@@ -14,9 +14,9 @@ from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case 
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
     SubReviewGuardrails,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem

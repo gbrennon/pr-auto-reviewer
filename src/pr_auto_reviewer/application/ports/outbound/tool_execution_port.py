@@ -2,8 +2,8 @@
 
 from typing import Protocol
 
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 
 
 class ToolExecutionPort(Protocol):

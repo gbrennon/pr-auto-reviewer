@@ -18,17 +18,17 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.domain.agent.conversation_decision import (
+from pr_auto_reviewer.domain.value_objects.conversation_decision import (
     ConversationDecision,
 )
-from pr_auto_reviewer.domain.agent.conversation_guardrails import (
+from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
     ConversationGuardrails,
 )
-from pr_auto_reviewer.domain.agent.conversation_message import (
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )

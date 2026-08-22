@@ -15,7 +15,7 @@ from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import 
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
-from pr_auto_reviewer.domain.agent.conversation_message import (
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem

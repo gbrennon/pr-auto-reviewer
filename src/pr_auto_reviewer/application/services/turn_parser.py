@@ -12,8 +12,8 @@ from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case impor
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
