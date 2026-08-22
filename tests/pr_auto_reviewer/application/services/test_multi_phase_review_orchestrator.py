@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.agent.sub_review_guardrails import SubReviewGuardrails
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
@@ -30,7 +30,7 @@ from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
 
 def _plan():
     """Build a ReviewPlan."""
-    from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+    from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
     phases: list[ReviewPhase] = []
     phase_configs = [
         ("advisor", "Advisor Review"),
@@ -273,7 +273,7 @@ class TestMultiPhaseReviewOrchestrator:
     ) -> None:
         """Escalation reaches ALL phases in a feedback round, so logs differ."""
         from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
@@ -323,8 +323,8 @@ class TestMultiPhaseReviewOrchestrator:
     ) -> None:
         """Phase role and plan manager brief are composed into phase prompts."""
         from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
@@ -500,7 +500,7 @@ class TestMultiPhaseReviewOrchestrator:
     ) -> None:
         """The architect phase's llm_suggestions feed the final review's suggestions."""
         from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -553,7 +553,7 @@ class TestMultiPhaseReviewOrchestrator:
         the empty review resolves to APPROVED instead.
         """
         from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(

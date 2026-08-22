@@ -270,7 +270,7 @@ class TestOrchestratorCommentedIsFailureMarker:
         from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
             MultiPhaseReviewOrchestrator,
         )
-        from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+        from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
         from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
             ParseReviewTurnCommand,
         )
@@ -293,9 +293,9 @@ class TestOrchestratorCommentedIsFailureMarker:
         ), bus
 
     def test_legit_llm_verdict_survives_no_items_path(self) -> None:
-        from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
@@ -331,9 +331,9 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert review.suggestions != []
 
     def test_comment_stays_marker_with_diagnostics(self) -> None:
-        from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-        from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )

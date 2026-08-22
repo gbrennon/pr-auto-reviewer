@@ -1,10 +1,10 @@
 """Tests for the Conversation domain object."""
 
-from pr_auto_reviewer.domain.agent.conversation import Conversation
-from pr_auto_reviewer.domain.agent.conversation_message import (
+from pr_auto_reviewer.domain.value_objects.conversation import Conversation
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 
 
 class TestConversation:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )

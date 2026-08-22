@@ -3,7 +3,7 @@
 from pr_auto_reviewer.application.services.finding_aggregator import (
     FindingAggregator,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,

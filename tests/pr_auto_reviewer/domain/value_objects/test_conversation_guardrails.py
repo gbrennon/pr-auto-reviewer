@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.domain.agent.conversation_decision import (
+from pr_auto_reviewer.domain.value_objects.conversation_decision import (
     ConversationDecision,
 )
-from pr_auto_reviewer.domain.agent.conversation_guardrails import (
+from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
     ConversationGuardrails,
 )
 
 
-class TestTurnBudget:
-    """Turn-budget policy and state transitions."""
+class TestConversationGuardrails:
+    """ConversationGuardrails policy: turn budget, failure counters, tool-call tracking, verdict judgement."""
 
     def test_default_limit_preferences(self) -> None:
         guardrails = ConversationGuardrails()
@@ -38,10 +38,6 @@ class TestTurnBudget:
         original = ConversationGuardrails(turn=3)
         original.advance_turn()
         assert original.turn == 3
-
-
-class TestConsecutiveFailureCounters:
-    """Empty and unparseable consecutive-response thresholds."""
 
     def test_mark_consecutive_success_resets_both_counters(self) -> None:
         updated = ConversationGuardrails(
@@ -74,10 +70,6 @@ class TestConsecutiveFailureCounters:
         assert decision is ConversationDecision.EXCEEDED_UNPARSEABLE
         assert state.consecutive_unparseable == 2
 
-
-class TestToolCallTracking:
-    """Tool-call counting used by the verdict judgement rule."""
-
     def test_record_tool_call_increments_count(self) -> None:
         assert ConversationGuardrails(tool_calls=2).record_tool_call().tool_calls == 3
 
@@ -85,10 +77,6 @@ class TestToolCallTracking:
         original = ConversationGuardrails(tool_calls=2)
         original.record_tool_call()
         assert original.tool_calls == 2
-
-
-class TestVerdictJudgement:
-    """Verdict acceptance and the exploration-demand fallback."""
 
     def test_accepts_when_exploration_not_required(self) -> None:
         decision, state = ConversationGuardrails(

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.tool_result import ToolResult
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )

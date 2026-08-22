@@ -5,8 +5,8 @@ import logging
 from pr_auto_reviewer.application.services.event_logging_handler import (
     EventLoggingHandler,
 )
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
     ConversationCompletedEvent,

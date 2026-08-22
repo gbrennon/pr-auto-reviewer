@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
-    SubReviewGuardrails,
-)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
+    SubReviewGuardrails,
+)
 
 
-class TestVerdictFor:
-    """Verdict derivation from the blocking status of a sub-review's findings."""
+class TestSubReviewGuardrails:
+    """Verdict derivation, coherence, and reconciliation from a sub-review's findings."""
 
     @staticmethod
     def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
@@ -38,20 +38,6 @@ class TestVerdictFor:
         items = [self._item(ItemSeverity.MINOR, IssueCategory.BUG)]
         assert guardrails.verdict_for(items) is ReviewVerdict.APPROVED
 
-
-class TestIsCoherent:
-    """Verdict-vs-findings coherence checks."""
-
-    @staticmethod
-    def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
-        return ReviewItem(id="id-1",
-            severity=severity,
-            category=category,
-            file_path="src/a.py",
-            description="finding",
-            line="42",
-        )
-
     def test_approval_is_coherent_without_blocking(self) -> None:
         guardrails = SubReviewGuardrails()
         items = [self._item(ItemSeverity.MINOR, IssueCategory.BUG)]
@@ -76,20 +62,6 @@ class TestIsCoherent:
         assert (
             guardrails.is_coherent(ReviewVerdict.CHANGES_REQUESTED, items)
             is False
-        )
-
-
-class TestReconcile:
-    """Verdict reconciliation preserving coherent verdicts."""
-
-    @staticmethod
-    def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
-        return ReviewItem(id="id-1",
-            severity=severity,
-            category=category,
-            file_path="src/a.py",
-            description="finding",
-            line="42",
         )
 
     def test_preserves_coherent_verdict(self) -> None:
