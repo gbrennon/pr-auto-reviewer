@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.agent.conversation_message import (
-    ConversationMessage,
-)
+from .conversation_message import ConversationMessage
 
 
 @dataclass(frozen=True)

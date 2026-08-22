@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from .phase_result import PhaseResult
+from .tool_call import ToolCall
 
 
 @dataclass(frozen=True)

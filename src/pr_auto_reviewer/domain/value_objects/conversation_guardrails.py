@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from pr_auto_reviewer.domain.agent.conversation_decision import (
-    ConversationDecision,
-)
+from .conversation_decision import ConversationDecision
 
 
 @dataclass(frozen=True)

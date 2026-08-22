@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.agent.sub_agent import SubAgent
+from ..entities.sub_agent import SubAgent
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
+from .review_phase import ReviewPhase
 
 
 @dataclass(frozen=True)

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.tool_result import ToolResult
+from .tool_call import ToolCall
+from .tool_result import ToolResult
 
 
 @dataclass(frozen=True)

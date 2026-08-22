@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from ..entities.review_item import ReviewItem
+from .review_verdict import ReviewVerdict
 
 
 @dataclass(frozen=True)
