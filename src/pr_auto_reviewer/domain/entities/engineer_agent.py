@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.domain.agent.sub_agent import SubAgent
+from .sub_agent import SubAgent
 
 
 class EngineerAgent(SubAgent):
