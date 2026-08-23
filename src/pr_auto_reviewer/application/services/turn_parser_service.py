@@ -1,4 +1,4 @@
-"""TurnParser — parse a single LLM conversation turn into a TurnParseResult."""
+"""TurnParserService — parse a single LLM conversation turn into a TurnParseResult."""
 
 from __future__ import annotations
 
@@ -12,17 +12,17 @@ from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case impor
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
 )
-from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
-from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 
 logger = logging.getLogger(__name__)
 
 
-class TurnParser(ParseReviewTurnUseCase):
+class TurnParserService(ParseReviewTurnUseCase):
     """Parse a raw LLM response into a structured TurnParseResult.
 
     Extracts item dicts via ``ResponseParserPort.parse_items()`` and
@@ -159,7 +159,7 @@ class TurnParser(ParseReviewTurnUseCase):
             if isinstance(items_data, list):
                 for entry in items_data:
                     if isinstance(entry, dict):
-                        raw_items.append(self._parser._normalize_item_dict(entry))
+                        raw_items.append(self._parser.normalize_item_dict(entry))
             return TurnParseResult(
                 kind="verdict",
                 raw_items=raw_items,
@@ -170,7 +170,7 @@ class TurnParser(ParseReviewTurnUseCase):
             return TurnParseResult(
                 kind="verdict",
                 raw_items=[
-                    self._parser._normalize_item_dict(item)
+                    self._parser.normalize_item_dict(item)
                     for item in parsed
                     if isinstance(item, dict)
                 ],
@@ -182,14 +182,14 @@ class TurnParser(ParseReviewTurnUseCase):
     def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
         """Extract verdict metadata from a JSON block or markdown in the content."""
         try:
-            parsed = json.loads(self._parser._sanitize_json_literals(content))
+            parsed = json.loads(self._parser.sanitize_json_literals(content))
         except json.JSONDecodeError:
             extracted = self._parser.extract_outermost_json(content)
             if extracted is None:
                 return self._extract_verdict_from_markdown(content)
             try:
                 parsed = json.loads(
-                    self._parser._sanitize_json_literals(extracted)
+                    self._parser.sanitize_json_literals(extracted)
                 )
             except json.JSONDecodeError:
                 return self._extract_verdict_from_markdown(content)
@@ -206,7 +206,7 @@ class TurnParser(ParseReviewTurnUseCase):
         return self._extract_verdict_from_markdown(content)
 
     def _extract_verdict_from_markdown(self, content: str) -> dict[str, Any]:
-        verdict = self._parser._extract_verdict_md(content)
+        verdict = self._parser.extract_verdict_md(content)
         suggestions = self._parser.parse_prose_recommendations(content)
         praise = self._parser.parse_prose_praise(content)
         return {
@@ -220,13 +220,13 @@ class TurnParser(ParseReviewTurnUseCase):
     def _parse_json(self, content: str) -> Any:
         """Attempt to parse *content* as JSON, with markdown extraction fallback."""
         try:
-            return json.loads(self._parser._sanitize_json_literals(content))
+            return json.loads(self._parser.sanitize_json_literals(content))
         except json.JSONDecodeError:
             extracted = self._parser.extract_outermost_json(content)
             if extracted is not None:
                 try:
                     return json.loads(
-                        self._parser._sanitize_json_literals(extracted)
+                        self._parser.sanitize_json_literals(extracted)
                     )
                 except json.JSONDecodeError:
                     pass
