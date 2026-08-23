@@ -15,12 +15,12 @@ from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import 
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
-from pr_auto_reviewer.domain.value_objects.conversation_message import (
-    ConversationMessage,
-)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
 )
 
 logger = logging.getLogger(__name__)
