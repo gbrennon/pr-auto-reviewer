@@ -100,4 +100,4 @@ class OllamaStreamingLlmAdapter(LlmReviewPort):
         prompt_str = prompt_builder.build(diff, context)
         # Fall back to the old single‑call path using the same parser
         raw_text = self._client.send_message(prompt_str)
-        return self._parser.parse(raw_text, "")
+        return self._parser.parse(raw_text, "code-review:latest")
