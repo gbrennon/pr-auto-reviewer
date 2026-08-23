@@ -11,14 +11,14 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.github_verdict_event_mapper import (
-    GithubVerdictEventMapper,
-)
 from pr_auto_reviewer.infrastructure.review_publishers._review_processor import (
     ReviewPublisherProcessor,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
     ReviewBodyRenderer,
+)
+from pr_auto_reviewer.infrastructure.review_publishers.github_verdict_event_mapper import (
+    GithubVerdictEventMapper,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
     ReviewPublishingService,
