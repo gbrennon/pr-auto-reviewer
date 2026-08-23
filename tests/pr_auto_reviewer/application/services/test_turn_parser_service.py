@@ -414,3 +414,42 @@ class TestTurnParserServiceItemExtraction:
         })))
         assert result.metadata is not None
         assert result.metadata["verdict"] == "approved"
+
+    def test_prose_findings_without_verdict_derive_changes_requested(self) -> None:
+        content = (
+            "#### 1. Hardcoded timeout in `src/a.py` [major]\n"
+            "The module hardcodes a timeout instead of reading config.\n"
+            "```python\n"
+            "TIMEOUT = 30\n"
+            "```\n"
+            "Suggested fix:\n"
+            "```python\n"
+            "TIMEOUT = settings.timeout\n"
+            "```\n"
+        )
+        parser = TurnParserService(ReviewResponseParser())
+        result = parser.execute(ParseReviewTurnCommand(content=content))
+
+        assert result.kind == "verdict"
+        assert result.metadata["verdict"] == "changes_requested"
+        assert result.metadata["reason"] != ""
+        assert result.metadata["summary"] != ""
+
+    def test_prose_minor_findings_without_verdict_derive_approved(self) -> None:
+        content = (
+            "#### 1. Trailing whitespace in `src/a.py` [minor]\n"
+            "```python\n"
+            "x = 1 \n"
+            "```\n"
+            "Suggested fix:\n"
+            "```python\n"
+            "x = 1\n"
+            "```\n"
+        )
+        parser = TurnParserService(ReviewResponseParser())
+        result = parser.execute(ParseReviewTurnCommand(content=content))
+
+        assert result.kind == "verdict"
+        assert result.metadata["verdict"] == "approved"
+        assert result.metadata["reason"] != ""
+

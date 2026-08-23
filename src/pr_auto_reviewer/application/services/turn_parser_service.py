@@ -12,9 +12,13 @@ from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case impor
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
 )
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
@@ -96,7 +100,7 @@ class TurnParserService(ParseReviewTurnUseCase):
         items = self._parser.parse_items(content)
         logger.debug("_parse: parse_items returned %d items", len(items))
         if items:
-            metadata = self._extract_verdict_metadata(content)
+            metadata = self._extract_verdict_metadata(content, items)
             observations = self._parser.parse_item_observations(content)
             existing = metadata.get("suggestions") or []
             combined = list(existing)
@@ -179,20 +183,22 @@ class TurnParserService(ParseReviewTurnUseCase):
 
         return TurnParseResult(kind="unparseable")
 
-    def _extract_verdict_metadata(self, content: str) -> dict[str, Any]:
+    def _extract_verdict_metadata(
+        self, content: str, raw_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Extract verdict metadata from a JSON block or markdown in the content."""
         try:
             parsed = json.loads(self._parser.sanitize_json_literals(content))
         except json.JSONDecodeError:
             extracted = self._parser.extract_outermost_json(content)
             if extracted is None:
-                return self._extract_verdict_from_markdown(content)
+                return self._extract_verdict_from_markdown(content, raw_items)
             try:
                 parsed = json.loads(
                     self._parser.sanitize_json_literals(extracted)
                 )
             except json.JSONDecodeError:
-                return self._extract_verdict_from_markdown(content)
+                return self._extract_verdict_from_markdown(content, raw_items)
         if isinstance(parsed, dict) and "verdict" in parsed:
             return {
                 "verdict": self._verdict_str(parsed.get("verdict", "")),
@@ -203,19 +209,54 @@ class TurnParserService(ParseReviewTurnUseCase):
                 "suggestions": self._suggestions_from(parsed),
                 "praise": self._praise_from(parsed),
             }
-        return self._extract_verdict_from_markdown(content)
+        return self._extract_verdict_from_markdown(content, raw_items)
 
-    def _extract_verdict_from_markdown(self, content: str) -> dict[str, Any]:
-        verdict = self._parser.extract_verdict_md(content)
+    def _extract_verdict_from_markdown(
+        self, content: str, raw_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Build metadata from markdown prose, deriving the verdict from items.
+
+        Prose responses rarely carry an explicit verdict section. When
+        the parser refuses to extract one, the verdict implied by the
+        already-parsed findings is used instead of failing the turn.
+        """
+        try:
+            verdict = self._parser.extract_verdict_md(content)
+        except ReviewVerdictError:
+            verdict = self._verdict_for_items(raw_items)
         suggestions = self._parser.parse_prose_recommendations(content)
         praise = self._parser.parse_prose_praise(content)
         return {
             "verdict": verdict.value,
-            "reason": "",
-            "summary": "",
+            "reason": self._reason_for_items(raw_items),
+            "summary": self._summary_for_items(raw_items),
             "suggestions": suggestions,
             "praise": praise,
         }
+
+    def _verdict_for_items(self, raw_items: list[dict[str, Any]]) -> ReviewVerdict:
+        """Return the verdict implied by the severities of *raw_items*."""
+        blocking = {ItemSeverity.CRITICAL.value, ItemSeverity.MAJOR.value}
+        if any(
+            str(item.get("severity", "")).lower() in blocking
+            for item in raw_items
+        ):
+            return ReviewVerdict.CHANGES_REQUESTED
+        return ReviewVerdict.APPROVED
+
+    def _reason_for_items(self, raw_items: list[dict[str, Any]]) -> str:
+        """Return a reason line grounded in the first finding, or empty."""
+        for item in raw_items:
+            description = str(item.get("description") or "").strip()
+            if description:
+                return description
+        return ""
+
+    def _summary_for_items(self, raw_items: list[dict[str, Any]]) -> str:
+        """Return a short summary naming how many findings were reported."""
+        if not raw_items:
+            return ""
+        return f"Reported {len(raw_items)} finding(s) from prose response."
 
     def _parse_json(self, content: str) -> Any:
         """Attempt to parse *content* as JSON, with markdown extraction fallback."""
