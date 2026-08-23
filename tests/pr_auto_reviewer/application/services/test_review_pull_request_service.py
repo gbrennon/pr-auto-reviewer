@@ -58,7 +58,7 @@ def _diff_fixture(pr_id, sha):
 
 
 def _review(verdict=ReviewVerdict.APPROVED):
-    return CodeReview(verdict=verdict, summary="Looks good", model_used="test")
+    return CodeReview(verdict=verdict, summary="Looks good", model_used="test", reason="test reason")
 
 
 def _pr(pr_id, sha):
@@ -246,7 +246,7 @@ class TestReviewPullRequestService:
         old, new = _sha("old111"), _sha("new222")
         cmd = _cmd(sha=new)
         existing = _pr(cmd.pr_id, old)
-        existing = existing.add_review(_review(ReviewVerdict.COMMENTED), old)
+        existing = existing.add_review(_review(ReviewVerdict.CHANGES_REQUESTED), old)
         mock_pr_repository.find.return_value = existing
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
             cmd.pr_id, cmd.head_sha
@@ -466,6 +466,8 @@ class TestReviewPullRequestService:
                     suggested_fix="x = 2",
                 )
             ],
+            reason="test reason",
+            model_used="test model",
         )
         mock_pr_repository.find.return_value = None
         mock_changeset_fetcher.fetch.return_value = diff
@@ -612,6 +614,8 @@ class TestReviewPullRequestService:
                     suggested_fix="",
                 ),
             ],
+            reason="test reason",
+            model_used="test model",
         )
         mock_pr_repository.find.return_value = None
         mock_changeset_fetcher.fetch.return_value = diff
@@ -679,6 +683,8 @@ class TestReviewPullRequestService:
                     suggested_fix="z = 2",
                 ),
             ],
+            reason="test reason",
+            model_used="test model",
         )
         mock_pr_repository.find.return_value = None
         mock_changeset_fetcher.fetch.return_value = diff
