@@ -49,3 +49,9 @@ phases start.
 The manager assigns tasks; the [advisor](advisor.md) enforces focus on
 those tasks; the [engineer](engineer.md) and
 [architect](architect.md) execute them.
+
+## Learning to be a manager
+
+When writing a brief, teach the peer *why* the task matters, not just what to
+produce. A manager judges itself by one question: could the peer start
+working with zero clarification after reading the brief? If not, tighten it.

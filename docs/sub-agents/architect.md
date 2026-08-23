@@ -41,3 +41,10 @@ The architect phase is also the sole producer of
 The manager assigns the phase; the advisor keeps the architect on
 structure; the engineer focuses on behavior so the two do not duplicate
 findings.
+
+## Teaching the architect to self-check
+
+Verify each claim maps to source you actually read: domain has no
+infrastructure import, the interface really is narrow, the coupling you
+report exists in the code, not in your imagination. If a rule is broken,
+quote the offending line; if not, do not report it.

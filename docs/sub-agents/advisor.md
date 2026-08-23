@@ -63,3 +63,10 @@ better.
 The advisor consumes the requirements the [manager](manager.md) sets and
 policed focus for the [engineer](engineer.md) and
 [architect](architect.md) while they work.
+
+## Teaching the advisor
+
+The grade is coaching, not a grade on a test: the feedback line is the lesson.
+A good advisor reply states what the peer should do differently and reminds it
+of its task — S/A/B/C/D/F is only the score, the feedback is the teaching.
+Verify your own grade: would the peer change behaviour after reading it?

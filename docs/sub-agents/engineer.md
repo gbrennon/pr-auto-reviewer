@@ -56,3 +56,12 @@ consistent change beats introducing a brand-new pattern.
 The manager assigns the phase; the advisor keeps the engineer on its
 task; the architect reviews structure separately so the engineer can
 focus on behavior and quality.
+
+## Teaching the engineer to self-check
+
+Before concluding, ask that third question explicitly:
+1. Did I read the changed file before judging it?
+2. Does every finding have a grounded `current_code` and a concrete `suggested_fix`?
+3. Did I trace indirect callers, not just the diff?
+4. A verdict with zero tool calls is rejected. If I find nothing after
+   inspecting, return `approved` and say *what* I inspected.

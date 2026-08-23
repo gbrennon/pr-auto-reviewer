@@ -11,6 +11,7 @@ into phase prompts at runtime. See the individual pages for details:
 | [advisor](advisor.md) | watches peers turn-by-turn; grades S/A/B/C/D/F and interrupts drift | keep every sub-agent on its assigned task | grade every turn; block on F and hand to manager |
 | [engineer](engineer.md) | exercises the diff and its indirect blast radius like a principal | find bugs, security issues, biased tests; suggest fitting practices | probe from many angles; verify tests test real behavior |
 | [architect](architect.md) | reviews structure, not behavior | enforce architecture rules and conventions | read source for violations, coupling, anti-patterns |
+| [teacher](teacher.md) | teaches each role its task and craft | keep the sub-agent skill curve rising | coach via task planning, live feedback, and transcripts |
 
 The current production plan runs three phases: Bug Hunt — Diff and Bug
 Hunt — Branch execute as an *engineer*; Architecture Review executes as
@@ -43,7 +44,11 @@ These rules are enforced by the workflow code, not by convention:
    persisted as markdown under `~/.config/pr-auto-reviewer/
    conversations/<repo>_<pr>/`. A crashed conversation is logged too —
    partial output is audit evidence.
-6. **The container wires everything.**
+6. **The docs teach.** Sub-agent pages and prompts are written in a
+   teaching tone: why the role exists, what it must produce, how, and
+   how the agent self-verifies — never a bare list of prohibitions.
+   See [teacher.md](teacher.md).
+7. **The container wires everything.**
    `src/pr_auto_reviewer/infrastructure/container/` is the only place
    where sub-agents, the turn limit, the conversation logger, and the
    event bus are constructed and connected. Application services
