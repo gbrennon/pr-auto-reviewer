@@ -298,6 +298,11 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         previous_findings: str = ""
         phase_sequence = list(plan.phases)
         next_manager_brief = ""
+        if self._manager is not None and phase_sequence:
+            next_manager_brief = self._manager.brief(
+                phase_sequence[0],
+                "(Review start — no findings recorded yet.)",
+            )
 
         for idx, phase in enumerate(phase_sequence):
             logger.info("Starting phase: %s", phase.phase_name)
@@ -311,10 +316,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
             manager_brief = getattr(plan, "manager_brief", "")
             assignment = manager_brief or next_manager_brief
-            if manager_brief and phase is phase_sequence[0]:
-                phase_prompt = manager_brief + "\n\n" + phase_prompt
-            if next_manager_brief and phase is not phase_sequence[0]:
-                phase_prompt = next_manager_brief + "\n\n" + phase_prompt
+            if assignment:
+                phase_prompt = assignment + "\n\n" + phase_prompt
 
             if initial_feedback:
                 phase_prompt = initial_feedback + "\n\n" + phase_prompt

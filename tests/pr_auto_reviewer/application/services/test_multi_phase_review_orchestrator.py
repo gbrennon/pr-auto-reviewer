@@ -734,3 +734,45 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert "did not survive" in rebuilt.summary
         assert "2" in rebuilt.summary
         assert "3" not in rebuilt.reason
+
+    def test_manager_briefs_first_phase_before_it_starts(self) -> None:
+        """The opening phase runs on a manager-planned task, not a static prompt."""
+        from unittest.mock import MagicMock
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
+
+        manager = MagicMock()
+        manager.brief.return_value = "Focus exclusively on install scripts."
+        bus = InMemoryCommandBus()
+        seen_prompts: list[str] = []
+
+        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
+            seen_prompts.append(command.system_prompt)
+            return PhaseResult(items=[], llm_verdict="approved")
+
+        bus.register(RunAgentConversationCommand, _phase_stub)
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=bus, tool_factory=lambda *a: None, manager=manager,
+        )
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(ReviewPhase(
+                phase_id="engineer", phase_name="Bug Hunt — Diff",
+                system_prompt="EEP",
+            ),),
+        )
+        orchestrator._run_phases(
+            plan=plan, repo_path=Path("."), changed_files=[], model="m",
+        )
+
+        assert manager.brief.call_count == 1
+        briefed_phase = manager.brief.call_args[0][0]
+        assert briefed_phase.phase_id == "engineer"
+        assert seen_prompts
+        assert "Focus exclusively on install scripts." in seen_prompts[0]
