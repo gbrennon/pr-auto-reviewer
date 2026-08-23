@@ -1,3 +1,4 @@
+from .advisor_directive import AdvisorDirective
 from .code_review import CodeReview
 from .comment_id import CommentId
 from .commit_sha import CommitSha
@@ -16,6 +17,7 @@ from .repository_context import RepositoryContext
 from .review_phase import ReviewPhase
 from .review_plan import ReviewPlan
 from .review_verdict import ReviewVerdict
+from .sub_agent_grade import SubAgentGrade
 from .sub_review_guardrails import SubReviewGuardrails
 from .token_slug import TokenSlug
 from .tool_call import ToolCall
@@ -24,6 +26,7 @@ from .tool_result import ToolResult
 from .turn_parse_result import TurnParseResult
 
 __all__ = [
+    "AdvisorDirective",
     "CodeReview",
     "CommentId",
     "CommitSha",
@@ -42,6 +45,7 @@ __all__ = [
     "ReviewPhase",
     "ReviewPlan",
     "ReviewVerdict",
+    "SubAgentGrade",
     "SubReviewGuardrails",
     "TokenSlug",
     "ToolCall",

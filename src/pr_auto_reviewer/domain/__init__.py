@@ -6,8 +6,8 @@ from .entities import (
     Issue,
     ManagerAgent,
     PullRequest,
-    ReviewItem,
     ReviewerAgent,
+    ReviewItem,
     SubAgent,
 )
 from .exceptions import (
