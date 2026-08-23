@@ -11,7 +11,6 @@ from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
@@ -19,6 +18,7 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
     RunMultiPhaseReviewCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
 )
