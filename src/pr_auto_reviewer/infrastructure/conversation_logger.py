@@ -24,7 +24,7 @@ class MarkdownConversationLogger(ConversationLoggerPort):
 
     _PHASE_TO_ROLE: ClassVar[dict[str, str]] = {
         "Bug Hunt — Diff": "engineer",
-        "Bug Hunt — Branch": "explorer",
+        "Bug Hunt — Branch": "engineer",
         "Architecture Review": "architect",
     }
 
@@ -52,32 +52,57 @@ class MarkdownConversationLogger(ConversationLoggerPort):
             phase_name, metadata.get("agent_role", "unknown")
         )
 
+        turn_count = 0
+        assistants = 0
+        for msg in messages:
+            role = getattr(msg, "role", "unknown")
+            if role == "assistant":
+                assistants += 1
+                turn = assistants
+            else:
+                turn = assistants if assistants > 0 else 1
+            turn_count = max(turn_count, turn)
+
         lines: list[str] = []
         lines.append(f"# Agent: {agent_role}")
         lines.append(f"# Phase: {phase_name}")
         lines.append(f"# PR: {pr_identifier}")
         lines.append(f"# Model: {metadata.get('model', 'unknown')}")
-        lines.append(
-            f"# Turns: {metadata.get('turns', 0)}"
+        item_count = metadata.get("item_count", 0)
+        skipped = metadata.get("skipped", 0)
+        items_part = f"Items: {item_count}"
+        if skipped:
+            items_part += f" (Skipped: {skipped})"
+        lines.append(f"# Turns: {turn_count}"
             f" | Verdict: {metadata.get('verdict', 'unknown')}"
-            f" | Items: {metadata.get('item_count', 0)}"
+            f" | {items_part}"
         )
         lines.append(f"# {timestamp}")
         lines.append("")
 
-        turn_number = 0
+        assistant_count = 0
+        current_turn = 0
         for msg in messages:
             role = getattr(msg, "role", "unknown")
             content = getattr(msg, "content", "")
             tool_call = getattr(msg, "tool_call", None)
             tool_result = getattr(msg, "tool_result", None)
 
+            if role == "assistant":
+                assistant_count += 1
+                turn = assistant_count
+            else:
+                turn = assistant_count if assistant_count > 0 else 1
+
+            if turn != current_turn:
+                if turn > 0:
+                    lines.append("---")
+                    lines.append("")
+                    lines.append(f"## Turn {turn}")
+                    lines.append("")
+                current_turn = turn
+
             if role == "system":
-                turn_number += 1
-                lines.append("---")
-                lines.append("")
-                lines.append(f"## Turn {turn_number}")
-                lines.append("")
                 lines.append(f"### Sent — System Prompt ({agent_role})")
                 lines.append("")
                 if len(content) > 4000:
