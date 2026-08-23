@@ -1,0 +1,77 @@
+"""Tests for PhaseManager."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+from pr_auto_reviewer.application.services.phase_manager import PhaseManager
+from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+
+
+class TestPhaseManager:
+    """The manager briefs the next phase with a focused task."""
+
+    def test_brief_returns_manager_reply(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = "assign the architecture review to the architect"
+        manager = PhaseManager(chat_port=chat)
+
+        brief = manager.brief(
+            ReviewPhase(
+                phase_id="architect",
+                phase_name="Architecture Review",
+                system_prompt="AAP",
+                role=ArchitectAgent(),
+            ),
+            "found bugs in src/a.py",
+        )
+
+        assert brief == "assign the architecture review to the architect"
+        assert len(chat.send.call_args_list) == 1
+        messages = chat.send.call_args.args[0]
+        assert any("architect" in m.content for m in messages)
+        assert any("src/a.py" in m.content for m in messages)
+
+    def test_brief_empty_reply_returns_empty(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = "   "
+        manager = PhaseManager(chat_port=chat)
+
+        brief = manager.brief(
+            ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
+            "",
+        )
+
+        assert brief == ""
+
+    def test_brief_chat_failure_returns_empty(self) -> None:
+        chat = MagicMock()
+        chat.send.side_effect = RuntimeError("ollama down")
+        manager = PhaseManager(chat_port=chat)
+
+        brief = manager.brief(
+            ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
+            "findings",
+        )
+
+        assert brief == ""
+
+    def test_brief_prompt_grounds_in_prior_findings(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = "task"
+        manager = PhaseManager(chat_port=chat)
+
+        manager.brief(
+            ReviewPhase(
+                phase_id="architect", phase_name="Architecture Review",
+                system_prompt="AAP", role=ArchitectAgent(),
+            ),
+            "found bugs in src/a.py\nfound leak in src/b.py",
+        )
+
+        messages = chat.send.call_args.args[0]
+        user_content = messages[-1].content
+        assert "Architecture Review" in user_content
+        assert "found bugs in src/a.py" in user_content
+        assert "found leak in src/b.py" in user_content
