@@ -3,13 +3,13 @@
 from pr_auto_reviewer.application.services.finding_aggregator import (
     FindingAggregator,
 )
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 
@@ -68,7 +68,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items)
+            AggregateReviewFindingsCommand(items=items, model_used="test model")
         )
 
         assert len(review.items) == 1
@@ -88,7 +88,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items)
+            AggregateReviewFindingsCommand(items=items, model_used="test model")
         )
 
         assert len(review.items) == 1
@@ -101,7 +101,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items)
+            AggregateReviewFindingsCommand(items=items, model_used="test model")
         )
 
         assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -116,23 +116,23 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items)
+            AggregateReviewFindingsCommand(items=items, model_used="test model")
         )
 
         assert review.verdict == ReviewVerdict.APPROVED
 
-    def test_empty_items_yield_approved_with_empty_summary(
+    def test_empty_items_yield_approved_with_populated_summary(
         self, mock_reason_factory,
     ) -> None:
         mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=[])
+            AggregateReviewFindingsCommand(items=[], model_used="test model")
         )
 
         assert review.verdict == ReviewVerdict.APPROVED
-        assert review.summary == ""
+        assert review.summary == "Found 0 issue(s) (0 blocking across 0 file(s))."
         assert review.items == []
 
     def test_phase_result_summary_takes_precedence(
@@ -144,7 +144,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, phase_result=phase_result)
+            AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
         )
 
         assert review.summary == "LLM summary"
@@ -158,7 +158,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, phase_result=phase_result)
+            AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
         )
 
         assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -176,7 +176,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, phase_result=phase_result)
+            AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
         )
 
         assert len(review.suggestions) == 1
@@ -194,7 +194,7 @@ class TestFindingAggregator:
         aggregator = FindingAggregator(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, phase_result=phase_result)
+            AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
         )
 
         assert review.reason == "LLM reason"
@@ -222,6 +222,7 @@ class TestFindingAggregator:
                 items=items,
                 phase_result=phase_result,
                 suggestions_phase_result=architect_result,
+                model_used="test model",
             )
         )
 
