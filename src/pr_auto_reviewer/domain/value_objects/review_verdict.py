@@ -31,7 +31,7 @@ class ReviewVerdict(StrEnum):
         tokens = set(re.split(r"[^a-z0-9]+", raw))
         negative = {"critical", "changes", "request", "fail", "issues",
                     "problems", "errors", "must", "needs", "incomplete",
-                    "concerns"}
+                    "concerns", "blocker", "blocking", "blocked"}
         positive = {"positive", "approved", "approve", "noissues",
                     "pass", "good", "clean", "acceptable"}
         if any(
