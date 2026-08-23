@@ -483,7 +483,7 @@
 │ │  │  ③ Fallback: Markdown regex parser                 │   │   │
 │ │  │                                                   │   │   │
 │ │  │ → CodeReview(                                      │   │   │
-│ │  │     verdict=APPROVED|CHANGES_REQUESTED|COMMENTED,  │   │   │
+│ │  │     verdict=APPROVED|CHANGES_REQUESTED,  # COMMENTED now raises  │   │   │
 │ │  │     reason="...",                                  │   │   │
 │ │  │     summary="...",                                 │   │   │
 │ │  │     items=[ReviewItem(number, severity,            │   │   │
@@ -859,26 +859,32 @@ MultiPhaseReviewOrchestrator.execute()
        │
        ├─▶ Full retry loop (max_retries times)
        │    │
-       │    ├─▶ _run_phases(plan, repo_path, changed_files, model)
-       │    │    │
-       │    │    ├─▶ Phase 1: Security Review
-       │    │    │    RunAgentConversationCommand → AgentConversationService
-       │    │    │    └─▶ Tool calls: read_file, search_codebase, etc.
-       │    │    │
-       │    │    ├─▶ Phase 2: Architecture Review
-       │    │    │    (injects Phase 1 findings via __PREVIOUS_FINDINGS__)
-       │    │    │
-       │    │    ├─▶ Phase 3: Style Review
-       │    │    │
-       │    │    └─▶ Aggregate: AggregateReviewFindingsCommand
-       │    │         └─▶ FindingAggregator → deduplicate, merge
-       │    │         └─▶ VerifyFindingsCommand
-       │    │              └─▶ FindingVerifier → validate against source
-       │    │
-       │    └─▶ If zero items: _run_feedback_loop() (max_feedback_rounds)
-       │         Re-runs with feedback context from prior attempt
+       │    ├─▶ Manager briefs EVERY phase (incl. the first)
+       │    └─▶ _run_phases(plan, repo_path, changed_files, model)
+       │         │
+       │         ├─▶ Phase 1: Bug Hunt — Diff (engineer)
+       │         │    RunAgentConversationCommand → AgentConversationService
+       │         │    │
+       │         │    ├─▶ Tool exploration: read_file, search_codebase,
+       │         │    │    list_directory, run_git
+       │         │    └─▶ Advisor observes every turn (S/A/B/C/D/F)
+       │         │
+       │         ├─▶ Phase 2: Bug Hunt — Branch (engineer)
+       │         │    (injects prior findings via __FINDINGS__)
+       │         │
+       │         ├─▶ Phase 3: Architecture Review (architect)
+       │         │
+       │         ├─▶ After each phase: advisor grades the finished output.
+       │         │    On F → manager re-plans the task → restart once,
+       │         │    never replaying the failed prompt.
+       │         │
+       │         └─▶ Aggregate: AggregateReviewFindingsCommand
+       │              ├─▶ FindingAggregator → deduplicate, merge
+       │              └─▶ VerifyFindingsCommand
+       │                   └─▶ FindingVerifier → validate against source
        │
-       └─▶ Returns final CodeReview
+       └─▶ If zero findings: _run_feedback_loop() (max_feedback_rounds)
+            Re-runs with feedback context from prior attempt
 ```
 
 ### 7.2. Agent System
@@ -887,12 +893,15 @@ The agent system provides specialized agents for different review aspects. The `
 
 | Agent | Purpose |
 |-------|---------|
-| `AdvisorAgent` | Provides advisory feedback |
-| `ArchitectAgent` | Reviews architecture and design |
-| `EngineerAgent` | Reviews implementation details |
-| `ExplorerAgent` | Explores codebase for context |
-| `ManagerAgent` | Orchestrates the review process |
-| `ReviewerAgent` | Performs the actual code review |
+| `ManagerAgent` | Plans every phase, briefs each peer with a focused task |
+| `AdvisorAgent` | Grades every peer turn (S/A/B/C/D/F); hands blockers to the manager |
+| `EngineerAgent` | Bugs, security, edge cases, biased tests — incl. indirect callers |
+| `ArchitectAgent` | Structure, coupling, anti-patterns |
+| Teacher | The coaching approach behind the above; see `docs/sub-agents/teacher.md` |
+
+The domain agents are `AdvisorAgent`, `ArchitectAgent`, `EngineerAgent`,
+and `ManagerAgent`; they are metadata attached to phases via
+`ReviewPhase.role`.
 
 Each agent is instantiated with a role-specific system prompt. The `AgentConversationService` runs the multi-turn conversation with tool access (read_file, search_codebase, list_directory, run_git, get_changed_files).
 
@@ -924,6 +933,14 @@ AgentConversationService._run()
 ---
 
 ## 8. Key Implementation Details
+
+### No silent defaults
+
+`COMMENTED` is not a valid produced verdict: constructing a `CodeReview` with it (or with empty `reason`/`summary`/`model_used`) raises `ReviewVerdictError`. Persistence maps any legacy `commented` records to `APPROVED`/`CHANGES_REQUESTED` on load, so the comment-only publish path is unreachable with valid reviews.
+
+### Transcripts
+
+Every LLM exchange — peer conversations, advisor gradings, manager briefs, verifier runs — is persisted under `~/.config/pr-auto-reviewer/conversations/<repo>_<pr>/`.
 
 ### Local Git Clone for Diffs
 
