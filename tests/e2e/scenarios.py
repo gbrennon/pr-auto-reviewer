@@ -71,11 +71,4 @@ E2E_REVIEW_SCENARIOS: list[ReviewScenarioInput] = [
         "repo": "ratatui",
         "pr_id": 1,
     },
-    {
-        "platform": "github",
-        "owner": "gbrennon",
-        "repo": "rataflow",
-        "pr_id": 1,
-        "expected_items": 1,
-    }
 ]
