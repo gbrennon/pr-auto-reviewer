@@ -32,6 +32,48 @@ _STATE_KEY_SEPARATOR = "/"
 def _make_key(pr_id: PullRequestId) -> str:
     return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
 
+
+def _deserialize_review(raw: dict) -> CodeReview:
+    """Build a CodeReview from persisted state, deriving missing fields.
+
+    Older persisted records predate the non-default review contract and
+    may lack ``reason``, ``summary``, ``model_used``, or carry the old
+    ``commented`` placeholder verdict. A stored review is still a real
+    result, so we derive those fields from what exists instead of
+    failing on load.
+    """
+    items = [
+        ReviewItem(
+            severity=ItemSeverity.from_value(i.get("severity")),
+            category=IssueCategory.from_value(i.get("category")),
+            file_path=i.get("file_path"),
+            description=i.get("description", ""),
+            id=i.get("id", ""),
+        )
+        for i in raw.get("items", [])
+    ]
+    stored_verdict = str(raw.get("verdict", "")).strip().lower()
+    verdict = ReviewVerdict(stored_verdict)
+    if verdict is ReviewVerdict.COMMENTED:
+        # Old placeholder: resolve from what the review actually holds.
+        verdict = (
+            ReviewVerdict.CHANGES_REQUESTED
+            if items
+            else ReviewVerdict.APPROVED
+        )
+    summary = raw.get("summary", "") or (
+        f"Found {len(items)} issue(s) in persisted review."
+    )
+    reason = raw.get("reason", "") or summary
+    model_used = raw.get("model_used", "") or "unknown"
+    return CodeReview(
+        verdict=verdict,
+        reason=reason,
+        summary=summary,
+        model_used=model_used,
+        items=items,
+    )
+
 class JsonFilePullRequestRepository(PullRequestRepository):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
 
@@ -93,21 +135,7 @@ class JsonFilePullRequestRepository(PullRequestRepository):
     def _deserialize(self, pr_id: PullRequestId, raw: dict) -> PullRequest:
         reviews_raw = raw.get("reviews", [])
         reviews: tuple[CodeReview, ...] = tuple(
-            CodeReview(
-                verdict=ReviewVerdict(r["verdict"]),
-                summary=r.get("summary", ""),
-                model_used=r.get("model_used", ""),
-                items=[
-                    ReviewItem(
-                        severity=ItemSeverity.from_value(i.get("severity")),
-                        category=IssueCategory.from_value(i.get("category")),
-                        file_path=i.get("file_path"),
-                        description=i.get("description", ""),
-                        id=i.get("id", ""),
-                    )
-                    for i in r.get("items", [])
-                ],
-            )
+            _deserialize_review(r)
             for r in reviews_raw
         )
         unresolved_ids: frozenset[str] = frozenset(
