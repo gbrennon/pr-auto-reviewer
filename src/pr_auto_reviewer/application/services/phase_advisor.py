@@ -1,4 +1,4 @@
-"""PhaseAdvisor — grades a finished peer phase on the S/B/D/F scale."""
+"""PhaseAdvisor — grades a finished peer phase on the S/A/B/C/D/F scale."""
 
 from __future__ import annotations
 
@@ -12,7 +12,13 @@ from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
+)
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.value_objects.advisor_directive import (
     AdvisorDirective,
 )
@@ -33,32 +39,37 @@ class PhaseAdvisor(AssessPhaseUseCase):
 
     The advisor does not review code itself: it watches what the peer
     sub-agent produced during *phase*, grades it against the task the
-    manager assigned (S: impressive, B: okok, D: whatever, F: don't do
-    this!), and on an F returns an improved prompt that re-explains the
-    task so the phase can be restarted. A missing or unparseable advisor
-    reply resolves to ``OKOK`` so a grading failure never halts the
-    review.
+    manager assigned (S: impressive, A: amazing, B: okok, C: acceptable,
+    D: whatever, F: don't do this!), and on an F reports the blocker to
+    the manager, who re-plans the task before the phase restarts. A
+    missing or unparseable advisor reply resolves to ``OKOK`` so a
+    grading failure never halts the review.
     """
 
     _GRADE_KEYS = ("grade", "verdict", "assessment")
     _FEEDBACK_KEYS = ("feedback", "reason", "interjection")
     _PROMPT_KEYS = ("improved_prompt", "improvedPrompt", "reprompt")
 
-    def __init__(self, chat_port: AgentChatPort) -> None:
+    def __init__(
+        self,
+        chat_port: AgentChatPort,
+        command_bus: CommandBusPort | None = None,
+    ) -> None:
         self._chat_port = chat_port
+        self._command_bus = command_bus
 
     def assess(
         self,
         phase: ReviewPhase,
         assignment: str,
         phase_result: PhaseResult,
+        pr_identifier: str = "",
     ) -> AdvisorDirective:
         """Return the advisor's directive for the finished *phase*."""
         peer = phase.role
+        messages = self._build_messages(phase, assignment, phase_result)
         try:
-            raw = self._chat_port.send(self._build_messages(
-                phase, assignment, phase_result,
-            ))
+            raw = self._chat_port.send(messages)
         except Exception:
             logger.warning(
                 "Advisor grading failed for phase %s; accepting output",
@@ -66,14 +77,36 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
+        self._publish_exchange(phase, pr_identifier, messages, raw)
         directive = self._parse_directive(raw)
         if peer is not None and directive.blocks_output:
             logger.info(
                 "Advisor graded phase %s as F (don't do this!); blocking "
-                "output and restarting with improved prompt",
+                "output and handing the blocker to the manager",
                 phase.phase_name,
             )
         return directive
+
+    def _publish_exchange(
+        self,
+        phase: ReviewPhase,
+        pr_identifier: str,
+        messages: list[ConversationMessage],
+        raw_reply: str,
+    ) -> None:
+        """Emit the finished grading exchange for the transcript log."""
+        if self._command_bus is None:
+            return
+        transcript = [
+            *messages,
+            ConversationMessage(role="assistant", content=raw_reply),
+        ]
+        self._command_bus.dispatch(AgentExchangeEvent(
+            role="advisor",
+            phase_name=phase.phase_name,
+            pr_identifier=pr_identifier,
+            messages=transcript,
+        ))
 
     def _assigned_task(self, phase: ReviewPhase, assignment: str) -> str:
         """Render the task the manager assigned plus the peer's role contract."""
@@ -107,8 +140,8 @@ class PhaseAdvisor(AssessPhaseUseCase):
         system = (
             f"{advisor.description}\n\n"
             f"{advisor.interaction}\n\n"
-            "You grade the FINISHED phase, never the diff. Use exactly one "
-            "of the four grades and output a single JSON object with keys "
+            "You grade the FINISHED phase, never the diff. Use exactly "
+            "one of the grades and output a single JSON object with keys "
             '"grade", "feedback", and "improved_prompt".'
         )
         user = (
@@ -117,11 +150,11 @@ class PhaseAdvisor(AssessPhaseUseCase):
             f"Phase verdict: {phase_result.llm_verdict or 'none'}\n"
             f"Phase reason: {phase_result.llm_reason or ''}\n"
             f"Findings reported:\n{findings}\n\n"
-            'Respond with JSON: {"grade": "impressive|okok|whatever|'
-            'don\'t do this!", "feedback": "short note to the peer", '
-            '"improved_prompt": "ONLY when grade is don\'t do this!: an '
-            'improved version of the original prompt re-explaining the '
-            'task; otherwise empty string"}'
+            'Respond with JSON: {"grade": "impressive|amazing|okok|'
+            'acceptable|whatever|don\'t do this!", "feedback": "short '
+            'note to the peer", "improved_prompt": "ONLY when grade is '
+            'don\'t do this!: an improved version of the original prompt '
+            're-explaining the task; otherwise empty string"}'
         )
         return [
             ConversationMessage(role="system", content=system),
@@ -146,10 +179,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 "Advisor reply was not JSON; accepting phase output"
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
-
-        grade_text = cls._first_value(
-            payload, cls._GRADE_KEYS
-        ) or "okok"
+        grade_text = cls._first_value(payload, cls._GRADE_KEYS) or ""
         feedback = cls._first_value(payload, cls._FEEDBACK_KEYS) or ""
         improved = cls._first_value(payload, cls._PROMPT_KEYS) or ""
         return AdvisorDirective(

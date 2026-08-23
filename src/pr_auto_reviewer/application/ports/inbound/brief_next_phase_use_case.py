@@ -16,6 +16,11 @@ class BriefNextPhaseUseCase(Protocol):
     owns.
     """
 
-    def brief(self, next_phase: ReviewPhase, findings_summary: str) -> str:
+    def brief(
+        self,
+        next_phase: ReviewPhase,
+        findings_summary: str,
+        pr_identifier: str = "",
+    ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
         ...

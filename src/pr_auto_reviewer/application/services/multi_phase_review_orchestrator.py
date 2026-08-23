@@ -290,6 +290,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         accumulated_items: list[ReviewItem] | None = None,
         initial_feedback: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        pr_identifier: str = "",
     ) -> CodeReview:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
@@ -302,6 +303,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             next_manager_brief = self._manager.brief(
                 phase_sequence[0],
                 "(Review start — no findings recorded yet.)",
+                pr_identifier=pr_identifier,
             )
 
         for idx, phase in enumerate(phase_sequence):
@@ -343,6 +345,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase=phase,
                 phase_prompt=phase_prompt,
                 assignment=assignment,
+                pr_identifier=pr_identifier,
                 phase_result=phase_result,
                 repo_path=repo_path,
                 changed_files=changed_files,
@@ -400,6 +403,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             ):
                 next_manager_brief = self._manager.brief(
                     phase_sequence[idx + 1], previous_findings,
+                    pr_identifier=pr_identifier,
                 )
 
         suggestion_phase_id = getattr(plan, "suggestions_phase_id", None)
@@ -622,6 +626,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         repo_path: Path,
         changed_files: list[str],
         existing_item_ids: frozenset[str],
+        pr_identifier: str = "",
     ) -> PhaseResult:
         """Grade the finished phase with the advisor and re-run it on a blocking grade.
 
@@ -634,7 +639,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         if self._advisor is None:
             return phase_result
         directive: AdvisorDirective = self._advisor.assess(
-            phase, assignment, phase_result,
+            phase, assignment, phase_result, pr_identifier=pr_identifier,
         )
         if not directive.blocks_output:
             return phase_result

@@ -15,6 +15,9 @@ from pr_auto_reviewer.application.ports.inbound.run_agent_conversation_use_case 
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
+)
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
@@ -94,14 +97,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
-        if repo_path is None:
-            return "unknown"
-        path_str = str(repo_path)
-        import re
-        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", path_str)
-        if match:
-            return f"{match.group(1)}/{match.group(2)}#{match.group(3)}"
-        return path_str.rsplit("/", 1)[-1]
+        return PRIdentifier.derive(repo_path)
 
 
     def _find_mentioned_file(

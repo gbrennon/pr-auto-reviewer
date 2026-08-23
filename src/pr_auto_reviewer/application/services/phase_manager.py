@@ -10,7 +10,13 @@ from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
+)
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
@@ -29,15 +35,24 @@ class PhaseManager(BriefNextPhaseUseCase):
     the review proceeds unchanged.
     """
 
-    def __init__(self, chat_port: AgentChatPort) -> None:
+    def __init__(
+        self,
+        chat_port: AgentChatPort,
+        command_bus: CommandBusPort | None = None,
+    ) -> None:
         self._chat_port = chat_port
+        self._command_bus = command_bus
 
-    def brief(self, next_phase: ReviewPhase, findings_summary: str) -> str:
+    def brief(
+        self,
+        next_phase: ReviewPhase,
+        findings_summary: str,
+        pr_identifier: str = "",
+    ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
+        messages = self._build_messages(next_phase, findings_summary)
         try:
-            raw = self._chat_port.send(self._build_messages(
-                next_phase, findings_summary,
-            ))
+            raw = self._chat_port.send(messages)
         except Exception:
             logger.warning(
                 "Manager briefing failed for phase %s; continuing without",
@@ -48,10 +63,32 @@ class PhaseManager(BriefNextPhaseUseCase):
         brief = (raw or "").strip()
         if not brief:
             return ""
+        self._publish_exchange(next_phase, pr_identifier, messages, raw)
         logger.info(
             "Manager briefed phase %s between phases", next_phase.phase_name,
         )
         return brief
+
+    def _publish_exchange(
+        self,
+        next_phase: ReviewPhase,
+        pr_identifier: str,
+        messages: list[ConversationMessage],
+        raw_reply: str,
+    ) -> None:
+        """Emit the finished briefing exchange for the transcript log."""
+        if self._command_bus is None:
+            return
+        transcript = [
+            *messages,
+            ConversationMessage(role="assistant", content=raw_reply),
+        ]
+        self._command_bus.dispatch(AgentExchangeEvent(
+            role="manager",
+            phase_name=next_phase.phase_name,
+            pr_identifier=pr_identifier,
+            messages=transcript,
+        ))
 
     def _build_messages(
         self, next_phase: ReviewPhase, findings_summary: str,

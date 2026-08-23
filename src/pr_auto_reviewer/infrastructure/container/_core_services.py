@@ -46,6 +46,9 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
     ConversationCompletedEvent,
 )
@@ -256,6 +259,8 @@ def wire_core_services(
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
             repo_path, changed_files=changed_files
         ),
+        command_bus=command_bus,
+        max_turns=config.llm_max_turns,
     )
     aggregator = FindingAggregator(ReasonFactory())
     orchestrator = MultiPhaseReviewOrchestrator(
@@ -263,8 +268,8 @@ def wire_core_services(
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
             repo_path, changed_files=changed_files
         ),
-        advisor=PhaseAdvisor(chat_port=chat_client),
-        manager=PhaseManager(chat_port=chat_client),
+        advisor=PhaseAdvisor(chat_port=chat_client, command_bus=command_bus),
+        manager=PhaseManager(chat_port=chat_client, command_bus=command_bus),
     )
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
@@ -275,7 +280,8 @@ def wire_core_services(
     )
     command_bus.register(VerifyFindingsCommand, verifier.execute)
     command_bus.register(ParseReviewTurnCommand, turn_parser.execute)
-    event_logger = EventLoggingHandler()
+    event_logger = EventLoggingHandler(exchange_logger=conversation_logger)
+    command_bus.register(AgentExchangeEvent, event_logger.handle_agent_exchange)
     command_bus.register(
         ReviewTurnParsedEvent, event_logger.handle_review_turn_parsed
     )

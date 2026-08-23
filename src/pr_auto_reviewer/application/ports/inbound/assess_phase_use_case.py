@@ -25,6 +25,7 @@ class AssessPhaseUseCase(Protocol):
         phase: ReviewPhase,
         assignment: str,
         phase_result: PhaseResult,
+        pr_identifier: str = "",
     ) -> AdvisorDirective:
         """Return the advisor's directive for the finished *phase*."""
         ...

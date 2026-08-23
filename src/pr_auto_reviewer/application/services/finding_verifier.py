@@ -15,7 +15,16 @@ from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import 
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
+)
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
+)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
@@ -48,10 +57,14 @@ class FindingVerifier(VerifyFindingsUseCase):
         chat_port: AgentChatPort,
         verify_prompt: str,
         tool_factory: Callable[[Path, list[str]], Any],
+        command_bus: CommandBusPort | None = None,
+        max_turns: int = _VERIFY_MAX_TURNS,
     ) -> None:
         self._chat_port = chat_port
         self._verify_prompt = verify_prompt
         self._tool_factory = tool_factory
+        self._command_bus = command_bus
+        self._max_turns = max_turns
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Verify blocking findings, returning only those confirmed by the LLM."""
@@ -66,10 +79,13 @@ class FindingVerifier(VerifyFindingsUseCase):
         )
         prompt = self._verify_prompt.replace("{findings}", findings_text)
 
-        results = self._run_verification_conversation(
+        results, transcript = self._run_verification_transcript(
             system_prompt=prompt,
             repo_path=command.repo_path,
             changed_files=command.changed_files,
+        )
+        self._publish_exchange(
+            command.repo_path, prompt, transcript
         )
 
         if results is None:
@@ -130,7 +146,21 @@ class FindingVerifier(VerifyFindingsUseCase):
         repo_path: Path,
         changed_files: list[str],
     ) -> list[dict[str, Any]] | None:
-        """Run a multi-turn verification conversation with tool access."""
+        """Run the verification conversation, returning only its results."""
+        results, _transcript = self._run_verification_transcript(
+            system_prompt=system_prompt,
+            repo_path=repo_path,
+            changed_files=changed_files,
+        )
+        return results
+
+    def _run_verification_transcript(
+        self,
+        system_prompt: str,
+        repo_path: Path,
+        changed_files: list[str],
+    ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
+        """Run the verification conversation, returning results and transcript."""
         tool_service = self._tool_factory(repo_path, changed_files)
 
         messages: list[ConversationMessage] = [
@@ -156,9 +186,9 @@ class FindingVerifier(VerifyFindingsUseCase):
 
         empty_consecutive = 0
         unparseable_consecutive = 0
-        for turn in range(_VERIFY_MAX_TURNS):
+        for turn in range(self._max_turns):
             logger.debug(
-                "Verify turn %d/%d", turn + 1, _VERIFY_MAX_TURNS
+                "Verify turn %d/%d", turn + 1, self._max_turns
             )
             content = self._chat_port.send(messages)
             if not content:
@@ -169,7 +199,7 @@ class FindingVerifier(VerifyFindingsUseCase):
                         "aborting",
                         empty_consecutive,
                     )
-                    return None
+                    return None, messages
                 logger.debug(
                     "Empty response at verify turn %d; reprompting",
                     turn + 1,
@@ -198,7 +228,7 @@ class FindingVerifier(VerifyFindingsUseCase):
                         "responses; aborting",
                         unparseable_consecutive,
                     )
-                    return None
+                    return None, messages
                 logger.debug(
                     "Unparseable response at verify turn %d; reprompting",
                     turn + 1,
@@ -223,7 +253,7 @@ class FindingVerifier(VerifyFindingsUseCase):
                 logger.debug(
                     "Got verification results at turn %d", turn + 1
                 )
-                return parsed
+                return parsed, messages
 
             action = parsed["action"]
             args = parsed.get("args", "")
@@ -247,7 +277,7 @@ class FindingVerifier(VerifyFindingsUseCase):
         logger.warning(
             "Verification exceeded max turns (%d)", _VERIFY_MAX_TURNS
         )
-        return None
+        return None, messages
 
     def _parse_verify_turn(
         self, content: str
@@ -366,3 +396,19 @@ class FindingVerifier(VerifyFindingsUseCase):
         window_start = max(0, match_line - 10)
         window_end = min(len(file_lines), match_line + 50)
         return "\n".join(file_lines[window_start:window_end])
+
+    def _publish_exchange(
+        self,
+        repo_path: Path,
+        system_prompt: str,
+        transcript: list[ConversationMessage],
+    ) -> None:
+        """Emit the finished verification exchange for the transcript log."""
+        if self._command_bus is None:
+            return
+        self._command_bus.dispatch(AgentExchangeEvent(
+            role="verifier",
+            phase_name="Verify Findings",
+            pr_identifier=PRIdentifier.derive(repo_path),
+            messages=transcript,
+        ))
