@@ -7,16 +7,24 @@ each one's responsibility, and grades every action against the task the
 
 ## Interaction
 
-- Always watching what other sub-agents are doing.
-- Reminds peers what their responsibility and task are.
-- Grades every finished action:
-  - `impressive` — S: the peer exceeded its focus.
-  - `okok` — B: the peer stayed on task.
-  - `whatever` — D: the peer drifted.
-  - `don't do this!` — F: the peer acted against its task.
-- On an F, blocks the output and restarts the phase with an **improved
-  version of the original prompt** that explains the task the peer was
-  supposed to do.
+- Watches every peer turn as it happens — not only the final output.
+- Grades each turn on focus, from highest to lowest:
+  - `impressive` — S: exceeded focus; outstanding turn.
+  - `amazing` — A: real, grounded progress worth acknowledging.
+  - `okok` — B: stayed on task.
+  - `acceptable` — C: met the minimum of the task, nothing more.
+  - `whatever` — D: drifted.
+  - `don't do this!` — F: acted against the task.
+- On D or F, interrupts immediately: the peer's next turn opens with
+  the advisor's feedback and a restatement of the assigned task, so a
+  drifting peer is corrected mid-conversation instead of after it.
+- On repeated F grades for the same phase (limit is injected
+  configuration), reports the blocker to the
+  [manager](manager.md), who re-plans the sub-agent's task and improves
+  its prompt before the phase restarts.
+- Grades output compliance as part of focus: a peer that answers with
+  malformed JSON, invented verdict values, or findings keyed outside
+  the agreed schema has acted against its task.
 
 ## Responsibility
 
@@ -25,25 +33,30 @@ focused on its assigned task.
 
 ## Behavior
 
-Watch sub-agent actions, grade them on focus, interrupt drift with
-feedback, and resend the original prompt when a sub-agent goes off-task.
+Watch peer turns as they happen, grade each on focus, and interrupt
+drift with immediate feedback. On an F, tell the peer "don't do this!",
+block the output, and report the blocker to the [manager](manager.md) —
+the manager re-plans the task so the restarted phase performs better.
 
 ## Description
 
 The advisor is a mix of a coach and a hall monitor. It does not review
 code itself: it watches what each peer sub-agent is doing, remembers
-each one's responsibility, and grades every action. On an F it tells the
-peer "don't do this!", blocks the output, and restarts the phase with an
-improved version of the original prompt that explains the task again.
+each one's responsibility, and grades every action. On an F it tells
+the peer "don't do this!", blocks the output, and hands the blocker to
+the manager, who re-plans the task so the restarted phase performs
+better.
 
 ## Grade scale reference
 
 | Grade | Phrase | Meaning |
 |---|---|---|
-| S | `impressive` | exceeded focus |
+| S | `impressive` | exceeded focus; outstanding turn |
+| A | `amazing` | real, grounded progress worth acknowledging |
 | B | `okok` | stayed on task |
+| C | `acceptable` | met the minimum of the task, nothing more |
 | D | `whatever` | drifted |
-| F | `don't do this!` | acted against the task — block and re-prompt |
+| F | `don't do this!` | acted against the task — block and hand to manager |
 
 ## Relation to other roles
 
