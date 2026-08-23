@@ -1,5 +1,8 @@
 import json
 
+import pytest
+
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
@@ -43,11 +46,10 @@ class TestReviewResponseParser:
         assert len(result.items) == 1
         assert result.items[0].file_path == "foo.py"
 
-    def test_parse_invalid_json_falls_back_to_markdown(self):
+    def test_parse_invalid_json_without_verdict_raises(self):
         raw = self._load("invalid_json.txt")
-        result = ReviewResponseParser().parse(raw, "m")
-        assert isinstance(result, CodeReview)
-        assert result.summary == "OOPS: model failed to produce JSON"
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser().parse(raw, "m")
 
     def test_parse_empty_response_returns_comment_verdict(self):
         raw = self._load("empty_response.json")
@@ -69,11 +71,11 @@ class TestReviewResponseParser:
         result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
-    def test_parse_json_without_issues_returns_commented(self):
+    def test_parse_json_without_issues_returns_approved(self):
         data = {"issues": [], "summary": "ok"}
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
-        assert result.verdict == ReviewVerdict.COMMENTED
+        assert result.verdict == ReviewVerdict.APPROVED
 
     def test_parse_json_keeps_item_with_file_and_description(self):
         data = {
@@ -195,15 +197,15 @@ class TestReviewResponseParser:
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.summary == "nested ok"
 
-    def test_parse_when_no_json_and_no_markdown_then_extracts_first_paragraph(self):
+    def test_parse_when_no_json_and_no_verdict_then_raises(self):
         raw = "This is a nice PR that improves code quality significantly. It adds tests and refactors modules."
-        result = ReviewResponseParser().parse(raw, "m")
-        assert "This is a nice PR" in result.summary
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser().parse(raw, "m")
 
-    def test_parse_when_no_json_and_no_markdown_and_short_text_then_uses_raw(self):
+    def test_parse_when_no_json_and_short_text_then_raises(self):
         raw = "ok"
-        result = ReviewResponseParser().parse(raw, "m")
-        assert result.summary == "ok"
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser().parse(raw, "m")
 
     def test_extract_outermost_json_when_no_braces_then_returns_none(self):
         assert ReviewResponseParser.extract_outermost_json("no braces here") is None
@@ -215,39 +217,41 @@ class TestReviewResponseParser:
         assert result.endswith("}")
 
     def test_resolve_verdict_when_explicit_changes_requested_then_returns_cr(self):
-        assert ReviewResponseParser._resolve_verdict("changes_requested", []) == ReviewVerdict.CHANGES_REQUESTED
+        assert ReviewResponseParser()._resolve_verdict("changes_requested", []) == ReviewVerdict.CHANGES_REQUESTED
 
     def test_resolve_verdict_when_explicit_approved_then_returns_approved(self):
-        assert ReviewResponseParser._resolve_verdict("approved", []) == ReviewVerdict.APPROVED
+        assert ReviewResponseParser()._resolve_verdict("approved", []) == ReviewVerdict.APPROVED
 
-    def test_resolve_verdict_when_explicit_commented_then_returns_commented(self):
-        assert ReviewResponseParser._resolve_verdict("commented", []) == ReviewVerdict.COMMENTED
+    def test_resolve_verdict_when_explicit_commented_then_raises(self):
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser()._resolve_verdict("commented", [])
 
     def test_extract_verdict_md_when_bold_verdict_changes_then_returns_cr(self):
         raw = "**Verdict:** **Request Changes**\\nSome text"
-        assert ReviewResponseParser._extract_verdict_md(raw) == ReviewVerdict.CHANGES_REQUESTED
+        assert ReviewResponseParser().extract_verdict_md(raw) == ReviewVerdict.CHANGES_REQUESTED
 
     def test_extract_verdict_md_when_bold_verdict_approved_then_returns_approved(self):
-        raw = "**Verdict:** **Approved**\\nSome text"
-        assert ReviewResponseParser._extract_verdict_md(raw) == ReviewVerdict.APPROVED
+        raw = "**Verdict:** **Approved**\nSome text"
+        assert ReviewResponseParser().extract_verdict_md(raw) == ReviewVerdict.APPROVED
 
-    def test_extract_verdict_md_when_bold_verdict_commented_then_returns_commented(self):
-        raw = "**Verdict:** **Commented**\\nSome text"
-        assert ReviewResponseParser._extract_verdict_md(raw) == ReviewVerdict.COMMENTED
+    def test_extract_verdict_md_when_bold_verdict_commented_then_raises(self):
+        raw = "**Verdict:** **Commented**\nSome text"
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser().extract_verdict_md(raw)
 
     def test_extract_verdict_md_when_plain_verdict_changes_then_returns_cr(self):
         raw = "Verdict: changes_requested\\nOther text"
-        assert ReviewResponseParser._extract_verdict_md(raw) == ReviewVerdict.CHANGES_REQUESTED
+        assert ReviewResponseParser().extract_verdict_md(raw) == ReviewVerdict.CHANGES_REQUESTED
 
     def test_extract_verdict_md_when_plain_verdict_approved_then_returns_approved(self):
         raw = "Verdict: approved\\nOther text"
-        assert ReviewResponseParser._extract_verdict_md(raw) == ReviewVerdict.APPROVED
+        assert ReviewResponseParser().extract_verdict_md(raw) == ReviewVerdict.APPROVED
 
     def test_extract_first_paragraph_when_starts_with_verdict_then_skips_and_returns_none(self):
-        assert ReviewResponseParser._extract_first_paragraph("Verdict: x\\n\\n## Summary\\n...") is None
+        assert ReviewResponseParser()._extract_first_paragraph("Verdict: x\\n\\n## Summary\\n...") is None
 
     def test_extract_first_paragraph_when_bold_verdict_then_skips_and_returns_none(self):
-        assert ReviewResponseParser._extract_first_paragraph("**Verdict:** x\\n\\n## Summary\\n...") is None
+        assert ReviewResponseParser()._extract_first_paragraph("**Verdict:** x\\n\\n## Summary\\n...") is None
 
     def test_parse_when_extracted_json_is_malformed_then_falls_back_to_markdown(self):
         raw = "Some text with { malformed: json } inside\n\n## Verdict\napproved\n\n## Summary\ngood\n\n## Items\nNone"
@@ -263,148 +267,148 @@ class TestReviewResponseParser:
 
     def test_infer_severity_critical_from_security_keywords(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "This has a security vulnerability with injection risk"
         )
         assert severity == ItemSeverity.CRITICAL
 
     def test_infer_severity_critical_from_leak_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Memory leak detected in the handler"
         )
         assert severity == ItemSeverity.CRITICAL
 
     def test_infer_severity_critical_from_hardcoded_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Hardcoded credentials in config"
         )
         assert severity == ItemSeverity.CRITICAL
 
     def test_infer_severity_high_from_crash_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Null pointer dereference causes crash"
         )
         assert severity == ItemSeverity.MAJOR
 
     def test_infer_severity_high_from_data_loss_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Potential data loss on unexpected shutdown"
         )
         assert severity == ItemSeverity.MAJOR
 
     def test_infer_severity_low_from_naming_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Naming convention should be snake_case"
         )
         assert severity == ItemSeverity.INFO
 
     def test_infer_severity_low_from_typo_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Typo in error message text"
         )
         assert severity == ItemSeverity.INFO
 
     def test_infer_severity_low_from_documentation_keyword(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, _ = ReviewResponseParser._infer_severity(
+        severity, _ = ReviewResponseParser()._infer_severity(
             "Update readme with new documentation"
         )
         assert severity == ItemSeverity.INFO
 
     def test_infer_severity_defaults_to_minor(self):
         from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-        severity, severity_str = ReviewResponseParser._infer_severity(
+        severity, severity_str = ReviewResponseParser()._infer_severity(
             "Some random description with no keywords"
         )
         assert severity == ItemSeverity.MINOR
         assert severity_str == "medium"
 
     def test_infer_type_security_from_security_keywords(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Security vulnerability via injection", "critical"
         )
         assert t == "security"
 
     def test_infer_type_security_from_hardcoded(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Hardcoded API key found", "high"
         )
         assert t == "security"
 
     def test_infer_type_architecture_from_layer_keywords(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Architecture violation: tight coupling between layers", "high"
         )
         assert t == "design"
 
     def test_infer_type_architecture_from_hexagonal(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Hexagonal port not properly implemented", "high"
         )
         assert t == "design"
 
     def test_infer_type_solid_from_srp(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Single responsibility principle violated", "major"
         )
         assert t == "design"
 
     def test_infer_type_solid_from_dependency_inversion(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Dependency inversion not followed", "major"
         )
         assert t == "design"
 
     def test_infer_type_test_from_coverage(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Missing test coverage for edge case", "minor"
         )
         assert t == "test"
 
     def test_infer_type_convention_from_formatting(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Formatting convention not followed", "low"
         )
         assert t == "maintainability"
 
     def test_infer_type_quality_from_magic_number(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Magic number used without constant", "minor"
         )
         assert t == "maintainability"
 
     def test_infer_type_quality_from_duplication(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Code duplication between modules", "minor"
         )
         assert t == "maintainability"
 
     def test_infer_type_default_critical_severity_returns_bug(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Some issue description", "critical"
         )
         assert t == "bug"
 
     def test_infer_type_default_high_severity_returns_bug(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Some issue description", "high"
         )
         assert t == "bug"
 
     def test_infer_type_default_low_severity_returns_quality(self):
-        t = ReviewResponseParser._infer_type(
+        t = ReviewResponseParser()._infer_type(
             "Some issue description", "low"
         )
         assert t == "quality"
 
     def test_extract_suggestions_md_no_section_returns_empty(self):
-        result = ReviewResponseParser._extract_suggestions_md(
+        result = ReviewResponseParser()._extract_suggestions_md(
             "## Verdict\napproved\n\n## Summary\nok\n\n## Items\nNone\n"
         )
         assert result == []
@@ -418,7 +422,7 @@ class TestReviewResponseParser:
             "1. a.py: 42 Use a context manager here\n"
             "2. utils.py:10 Extract to a helper function\n"
         )
-        result = ReviewResponseParser._extract_suggestions_md(raw)
+        result = ReviewResponseParser()._extract_suggestions_md(raw)
         assert len(result) == 2
         assert result[0]["file"] == "a.py:"
         assert result[0]["line"] == "42"
@@ -432,7 +436,7 @@ class TestReviewResponseParser:
             "## Suggestions\n"
             "1. Consider adding more comments throughout\n"
         )
-        result = ReviewResponseParser._extract_suggestions_md(raw)
+        result = ReviewResponseParser()._extract_suggestions_md(raw)
         assert len(result) == 1
         assert "adding more comments" in result[0]["description"]
 
@@ -445,7 +449,7 @@ class TestReviewResponseParser:
             "- Add integration tests\n"
             "* Improve error messages\n"
         )
-        result = ReviewResponseParser._extract_suggestions_md(raw)
+        result = ReviewResponseParser()._extract_suggestions_md(raw)
         assert len(result) == 2
         assert "integration tests" in result[0]["description"]
         assert "error messages" in result[1]["description"]
@@ -459,12 +463,12 @@ class TestReviewResponseParser:
             "no suggestions\n"
             "- Actually refactor this module\n"
         )
-        result = ReviewResponseParser._extract_suggestions_md(raw)
+        result = ReviewResponseParser()._extract_suggestions_md(raw)
         assert len(result) == 1
         assert "refactor" in result[0]["description"]
 
     def test_extract_praise_md_no_section_returns_empty(self):
-        result = ReviewResponseParser._extract_praise_md(
+        result = ReviewResponseParser()._extract_praise_md(
             "## Verdict\napproved\n\n## Summary\nok\n\n## Items\nNone\n"
         )
         assert result == []
@@ -478,7 +482,7 @@ class TestReviewResponseParser:
             "- src/auth.py: Good use of hashing\n"
             "* tests/test_auth.py: Comprehensive test coverage\n"
         )
-        result = ReviewResponseParser._extract_praise_md(raw)
+        result = ReviewResponseParser()._extract_praise_md(raw)
         assert len(result) == 2
         assert result[0]["file"] == "src/auth.py"
         assert "hashing" in result[0]["description"]
@@ -493,7 +497,7 @@ class TestReviewResponseParser:
             "## Praise\n"
             "- Overall clean architecture\n"
         )
-        result = ReviewResponseParser._extract_praise_md(raw)
+        result = ReviewResponseParser()._extract_praise_md(raw)
         assert len(result) == 1
         assert "clean architecture" in result[0]["description"]
 
@@ -506,7 +510,7 @@ class TestReviewResponseParser:
             "no notable praise\n"
             "- Good error handling\n"
         )
-        result = ReviewResponseParser._extract_praise_md(raw)
+        result = ReviewResponseParser()._extract_praise_md(raw)
         assert len(result) == 1
         assert "error handling" in result[0]["description"]
 
@@ -612,3 +616,33 @@ class TestReviewResponseParser:
     def _load(self, name):
         with open(f"{FIXTURES}/ollama_responses/{name}") as f:
             return f.read()
+
+
+class TestItemDictNormalization:
+    """LLM items using ``issue``/``severity`` keys must survive parsing."""
+
+    def test_issue_key_maps_to_description_and_suggested_fix(self) -> None:
+        normalized = ReviewResponseParser.normalize_item_dict({
+            "file": "src/a.py",
+            "issue": "Missing validation for phase dependencies.",
+            "severity": "High",
+        })
+        assert normalized["description"] == (
+            "Missing validation for phase dependencies."
+        )
+        assert normalized["severity"] == "major"
+        assert normalized["suggested_fix"] != ""
+        assert normalized["current_code"] == ""
+
+    def test_high_severity_maps_to_major(self) -> None:
+        normalized = ReviewResponseParser.normalize_item_dict({
+            "file": "a.py", "issue": "x", "severity": "High",
+        })
+        assert normalized["severity"] == "major"
+
+    def test_medium_severity_maps_to_minor(self) -> None:
+        normalized = ReviewResponseParser.normalize_item_dict({
+            "file": "a.py", "issue": "x", "severity": "medium",
+        })
+        assert normalized["severity"] == "minor"
+
