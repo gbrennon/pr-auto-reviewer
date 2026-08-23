@@ -128,15 +128,6 @@ class RetryPromptBuilder:
 
     def diagnose_failures(self, review: CodeReview) -> list[str]:
         failures: list[str] = []
-        if not review.verdict or review.verdict.value in ("commented",):
-            failures.append(
-                "verdict is missing or unclear (must be 'changes_requested' or 'approved')"
-            )
-        if not review.items and review.verdict and review.verdict.value == "approved" and not review.summary:
-            failures.append(
-                "no review items found but verdict is 'approved' — "
-                "if there are no issues, include a summary explaining why the PR is approved"
-            )
         for i, item in enumerate(review.items):
             if not item.description:
                 failures.append(f"item {i} is missing 'description'")
