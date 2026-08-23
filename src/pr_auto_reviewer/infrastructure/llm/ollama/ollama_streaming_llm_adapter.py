@@ -31,6 +31,11 @@ from .ollama_streaming_chat_impl import OllamaStreamingChatClient
 logger = logging.getLogger(__name__)
 
 
+from pr_auto_reviewer.infrastructure.llm.prompt_builder import (
+    PromptBuilder,
+)
+
+
 class OllamaStreamingLlmAdapter(LlmReviewPort):
     """Adapter implementing ``LlmReviewPort`` using ``OllamaStreamingChatClient``.
 
@@ -94,8 +99,6 @@ class OllamaStreamingLlmAdapter(LlmReviewPort):
         diff: PullRequestDiff,
         context: RepositoryContext,
     ) -> CodeReview:
-        from pr_auto_reviewer.infrastructure.llm.prompt_builder import PromptBuilder
-
         prompt_builder = PromptBuilder()
         prompt_str = prompt_builder.build(diff, context)
         # Fall back to the old single‑call path using the same parser

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import traceback
 
 import requests
 
@@ -167,8 +168,6 @@ class CliRunner:
                 self._notifier.notify_error(
                     f"LLM unavailable for PR #{command.pr_id.number}", e)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
         except ReviewPublishError as e:
@@ -181,8 +180,6 @@ class CliRunner:
             if self._notifier:
                 self._notifier.notify_error(f"Review failed for PR #{command.pr_id.number}", e)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
         finally:
@@ -239,8 +236,6 @@ class CliRunner:
                 self._notifier.notify_error(
                     f"LLM unavailable for PR #{args.pr}", e)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
         except (DomainError, requests.RequestException, RuntimeError, ValueError) as e:
@@ -248,8 +243,6 @@ class CliRunner:
             if self._notifier:
                 self._notifier.notify_error(f"Command processing failed for PR #{args.pr}", e)
             if args.verbose:
-                import traceback
-
                 traceback.print_exc()
             return 1
 

@@ -17,6 +17,7 @@ from ...application.ports.outbound.pull_request_repository import (
 )
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
+from ...domain.exceptions import RepositoryCorruptedError
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.comment_id import CommentId
 from ...domain.value_objects.commit_sha import CommitSha
@@ -127,7 +128,6 @@ class JsonFilePullRequestRepository(PullRequestRepository):
             with open(self._file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
-            from ...domain.exceptions import RepositoryCorruptedError
             raise RepositoryCorruptedError(
                 f"State file {self._file_path} is corrupted or unreadable"
             ) from exc

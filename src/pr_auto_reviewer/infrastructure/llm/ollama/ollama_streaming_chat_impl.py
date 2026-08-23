@@ -107,6 +107,8 @@ will guarantee validity; do not add any text before or after the JSON.
     return prompt
 
 
+
+
 class OllamaStreamingChatClient(OllamaStreamingChatABC):
     """Ollama streaming chat client using ``/api/chat`` with GBNF schema."""
 
@@ -275,7 +277,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         def _stream_lines() -> None:
             """Synchronous helper that populates ``accumulated``."""
             nonlocal verdict_seen
-            import httpx
 
             body: dict[str, Any] = {
                 "model": self._model,

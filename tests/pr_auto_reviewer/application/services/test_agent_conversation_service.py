@@ -3,21 +3,40 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
+from pr_auto_reviewer.application.services.turn_parser_service import (
+    TurnParserService,
+)
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
-from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
-from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
-from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
 from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
+from pr_auto_reviewer.domain.value_objects.advisor_directive import (
+    AdvisorDirective,
+)
+from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
+    SubAgentGrade,
+)
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
 
 EXPLORATION_DEMAND = "MUST use the exploration tools"
 
@@ -51,7 +70,6 @@ class _StubToolExecution:
     """Tool execution stub returning JSON-serializable results."""
 
     def execute_tool(self, tool_call):
-        from types import SimpleNamespace
         return SimpleNamespace(status="ok", data={"output": "stub"}, error=None)
 
 
@@ -503,13 +521,7 @@ class TestTurnObserverWiring:
     """The advisor observes turns and blocks repeat offenders."""
 
     def _observer(self, grades):
-        from pr_auto_reviewer.domain.value_objects.advisor_directive import (
-            AdvisorDirective,
-        )
-        from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
-            SubAgentGrade,
-        )
-
+                
         class _ScriptedObserver:
             def __init__(self, script):
                 self._script = list(script)
@@ -523,15 +535,6 @@ class TestTurnObserverWiring:
         return _ScriptedObserver(grades)
 
     def test_blocking_turn_injects_advisor_feedback(self) -> None:
-        from pr_auto_reviewer.application.services.turn_parser_service import (
-            TurnParserService,
-        )
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
-        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-            ReviewResponseParser,
-        )
         chat = MagicMock()
         chat.send.side_effect = [
             '{"action": "run_git", "args": "log --oneline -1"}',
@@ -562,18 +565,9 @@ class TestTurnObserverWiring:
 
     def test_repeated_blocks_abort_the_phase(self) -> None:
         import pytest as _pytest
-        from pr_auto_reviewer.application.services.turn_parser_service import (
-            TurnParserService,
-        )
-        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-            LlmUnavailableError,
-        )
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
-        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-            ReviewResponseParser,
-        )
+        
+                
+        
         chat = MagicMock()
         chat.send.side_effect = [
             '{"action": "run_git", "args": "log --oneline -1"}',

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from pr_auto_reviewer.application.ports.outbound.compose_review_prompt_port import (
     ComposeReviewPromptPort,
@@ -163,8 +164,6 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
 
             if fragment_explicit_match(fragment):
                 return True
-
-            import re
 
             words = re.findall(r"\b[a-z]{4,}\b", text)
             seen: set[str] = set()

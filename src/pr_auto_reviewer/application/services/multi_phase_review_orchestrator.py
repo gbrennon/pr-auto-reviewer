@@ -14,14 +14,14 @@ from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
 from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import (
     BriefNextPhaseUseCase,
 )
-from pr_auto_reviewer.application.services.pr_identifier import (
-    PRIdentifier,
-)
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
     RunMultiPhaseReviewUseCase,
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
+)
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (

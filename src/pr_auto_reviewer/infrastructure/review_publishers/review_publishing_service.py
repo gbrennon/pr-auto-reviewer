@@ -22,6 +22,11 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 logger = logging.getLogger(__name__)
 
 
+from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
+    PreflightVerificationError,
+)
+
+
 class ReviewPublishingService:
     """Handles low-level API operations for publishing reviews to git platforms.
 
@@ -84,9 +89,6 @@ class ReviewPublishingService:
         """Run preflight verification for both reviewer and owner tokens
         before publishing.  Wraps ``PreflightVerificationError`` as
         ``ReviewPublishError`` so the caller gets a uniform error type."""
-        from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
-            PreflightVerificationError,
-        )
         try:
             self._client.verify_token_for_pr(pr_id)
         except PreflightVerificationError as exc:

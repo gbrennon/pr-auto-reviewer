@@ -3,25 +3,44 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import pytest as _pytest
 
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
+from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
+from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+    RunAgentConversationCommand,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
 
 
 def _plan():
     """Build a ReviewPlan."""
-    from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
     phases: list[ReviewPhase] = []
     phase_configs = [
         ("advisor", "Advisor Review"),
@@ -103,7 +122,6 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
             max_retries=2,
         )
-        from types import SimpleNamespace
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
         orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
@@ -129,23 +147,15 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
             max_retries=1,
         )
-        from types import SimpleNamespace
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
 
         def failing_run_phases(*args, **kwargs):
-            from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-                LlmUnavailableError,
-            )
             raise LlmUnavailableError("Phase exceeded max turns (attempt 1)")
 
         orchestrator._run_phases = failing_run_phases
         # After max retries with no findings, refusing a default outcome is
         # mandatory: no silent COMMENTED fallback may be published.
-        import pytest as _pytest
 
-        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
-            ReviewVerdictError,
-        )
         with _pytest.raises(ReviewVerdictError):
             orchestrator.execute(
                 type("Cmd", (), {"existing_item_ids": frozenset(),
@@ -276,10 +286,6 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Escalation reaches ALL phases in a feedback round, so logs differ."""
-        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-            RunAgentConversationCommand,
-        )
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -325,11 +331,6 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Phase role and plan manager brief are composed into phase prompts."""
-        from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
-        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-            RunAgentConversationCommand,
-        )
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -501,7 +502,6 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """The architect phase's llm_suggestions feed the final review's suggestions."""
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -553,7 +553,6 @@ class TestMultiPhaseReviewOrchestrator:
         Nothing was flagged, so a blocking CHANGES_REQUESTED is incoherent;
         the empty review resolves to APPROVED instead.
         """
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -592,24 +591,6 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     @staticmethod
     def _build_review_orchestrator():
-        from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
-            MultiPhaseReviewOrchestrator,
-        )
-        from pr_auto_reviewer.application.services.turn_parser_service import (
-            TurnParserService,
-        )
-        from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
-            ParseReviewTurnCommand,
-        )
-        from pr_auto_reviewer.domain.value_objects.turn_parse_result import (
-            TurnParseResult,
-        )
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
-        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-            ReviewResponseParser,
-        )
 
         bus = InMemoryCommandBus()
         parser = ReviewResponseParser()
@@ -623,12 +604,6 @@ class TestOrchestratorCommentedIsFailureMarker:
         ), bus
 
     def test_legit_llm_verdict_survives_no_items_path(self) -> None:
-        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-            RunAgentConversationCommand,
-        )
-        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
         orchestrator, bus = self._build_review_orchestrator()
 
@@ -661,15 +636,6 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert review.suggestions != []
 
     def test_commented_verdict_raises_instead_of_defaulting(self) -> None:
-        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
-            ReviewVerdictError,
-        )
-        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-            RunAgentConversationCommand,
-        )
-        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
         orchestrator, bus = self._build_review_orchestrator()
 
@@ -692,12 +658,6 @@ class TestOrchestratorCommentedIsFailureMarker:
             )
 
     def test_rebuild_after_verification_explains_dropped_findings(self) -> None:
-        from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
-            MultiPhaseReviewOrchestrator,
-        )
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
 
         orchestrator = MultiPhaseReviewOrchestrator(
             command_bus=InMemoryCommandBus(), tool_factory=lambda *a: None
@@ -737,13 +697,6 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     def test_manager_briefs_first_phase_before_it_starts(self) -> None:
         """The opening phase runs on a manager-planned task, not a static prompt."""
-        from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-            RunAgentConversationCommand,
-        )
-        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-            InMemoryCommandBus,
-        )
 
         manager = MagicMock()
         manager.brief.return_value = "Focus exclusively on install scripts."
@@ -758,8 +711,6 @@ class TestOrchestratorCommentedIsFailureMarker:
         orchestrator = MultiPhaseReviewOrchestrator(
             command_bus=bus, tool_factory=lambda *a: None, manager=manager,
         )
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
         plan = ReviewPlan(
             methodology="review",
             phases=(ReviewPhase(

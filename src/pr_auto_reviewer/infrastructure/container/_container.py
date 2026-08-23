@@ -65,6 +65,9 @@ from pr_auto_reviewer.infrastructure.container._platform_clients import (
 from pr_auto_reviewer.infrastructure.conversation_logger import (
     MarkdownConversationLogger,
 )
+from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
+    LocalGitRepository,
+)
 from pr_auto_reviewer.infrastructure.persistence.null_pr_repository import (
     NullPullRequestRepository,
 )
@@ -174,6 +177,7 @@ class Container:
     def review_plan(self) -> ReviewPlan:
         return self._review_plan
 
+    
     def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
         clients = wire_platform_clients(self._config)
@@ -181,9 +185,6 @@ class Container:
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
-            LocalGitRepository,
-        )
         local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
         adapters = wire_platform_adapters(
             self._config, clients, is_terminal, local_repository=local_repository
