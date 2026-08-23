@@ -21,6 +21,9 @@ class TestFakeForgejoReviewPublisher:
         # Create a minimal CodeReview for testing
         review = CodeReview(
             verdict="approved",
+            reason="test reason",
+            summary="test summary",
+            model_used="test model",
         )
 
         result = fake.publish(review, official=True)

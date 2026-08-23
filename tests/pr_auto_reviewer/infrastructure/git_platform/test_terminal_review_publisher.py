@@ -24,6 +24,7 @@ class TestTerminalReviewPublisherAdapter:
             summary="ok",
             items=[],
             model_used="m",
+            reason="test reason",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -43,6 +44,7 @@ class TestTerminalReviewPublisherAdapter:
             summary="ok",
             items=[],
             model_used="m",
+            reason="test reason",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)

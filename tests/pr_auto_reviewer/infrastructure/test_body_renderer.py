@@ -40,6 +40,8 @@ class TestReviewBodyRenderer:
             verdict=ReviewVerdict.APPROVED,
             items=[item],
             model_used="code-review:latest",
+            reason="test reason",
+            summary="test summary",
         )
         output = renderer.render(review)
         assert "i1a01." in output, f"Item ID not found in output: {output}"
@@ -72,6 +74,8 @@ class TestReviewBodyRenderer:
             verdict=ReviewVerdict.APPROVED,
             suggestions=suggestions,
             model_used="code-review:latest",
+            reason="test reason",
+            summary="test summary",
         )
         output = renderer.render(review)
         assert "s1." in output, f"Suggestion s1 ID not found in output: {output}"
@@ -93,6 +97,8 @@ class TestReviewBodyRenderer:
             verdict=ReviewVerdict.APPROVED,
             praise=[praise],
             model_used="code-review:latest",
+            reason="test reason",
+            summary="test summary",
         )
         output = renderer.render(review)
         assert "- auth.py:" in output, f"Praise file not found in output: {output}"
@@ -110,6 +116,8 @@ class TestReviewBodyRenderer:
             verdict=ReviewVerdict.APPROVED,
             suggestions=[suggestion],
             model_used="code-review:latest",
+            reason="test reason",
+            summary="test summary",
         )
         output = renderer.render(review)
         # Should render without crashing; id will be empty string
