@@ -24,13 +24,13 @@ from pr_auto_reviewer.application.services.finding_verifier import (
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
-from pr_auto_reviewer.application.services.turn_parser import TurnParser
+from pr_auto_reviewer.application.services.phase_advisor import PhaseAdvisor
+from pr_auto_reviewer.application.services.phase_manager import PhaseManager
+from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
-from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
@@ -58,6 +58,8 @@ from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
 from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
     ReviewTurnParsedEvent,
 )
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -237,7 +239,7 @@ def wire_core_services(
     conversation_logger = MarkdownConversationLogger(
         base_dir=Path(config_dir) / "conversations"
     )
-    turn_parser = TurnParser(ReviewResponseParser())
+    turn_parser = TurnParserService(ReviewResponseParser())
     conversation_service = AgentConversationService(
         chat_port=chat_client,
         command_bus=command_bus,
@@ -260,6 +262,8 @@ def wire_core_services(
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
             repo_path, changed_files=changed_files
         ),
+        advisor=PhaseAdvisor(chat_port=chat_client),
+        manager=PhaseManager(chat_port=chat_client),
     )
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
