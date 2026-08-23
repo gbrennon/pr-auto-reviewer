@@ -27,6 +27,7 @@ class TestCodeReview:
             summary="Security issue found",
             items=items,
             model_used="llama3",
+            reason="test reason",
         )
         assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert review.summary == "Security issue found"
@@ -37,18 +38,20 @@ class TestCodeReview:
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             summary="LGTM",
+            reason="test reason",
+            model_used="test model",
         )
         assert review.items == []
-        assert review.model_used == ""
+        assert review.model_used == "test model"
 
     def test_equality_same(self) -> None:
-        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
-        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
+        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
+        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         assert a == b
 
     def test_equality_different_verdict(self) -> None:
-        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
-        b = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="OK")
+        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
+        b = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="OK", reason="test reason", model_used="test model")
         assert a != b
 
     def test_equality_different_items(self) -> None:
@@ -58,16 +61,16 @@ class TestCodeReview:
             file_path="x.py",
             description="desc",
         )
-        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[item])
-        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[])
+        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[item], reason="test reason", model_used="test model")
+        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
         assert a != b
 
     def test_immutability(self) -> None:
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         with pytest.raises(FrozenInstanceError):
             review.summary = "changed"
 
     def test_hash_consistency(self) -> None:
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         with pytest.raises(TypeError, match="unhashable"):
             hash(review)

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import pytest
-from pathlib import Path
 import os
 import shutil
+from pathlib import Path
 from unittest.mock import patch
 
-from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
 
 
 class TestReviewItemFactory:
@@ -40,12 +42,12 @@ class TestReviewItemFactory:
 
     def test_generate_id_format(self) -> None:
         """Test generated ID format."""
-        result = ReviewItemFactory._generate_id()
+        result = ReviewItemFactory.generate_id()
         assert len(result) == 6
         int(result, 16)
 
         # Method no longer accepts repo/pr params - always returns short format
-        result_without_params = ReviewItemFactory._generate_id()
+        result_without_params = ReviewItemFactory.generate_id()
         assert len(result_without_params) == 6
         int(result_without_params, 16)
 
@@ -55,11 +57,11 @@ class TestReviewItemFactory:
             f.write("x = 1\n")
 
         try:
-            result_path, result_str = ReviewItemFactory._resolve_file_path(
+            result_path, _result_str = ReviewItemFactory._resolve_file_path(
                 "test_resolve.py", Path("/tmp"), ["test_resolve.py"]
             )
             assert result_path is not None
-            assert result_str == "test_resolve.py"
+            assert _result_str == "test_resolve.py"
         finally:
             Path("/tmp/test_resolve.py").unlink(missing_ok=True)
 
@@ -73,10 +75,10 @@ class TestReviewItemFactory:
             f.write("z = 3\n")
 
         try:
-            result_path, result_str = ReviewItemFactory._resolve_file_path(
+            _result_path, _result_str = ReviewItemFactory._resolve_file_path(
                 "module.py", Path("/tmp"), ["module.py"]
             )
-            assert result_str == "module.py"
+            assert _result_str == "module.py"
         finally:
             Path("/tmp/pkg/module.py").unlink(missing_ok=True)
             Path("/tmp/main.py").unlink(missing_ok=True)
@@ -84,7 +86,7 @@ class TestReviewItemFactory:
 
     def test_unresolvable_path(self) -> None:
         """Test that unresolvable paths return None."""
-        result_path, result_str = ReviewItemFactory._resolve_file_path(
+        result_path, _result_str = ReviewItemFactory._resolve_file_path(
             "nonexistent.py", Path("/tmp"), ["other.py"]
         )
         assert result_path is None
@@ -124,7 +126,7 @@ class TestReviewItemFactory:
         item_dicts = ["not a dict", 123, None]
 
         with patch("pr_auto_reviewer.domain.services.review_item_factory.logger.warning") as mock_warn:
-            items, skip_reasons = ReviewItemFactory.create(
+            items, _skip_reasons = ReviewItemFactory.create(
                 item_dicts, "/tmp", None
             )
             assert len(items) == 0
@@ -208,38 +210,36 @@ class TestReviewItemFactory:
 
     def test_create_generates_ids(self) -> None:
         """Test that each item gets a unique ID."""
-        with patch.object(ReviewItemFactory, "_generate_id", side_effect=[__import__("uuid").uuid7(), __import__("uuid").uuid7()]):
-            item_dicts = [
-                {
-                    "file": "src/main.py",
-                    "description": "Finding 1",
-                    "severity": "minor",
-                    "category": "bug",
-                },
-                {
-                    "file": "src/main.py",
-                    "description": "Finding 2",
-                    "severity": "major",
-                    "category": "quality",
-                },
-            ]
+        item_dicts = [
+            {
+                "file": "src/main.py",
+                "description": "Finding 1",
+                "severity": "minor",
+                "category": "bug",
+            },
+            {
+                "file": "src/main.py",
+                "description": "Finding 2",
+                "severity": "major",
+                "category": "quality",
+            },
+        ]
 
-            repo_path = "/tmp/test_repo5"
-            repo = Path(repo_path)
-            repo.mkdir(parents=True, exist_ok=True)
-            (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
-            (repo / "src/main.py").write_text("x = 1\n")
+        repo_path = "/tmp/test_repo5"
+        repo = Path(repo_path)
+        repo.mkdir(parents=True, exist_ok=True)
+        (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
+        (repo / "src/main.py").write_text("x = 1\n")
 
-            try:
-                items, skip_reasons = ReviewItemFactory.create(
-                    item_dicts, repo_path, ["src/main.py"]
-                )
-                assert len(items) == 2
-                item_ids = [item.id for item in items]
-                assert len(set(item_ids)) == 2, f"Expected 2 unique IDs, got {item_ids}"
-            finally:
-                import shutil
-                shutil.rmtree(repo_path, ignore_errors=True)
+        try:
+            items, _skip_reasons = ReviewItemFactory.create(
+                item_dicts, repo_path, ["src/main.py"]
+            )
+            assert len(items) == 2
+            item_ids = [item.id for item in items]
+            assert len(set(item_ids)) == 2, f"Expected 2 unique IDs, got {item_ids}"
+        finally:
+            shutil.rmtree(repo_path, ignore_errors=True)
 
     def test_create_preserves_fields(self) -> None:
         """Test that file_path, description, severity, category are preserved."""
@@ -261,7 +261,7 @@ class TestReviewItemFactory:
         (repo / "src/client.py").write_text("logger.info('test')\n")
 
         try:
-            items, skip_reasons = ReviewItemFactory.create(
+            items, _skip_reasons = ReviewItemFactory.create(
                 item_dicts, repo_path, ["src/client.py"]
             )
             assert len(items) == 1
@@ -296,6 +296,9 @@ class TestEnsureUniqueIds:
             items=[self._item("a1"), self._item("a1"), self._item("")],
             suggestions=[self._item("a1"), self._item("b2")],
             praise=[self._item("")],
+            reason="test reason",
+            summary="test summary",
+            model_used="test model",
         )
 
         result = ReviewItemFactory.ensure_unique_ids(review)
@@ -309,8 +312,43 @@ class TestEnsureUniqueIds:
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
             items=[self._item("b2")],
+            reason="test reason",
+            summary="test summary",
+            model_used="test model",
         )
 
         result = ReviewItemFactory.ensure_unique_ids(review)
 
         assert result.items[0].id == "b2"
+
+
+class TestFactoryKeepsUnverifiedItems:
+    """Factory must not drop items solely for missing code snippets."""
+
+    def test_item_without_code_survives_with_evidence(self, tmp_path) -> None:
+        repo = tmp_path / "repo"
+        target = repo / "src" / "multi_phase_review_orchestrator.py"
+        target.parent.mkdir(parents=True)
+        target.write_text(
+            "def run_phases(self, plan):\n"
+            "    for phase in plan.phases:\n"
+            "        process(phase)\n"
+        )
+        factory = ReviewItemFactory()
+        normalized = ReviewResponseParser.normalize_item_dict({
+            "file": "src/multi_phase_review_orchestrator.py",
+            "issue": "Missing validation for phase dependencies.",
+            "severity": "high",
+        })
+        items, _skips = factory.create(
+            [normalized],
+            repo,
+            ["src/multi_phase_review_orchestrator.py"],
+        )
+        assert len(items) == 1
+        assert items[0].description == (
+            "Missing validation for phase dependencies."
+        )
+        assert items[0].suggested_fix != ""
+        assert items[0].current_code != ""
+
