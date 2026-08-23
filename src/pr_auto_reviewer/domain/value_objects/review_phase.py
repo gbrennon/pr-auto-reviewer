@@ -26,4 +26,7 @@ class ReviewPhase:
         """Return a single-line role instruction, or empty when no role is set."""
         if self.role is None:
             return ""
-        return f"Your role: {self.role.describe()}"
+        role_text = f"Your role: {self.role.describe()}"
+        if self.role.interaction:
+            role_text += f"\nInteraction contract: {self.role.interaction}"
+        return role_text
