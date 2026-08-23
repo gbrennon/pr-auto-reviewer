@@ -18,17 +18,6 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.domain.value_objects.conversation_decision import (
-    ConversationDecision,
-)
-from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
-    ConversationGuardrails,
-)
-from pr_auto_reviewer.domain.value_objects.conversation_message import (
-    ConversationMessage,
-)
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
@@ -47,6 +36,17 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 from pr_auto_reviewer.domain.services.review_item_factory import (
     ReviewItemFactory,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_decision import (
+    ConversationDecision,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
+    ConversationGuardrails,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +291,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 messages.append(ConversationMessage(
                     role="user",
                     content=result_json,
+                    tool_result=result,
                 ))
                 if guardrails.should_force_verdict() and not verdict_nudged:
                     verdict_nudged = True
@@ -407,6 +408,10 @@ class AgentConversationService(RunAgentConversationUseCase):
         if self._conversation_logger is None:
             return
         pr_identifier = self._derive_pr_identifier(repo_path)
+        skipped = (
+            len(getattr(phase_result, "skip_reasons", []))
+            if phase_result else 0
+        )
         metadata: dict[str, Any] = {
             "model": "code-review:latest",
             "turns": turns,
@@ -414,8 +419,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                 phase_result.llm_verdict if phase_result else "exhausted"
             ),
             "item_count": (
-                len(phase_result.items) if phase_result else 0
+                len(getattr(phase_result, "items", []) or []) + skipped
+                if phase_result else 0
             ),
+            "skipped": skipped,
         }
         try:
             self._conversation_logger.log_conversation(
