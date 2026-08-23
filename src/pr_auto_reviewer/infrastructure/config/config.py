@@ -94,7 +94,13 @@ class ConfigLoader:
             values = {}
         self._merge_command_line_env(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
-        return self._builder.build(values, env_name="production", llm_max_retries=llm_max_retries)
+        llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
+        return self._builder.build(
+            values,
+            env_name="production",
+            llm_max_retries=llm_max_retries,
+            llm_max_turns=llm_max_turns,
+        )
 
     def _load_development(
         self, user_config_path: str, repo_env_path: Path, env: str
@@ -115,7 +121,13 @@ class ConfigLoader:
         self._merge_command_line_env(values)
 
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
-        return self._builder.build(values, env_name=env, llm_max_retries=llm_max_retries)
+        llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
+        return self._builder.build(
+            values,
+            env_name=env,
+            llm_max_retries=llm_max_retries,
+            llm_max_turns=llm_max_turns,
+        )
 
 
 def load_config() -> Config:

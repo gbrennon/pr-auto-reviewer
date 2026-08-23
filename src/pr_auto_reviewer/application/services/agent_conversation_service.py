@@ -66,7 +66,8 @@ class AgentConversationService(RunAgentConversationUseCase):
         chat_port: AgentChatPort,
         command_bus: CommandBusPort,
         conversation_logger: Any = None,
-        max_turns: int = 10,
+        *,
+        max_turns: int,
         max_empty_responses: int = 3,
         max_unparseable_responses: int = 3,
     ) -> None:

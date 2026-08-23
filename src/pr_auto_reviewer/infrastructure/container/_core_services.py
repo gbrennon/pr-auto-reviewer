@@ -244,6 +244,7 @@ def wire_core_services(
         chat_port=chat_client,
         command_bus=command_bus,
         conversation_logger=conversation_logger,
+        max_turns=config.llm_max_turns,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
     verify_prompt = ReviewResponseParser.strip_frontmatter(

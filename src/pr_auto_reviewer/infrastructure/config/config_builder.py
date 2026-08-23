@@ -85,7 +85,13 @@ class ConfigBuilder:
 
         return OrgTokenOverrides(github=github, forgejo=forgejo)
 
-    def build(self, source: dict[str, str], env_name: str, llm_max_retries: int = 5) -> Config:
+    def build(
+        self,
+        source: dict[str, str],
+        env_name: str,
+        llm_max_retries: int = 5,
+        llm_max_turns: int = 10,
+    ) -> Config:
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
             or self._get(source, "FORGEJO_MODE")
@@ -167,6 +173,7 @@ class ConfigBuilder:
             llm_model=llm_model,
             ollama_timeout=ollama_timeout,
             llm_max_retries=llm_max_retries,
+            llm_max_turns=llm_max_turns,
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,

@@ -34,6 +34,7 @@ class Config:
     llm_model: str | None = None
     ollama_timeout: int = 120
     llm_max_retries: int = 5
+    llm_max_turns: int = 10
     poll_interval: int = 60
     run_once: bool = False
     repos_filter: str = ""

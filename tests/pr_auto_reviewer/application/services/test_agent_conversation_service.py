@@ -63,7 +63,8 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(MagicMock()))
 
@@ -93,7 +94,8 @@ class TestConversationLoopGuardrails:
         )
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
@@ -113,7 +115,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(
             Path("/repos/owner_repo_42")
@@ -124,7 +127,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(None)
         assert result == "unknown"
@@ -133,7 +137,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(Path("/some/other/path"))
         assert result == "path"
@@ -142,7 +147,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "src/client.py is the file", ["src/client.py"]
@@ -153,7 +159,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "client python file", ["src/client.py"]
@@ -164,7 +171,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "other file", ["src/client.py"]
@@ -175,7 +183,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "", ["src/client.py"]
@@ -186,7 +195,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "something", []
@@ -199,6 +209,7 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=None,
+            max_turns=10,
         )
         phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
         messages = [
@@ -216,6 +227,7 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=None,
+            max_turns=10,
         )
         phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
         messages = [
@@ -234,7 +246,8 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(MagicMock()))
 
@@ -248,7 +261,8 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(MagicMock()))
 
@@ -274,7 +288,8 @@ class TestConversationLoopGuardrails:
         ]
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
@@ -311,7 +326,8 @@ class TestConversationLoopGuardrails:
             metadata={"verdict": "approved", "reason": "LGTM"},
         )
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         # Mock ReviewItemFactory.create
         original_create = ReviewItemFactory.create
@@ -338,7 +354,8 @@ class TestConversationLoopGuardrails:
             },
         )
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         original_create = ReviewItemFactory.create
         ReviewItemFactory.create = lambda *a, **kw: ([], [])
@@ -356,7 +373,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         service._publish("test_event")
         mock_command_bus.dispatch.assert_called_once()
@@ -367,6 +385,7 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=MagicMock(),
+            max_turns=10,
         )
         phase_result = type("PhaseResult", (), {
             "llm_verdict": "approved",
@@ -410,7 +429,8 @@ class TestConversationLoopGuardrails:
         ]
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
