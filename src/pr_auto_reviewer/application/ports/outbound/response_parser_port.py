@@ -24,6 +24,6 @@ class ResponseParserPort(Protocol):
         ...
 
     @classmethod
-    def _extract_verdict_md(cls, raw_text: str) -> Any:
+    def extract_verdict_md(cls, raw_text: str) -> Any:
         """Extract the verdict from markdown-formatted LLM output."""
         ...
