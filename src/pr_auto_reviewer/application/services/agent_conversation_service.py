@@ -73,10 +73,14 @@ class AgentConversationService(RunAgentConversationUseCase):
         max_turns: int,
         max_empty_responses: int = 3,
         max_unparseable_responses: int = 3,
+        turn_observer: Any = None,
+        max_advisor_blocks: int = 2,
     ) -> None:
         self._chat_port = chat_port
         self._command_bus = command_bus
         self._conversation_logger = conversation_logger
+        self._turn_observer = turn_observer
+        self._max_advisor_blocks = max_advisor_blocks
         self._guardrails = ConversationGuardrails(
             max_turns=max_turns,
             max_empty_responses=max_empty_responses,
@@ -177,6 +181,7 @@ class AgentConversationService(RunAgentConversationUseCase):
 
         guardrails = replace(self._guardrails)
         seen_tool_calls: set[tuple[str, str]] = set()
+        self._consecutive_blocks = 0
         verdict_nudged = False
         while guardrails.has_turns_remaining():
             logger.debug(
@@ -214,6 +219,42 @@ class AgentConversationService(RunAgentConversationUseCase):
             self._publish(ReviewTurnParsedEvent(
                 turn_number=guardrails.turn, result=parsed
             ))
+            if self._turn_observer is not None:
+                directive = self._turn_observer.observe(
+                    content, phase_name,
+                    pr_identifier=self._derive_pr_identifier(repo_path),
+                )
+                if directive.blocks_output:
+                    self._consecutive_blocks += 1
+                    messages.append(ConversationMessage(
+                        role="user",
+                        content=(
+                            "ADVISOR — don't do this! "
+                            f"{directive.feedback} "
+                            "Stay strictly on your assigned task."
+                        ),
+                    ))
+                    if self._consecutive_blocks >= self._max_advisor_blocks:
+                        self._log_conversation(
+                            phase_name, messages, guardrails.turn, None,
+                            repo_path=repo_path,
+                        )
+                        raise LlmUnavailableError(
+                            f"Advisor blocked phase {phase_name} after "
+                            f"{self._consecutive_blocks} blocking grades"
+                        )
+                else:
+                    self._consecutive_blocks = 0
+                    if directive.feedback and str(directive.grade) in (
+                        "whatever",
+                    ):
+                        messages.append(ConversationMessage(
+                            role="user",
+                            content=(
+                                f"ADVISOR — {directive.feedback} "
+                                "Refocus on your assigned task."
+                            ),
+                        ))
 
             if parsed.kind == "unparseable":
                 decision, guardrails = guardrails.record_unparseable_response()

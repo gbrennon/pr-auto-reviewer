@@ -14,6 +14,9 @@ from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
 from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import (
     BriefNextPhaseUseCase,
 )
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
+)
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
     RunMultiPhaseReviewUseCase,
 )
@@ -134,7 +137,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 best_attempt_items = result.items
                 break
             except LlmUnavailableError as exc:
-                if not self._is_max_turns_exceeded(exc):
+                if not self._is_max_turns_exceeded(exc) and not (
+                    "Advisor blocked" in str(exc)
+                ):
                     raise
                 last_failure = exc
 
@@ -643,16 +648,28 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         )
         if not directive.blocks_output:
             return phase_result
+        improved_task = ""
+        if self._manager is not None:
+            improved_task = self._manager.brief(
+                phase,
+                directive.feedback or "phase drifted off its task",
+                pr_identifier=pr_identifier,
+            )
         corrected_prompt = (
             phase_prompt
             + "\n\n"
             + "ADVISOR CORRECTION — this phase drifted off the task it "
             + "was assigned. Restart with the task explained again:\n"
-            + directive.improved_prompt
+            + (directive.improved_prompt or directive.feedback)
         )
+        if improved_task:
+            corrected_prompt += (
+                "\n\nMANAGER RE-PLAN — the manager improved your task "
+                "for this restart:\n" + improved_task
+            )
         logger.warning(
             "Advisor blocked phase %s (F); discarding output and "
-            "restarting with improved prompt",
+            "restarting with the manager's improved prompt",
             phase.phase_name,
         )
         return self._run_phase_with_retry(
@@ -668,15 +685,11 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
     def _extract_repo_and_pr(self, repo_path: Path) -> tuple[str, str]:
         """Extract (repo_name, pr_id) from repo_path."""
-        if repo_path is None:
-            return "", ""
-        path_str = str(repo_path)
-        import re
-        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", path_str)
-        if match:
-            return f"{match.group(1)}/{match.group(2)}", match.group(3)
-        # Fallback: use last path component
-        return path_str.rsplit("/", 1)[-1], ""
+        identifier = PRIdentifier.derive(repo_path)
+        if "#" not in identifier:
+            return identifier, ""
+        repo_name, pr_number = identifier.rsplit("#", 1)
+        return repo_name, pr_number
 
     def _publish(self, event: Any) -> None:
         """Publish an event to the bus."""

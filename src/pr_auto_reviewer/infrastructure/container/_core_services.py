@@ -243,11 +243,14 @@ def wire_core_services(
         base_dir=Path(config_dir) / "conversations"
     )
     turn_parser = TurnParserService(ReviewResponseParser())
+    advisor = PhaseAdvisor(chat_port=chat_client, command_bus=command_bus)
     conversation_service = AgentConversationService(
         chat_port=chat_client,
         command_bus=command_bus,
         conversation_logger=conversation_logger,
         max_turns=config.llm_max_turns,
+        turn_observer=advisor,
+        max_advisor_blocks=config.advisor_max_blocks,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
     verify_prompt = ReviewResponseParser.strip_frontmatter(
@@ -268,7 +271,7 @@ def wire_core_services(
         tool_factory=lambda repo_path, changed_files: ExplorationToolService(
             repo_path, changed_files=changed_files
         ),
-        advisor=PhaseAdvisor(chat_port=chat_client, command_bus=command_bus),
+        advisor=advisor,
         manager=PhaseManager(chat_port=chat_client, command_bus=command_bus),
     )
     command_bus.register(

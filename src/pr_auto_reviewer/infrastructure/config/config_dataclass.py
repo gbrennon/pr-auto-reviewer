@@ -35,6 +35,7 @@ class Config:
     ollama_timeout: int = 120
     llm_max_retries: int = 5
     llm_max_turns: int = 10
+    advisor_max_blocks: int = 2
     poll_interval: int = 60
     run_once: bool = False
     repos_filter: str = ""

@@ -91,6 +91,7 @@ class ConfigBuilder:
         env_name: str,
         llm_max_retries: int = 5,
         llm_max_turns: int = 10,
+        advisor_max_blocks: int = 2,
     ) -> Config:
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
@@ -174,6 +175,7 @@ class ConfigBuilder:
             ollama_timeout=ollama_timeout,
             llm_max_retries=llm_max_retries,
             llm_max_turns=llm_max_turns,
+            advisor_max_blocks=advisor_max_blocks,
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,

@@ -8,16 +8,20 @@ from enum import StrEnum
 class SubAgentGrade(StrEnum):
     """The advisor's school-letter grade for a finished peer phase.
 
-    Mirrors the documented advisor scale:
-    - ``IMPRESSIVE`` — S: the peer exceeded its focus.
-    - ``OKOK`` — B: the peer stayed on task.
-    - ``WHATEVER`` — D: the peer drifted.
-    - ``DONT_DO_THIS`` — F: the peer acted against its task; the phase
-      output is blocked and re-run with an improved prompt.
+    Mirrors the documented advisor scale, highest to lowest:
+    - ``IMPRESSIVE`` — S: exceeded focus; outstanding turn.
+    - ``AMAZING`` — A: real, grounded progress worth acknowledging.
+    - ``OKOK`` — B: stayed on task.
+    - ``ACCEPTABLE`` — C: met the minimum of the task, nothing more.
+    - ``WHATEVER`` — D: drifted.
+    - ``DONT_DO_THIS`` — F: acted against its task; the output is
+      blocked and handed back through the manager.
     """
 
     IMPRESSIVE = "impressive"
+    AMAZING = "amazing"
     OKOK = "okok"
+    ACCEPTABLE = "acceptable"
     WHATEVER = "whatever"
     DONT_DO_THIS = "don't do this!"
 

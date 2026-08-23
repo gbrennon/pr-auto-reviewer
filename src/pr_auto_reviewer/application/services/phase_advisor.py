@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 
 
 class PhaseAdvisor(AssessPhaseUseCase):
-    """Grade a finished phase the way the advisor role is documented.
+    """Grade a finished phase and each live turn the way the advisor role documents.
 
     The advisor does not review code itself: it watches what the peer
-    sub-agent produced during *phase*, grades it against the task the
+    sub-agent produces during *phase*, grades it against the task the
     manager assigned (S: impressive, A: amazing, B: okok, C: acceptable,
     D: whatever, F: don't do this!), and on an F reports the blocker to
     the manager, who re-plans the task before the phase restarts. A
@@ -77,7 +77,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        self._publish_exchange(phase, pr_identifier, messages, raw)
+        self._publish_exchange(phase.phase_name, pr_identifier, messages, raw)
         directive = self._parse_directive(raw)
         if peer is not None and directive.blocks_output:
             logger.info(
@@ -87,9 +87,55 @@ class PhaseAdvisor(AssessPhaseUseCase):
             )
         return directive
 
+    def observe(
+        self,
+        peer_content: str,
+        phase_name: str,
+        pr_identifier: str = "",
+    ) -> AdvisorDirective:
+        """Grade one raw peer turn while its conversation is still running."""
+        messages = self._build_turn_messages(peer_content, phase_name)
+        try:
+            raw = self._chat_port.send(messages)
+        except Exception:
+            logger.warning(
+                "Advisor turn observation failed for %s; continuing",
+                phase_name,
+                exc_info=True,
+            )
+            return AdvisorDirective(grade=SubAgentGrade.OKOK)
+        self._publish_exchange(phase_name, pr_identifier, messages, raw)
+        return self._parse_directive(raw)
+
+    def _build_turn_messages(
+        self, peer_content: str, phase_name: str,
+    ) -> list[ConversationMessage]:
+        """Compose the per-turn focus-grading prompt."""
+        advisor = AdvisorAgent()
+        grade_line = (
+            "You are watching ONE turn of an in-progress review phase. "
+            "Grade the peer focus only. Respond with JSON: "
+            '{"grade": "impressive|amazing|okok|acceptable|whatever|'
+            "don't do this!\""
+            ', "feedback": "short note to the peer"}.'
+        )
+        system = (
+            f"{advisor.description}\n\n"
+            f"{advisor.interaction}\n\n"
+            f"{grade_line}"
+        )
+        user = (
+            f"Phase under observation: {phase_name}\n\n"
+            f"Peer turn:\n{peer_content[:4000]}"
+        )
+        return [
+            ConversationMessage(role="system", content=system),
+            ConversationMessage(role="user", content=user),
+        ]
+
     def _publish_exchange(
         self,
-        phase: ReviewPhase,
+        phase_name: str,
         pr_identifier: str,
         messages: list[ConversationMessage],
         raw_reply: str,
@@ -103,7 +149,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
         ]
         self._command_bus.dispatch(AgentExchangeEvent(
             role="advisor",
-            phase_name=phase.phase_name,
+            phase_name=phase_name,
             pr_identifier=pr_identifier,
             messages=transcript,
         ))

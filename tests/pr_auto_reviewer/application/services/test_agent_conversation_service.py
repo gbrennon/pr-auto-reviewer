@@ -8,6 +8,9 @@ from unittest.mock import MagicMock
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
 from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
@@ -42,6 +45,16 @@ def _tool_parse() -> TurnParseResult:
     )
 
 
+
+
+class _StubToolExecution:
+    """Tool execution stub returning JSON-serializable results."""
+
+    def execute_tool(self, tool_call):
+        from types import SimpleNamespace
+        return SimpleNamespace(status="ok", data={"output": "stub"}, error=None)
+
+
 def _command(tool_execution: MagicMock) -> RunAgentConversationCommand:
     """Build a single-phase conversation command."""
     return RunAgentConversationCommand(
@@ -66,7 +79,7 @@ class TestConversationLoopGuardrails:
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 2
@@ -249,7 +262,7 @@ class TestConversationLoopGuardrails:
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 3
@@ -264,7 +277,7 @@ class TestConversationLoopGuardrails:
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 2
@@ -484,3 +497,100 @@ class TestConversationLoopGuardrails:
             for message in final_messages
         )
         assert nudge_count == 1
+
+
+class TestTurnObserverWiring:
+    """The advisor observes turns and blocks repeat offenders."""
+
+    def _observer(self, grades):
+        from pr_auto_reviewer.domain.value_objects.advisor_directive import (
+            AdvisorDirective,
+        )
+        from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
+            SubAgentGrade,
+        )
+
+        class _ScriptedObserver:
+            def __init__(self, script):
+                self._script = list(script)
+
+            def observe(self, peer_content, phase_name, pr_identifier=""):
+                return AdvisorDirective(
+                    grade=SubAgentGrade.from_phrase(self._script.pop(0)),
+                    feedback="off task",
+                )
+
+        return _ScriptedObserver(grades)
+
+    def test_blocking_turn_injects_advisor_feedback(self) -> None:
+        from pr_auto_reviewer.application.services.turn_parser_service import (
+            TurnParserService,
+        )
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
+        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+            ReviewResponseParser,
+        )
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"verdict": "approved", "reason": "clean", "items": []}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=self._observer(["whatever", "okok"]),
+        )
+        result = service.execute(_command(_StubToolExecution()))
+
+        assert result.llm_verdict == "approved"
+        # The turn following the drifted one opens with the correction.
+        post_drift_messages = chat.send.call_args_list[1][0][0]
+        advisor_notes = [
+            m for m in post_drift_messages
+            if m.role == "user" and "ADVISOR" in m.content
+        ]
+        assert len(advisor_notes) == 1
+        assert "off task" in advisor_notes[0].content
+
+    def test_repeated_blocks_abort_the_phase(self) -> None:
+        import pytest as _pytest
+        from pr_auto_reviewer.application.services.turn_parser_service import (
+            TurnParserService,
+        )
+        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+            LlmUnavailableError,
+        )
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
+        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+            ReviewResponseParser,
+        )
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"action": "run_git", "args": "log --oneline -2"}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=self._observer(["don't do this!", "don't do this!"]),
+            max_advisor_blocks=2,
+        )
+
+        with _pytest.raises(LlmUnavailableError, match="Advisor blocked"):
+            service.execute(_command(_StubToolExecution()))
