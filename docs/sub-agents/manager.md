@@ -7,11 +7,19 @@ so no peer ever reviews a pull request poorly.
 
 ## Interaction
 
-- Acts at the **start of the review** and **between phases**.
+- Acts at the **start of the review** and **between phases**. The
+  first phase receives its task from the manager too — a phase never
+  starts on a static plan prompt alone.
 - Plans and separates tasks; assigns refined tasks to the appropriate
   sub-agent.
 - Explains requirements and acceptance criteria to the advisor before
   phases start, so the advisor can police focus accurately.
+- Reacts to blocker feedback: when the advisor blocks a sub-agent's
+  output, the manager re-plans that sub-agent's task and improves its
+  prompt so the restarted phase performs better than before.
+- Its briefings and re-plans are LLM conversations and leave
+  transcripts like every other role's — see
+  [runtime rules](README.md#runtime-rules).
 
 ## Responsibility
 

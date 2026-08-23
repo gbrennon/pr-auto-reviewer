@@ -8,7 +8,10 @@ rather than behavior.
 ## Interaction
 
 Reviews its assigned phase with read_file / search_codebase /
-list_directory / run_git, verifying that domain logic stays free of
+list_directory / run_git, searching for what the change violates rather
+than what it does: architecture-rule violations, coupling, bad
+practices, anti-patterns, God classes, leaky abstractions, and
+duplicated logic. Verifies that domain logic stays free of
 infrastructure imports and that interfaces are narrow and segregated.
 
 ## Responsibility
