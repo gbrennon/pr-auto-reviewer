@@ -100,7 +100,7 @@ class ReviewItemFactory:
         return None
 
     @classmethod
-    def _generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
+    def generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
         """Generate a unique ID for a review item.
 
         Uses 4 hex characters from uuid7 + 2 hex counter
@@ -141,7 +141,7 @@ class ReviewItemFactory:
         if item.id and item.id not in used:
             used.add(item.id)
             return item
-        candidate = cls._generate_id(frozenset(used))
+        candidate = cls.generate_id(frozenset(used))
         used.add(candidate)
         return replace(item, id=candidate)
 
@@ -430,7 +430,7 @@ class ReviewItemFactory:
                 file_path=file_path,
                 description=str(item_dict.get("description", "")),
                 line=line_str,
-                id=cls._generate_id(existing_ids),
+                id=cls.generate_id(existing_ids),
                 current_code=current_code,
                 suggested_fix=suggested_fix,
             )
