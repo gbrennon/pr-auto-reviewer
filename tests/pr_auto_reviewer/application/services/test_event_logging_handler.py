@@ -108,6 +108,8 @@ class TestEventLoggingHandler:
                 verdict=ReviewVerdict.CHANGES_REQUESTED,
                 items=[_review_item()],
                 model_used="test",
+                reason="test reason",
+                summary="test summary",
             )
         )
 
@@ -122,7 +124,9 @@ class TestEventLoggingHandler:
         caplog.set_level(logging.INFO)
         event = FindingsAggregatedEvent(
             code_review=CodeReview(
-                verdict=ReviewVerdict.APPROVED, model_used="test"
+                verdict=ReviewVerdict.APPROVED, model_used="test",
+                reason="test reason",
+                summary="test summary",
             )
         )
 
