@@ -8,23 +8,24 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
+    AssessPhaseUseCase,
+)
+from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import (
+    BriefNextPhaseUseCase,
+)
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
     RunMultiPhaseReviewUseCase,
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
-    SubReviewGuardrails,
-)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
 )
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
@@ -44,8 +45,20 @@ from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
 from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
     PhaseCompletedEvent,
 )
+from pr_auto_reviewer.domain.value_objects.advisor_directive import (
+    AdvisorDirective,
+)
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
+)
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
+    SubReviewGuardrails,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,11 +82,15 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         tool_factory: Callable[[Path, list[str]], Any],
         max_retries: int = 5,
         max_feedback_rounds: int = 2,
+        advisor: AssessPhaseUseCase | None = None,
+        manager: BriefNextPhaseUseCase | None = None,
     ) -> None:
         self._command_bus = command_bus
         self._tool_factory = tool_factory
         self._max_retries = max_retries
         self._max_feedback_rounds = max_feedback_rounds
+        self._advisor = advisor
+        self._manager = manager
 
     def execute(
         self, command: RunMultiPhaseReviewCommand
@@ -99,6 +116,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         repo_name, pr_id_str = self._extract_repo_and_pr(repo_path)
         best_attempt_items: list[ReviewItem] = []
         result: CodeReview | None = None
+        last_failure: Exception | None = None
 
         for full_retry in range(self._max_retries):
             logger.info(
@@ -118,6 +136,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             except LlmUnavailableError as exc:
                 if not self._is_max_turns_exceeded(exc):
                     raise
+                last_failure = exc
 
                 if attempt_items and len(attempt_items) > len(
                     best_attempt_items
@@ -159,24 +178,19 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     ),
                 )
             else:
-                logger.warning(
-                    "No findings accumulated after %d full-review attempts",
-                    self._max_retries,
+                logger.error(
+                    "All %d full-review attempts exhausted with no "
+                    "structured verdict and no accumulated items "
+                    "(repo=%s pr=%s model=%s); refusing to publish a "
+                    "COMMENTED review. Last failure: %s",
+                    self._max_retries, repo_name, pr_id_str, model,
+                    last_failure,
                 )
-                result = CodeReview(
-                    verdict=ReviewVerdict.COMMENTED,
-                    reason=(
-                        "Application could not extract a structured verdict "
-                        "from any review phase."
-                    ),
-                    summary=(
-                        f"Reviewed {len(plan.phases)} phases over model {model}; "
-                        "no structured verdict or items were obtained from the "
-                        "LLM output. This is a pipeline failure signal, not a "
-                        "clean review."
-                    ),
-                    model_used=model,
-                )
+                raise ReviewVerdictError(
+                    "All full-review attempts exhausted without a structured "
+                    "verdict or items; refusing to publish a default "
+                    "COMMENTED review."
+                ) from last_failure
 
         if not result.items:
             result = self._run_feedback_loop(
@@ -283,8 +297,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         phase_results: dict[str, PhaseResult] = {}
         previous_findings: str = ""
         phase_sequence = list(plan.phases)
+        next_manager_brief = ""
 
-        for phase in phase_sequence:
+        for idx, phase in enumerate(phase_sequence):
             logger.info("Starting phase: %s", phase.phase_name)
             phase_prompt = (
                 plan.methodology + "\n\n" + phase.system_prompt
@@ -295,8 +310,11 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase_prompt = role_brief + "\n\n" + phase_prompt
 
             manager_brief = getattr(plan, "manager_brief", "")
+            assignment = manager_brief or next_manager_brief
             if manager_brief and phase is phase_sequence[0]:
                 phase_prompt = manager_brief + "\n\n" + phase_prompt
+            if next_manager_brief and phase is not phase_sequence[0]:
+                phase_prompt = next_manager_brief + "\n\n" + phase_prompt
 
             if initial_feedback:
                 phase_prompt = initial_feedback + "\n\n" + phase_prompt
@@ -314,6 +332,15 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             phase_result = self._run_phase_with_retry(
                 phase_name=phase.phase_name,
                 phase_prompt=phase_prompt,
+                repo_path=repo_path,
+                changed_files=changed_files,
+                existing_item_ids=existing_ids,
+            )
+            phase_result = self._adjudicate_phase(
+                phase=phase,
+                phase_prompt=phase_prompt,
+                assignment=assignment,
+                phase_result=phase_result,
                 repo_path=repo_path,
                 changed_files=changed_files,
                 existing_item_ids=existing_ids,
@@ -364,6 +391,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 len(phase_result.items),
                 len(all_items),
             )
+            if (
+                self._manager is not None
+                and idx < len(phase_sequence) - 1
+            ):
+                next_manager_brief = self._manager.brief(
+                    phase_sequence[idx + 1], previous_findings,
+                )
 
         suggestion_phase_id = getattr(plan, "suggestions_phase_id", None)
         suggestions_source = (
@@ -373,9 +407,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         ) or last_phase_result
 
         if not all_items:
-            verdict = ReviewVerdict.COMMENTED
-            reason = "No issues found across all review phases."
-            summary = "No issues found across all review phases."
+            reason = ""
+            summary = ""
             suggestions: list[ReviewItem] = []
             praise_list: list[ReviewItem] = []
 
@@ -399,7 +432,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         line=s.get("line", ""),
                         id=s.get("id", ""),
                         current_code=s.get("current_code", ""),
-                        suggested_fix=s.get("suggested_code", ""),
+                        suggested_fix=s.get("suggested_fix", ""),
                     ))
                 for p in last_phase_result.llm_praise:
                     praise_list.append(ReviewItem(
@@ -413,26 +446,43 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         suggested_fix=p.get("description", ""),
                     ))
 
-            # A real, non-blank model verdict with zero items is a clean
-            # approval: nothing was found to flag. Only a blank/commented
-            # model verdict (or no phase result at all) is a pipeline failure.
-            if coerced is not None and coerced is not ReviewVerdict.COMMENTED:
+            skipped = [
+                skip_reason
+                for phase_result in phase_results.values()
+                for skip_reason in phase_result.skip_reasons
+            ]
+            model_reported_findings = bool(skipped)
+
+            # The application automates PR interaction: it must never
+            # publish a hollow COMMENTED outcome. Every zero-items review
+            # resolves to a real verdict from the model's evidence — or
+            # the pipeline failure raises instead of defaulting.
+            if model_reported_findings:
+                verdict = ReviewVerdict.CHANGES_REQUESTED
+                dropped_list = "; ".join(skipped[:3])
+                reason = (
+                    f"The model reported {len(skipped)} finding(s) that "
+                    "did not survive verification against the source code."
+                )
+                summary = (
+                    f"Reviewed {len(plan.phases)} phases over model {model}; "
+                    f"the model reported {len(skipped)} finding(s) that were "
+                    "dropped during source verification and were not "
+                    f"published. {dropped_list}"
+                )
+            elif coerced is not None and coerced is not ReviewVerdict.COMMENTED:
+                # A real, non-blank model verdict with zero kept items is a
+                # clean approval: nothing survived to flag.
                 verdict = ReviewVerdict.APPROVED
                 if not reason:
                     reason = "Review completed without action items."
                 if not summary:
                     summary = reason
             else:
-                if not reason:
-                    reason = (
-                        "Application could not extract a structured verdict "
-                        "from any review phase."
-                    )
-                summary = (
-                    f"Reviewed {len(plan.phases)} phases over model {model}; "
-                    "no structured verdict or items were obtained from the "
-                    "LLM output. This is a pipeline failure signal, not a "
-                    "clean review."
+                raise ReviewVerdictError(
+                    "No review phase produced a structured verdict and no "
+                    "findings survived verification; refusing to publish a "
+                    "default COMMENTED review."
                 )
 
             return CodeReview(
@@ -480,10 +530,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         review_items = [
             item for item in verified_items if isinstance(item, ReviewItem)
         ]
-        if previous is not None and previous.verdict == ReviewVerdict.COMMENTED:
-            verdict = ReviewVerdict.COMMENTED
-        else:
-            verdict = SubReviewGuardrails().verdict_for(review_items)
+        verdict = SubReviewGuardrails().verdict_for(review_items)
 
         dropped = previous_items - len(review_items)
         if dropped and previous is not None:
@@ -562,6 +609,51 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     repo_path, changed_files
                 )
         raise RuntimeError("Unreachable: _max_retries must be >= 1")
+
+    def _adjudicate_phase(
+        self,
+        phase: ReviewPhase,
+        phase_prompt: str,
+        assignment: str,
+        phase_result: PhaseResult,
+        repo_path: Path,
+        changed_files: list[str],
+        existing_item_ids: frozenset[str],
+    ) -> PhaseResult:
+        """Grade the finished phase with the advisor and re-run it on a blocking grade.
+
+        The advisor watches the peer after every phase. When the grade
+        blocks (F — don't do this!), the phase's output is discarded and
+        the phase is restarted with the advisor's improved version of the
+        original prompt, exactly once. Any non-blocking grade (S/B/D), or
+        an absent advisor, accepts the output unchanged.
+        """
+        if self._advisor is None:
+            return phase_result
+        directive: AdvisorDirective = self._advisor.assess(
+            phase, assignment, phase_result,
+        )
+        if not directive.blocks_output:
+            return phase_result
+        corrected_prompt = (
+            phase_prompt
+            + "\n\n"
+            + "ADVISOR CORRECTION — this phase drifted off the task it "
+            + "was assigned. Restart with the task explained again:\n"
+            + directive.improved_prompt
+        )
+        logger.warning(
+            "Advisor blocked phase %s (F); discarding output and "
+            "restarting with improved prompt",
+            phase.phase_name,
+        )
+        return self._run_phase_with_retry(
+            phase_name=phase.phase_name,
+            phase_prompt=corrected_prompt,
+            repo_path=repo_path,
+            changed_files=changed_files,
+            existing_item_ids=existing_item_ids,
+        )
 
     def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
         return "Phase exceeded max turns" in str(exc)

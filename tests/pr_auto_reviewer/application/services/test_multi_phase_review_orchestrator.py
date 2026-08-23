@@ -5,27 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
-    AggregateReviewFindingsCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
-    VerifyFindingsCommand,
-)
-from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
-    FindingsAggregatedEvent,
-)
-from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
-    PhaseCompletedEvent,
-)
 
 
 def _plan():
@@ -52,8 +43,8 @@ def _plan():
 
 def _code_review(
     verdict=ReviewVerdict.APPROVED,
-    reason="",
-    summary="",
+    reason="test reason",
+    summary="test summary",
     items=None,
     suggestions=None,
     praise=None,
@@ -106,7 +97,7 @@ class TestMultiPhaseReviewOrchestrator:
     def test_execute_full_retry(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        """Test full review execution with retry logic."""
+        """Full execution returns the review produced by the phase run."""
         orchestrator = MultiPhaseReviewOrchestrator(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
@@ -114,8 +105,12 @@ class TestMultiPhaseReviewOrchestrator:
         )
         from types import SimpleNamespace
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[_make_review_item("src/main.py", "found")],
+        )
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), 
+            type("Cmd", (), {"existing_item_ids": frozenset(),
                 "plan": plan,
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -123,6 +118,7 @@ class TestMultiPhaseReviewOrchestrator:
             })()
         )
         assert result is not None
+        assert len(result.items) == 1
 
     def test_execute_with_llm_unavailable(
         self, mock_command_bus, mock_tool_factory,
@@ -137,21 +133,28 @@ class TestMultiPhaseReviewOrchestrator:
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
 
         def failing_run_phases(*args, **kwargs):
-            from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
+            from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+                LlmUnavailableError,
+            )
             raise LlmUnavailableError("Phase exceeded max turns (attempt 1)")
 
         orchestrator._run_phases = failing_run_phases
-        result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), 
-                "plan": plan,
-                "repo_path": Path("/tmp"),
-                "changed_files": ["src/main.py"],
-                "model": "test",
-            })()
+        # After max retries with no findings, refusing a default outcome is
+        # mandatory: no silent COMMENTED fallback may be published.
+        import pytest as _pytest
+
+        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+            ReviewVerdictError,
         )
-        # After max retries, should return CODE_REVIEW with COMMENTED verdict
-        assert result is not None
-        assert result.verdict == ReviewVerdict.COMMENTED.value
+        with _pytest.raises(ReviewVerdictError):
+            orchestrator.execute(
+                type("Cmd", (), {"existing_item_ids": frozenset(),
+                    "plan": plan,
+                    "repo_path": Path("/tmp"),
+                    "changed_files": ["src/main.py"],
+                    "model": "test",
+                })()
+            )
 
     def test__run_phases_full_retry_no_items(
         self, mock_command_bus, mock_tool_factory,
@@ -167,9 +170,15 @@ class TestMultiPhaseReviewOrchestrator:
 
         # Make _run_phases return a result with no items
         orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
-            verdict=ReviewVerdict.COMMENTED,
+            verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
+        )
+        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(): _code_review(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Recovered after feedback",
+            summary="Issues resolved",
+            items=[_make_review_item("src/main.py", "kept")],
         )
 
         result = orchestrator._run_phases_full_retry(
@@ -179,7 +188,9 @@ class TestMultiPhaseReviewOrchestrator:
             model="test",
         )
 
-        assert result.verdict == ReviewVerdict.COMMENTED.value
+        assert result.verdict == ReviewVerdict.APPROVED.value
+        assert len(result.items) == 1
+
 
     def test__run_phases_full_retry_with_items(
         self, mock_command_bus, mock_tool_factory,
@@ -223,13 +234,6 @@ class TestMultiPhaseReviewOrchestrator:
 
         plan = _plan()
 
-        # First round returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
-            verdict=ReviewVerdict.COMMENTED,
-            reason="No issues",
-            summary="No issues",
-        )
-
         # Second round returns items
         orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
             verdict=ReviewVerdict.APPROVED,
@@ -243,7 +247,7 @@ class TestMultiPhaseReviewOrchestrator:
             repo_path=Path("/tmp"),
             changed_files=["src/main.py"],
             model="test",
-            previous_result=_code_review(verdict=ReviewVerdict.COMMENTED),
+            previous_result=_code_review(verdict=ReviewVerdict.CHANGES_REQUESTED),
         )
 
         assert result.verdict == ReviewVerdict.APPROVED.value
@@ -259,7 +263,7 @@ class TestMultiPhaseReviewOrchestrator:
         )
 
         result = _code_review(
-            verdict=ReviewVerdict.COMMENTED,
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="No issues",
             summary="No issues found",
         )
@@ -272,11 +276,10 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Escalation reaches ALL phases in a feedback round, so logs differ."""
-        from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -300,7 +303,7 @@ class TestMultiPhaseReviewOrchestrator:
             phase_result, MagicMock(), phase_result, MagicMock(),
         ]
         feedback = orchestrator._build_feedback_context(
-            _code_review(verdict=ReviewVerdict.COMMENTED), 1
+            _code_review(verdict=ReviewVerdict.CHANGES_REQUESTED), 1
         )
 
         orchestrator._run_phases(
@@ -322,12 +325,11 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Phase role and plan manager brief are composed into phase prompts."""
-        from unittest.mock import MagicMock
-        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
         from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
             RunAgentConversationCommand,
         )
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -379,7 +381,7 @@ class TestMultiPhaseReviewOrchestrator:
 
         # First run returns no items
         orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
-            verdict=ReviewVerdict.COMMENTED,
+            verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
@@ -425,28 +427,28 @@ class TestMultiPhaseReviewOrchestrator:
         assert len(result.items) == 1
         assert result.items[0].description == "kept item"
 
-    def test__rebuild_after_verification_commented_verdict(
+    def test__rebuild_after_verification_derives_verdict_from_survivors(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        """Test _rebuild_after_verification with COMMENTED verdict."""
+        """Verdict comes from surviving items only, never from the previous review."""
         orchestrator = MultiPhaseReviewOrchestrator(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
 
-        verified_items = []
         previous = _code_review(
-            verdict=ReviewVerdict.COMMENTED,
-            items=[],
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[_make_review_item("src/main.py", "dropped item")],
         )
 
         result = orchestrator._rebuild_after_verification(
-            verified_items=verified_items,
+            verified_items=[],
             model="test",
             previous=previous,
         )
 
-        assert result.verdict == ReviewVerdict.COMMENTED.value
+        assert result.verdict == ReviewVerdict.APPROVED.value
+        assert result.items == []
 
     def test__is_max_turns_exceeded(self, mock_command_bus, mock_tool_factory) -> None:
         """Test _is_max_turns_exceeded helper."""
@@ -499,7 +501,6 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """The architect phase's llm_suggestions feed the final review's suggestions."""
-        from unittest.mock import MagicMock
         from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
@@ -552,7 +553,6 @@ class TestMultiPhaseReviewOrchestrator:
         Nothing was flagged, so a blocking CHANGES_REQUESTED is incoherent;
         the empty review resolves to APPROVED instead.
         """
-        from unittest.mock import MagicMock
         from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
         plan = ReviewPlan(
             phases=(
@@ -585,3 +585,152 @@ class TestMultiPhaseReviewOrchestrator:
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.items == []
         assert result.reason == "the code is wrong"
+
+
+class TestOrchestratorCommentedIsFailureMarker:
+    """A ``commented`` LLM verdict is a pipeline failure, never an outcome."""
+
+    @staticmethod
+    def _build_review_orchestrator():
+        from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
+            MultiPhaseReviewOrchestrator,
+        )
+        from pr_auto_reviewer.application.services.turn_parser_service import (
+            TurnParserService,
+        )
+        from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+            ParseReviewTurnCommand,
+        )
+        from pr_auto_reviewer.domain.value_objects.turn_parse_result import (
+            TurnParseResult,
+        )
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
+        from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+            ReviewResponseParser,
+        )
+
+        bus = InMemoryCommandBus()
+        parser = ReviewResponseParser()
+
+        def _parse_turn(command: ParseReviewTurnCommand) -> TurnParseResult:
+            return TurnParserService(parser).execute(command)
+
+        bus.register(ParseReviewTurnCommand, _parse_turn)
+        return MultiPhaseReviewOrchestrator(
+            command_bus=bus, tool_factory=lambda *a: None
+        ), bus
+
+    def test_legit_llm_verdict_survives_no_items_path(self) -> None:
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+
+        orchestrator, bus = self._build_review_orchestrator()
+
+        def _run_phase(command: RunAgentConversationCommand) -> PhaseResult:
+            return PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No critical bugs identified.",
+                llm_suggestions=[
+                    {"file": "", "line": "", "description": "Add rate limiting."}
+                ],
+            )
+
+        bus.register(RunAgentConversationCommand, _run_phase)
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(ReviewPhase(
+                phase_id="advisor", phase_name="Advisor", system_prompt="x"
+            ),),
+        )
+        review = orchestrator._run_phases_full_retry(
+            plan=plan,
+            repo_path=Path("."),
+            changed_files=[],
+            model="code-review:latest",
+        )
+        assert review.verdict == ReviewVerdict.APPROVED
+        assert review.reason != ""
+        assert review.summary != ""
+        assert review.suggestions != []
+
+    def test_commented_verdict_raises_instead_of_defaulting(self) -> None:
+        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+            ReviewVerdictError,
+        )
+        from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
+            RunAgentConversationCommand,
+        )
+        from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+        from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+
+        orchestrator, bus = self._build_review_orchestrator()
+
+        def _run_phase(command: RunAgentConversationCommand) -> PhaseResult:
+            return PhaseResult(items=[], llm_verdict="commented")
+
+        bus.register(RunAgentConversationCommand, _run_phase)
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(ReviewPhase(
+                phase_id="advisor", phase_name="Advisor", system_prompt="x"
+            ),),
+        )
+        with pytest.raises(ReviewVerdictError):
+            orchestrator._run_phases_full_retry(
+                plan=plan,
+                repo_path=Path("."),
+                changed_files=[],
+                model="code-review:latest",
+            )
+
+    def test_rebuild_after_verification_explains_dropped_findings(self) -> None:
+        from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
+            MultiPhaseReviewOrchestrator,
+        )
+        from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+            InMemoryCommandBus,
+        )
+
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=InMemoryCommandBus(), tool_factory=lambda *a: None
+        )
+        previous = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found 1 critical (1 maintainability) and 2 major.",
+            summary="Found 3 issue(s) (3 blocking across 3 file(s)).",
+            items=[
+                ReviewItem(id="id-1",
+                    severity=ItemSeverity.CRITICAL,
+                    category=IssueCategory.MAINTAINABILITY,
+                    file_path="src/a.py",
+                    description="Missing validation.",
+                    current_code="def f():",
+                    suggested_fix="Add validation.",
+                ),
+                ReviewItem(id="id-2",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.MAINTAINABILITY,
+                    file_path="src/b.py",
+                    description="No error handling.",
+                    current_code="def g():",
+                    suggested_fix="Add handling.",
+                ),
+            ],
+            model_used="code-review:latest",
+        )
+        rebuilt = orchestrator._rebuild_after_verification(
+            [], "code-review:latest", previous=previous
+        )
+        assert rebuilt.items == []
+        assert "dropped" in rebuilt.reason
+        assert "did not survive" in rebuilt.summary
+        assert "2" in rebuilt.summary
+        assert "3" not in rebuilt.reason
