@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 
 
 @dataclass(frozen=True)
@@ -18,8 +18,8 @@ class AggregateReviewFindingsCommand:
     """
 
     items: list[ReviewItem]
+    model_used: str
     phase_result: PhaseResult | None = None
     suggestions_phase_result: PhaseResult | None = None
-    model_used: str = ""
     repo_name: str = ""
     pr_id: str = ""
