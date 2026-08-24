@@ -68,6 +68,9 @@ from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
 from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
@@ -218,6 +221,7 @@ class CoreServices:
     fragment_renderer: PromptRendererPort
     fragment_max_tokens: int | None
     review_context_factory: ReviewContextFactoryPort
+    conversation_service: AgentConversationService
 
 
 
@@ -243,6 +247,7 @@ def wire_core_services(
         host=config.llm_host,
         timeout=config.ollama_timeout,
         max_retries=config.llm_max_retries,
+        max_llm_calls=config.llm_call_budget,
     )
     command_bus = InMemoryCommandBus()
     conversation_logger = MarkdownConversationLogger(
@@ -250,12 +255,17 @@ def wire_core_services(
     )
     turn_parser = TurnParserService(ReviewResponseParser())
     advisor = PhaseAdvisor(chat_port=chat_client, command_bus=command_bus)
+    turn_observer = (
+        advisor
+        if config.advisor_granularity is AdvisorGranularity.TURN
+        else None
+    )
     conversation_service = AgentConversationService(
         chat_port=chat_client,
         command_bus=command_bus,
         conversation_logger=conversation_logger,
         max_turns=config.llm_max_turns,
-        turn_observer=advisor,
+        turn_observer=turn_observer,
         max_advisor_blocks=config.advisor_max_blocks,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
@@ -351,4 +361,5 @@ def wire_core_services(
         fragment_renderer=fragment_renderer,
         fragment_max_tokens=fragment_max_tokens,
         review_context_factory=review_context_factory,
+        conversation_service=conversation_service,
     )

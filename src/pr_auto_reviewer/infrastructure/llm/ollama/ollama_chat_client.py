@@ -15,6 +15,9 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
+from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
@@ -36,14 +39,31 @@ class OllamaChatClient(AgentChatPort):
         host: str = "http://localhost:11434",
         timeout: int = 120,
         max_retries: int = 5,
+        max_llm_calls: int | None = None,
     ) -> None:
         self._model = model
         self._host = host.rstrip("/")
         self._timeout = timeout
         self._max_retries = max_retries
+        self._max_llm_calls = max_llm_calls
+        self._calls_started = 0
 
     def send(self, messages: list[ConversationMessage]) -> str:
-        """Send *messages* to Ollama and return the accumulated response."""
+        """Send *messages* to Ollama and return the accumulated response.
+
+        Raises:
+            ReviewBudgetExhaustedError: When ``max_llm_calls`` was set and
+                every allowed call has already been consumed.
+        """
+        self._assert_budget_available()
+        self._calls_started += 1
+        call_index = self._calls_started
+        started_at = time.monotonic()
+        logger.info(
+            "LLM chat call %s starting (%d messages in history)",
+            self._describe_call(call_index),
+            len(messages),
+        )
         url = f"{self._host}/api/chat"
         payload: dict[str, Any] = {
             "model": self._model,
@@ -100,14 +120,23 @@ class OllamaChatClient(AgentChatPort):
                         "No content in response; fell back to %d chars of thinking",
                         len(result),
                     )
-                logger.debug(
-                    "Chat response: %d chars from %d lines, %d messages",
+                elapsed = time.monotonic() - started_at
+                logger.info(
+                    "LLM chat call %s finished in %.1fs "
+                    "(%d chars, %d messages in history)",
+                    self._describe_call(call_index),
+                    elapsed,
                     len(result),
-                    len(content_parts),
                     len(messages),
                 )
                 return result
             except requests.RequestException as exc:
+                elapsed = time.monotonic() - started_at
+                logger.info(
+                    "LLM chat call %s failed after %.1fs",
+                    self._describe_call(call_index),
+                    elapsed,
+                )
                 if attempt == self._max_retries - 1:
                     raise LlmUnavailableError(
                         f"Chat request to {url} failed after "
@@ -120,3 +149,20 @@ class OllamaChatClient(AgentChatPort):
                 )
                 time.sleep(2**attempt)
         raise LlmUnavailableError("All chat requests exhausted")
+
+    def _assert_budget_available(self) -> None:
+        """Raise when the configured LLM call budget is fully consumed."""
+        if (
+            self._max_llm_calls is not None
+            and self._calls_started >= self._max_llm_calls
+        ):
+            raise ReviewBudgetExhaustedError(
+                f"LLM call budget of {self._max_llm_calls} exhausted; "
+                "refusing to send another chat request"
+            )
+
+    def _describe_call(self, call_index: int) -> str:
+        """Render the budget-aware label used in call log lines."""
+        if self._max_llm_calls is None:
+            return f"#{call_index}"
+        return f"#{call_index}/{self._max_llm_calls}"

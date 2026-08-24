@@ -4,10 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from pr_auto_reviewer.application.ports.outbound.review_reader_port import ReviewReaderPort
+from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
+    ReviewReaderPort,
+)
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.composition_root import bootstrap
 from tests.e2e.scenarios import ReviewScenario, _get_normalized_scenarios
+from tests.fakes.fake_notifier import FakeNotifier
 
 
 def _cassette_name(scenario: ReviewScenario) -> str:
@@ -57,16 +60,22 @@ def _all_review_ids(payload: dict) -> list[str]:
 @pytest.mark.vcr
 class TestReviewFlowVCR:
     @pytest.fixture
-    def components(self, scenario, monkeypatch):
+    def notifier(self) -> FakeNotifier:
+        return FakeNotifier()
+
+    @pytest.fixture
+    def components(self, scenario, monkeypatch, notifier: FakeNotifier):
         monkeypatch.setenv("REVIEW_OUTPUT", scenario["review_output"])
-        return bootstrap()
+        return bootstrap(notifier=notifier)
 
     @pytest.mark.parametrize(
         "scenario",
         _get_normalized_scenarios(),
         ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
     )
-    def test_review_flow(self, components, scenario: dict) -> None:
+    def test_review_flow(
+        self, components, scenario: dict, notifier: FakeNotifier,
+    ) -> None:
         repo_spec = f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
         pr_id = PullRequestId(repository=repo_spec, number=scenario["pr_id"])
 
@@ -81,6 +90,10 @@ class TestReviewFlowVCR:
         ]
         exit_code = components.cli_runner.run(review_argv)
         assert exit_code == 0
+        assert notifier.errors == []
+        assert notifier.successes == [
+            ("Review complete", f"PR #{scenario['pr_id']} in {repo_spec}")
+        ]
 
         raw_body = _read_review_body(
             scenario["review_output"],

@@ -225,8 +225,8 @@ class TestReviewCliJsonOutput:
             ],
             suggestions=[
                 ReviewItem(
-                    severity="info",
-                    category="general",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
                     file_path="src/network.py",
                     description="Add an explicit timeout to every outbound request.",
                     line="3",
@@ -236,8 +236,8 @@ class TestReviewCliJsonOutput:
                 ),
             ],
             praise=[ReviewItem(
-                severity="info",
-                category="general",
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
                 file_path="src/network.py",
                 description="Small, focused helper that is easy to unit test.",
                 line="",
@@ -422,8 +422,8 @@ class TestReviewCliJsonOutput:
             items=[],
             suggestions=[
                 ReviewItem(
-                    severity="info",
-                    category="general",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
                     file_path="src/network.py",
                     description="Add an explicit timeout.",
                     line="3",
