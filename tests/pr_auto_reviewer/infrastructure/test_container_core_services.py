@@ -10,6 +10,9 @@ from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
 from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.container._core_services import (
     CoreServices,
     wire_core_services,
@@ -319,3 +322,56 @@ class TestWireCoreServices:
         state_path = result.pr_repository._file_path
         assert str(state_path).startswith(str(tmp_path))
         assert str(state_path).endswith("state.json")
+
+
+class TestAdvisorGranularityWiring:
+    """ADVISOR_GRANULARITY controls per-turn advisor observation."""
+
+    def _config(self, granularity: AdvisorGranularity):
+        return Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fj-own",
+            advisor_granularity=granularity,
+        )
+
+    def test_phase_granularity_disables_turn_observer(
+        self, repo_context
+    ) -> None:
+        result = wire_core_services(
+            self._config(AdvisorGranularity.PHASE), repo_context, _config_dir=None
+        )
+
+        assert result.conversation_service._turn_observer is None
+
+    def test_turn_granularity_enables_advisor_as_turn_observer(
+        self, repo_context
+    ) -> None:
+        result = wire_core_services(
+            self._config(AdvisorGranularity.TURN), repo_context, _config_dir=None
+        )
+
+        from pr_auto_reviewer.application.services.phase_advisor import (
+            PhaseAdvisor,
+        )
+
+        assert isinstance(result.conversation_service._turn_observer, PhaseAdvisor)
+
+
+class TestLlmCallBudgetWiring:
+    """LLM_CALL_BUDGET is enforced by the shared chat client."""
+
+    def test_chat_client_receives_configured_call_budget(
+        self, forgejo_config: Config, repo_context, tmp_path
+    ) -> None:
+        config = Config(
+            env="test",
+            platform_mode=GitProvider.FORGEJO,
+            forgejo_owner_token="fj-own",
+            llm_call_budget=7,
+        )
+        result = wire_core_services(config, repo_context, _config_dir=tmp_path)
+
+        client = result.llm_review._chat_client
+
+        assert client._max_llm_calls == 7
