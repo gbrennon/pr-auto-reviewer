@@ -15,6 +15,9 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
+from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
+    TranscriptMetadata,
+)
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
@@ -29,6 +32,13 @@ from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
     SubAgentGrade,
+)
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    AdvisorPhaseGradeSystemRenderer,
+    AdvisorPhaseGradeUserRenderer,
+    AdvisorTurnGradeSystemRenderer,
+    AdvisorTurnGradeUserRenderer,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,8 +56,8 @@ class PhaseAdvisor(AssessPhaseUseCase):
     grading failure never halts the review.
     """
 
-    _GRADE_KEYS = ("grade", "verdict", "assessment")
-    _FEEDBACK_KEYS = ("feedback", "reason", "interjection")
+    _GRADE_KEYS = ("grade",)
+    _FEEDBACK_KEYS = ("feedback",)
     _PROMPT_KEYS = ("improved_prompt", "improvedPrompt", "reprompt")
 
     def __init__(
@@ -57,12 +67,17 @@ class PhaseAdvisor(AssessPhaseUseCase):
     ) -> None:
         self._chat_port = chat_port
         self._command_bus = command_bus
+        self._turn_system = AdvisorTurnGradeSystemRenderer()
+        self._turn_user = AdvisorTurnGradeUserRenderer()
+        self._phase_system = AdvisorPhaseGradeSystemRenderer()
+        self._phase_user = AdvisorPhaseGradeUserRenderer()
 
     def assess(
         self,
         phase: ReviewPhase,
         assignment: str,
         phase_result: PhaseResult,
+        review_session: str,
         pr_identifier: str = "",
     ) -> AdvisorDirective:
         """Return the advisor's directive for the finished *phase*."""
@@ -77,8 +92,11 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        self._publish_exchange(phase.phase_name, pr_identifier, messages, raw)
         directive = self._parse_directive(raw)
+        self._publish_exchange(
+            phase.phase_name, pr_identifier, review_session, messages, raw,
+            directive,
+        )
         if peer is not None and directive.blocks_output:
             logger.info(
                 "Advisor graded phase %s as F (don't do this!); blocking "
@@ -91,6 +109,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
         self,
         peer_content: str,
         phase_name: str,
+        review_session: str,
         pr_identifier: str = "",
     ) -> AdvisorDirective:
         """Grade one raw peer turn while its conversation is still running."""
@@ -104,41 +123,33 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        self._publish_exchange(phase_name, pr_identifier, messages, raw)
-        return self._parse_directive(raw)
+        directive = self._parse_directive(raw)
+        self._publish_exchange(
+            phase_name, pr_identifier, review_session, messages, raw,
+            directive,
+        )
+        return directive
 
     def _build_turn_messages(
         self, peer_content: str, phase_name: str,
     ) -> list[ConversationMessage]:
         """Compose the per-turn focus-grading prompt."""
-        advisor = AdvisorAgent()
-        grade_line = (
-            "You are watching ONE turn of an in-progress review phase. "
-            "Grade the peer focus only. Respond with JSON: "
-            '{"grade": "impressive|amazing|okok|acceptable|whatever|'
-            "don't do this!\""
-            ', "feedback": "short note to the peer"}.'
-        )
-        system = (
-            f"{advisor.description}\n\n"
-            f"{advisor.interaction}\n\n"
-            f"{grade_line}"
-        )
-        user = (
-            f"Phase under observation: {phase_name}\n\n"
-            f"Peer turn:\n{peer_content[:4000]}"
-        )
         return [
-            ConversationMessage(role="system", content=system),
-            ConversationMessage(role="user", content=user),
+            self._turn_system.render(advisor=AdvisorAgent()),
+            self._turn_user.render(
+                phase_name=phase_name,
+                peer_content=peer_content[:4000],
+            ),
         ]
 
     def _publish_exchange(
         self,
         phase_name: str,
         pr_identifier: str,
+        review_session: str,
         messages: list[ConversationMessage],
         raw_reply: str,
+        directive: AdvisorDirective,
     ) -> None:
         """Emit the finished grading exchange for the transcript log."""
         if self._command_bus is None:
@@ -148,10 +159,15 @@ class PhaseAdvisor(AssessPhaseUseCase):
             ConversationMessage(role="assistant", content=raw_reply),
         ]
         self._command_bus.dispatch(AgentExchangeEvent(
-            role="advisor",
+            role=SubAgentRole.ADVISOR,
             phase_name=phase_name,
             pr_identifier=pr_identifier,
+            review_session=review_session,
             messages=transcript,
+            metadata={
+                TranscriptMetadata.GRADE: str(directive.grade),
+                TranscriptMetadata.FEEDBACK: directive.feedback,
+            },
         ))
 
     def _assigned_task(self, phase: ReviewPhase, assignment: str) -> str:
@@ -178,33 +194,19 @@ class PhaseAdvisor(AssessPhaseUseCase):
         phase_result: PhaseResult,
     ) -> list[ConversationMessage]:
         """Compose the advisor's grading prompt from the phase outcome."""
-        advisor = AdvisorAgent()
         findings = "\n".join(
             f"- {item.file_path or '?'}: {item.description}"
             for item in phase_result.items
         ) or "(no findings reported)"
-        system = (
-            f"{advisor.description}\n\n"
-            f"{advisor.interaction}\n\n"
-            "You grade the FINISHED phase, never the diff. Use exactly "
-            "one of the grades and output a single JSON object with keys "
-            '"grade", "feedback", and "improved_prompt".'
-        )
-        user = (
-            f"{self._assigned_task(phase, assignment)}\n\n"
-            f"Phase: {phase.phase_name}\n"
-            f"Phase verdict: {phase_result.llm_verdict or 'none'}\n"
-            f"Phase reason: {phase_result.llm_reason or ''}\n"
-            f"Findings reported:\n{findings}\n\n"
-            'Respond with JSON: {"grade": "impressive|amazing|okok|'
-            'acceptable|whatever|don\'t do this!", "feedback": "short '
-            'note to the peer", "improved_prompt": "ONLY when grade is '
-            'don\'t do this!: an improved version of the original prompt '
-            're-explaining the task; otherwise empty string"}'
-        )
         return [
-            ConversationMessage(role="system", content=system),
-            ConversationMessage(role="user", content=user),
+            self._phase_system.render(advisor=AdvisorAgent()),
+            self._phase_user.render(
+                assigned_task=self._assigned_task(phase, assignment),
+                phase_name=phase.phase_name,
+                phase_verdict=phase_result.llm_verdict or "none",
+                phase_reason=phase_result.llm_reason or "",
+                findings=findings,
+            ),
         ]
 
     @classmethod

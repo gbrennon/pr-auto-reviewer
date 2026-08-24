@@ -21,6 +21,7 @@ from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import 
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,7 @@ class TurnParserService(ParseReviewTurnUseCase):
                     combined.append(obs)
             metadata["suggestions"] = combined
             return TurnParseResult(
-                kind="verdict",
+                kind=TurnKind.VERDICT,
                 raw_items=items,
                 metadata=metadata,
             )
@@ -123,7 +124,7 @@ class TurnParserService(ParseReviewTurnUseCase):
         parsed = self._parse_json(content)
         if parsed is None:
             logger.debug("Unparseable content (first 2000 chars): %s", content[:2000])
-            return TurnParseResult(kind="unparseable")
+            return TurnParseResult(kind=TurnKind.UNPARSEABLE)
 
         if isinstance(parsed, dict) and "action" in parsed:
             raw_args = parsed.get("args", "")
@@ -136,7 +137,7 @@ class TurnParserService(ParseReviewTurnUseCase):
             else:
                 args_str = str(raw_args)
             return TurnParseResult(
-                kind="tool_call",
+                kind=TurnKind.TOOL_CALL,
                 tool_call=ToolCall(
                     tool_name=str(parsed["action"]),
                     arguments={"args": args_str},
@@ -165,14 +166,14 @@ class TurnParserService(ParseReviewTurnUseCase):
                     if isinstance(entry, dict):
                         raw_items.append(self._parser.normalize_item_dict(entry))
             return TurnParseResult(
-                kind="verdict",
+                kind=TurnKind.VERDICT,
                 raw_items=raw_items,
                 metadata=metadata,
             )
 
         if isinstance(parsed, list):
             return TurnParseResult(
-                kind="verdict",
+                kind=TurnKind.VERDICT,
                 raw_items=[
                     self._parser.normalize_item_dict(item)
                     for item in parsed
@@ -181,7 +182,7 @@ class TurnParserService(ParseReviewTurnUseCase):
                 metadata={},
             )
 
-        return TurnParseResult(kind="unparseable")
+        return TurnParseResult(kind=TurnKind.UNPARSEABLE)
 
     def _extract_verdict_metadata(
         self, content: str, raw_items: list[dict[str, Any]],

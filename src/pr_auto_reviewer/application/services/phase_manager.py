@@ -21,6 +21,11 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    ManagerBriefSystemRenderer,
+    ManagerBriefUserRenderer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +47,14 @@ class PhaseManager(BriefNextPhaseUseCase):
     ) -> None:
         self._chat_port = chat_port
         self._command_bus = command_bus
+        self._brief_system = ManagerBriefSystemRenderer()
+        self._brief_user = ManagerBriefUserRenderer()
 
     def brief(
         self,
         next_phase: ReviewPhase,
         findings_summary: str,
+        review_session: str,
         pr_identifier: str = "",
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
@@ -63,7 +71,9 @@ class PhaseManager(BriefNextPhaseUseCase):
         brief = (raw or "").strip()
         if not brief:
             return ""
-        self._publish_exchange(next_phase, pr_identifier, messages, raw)
+        self._publish_exchange(
+            next_phase, pr_identifier, review_session, messages, raw,
+        )
         logger.info(
             "Manager briefed phase %s between phases", next_phase.phase_name,
         )
@@ -73,6 +83,7 @@ class PhaseManager(BriefNextPhaseUseCase):
         self,
         next_phase: ReviewPhase,
         pr_identifier: str,
+        review_session: str,
         messages: list[ConversationMessage],
         raw_reply: str,
     ) -> None:
@@ -84,9 +95,10 @@ class PhaseManager(BriefNextPhaseUseCase):
             ConversationMessage(role="assistant", content=raw_reply),
         ]
         self._command_bus.dispatch(AgentExchangeEvent(
-            role="manager",
+            role=SubAgentRole.MANAGER,
             phase_name=next_phase.phase_name,
             pr_identifier=pr_identifier,
+            review_session=review_session,
             messages=transcript,
         ))
 
@@ -94,7 +106,6 @@ class PhaseManager(BriefNextPhaseUseCase):
         self, next_phase: ReviewPhase, findings_summary: str,
     ) -> list[ConversationMessage]:
         """Compose the manager's between-phases assignment prompt."""
-        manager = ManagerAgent()
         peer = next_phase.role
         role_text = ""
         if peer is not None:
@@ -103,21 +114,12 @@ class PhaseManager(BriefNextPhaseUseCase):
                 f"Responsibility: {peer.responsibility}\n"
                 f"Behavior: {peer.behavior}"
             )
-        system = (
-            f"{manager.description}\n\n"
-            "Assign exactly one focused task for the upcoming phase. The "
-            "task must not re-review findings other phases own. Respond "
-            "with a single short paragraph of instructions for the peer."
-        )
-        user = (
-            f"{role_text}\n\n"
-            f"Upcoming phase: {next_phase.phase_name}\n"
-            f"Phase instructions: {next_phase.system_prompt[:400]}\n\n"
-            f"Findings already recorded by earlier phases:\n"
-            f"{findings_summary or '(none)'}\n\n"
-            "Write the focused task for this phase now."
-        )
         return [
-            ConversationMessage(role="system", content=system),
-            ConversationMessage(role="user", content=user),
+            self._brief_system.render(manager=ManagerAgent()),
+            self._brief_user.render(
+                role_text=role_text,
+                phase_name=next_phase.phase_name,
+                phase_instructions=next_phase.system_prompt[:400],
+                findings_summary=findings_summary or "(none)",
+            ),
         ]
