@@ -24,8 +24,17 @@ from pr_auto_reviewer.application.services.pr_identifier import (
     PRIdentifier,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
+    AdvisorBlockedError,
+)
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
+    MaxTurnsExceededError,
+)
+from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
 )
 from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
     ReviewVerdictError,
@@ -63,11 +72,15 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import (
 from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
     SubReviewGuardrails,
 )
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    AdvisorCorrectionRenderer,
+    FeedbackContextRenderer,
+    PhasePromptRenderer,
+)
 
 logger = logging.getLogger(__name__)
 
 _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
-
 
 class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     """Orchestrate a multi-phase review plan with retry and feedback loops.
@@ -82,18 +95,24 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
     def __init__(
         self,
         command_bus: CommandBusPort,
-        tool_factory: Callable[[Path, list[str]], Any],
+        tool_factory: Callable[[Path, list[str], str], Any],
         max_retries: int = 5,
+        max_conversations: int | None = None,
         max_feedback_rounds: int = 2,
         advisor: AssessPhaseUseCase | None = None,
         manager: BriefNextPhaseUseCase | None = None,
     ) -> None:
         self._command_bus = command_bus
         self._tool_factory = tool_factory
+        self._conversations_started = 0
+        self._max_conversations = max_conversations
         self._max_retries = max_retries
         self._max_feedback_rounds = max_feedback_rounds
         self._advisor = advisor
         self._manager = manager
+        self._phase_prompt_renderer = PhasePromptRenderer()
+        self._correction_renderer = AdvisorCorrectionRenderer()
+        self._feedback_renderer = FeedbackContextRenderer()
 
     def execute(
         self, command: RunMultiPhaseReviewCommand
@@ -104,7 +123,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             repo_path=command.repo_path,
             changed_files=command.changed_files,
             model=command.model,
+            base_sha=command.base_sha,
             existing_item_ids=command.existing_item_ids,
+            review_session=command.review_session,
         )
 
     def _run_phases_full_retry(
@@ -113,6 +134,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         repo_path: Path,
         changed_files: list[str],
         model: str,
+        review_session: str,
+        base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
         """Orchestrate all phases with full-review retry and feedback loop."""
@@ -120,6 +143,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         best_attempt_items: list[ReviewItem] = []
         result: CodeReview | None = None
         last_failure: Exception | None = None
+        self._conversations_started = 0
 
         for full_retry in range(self._max_retries):
             logger.info(
@@ -130,16 +154,27 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             attempt_items: list[ReviewItem] = []
             try:
                 result = self._run_phases(
-                    plan, repo_path, changed_files, model, attempt_items, existing_item_ids=existing_item_ids
+                    plan, repo_path, changed_files, model, attempt_items,
+                    base_sha=base_sha,
+                    existing_item_ids=existing_item_ids,
+                    pr_identifier=f"{repo_name}/{pr_id_str}",
+                    review_session=review_session,
                 )
                 if result.items:
                     return result
                 best_attempt_items = result.items
                 break
+            except ReviewBudgetExhaustedError:
+                logger.warning(
+                    "Conversation budget exhausted with %d findings from"
+                    " this attempt; returning the best partial review",
+                    len(attempt_items),
+                )
+                if len(attempt_items) > len(best_attempt_items):
+                    best_attempt_items = list(attempt_items)
+                break
             except LlmUnavailableError as exc:
-                if not self._is_max_turns_exceeded(exc) and not (
-                    "Advisor blocked" in str(exc)
-                ):
+                if not self._is_max_turns_exceeded(exc):
                     raise
                 last_failure = exc
 
@@ -199,7 +234,11 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
         if not result.items:
             result = self._run_feedback_loop(
-                plan, repo_path, changed_files, model, result, existing_item_ids
+                plan, repo_path, changed_files, model, result,
+                base_sha=base_sha,
+                review_session=review_session,
+                pr_identifier=f"{repo_name}/{pr_id_str}",
+                existing_item_ids=existing_item_ids,
             )
 
         return result
@@ -211,6 +250,9 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         changed_files: list[str],
         model: str,
         previous_result: CodeReview,
+        review_session: str,
+        pr_identifier: str,
+        base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
         """Re-run phases with the prior review output as feedback context."""
@@ -231,7 +273,10 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     changed_files,
                     model,
                     initial_feedback=context,
+                    base_sha=base_sha,
                     existing_item_ids=existing_item_ids,
+                    pr_identifier=pr_identifier,
+                    review_session=review_session,
                 )
             except LlmUnavailableError:
                 logger.warning(
@@ -272,18 +317,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 "issues and dig deeper."
             )
         )
-        return (
-            f"## Review Feedback — Attempt #{round_number} Returned No Findings\n\n"
-            "Your previous review of this pull request produced **zero** actionable findings. "
-            f"{escalation}\n\n"
-            f"Previous verdict: **{result.verdict.value}** — "
-            f"{result.summary or result.reason or 'no explanation provided'}\n\n"
-            "Look for genuine issues: bugs, logic errors, security problems, "
-            "performance concerns, API misuse, race conditions, missing edge cases, "
-            "and architectural problems. Only report issues you can confirm by "
-            "reading the affected files.\n\n"
-            "If after careful re-examination you truly find no issues, "
-            "explain why the change is correct."
+        return self._feedback_renderer.render_content(
+            round_number=round_number,
+            escalation=escalation,
+            previous_verdict=result.verdict.value,
+            previous_explanation=(
+                result.summary or result.reason or "no explanation provided"
+            ),
         )
 
     def _run_phases(
@@ -296,6 +336,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         initial_feedback: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
         pr_identifier: str = "",
+        review_session: str = "",
+        base_sha: str = "",
     ) -> CodeReview:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
@@ -309,25 +351,21 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase_sequence[0],
                 "(Review start — no findings recorded yet.)",
                 pr_identifier=pr_identifier,
+                review_session=review_session,
             )
 
         for idx, phase in enumerate(phase_sequence):
             logger.info("Starting phase: %s", phase.phase_name)
-            phase_prompt = (
-                plan.methodology + "\n\n" + phase.system_prompt
-            )
-
             role_brief = phase.role_brief()
-            if role_brief:
-                phase_prompt = role_brief + "\n\n" + phase_prompt
-
             manager_brief = getattr(plan, "manager_brief", "")
             assignment = manager_brief or next_manager_brief
-            if assignment:
-                phase_prompt = assignment + "\n\n" + phase_prompt
-
-            if initial_feedback:
-                phase_prompt = initial_feedback + "\n\n" + phase_prompt
+            phase_prompt = self._phase_prompt_renderer.render_content(
+                feedback=initial_feedback,
+                assignment=assignment,
+                role_brief=role_brief,
+                methodology=plan.methodology,
+                system_prompt=phase.system_prompt,
+            )
 
             if _FINDINGS_MARKER in phase_prompt:
                 phase_prompt = phase_prompt.replace(
@@ -344,6 +382,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase_prompt=phase_prompt,
                 repo_path=repo_path,
                 changed_files=changed_files,
+                base_sha=base_sha,
+                review_session=review_session,
                 existing_item_ids=existing_ids,
             )
             phase_result = self._adjudicate_phase(
@@ -351,6 +391,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase_prompt=phase_prompt,
                 assignment=assignment,
                 pr_identifier=pr_identifier,
+                review_session=review_session,
+                base_sha=base_sha,
                 phase_result=phase_result,
                 repo_path=repo_path,
                 changed_files=changed_files,
@@ -409,6 +451,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 next_manager_brief = self._manager.brief(
                     phase_sequence[idx + 1], previous_findings,
                     pr_identifier=pr_identifier,
+                    review_session=review_session,
                 )
 
         suggestion_phase_id = getattr(plan, "suggestions_phase_id", None)
@@ -520,6 +563,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     items=code_review.items,
                     repo_path=repo_path,
                     changed_files=changed_files,
+                    base_sha=base_sha,
+                    review_session=review_session,
                 )
             )
             if (
@@ -587,13 +632,25 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         phase_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        review_session: str,
+        base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
         """Run a single phase with per-phase retry on exhaustion."""
         tool_service = self._tool_factory(
-            repo_path, changed_files
+            repo_path, changed_files, base_sha
         )
         for retry in range(self._max_retries):
+            if (
+                self._max_conversations is not None
+                and self._conversations_started >= self._max_conversations
+            ):
+                raise ReviewBudgetExhaustedError(
+                    f"Review conversation budget of {self._max_conversations}"
+                    " exhausted; stopping before starting another phase"
+                    " conversation"
+                )
+            self._conversations_started += 1
             try:
                 return self._command_bus.dispatch(
                     RunAgentConversationCommand(
@@ -603,22 +660,22 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                         tool_execution=tool_service,
                         phase_name=phase_name,
                         existing_item_ids=existing_item_ids,
+                        review_session=review_session,
                     )
                 )
-            except LlmUnavailableError as exc:
-                if not self._is_max_turns_exceeded(exc):
-                    raise
+            except (MaxTurnsExceededError, AdvisorBlockedError) as exc:
                 if retry == self._max_retries - 1:
                     raise
                 logger.warning(
-                    "Phase %s exceeded max turns (attempt %d/%d), "
-                    "restarting",
+                    "Phase %s did not converge (%s); restarting "
+                    "(attempt %d/%d)",
                     phase_name,
+                    type(exc).__name__,
                     retry + 1,
                     self._max_retries,
                 )
                 tool_service = self._tool_factory(
-                    repo_path, changed_files
+                    repo_path, changed_files, base_sha
                 )
         raise RuntimeError("Unreachable: _max_retries must be >= 1")
 
@@ -632,6 +689,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         changed_files: list[str],
         existing_item_ids: frozenset[str],
         pr_identifier: str = "",
+        review_session: str = "",
+        base_sha: str = "",
     ) -> PhaseResult:
         """Grade the finished phase with the advisor and re-run it on a blocking grade.
 
@@ -645,6 +704,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             return phase_result
         directive: AdvisorDirective = self._advisor.assess(
             phase, assignment, phase_result, pr_identifier=pr_identifier,
+            review_session=review_session,
         )
         if not directive.blocks_output:
             return phase_result
@@ -654,19 +714,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase,
                 directive.feedback or "phase drifted off its task",
                 pr_identifier=pr_identifier,
+                review_session=review_session,
             )
-        corrected_prompt = (
-            phase_prompt
-            + "\n\n"
-            + "ADVISOR CORRECTION — this phase drifted off the task it "
-            + "was assigned. Restart with the task explained again:\n"
-            + (directive.improved_prompt or directive.feedback)
+        corrected_prompt = self._correction_renderer.render_content(
+            phase_prompt=phase_prompt,
+            correction=(directive.improved_prompt or directive.feedback),
+            manager_replan=improved_task,
         )
-        if improved_task:
-            corrected_prompt += (
-                "\n\nMANAGER RE-PLAN — the manager improved your task "
-                "for this restart:\n" + improved_task
-            )
         logger.warning(
             "Advisor blocked phase %s (F); discarding output and "
             "restarting with the manager's improved prompt",
@@ -677,11 +731,13 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             phase_prompt=corrected_prompt,
             repo_path=repo_path,
             changed_files=changed_files,
+            base_sha=base_sha,
+            review_session=review_session,
             existing_item_ids=existing_item_ids,
         )
 
     def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
-        return "Phase exceeded max turns" in str(exc)
+        return isinstance(exc, MaxTurnsExceededError)
 
     def _extract_repo_and_pr(self, repo_path: Path) -> tuple[str, str]:
         """Extract (repo_name, pr_id) from repo_path."""

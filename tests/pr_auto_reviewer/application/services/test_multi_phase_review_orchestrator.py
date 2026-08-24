@@ -15,7 +15,13 @@ from pr_auto_reviewer.application.services.multi_phase_review_orchestrator impor
 from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
+    AdvisorBlockedError,
+)
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
+from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
+    MaxTurnsExceededError,
+)
 from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
@@ -123,12 +129,13 @@ class TestMultiPhaseReviewOrchestrator:
             max_retries=2,
         )
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(),
+            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
+                "base_sha": "",
                 "plan": plan,
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -150,7 +157,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
 
         def failing_run_phases(*args, **kwargs):
-            raise LlmUnavailableError("Phase exceeded max turns (attempt 1)")
+            raise MaxTurnsExceededError("Phase exceeded max turns (attempt 1)")
 
         orchestrator._run_phases = failing_run_phases
         # After max retries with no findings, refusing a default outcome is
@@ -158,7 +165,8 @@ class TestMultiPhaseReviewOrchestrator:
 
         with _pytest.raises(ReviewVerdictError):
             orchestrator.execute(
-                type("Cmd", (), {"existing_item_ids": frozenset(),
+                type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
+                    "base_sha": "",
                     "plan": plan,
                     "repo_path": Path("/tmp"),
                     "changed_files": ["src/main.py"],
@@ -179,12 +187,12 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
@@ -196,6 +204,7 @@ class TestMultiPhaseReviewOrchestrator:
             repo_path=Path("/tmp"),
             changed_files=["src/main.py"],
             model="test",
+            review_session="test-session",
         )
 
         assert result.verdict == ReviewVerdict.APPROVED.value
@@ -215,7 +224,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -227,6 +236,7 @@ class TestMultiPhaseReviewOrchestrator:
             repo_path=Path("/tmp"),
             changed_files=["src/main.py"],
             model="test",
+            review_session="test-session",
         )
 
         assert result.verdict == ReviewVerdict.APPROVED.value
@@ -245,7 +255,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -257,6 +267,8 @@ class TestMultiPhaseReviewOrchestrator:
             repo_path=Path("/tmp"),
             changed_files=["src/main.py"],
             model="test",
+            review_session="test-session",
+            pr_identifier="o/r#1",
             previous_result=_code_review(verdict=ReviewVerdict.CHANGES_REQUESTED),
         )
 
@@ -381,14 +393,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -400,6 +412,7 @@ class TestMultiPhaseReviewOrchestrator:
             repo_path=Path("/tmp"),
             changed_files=["src/main.py"],
             model="test",
+            review_session="test-session",
         )
 
         assert result.verdict == ReviewVerdict.APPROVED.value
@@ -452,19 +465,20 @@ class TestMultiPhaseReviewOrchestrator:
         assert result.items == []
 
     def test__is_max_turns_exceeded(self, mock_command_bus, mock_tool_factory) -> None:
-        """Test _is_max_turns_exceeded helper."""
+        """Only MaxTurnsExceededError counts as turn exhaustion."""
         orchestrator = MultiPhaseReviewOrchestrator(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
 
-        # Should return True - create instance with proper str
-        exc = type("Exc", (), {"__str__": lambda self: "Phase exceeded max turns"})()
-        assert orchestrator._is_max_turns_exceeded(exc)
-
-        # Should return False
+        assert orchestrator._is_max_turns_exceeded(
+            MaxTurnsExceededError("Phase exceeded max turns (10)")
+        )
         assert not orchestrator._is_max_turns_exceeded(
-            type("Exc", (), {"__str__": lambda self: "Other error"})()
+            AdvisorBlockedError("Advisor blocked phase after 2 blocking grades")
+        )
+        assert not orchestrator._is_max_turns_exceeded(
+            LlmUnavailableError("Ollama unreachable")
         )
 
     def test_execute_with_command_bus(
@@ -479,7 +493,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(): _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -487,7 +501,8 @@ class TestMultiPhaseReviewOrchestrator:
         )
 
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), 
+            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session", 
+                "base_sha": "",
                 "plan": {"phases": plan, "methodology": "sub-agent-multi-phase"},
                 "repo_path": Path("/tmp"),
                 "changed_files": ["src/main.py"],
@@ -497,6 +512,53 @@ class TestMultiPhaseReviewOrchestrator:
 
         assert result.verdict == ReviewVerdict.APPROVED.value
         assert len(result.items) == 1
+
+    def test_execute_respects_conversation_budget(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        """A conversation budget caps the total peer conversations per review."""
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer", phase_name="Engineer Review",
+                    system_prompt="",
+                ),
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="",
+                ),
+            ),
+            methodology="m",
+            suggestions_phase_id="architect",
+        )
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+            max_conversations=1,
+        )
+        engineer_result = _phase_result(
+            verdict="approved",
+            items=[_make_review_item("src/main.py", "budget item")],
+        )
+        # The first dispatch consumes the budget; the second phase must never
+        # start a conversation, so dispatch is called exactly once.
+        mock_command_bus.dispatch.side_effect = [engineer_result]
+
+        result = orchestrator.execute(
+            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
+                "base_sha": "",
+                "plan": plan,
+                "repo_path": Path("/tmp"),
+                "changed_files": ["src/main.py"],
+                "model": "test",
+            })()
+        )
+
+        assert mock_command_bus.dispatch.call_count == 1
+        # The first phase's item is salvaged into the published review rather
+        # than everything being lost to the budget stop.
+        assert len(result.items) == 1
+        assert result.items[0].description == "budget item"
 
     def test_run_phases_sources_suggestions_from_plan_suggestions_phase(
         self, mock_command_bus, mock_tool_factory,
@@ -629,6 +691,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             repo_path=Path("."),
             changed_files=[],
             model="code-review:latest",
+            review_session="test-session",
         )
         assert review.verdict == ReviewVerdict.APPROVED
         assert review.reason != ""
@@ -655,7 +718,8 @@ class TestOrchestratorCommentedIsFailureMarker:
                 repo_path=Path("."),
                 changed_files=[],
                 model="code-review:latest",
-            )
+            review_session="test-session",
+        )
 
     def test_rebuild_after_verification_explains_dropped_findings(self) -> None:
 
@@ -727,3 +791,38 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert briefed_phase.phase_id == "engineer"
         assert seen_prompts
         assert "Focus exclusively on install scripts." in seen_prompts[0]
+
+
+class TestPhaseRetryForwardsBaseSha:
+    """The PR merge-base reaches the exploration tool factory for each phase."""
+
+    def test_factory_receives_base_sha(self) -> None:
+        bus = InMemoryCommandBus()
+        seen: dict[str, object] = {}
+
+        def _factory(repo_path, changed_files, base_sha):
+            seen["changed_files"] = list(changed_files)
+            seen["base_sha"] = base_sha
+            return MagicMock()
+
+        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
+            seen["phase_name"] = command.phase_name
+            return PhaseResult(items=[], llm_verdict="approved")
+
+        bus.register(RunAgentConversationCommand, _phase_stub)
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=bus, tool_factory=_factory,
+        )
+        result = orchestrator._run_phase_with_retry(
+            phase_name="Bug Hunt — Diff",
+            phase_prompt="EEP",
+            repo_path=Path("."),
+            changed_files=["src/a.py"],
+            base_sha="d896687cafc093f113ade5444f02df98fcfc9042",
+            review_session="test-session",
+        )
+
+        assert result.llm_verdict == "approved"
+        assert seen["base_sha"] == "d896687cafc093f113ade5444f02df98fcfc9042"
+        assert seen["changed_files"] == ["src/a.py"]
+        assert seen["phase_name"] == "Bug Hunt — Diff"
