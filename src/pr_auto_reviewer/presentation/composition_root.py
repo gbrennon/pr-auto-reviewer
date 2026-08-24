@@ -71,10 +71,16 @@ class CompositionRoot:
     fully-wired presentation-layer entry points.
     """
 
-    def __init__(self, config_path: str | None = None) -> None:
+    def __init__(
+        self,
+        config_path: str | None = None,
+        *,
+        notifier: NotifierPort | None = None,
+    ) -> None:
         _ = config_path
         config = load_config()
         self._setup_logging(config.debug)
+        self._notifier_override = notifier
         self._container = Container(config)
         self._components = self._wire_components()
 
@@ -121,6 +127,11 @@ class CompositionRoot:
 
     def _wire_components(self) -> ApplicationComponents:
         c = self._container
+        notifier = (
+            self._notifier_override
+            if self._notifier_override is not None
+            else c.notifier
+        )
 
         review_service = ReviewPullRequestService(
             pr_repository=c.pr_repository,
@@ -156,7 +167,7 @@ class CompositionRoot:
             pr_lister=c.pr_lister,
             review_item_parser=review_item_parser,
             pr_repository=c.pr_repository,
-            notifier=c.notifier,
+            notifier=notifier,
             token_verifier=c.token_verifier,
             output_mode=c.config.output_mode,
         )
@@ -169,11 +180,11 @@ class CompositionRoot:
             repo_lister=c.repo_lister,
             review_item_parser=review_item_parser,
             cli_runner=cli_runner,
-            notifier=c.notifier,
+            notifier=notifier,
             token_verifier=c.token_verifier,
         )
 
-def bootstrap() -> ApplicationComponents:
+def bootstrap(*, notifier: NotifierPort | None = None) -> ApplicationComponents:
     """Backward-compatible entry point.  Delegates to CompositionRoot."""
     try:
         deleted = clean_temp_files()
@@ -182,7 +193,7 @@ def bootstrap() -> ApplicationComponents:
     except Exception:
         logger.warning("Temp file cleanup failed, continuing", exc_info=True)
 
-    root = CompositionRoot()
+    root = CompositionRoot(notifier=notifier)
     return root.components
 
 def run_daemon(components: ApplicationComponents | None = None) -> None:
