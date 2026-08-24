@@ -92,6 +92,7 @@ class ConfigBuilder:
         llm_max_retries: int = 5,
         llm_max_turns: int = 10,
         advisor_max_blocks: int = 2,
+        review_max_conversations: int = 48,
     ) -> Config:
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
@@ -176,6 +177,7 @@ class ConfigBuilder:
             llm_max_retries=llm_max_retries,
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
+            review_max_conversations=review_max_conversations,
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,

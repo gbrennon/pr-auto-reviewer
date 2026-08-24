@@ -63,6 +63,7 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 )
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -103,6 +104,7 @@ from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import 
 from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
     ReasonFactory,
 )
+from pr_auto_reviewer.infrastructure.transcript_routing import PEER_PHASE_ROUTES
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +115,14 @@ _PHASE_PROMPT_DIR = (
     / "universal"
 )
 
+_AGENT_BY_ROLE = {
+    SubAgentRole.ENGINEER: EngineerAgent(),
+    SubAgentRole.ARCHITECT: ArchitectAgent(),
+}
+
 _PHASES: list[tuple[str, str, Any]] = [
-    ("bug-hunt-diff", "Bug Hunt — Diff", EngineerAgent()),
-    ("bug-hunt-branch", "Bug Hunt — Branch", EngineerAgent()),
-    ("architecture-review", "Architecture Review", ArchitectAgent()),
+    (route.slug, route.label, _AGENT_BY_ROLE[route.role])
+    for route in PEER_PHASE_ROUTES
 ]
 
 _METHODOLOGY = (
@@ -259,8 +265,8 @@ def wire_core_services(
     verifier = FindingVerifier(
         chat_port=chat_client,
         verify_prompt=verify_prompt,
-        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
-            repo_path, changed_files=changed_files
+        tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
+            repo_path, changed_files=changed_files, base_sha=base_sha
         ),
         command_bus=command_bus,
         max_turns=config.llm_max_turns,
@@ -268,9 +274,10 @@ def wire_core_services(
     aggregator = FindingAggregator(ReasonFactory())
     orchestrator = MultiPhaseReviewOrchestrator(
         command_bus=command_bus,
-        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
-            repo_path, changed_files=changed_files
+        tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
+            repo_path, changed_files=changed_files, base_sha=base_sha
         ),
+        max_conversations=config.review_max_conversations,
         advisor=advisor,
         manager=PhaseManager(chat_port=chat_client, command_bus=command_bus),
     )
