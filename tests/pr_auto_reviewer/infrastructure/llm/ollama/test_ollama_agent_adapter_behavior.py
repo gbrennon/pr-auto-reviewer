@@ -6,7 +6,6 @@ from typing import cast
 
 import pytest
 
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
@@ -14,6 +13,7 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
     RunMultiPhaseReviewCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_agent_adapter import (
     OllamaAgentAdapter,
@@ -30,9 +30,9 @@ class _FakeOrchestrator:
     def execute(self, command: RunMultiPhaseReviewCommand) -> CodeReview:
         self.command = command
         return CodeReview(
-            verdict=ReviewVerdict.COMMENTED,
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="ran",
-            summary="",
+            summary="issues found",
             items=[],
             suggestions=[],
             praise=[],
@@ -105,7 +105,7 @@ class TestReviewPrompt:
 
         review = adapter.review_prompt(prompt)
 
-        assert review.verdict == ReviewVerdict.COMMENTED
+        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert isinstance(orchestrator.command, RunMultiPhaseReviewCommand)
         assert orchestrator.command.repo_path == Path("/tmp/repo")
         assert orchestrator.command.changed_files == ["src/a.py", "src/b.py"]

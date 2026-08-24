@@ -5,7 +5,7 @@ from .multi_phase_review_orchestrator import MultiPhaseReviewOrchestrator
 from .process_issue_commands_service import ProcessIssueCommandsService
 from .register_issue_service import RegisterIssueService
 from .review_pull_request_service import ReviewPullRequestService
-from .turn_parser import TurnParser
+from .turn_parser_service import TurnParserService
 
 __all__ = [
     "AgentConversationService",
@@ -15,5 +15,5 @@ __all__ = [
     "ProcessIssueCommandsService",
     "RegisterIssueService",
     "ReviewPullRequestService",
-    "TurnParser",
+    "TurnParserService",
 ]

@@ -124,18 +124,38 @@ Each phase is a `ReviewPhase` whose `system_prompt` comes from a prompt
 fragment (`infrastructure/fragments/content/universal/*.md`). Roles are
 expressed through these prompts AND the `SubAgent` role classes in the
 domain model, which now attach to phases via `ReviewPhase.role` and are
-composed into the phase prompt as a role brief. The plan also carries a
-`manager_brief` that opens the first phase.
+composed into the phase prompt as a role brief.
 
-To change what a sub-agent does, edit its fragment; to change which
-phase produces what, edit the plan builder.
+The **manager sub-agent plans every phase, including the first**: it
+briefs the opening phase before any conversation starts and re-briefs
+between phases (`MultiPhaseReviewOrchestrator._run_phases`). A static
+`plan.manager_brief` is only a fallback when no manager is wired.
+
+The **advisor observes every peer turn live** through a
+`PhaseTurnObserver` wired into `AgentConversationService`, grading on
+the S/A/B/C/D/F scale and interrupting drift with an in-conversation
+correction. On a post-phase F the output is blocked and handed back to
+the manager, who re-plans the task before the phase restarts — a restart
+never replays a failed prompt.
+
+The **teacher** role is the coaching layer formed by those manager tasks
+and advisor feedback plus this documentation set; see
+[sub-agents/teacher.md](sub-agents/teacher.md).
+
+To change what a sub-agent does, edit the phase fragment or the role's
+page in `docs/sub-agents/`; to change which phase produces what, edit
+the plan builder in `infrastructure/container/_core_services.py`.
 
 The role team is documented per page in [docs/sub-agents/](sub-agents/README.md):
 
 - [manager](sub-agents/manager.md) — plans, assigns, owns technical context
-- [advisor](sub-agents/advisor.md) — watches focus, grades, re-prompts
-- [engineer](sub-agents/engineer.md) — principal-engineer bug/quality review
-- [architect](sub-agents/architect.md) — structure, conventions, suggestions
+- [advisor](sub-agents/advisor.md) — watches every turn, grades S/A/B/C/D/F,
+  hands blockers to the manager
+- [engineer](sub-agents/engineer.md) — principal-engineer bug/security review
+  incl. indirect callers; audits tests for bias
+- [architect](sub-agents/architect.md) — structure, coupling, anti-patterns
+- [teacher](sub-agents/teacher.md) — the coaching tone; expressed through
+  manager tasks, advisor feedback, and transcripts
 
 ---
 
@@ -145,12 +165,17 @@ The role team is documented per page in [docs/sub-agents/](sub-agents/README.md)
    side-effectful `__post_init__` are breaking changes.
 2. **Port signatures are contracts.** Renaming/adding/removing a method
    on an outbound port requires updating all adapters and test fakes.
-3. **Verdict preservation.** When reconstructing a `CodeReview` from LLM
-   output, always carry `verdict=review.verdict` — never hardcode
-   `APPROVED`. See `verdict-event-mapping.md`.
-4. **Blocking threshold.** `ItemSeverity.is_blocking` (CRITICAL/MAJOR,
-   or SECURITY category) decides formal review vs comment-only output.
-5. **No comments, classes only.** Python source uses docstrings, not
+3. **No silent defaults.** A `CodeReview` always carries an explicit
+   `APPROVED` or `CHANGES_REQUESTED` verdict and a non-empty `reason`,
+   `summary`, and `model_used`; `COMMENTED` is a pipeline failure and
+   constructing one raises `ReviewVerdictError`.
+4. **Verdict preservation.** When reconstructing a `CodeReview` from LLM
+   output, always carry `verdict=review.verdict` — never hardcode an
+   outcome. See `verdict-event-mapping.md`.
+5. **Blocking threshold.** `ItemSeverity.is_blocking` (CRITICAL/MAJOR,
+   or SECURITY category) decides whether a review is a formal
+   `CHANGES_REQUESTED` case.
+6. **No comments, classes only.** Python source uses docstrings, not
    comments; behavior lives in classes, not standalone functions. See
    the AI guardrails file at the repo root.
 6. **External contracts are verified upstream.** Platform API behavior

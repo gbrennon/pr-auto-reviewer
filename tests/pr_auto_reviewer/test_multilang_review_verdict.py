@@ -90,6 +90,9 @@ class TestChangesRequestedMultilang:
                         description="SQL injection vulnerability in user query",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "app/repository.py")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -109,6 +112,9 @@ class TestChangesRequestedMultilang:
                         description="God object pattern detected — class has too many responsibilities",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "src/main/java/com/example/OrderService.java")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -129,6 +135,9 @@ class TestChangesRequestedMultilang:
                         description="Unhandled error in file operation",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "pkg/handler/user.go")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -147,6 +156,9 @@ class TestChangesRequestedMultilang:
                         description="Hardcoded API secret key exposed",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "lib/payment_gateway.rb")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -166,6 +178,9 @@ class TestChangesRequestedMultilang:
                         description="Tight coupling to concrete database implementation",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "Services/ReportGenerator.cs")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
@@ -184,6 +199,9 @@ class TestChangesRequestedMultilang:
                         description="Function name 'revese' should be 'reverse'",
                     ),
                 ],
+                reason="test reason",
+                summary="test summary",
+                model_used="test model",
             ),
                            "src/infrastructure/persistence/"
                            "json_dose_record_repository.rs")
@@ -195,14 +213,14 @@ class TestApprovedMultilang:
 
     def test_rust_clean_service(self) -> None:
         r, _ = _run_review("rust-clean-service",
-            CodeReview(verdict=ReviewVerdict.APPROVED),
+            CodeReview(verdict=ReviewVerdict.APPROVED, reason="test reason", summary="test summary", model_used="test model"),
                            "src/services/user_service.rs")
         assert r.verdict == ReviewVerdict.APPROVED
         assert len(r.items) == 0
 
     def test_kotlin_clean_service(self) -> None:
         r, _ = _run_review("kotlin-clean-service",
-            CodeReview(verdict=ReviewVerdict.APPROVED),
+            CodeReview(verdict=ReviewVerdict.APPROVED, reason="test reason", summary="test summary", model_used="test model"),
                            "src/main/kotlin/com/example/UserService.kt")
         assert r.verdict == ReviewVerdict.APPROVED
         assert len(r.items) == 0
@@ -232,7 +250,7 @@ class TestMultilangPromptContents:
         correct file_paths and file content keyword."""
         _, ctx_factory = _run_review(
             diff_name,
-            CodeReview(verdict=ReviewVerdict.APPROVED),
+            CodeReview(verdict=ReviewVerdict.APPROVED, reason="test reason", summary="test summary", model_used="test model"),
             file_path,
             file_content=keyword,
         )

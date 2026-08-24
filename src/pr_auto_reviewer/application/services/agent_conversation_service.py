@@ -18,19 +18,17 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.domain.agent.conversation_decision import (
-    ConversationDecision,
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
 )
-from pr_auto_reviewer.domain.agent.conversation_guardrails import (
-    ConversationGuardrails,
+from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
+    AdvisorBlockedError,
 )
-from pr_auto_reviewer.domain.agent.conversation_message import (
-    ConversationMessage,
-)
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
+    MaxTurnsExceededError,
 )
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
@@ -46,6 +44,29 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 )
 from pr_auto_reviewer.domain.services.review_item_factory import (
     ReviewItemFactory,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_decision import (
+    ConversationDecision,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
+    ConversationGuardrails,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.sub_agent_grade import SubAgentGrade
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    AdvisorBlockMessageRenderer,
+    AdvisorFeedbackMessageRenderer,
+    EmptyResponseMessageRenderer,
+    ExploreBeforeVerdictMessageRenderer,
+    ForceVerdictMessageRenderer,
+    InitialUserMessageRenderer,
+    RepeatedToolCallMessageRenderer,
+    UnparseableResponseMessageRenderer,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,18 +87,31 @@ class AgentConversationService(RunAgentConversationUseCase):
         chat_port: AgentChatPort,
         command_bus: CommandBusPort,
         conversation_logger: Any = None,
-        max_turns: int = 10,
+        *,
+        max_turns: int,
         max_empty_responses: int = 3,
         max_unparseable_responses: int = 3,
+        turn_observer: Any = None,
+        max_advisor_blocks: int = 2,
     ) -> None:
         self._chat_port = chat_port
         self._command_bus = command_bus
         self._conversation_logger = conversation_logger
+        self._turn_observer = turn_observer
+        self._max_advisor_blocks = max_advisor_blocks
         self._guardrails = ConversationGuardrails(
             max_turns=max_turns,
             max_empty_responses=max_empty_responses,
             max_unparseable_responses=max_unparseable_responses,
         )
+        self._initial_message = InitialUserMessageRenderer()
+        self._empty_message = EmptyResponseMessageRenderer()
+        self._unparseable_message = UnparseableResponseMessageRenderer()
+        self._advisor_block_message = AdvisorBlockMessageRenderer()
+        self._advisor_feedback_message = AdvisorFeedbackMessageRenderer()
+        self._repeated_tool_message = RepeatedToolCallMessageRenderer()
+        self._force_verdict_message = ForceVerdictMessageRenderer()
+        self._explore_message = ExploreBeforeVerdictMessageRenderer()
 
     def execute(
         self, command: RunAgentConversationCommand
@@ -89,18 +123,12 @@ class AgentConversationService(RunAgentConversationUseCase):
             changed_files=command.changed_files,
             tool_execution=command.tool_execution,
             phase_name=command.phase_name,
+            review_session=command.review_session,
             existing_item_ids=command.existing_item_ids,
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
-        if repo_path is None:
-            return "unknown"
-        path_str = str(repo_path)
-        import re
-        match = re.search(r"/repos/([^/]+)_([^/]+)_(\d+)$", path_str)
-        if match:
-            return f"{match.group(1)}/{match.group(2)}#{match.group(3)}"
-        return path_str.rsplit("/", 1)[-1]
+        return PRIdentifier.derive(repo_path)
 
 
     def _find_mentioned_file(
@@ -145,6 +173,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         repo_path: Path,
         changed_files: list[str],
         tool_execution: Any,
+        review_session: str,
         phase_name: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
@@ -159,27 +188,14 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
         messages: list[ConversationMessage] = [
             ConversationMessage(role="system", content=system_prompt),
-            ConversationMessage(
-                role="user",
-                content=(
-                    f"Changed files for this review:\n"
-                    f"  - {file_listing}\n\n"
-                    f"Repository path: {repo_path}\n\n"
-                    "Use get_changed_files to see which files were modified, "
-                    "then use read_file to inspect relevant files.\n"
-                    "You have access to read_file, search_codebase, "
-                    "list_directory, run_git, and get_changed_files tools.\n"
-                    "When you have completed your review for this phase, "
-                    'respond with a JSON object containing "verdict", '
-                    '"reason", "suggestions", "praise", and "items" keys.\n'
-                    "For tool calls, respond with a JSON object containing "
-                    '"action" and "args" keys.'
-                ),
+            self._initial_message.render(
+                file_listing=file_listing, repo_path=repo_path
             ),
         ]
 
         guardrails = replace(self._guardrails)
         seen_tool_calls: set[tuple[str, str]] = set()
+        self._consecutive_blocks = 0
         verdict_nudged = False
         while guardrails.has_turns_remaining():
             logger.debug(
@@ -198,15 +214,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 logger.debug(
                     "Empty response at turn %d; reprompting", guardrails.turn
                 )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "Your previous response was empty. Please continue "
-                        "your analysis or provide your review findings as "
-                        'a JSON object with "verdict", "reason", '
-                        '"suggestions", "praise", and "items" keys.'
-                    ),
-                ))
+                messages.append(self._empty_message.render())
                 continue
 
             guardrails = guardrails.mark_consecutive_success()
@@ -217,8 +225,39 @@ class AgentConversationService(RunAgentConversationUseCase):
             self._publish(ReviewTurnParsedEvent(
                 turn_number=guardrails.turn, result=parsed
             ))
+            if self._turn_observer is not None and parsed.kind is not TurnKind.VERDICT:
+                directive = self._turn_observer.observe(
+                    content, phase_name, review_session,
+                    pr_identifier=self._derive_pr_identifier(repo_path),
+                )
+                if directive.blocks_output:
+                    self._consecutive_blocks += 1
+                    messages.append(
+                        self._advisor_block_message.render(
+                            feedback=directive.feedback
+                        )
+                    )
+                    if self._consecutive_blocks >= self._max_advisor_blocks:
+                        self._log_conversation(
+                            phase_name, messages, guardrails.turn, None,
+                            repo_path=repo_path, review_session=review_session,
+                        )
+                        raise AdvisorBlockedError(
+                            f"Advisor blocked phase {phase_name} after "
+                            f"{self._consecutive_blocks} blocking grades"
+                        )
+                else:
+                    self._consecutive_blocks = 0
+                    if directive.feedback and directive.grade is (
+                        SubAgentGrade.WHATEVER
+                    ):
+                        messages.append(
+                            self._advisor_feedback_message.render(
+                                feedback=directive.feedback
+                            )
+                        )
 
-            if parsed.kind == "unparseable":
+            if parsed.kind is TurnKind.UNPARSEABLE:
                 decision, guardrails = guardrails.record_unparseable_response()
                 if decision is ConversationDecision.EXCEEDED_UNPARSEABLE:
                     raise LlmUnavailableError(
@@ -230,23 +269,14 @@ class AgentConversationService(RunAgentConversationUseCase):
                     "Unparseable response at turn %d; reprompting",
                     guardrails.turn,
                 )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "Your previous response was not valid JSON. Please "
-                        "respond with a JSON object containing either "
-                        "'action' and 'args' for tool calls, or 'verdict', "
-                        "'reason', 'suggestions', 'praise', and 'items' "
-                        "for your final review findings."
-                    ),
-                ))
+                messages.append(self._unparseable_message.render())
                 continue
 
             messages.append(ConversationMessage(
                 role="assistant", content=content
             ))
 
-            if parsed.kind == "tool_call" and parsed.tool_call is not None:
+            if parsed.kind is TurnKind.TOOL_CALL and parsed.tool_call is not None:
                 tool_call = parsed.tool_call
                 logger.debug(
                     "Tool call — action=%s args=%s",
@@ -264,16 +294,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                         "Tool call repeated (%s); refusing and reprompting",
                         tool_call.tool_name,
                     )
-                    messages.append(ConversationMessage(
-                        role="user",
-                        content=(
-                            "You already ran that exact tool call and its "
-                            "result is in the conversation above. Do not "
-                            "repeat it. Use a different changed file from "
-                            "the list, or provide your final verdict JSON "
-                            "now."
-                        ),
-                    ))
+                    messages.append(self._repeated_tool_message.render())
                     continue
                 seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
@@ -291,6 +312,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 messages.append(ConversationMessage(
                     role="user",
                     content=result_json,
+                    tool_result=result,
                 ))
                 if guardrails.should_force_verdict() and not verdict_nudged:
                     verdict_nudged = True
@@ -298,20 +320,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                         "Tool budget reached (%d); nudging verdict",
                         guardrails.tool_calls,
                     )
-                    messages.append(ConversationMessage(
-                        role="user",
-                        content=(
-                            "You have explored enough. Conclude now with "
-                            "your final review as a single JSON object: "
-                            '"verdict" ("approved" | "changes_requested" | '
-                            '"commented"), "reason", "items", "suggestions", '
-                            'and "praise". Only include findings you can '
-                            "confirm from the files you read."
-                        ),
-                    ))
+                    messages.append(self._force_verdict_message.render())
                 continue
 
-            if parsed.kind == "verdict":
+            if parsed.kind is TurnKind.VERDICT:
                 decision, guardrails = guardrails.judge_verdict()
                 if decision is ConversationDecision.ACCEPT_VERDICT:
                     logger.debug("Got verdict at turn %d", guardrails.turn)
@@ -320,7 +332,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                     )
                     self._log_conversation(
                         phase_name, messages, guardrails.turn, phase_result,
-                        repo_path=repo_path,
+                        repo_path=repo_path, review_session=review_session,
                     )
                     self._publish(ConversationCompletedEvent(
                         phase_result=phase_result
@@ -331,21 +343,11 @@ class AgentConversationService(RunAgentConversationUseCase):
                     "demanding exploration",
                     guardrails.turn,
                 )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "You reached a verdict without inspecting the "
-                        "repository. Before concluding, you MUST use the "
-                        "exploration tools (read_file, search_codebase, "
-                        "list_directory, run_git) to inspect the changed "
-                        "files. Do that now, then provide your final JSON "
-                        "verdict."
-                    ),
-                ))
+                messages.append(self._explore_message.render())
                 continue
         self._log_conversation(
             phase_name, messages, self._guardrails.max_turns, None,
-            repo_path=repo_path,
+            repo_path=repo_path, review_session=review_session,
         )
         fd, dump_path = tempfile.mkstemp(
             prefix="pr-review-exhausted-",
@@ -358,7 +360,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 indent=2,
                 default=str,
             )
-        raise LlmUnavailableError(
+        raise MaxTurnsExceededError(
             f"Phase exceeded max turns ({self._guardrails.max_turns}) "
             f"without a verdict. Full conversation dumped to {dump_path}"
         )
@@ -400,6 +402,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         turns: int,
         phase_result: PhaseResult | None,
         repo_path: Path | None = None,
+        review_session: str = "",
     ) -> None:
         self._log_conversation_debug(
             phase_name, messages, turns, phase_result, repo_path,
@@ -407,6 +410,10 @@ class AgentConversationService(RunAgentConversationUseCase):
         if self._conversation_logger is None:
             return
         pr_identifier = self._derive_pr_identifier(repo_path)
+        skipped = (
+            len(getattr(phase_result, "skip_reasons", []))
+            if phase_result else 0
+        )
         metadata: dict[str, Any] = {
             "model": "code-review:latest",
             "turns": turns,
@@ -414,8 +421,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                 phase_result.llm_verdict if phase_result else "exhausted"
             ),
             "item_count": (
-                len(phase_result.items) if phase_result else 0
+                len(getattr(phase_result, "items", []) or []) + skipped
+                if phase_result else 0
             ),
+            "skipped": skipped,
         }
         try:
             self._conversation_logger.log_conversation(
@@ -423,6 +432,7 @@ class AgentConversationService(RunAgentConversationUseCase):
                 pr_identifier=pr_identifier,
                 messages=messages,
                 metadata=metadata,
+                review_session=review_session,
             )
         except Exception:
             logger.warning(

@@ -12,7 +12,7 @@ Defined in `src/pr_auto_reviewer/domain/value_objects/review_verdict.py`:
 |---|---|---|
 | `APPROVED` | `"approved"` | PR is acceptable as-is |
 | `CHANGES_REQUESTED` | `"changes_requested"` | Blocking issues found; PR must not be merged |
-| `COMMENTED` | `"commented"` | Non-blocking feedback only |
+| `COMMENTED` | `"commented"` | Legacy/deserialization only — never constructed |
 
 ---
 
@@ -57,15 +57,16 @@ Forgejo/Codeberg expects:
 |---|---|---|---|---|
 | `APPROVED` | `APPROVE` | `APPROVED` | Formal review | All items in review body; no separate comment |
 | `CHANGES_REQUESTED` | `REQUEST_CHANGES` | `REQUEST_CHANGES` | Formal review + optional comment | **GitHub**: all items in review body. **Forgejo**: blocking items (CRITICAL/MAJOR) in review body; non-blocking items (MINOR/INFO) as a separate PR comment |
-| `COMMENTED` | `COMMENT` | `COMMENT` | Plain PR comment | All items in a single comment (both platforms) |
+| `COMMENTED` | `COMMENT` | `COMMENT` | Unreachable with valid reviews (construction raises) | — |
 
 ### Critical Rule
 
 > **APPROVED reviews MUST NOT carry blocking inline comments.**
 > Both GitHub and Forgejo/Codeberg reject this combination (HTTP 422 or 500).
 
-The publisher enforces this: a `COMMENT` verdict is published as a plain comment
-(not a review), and only `CHANGES_REQUESTED` / `APPROVED` trigger formal reviews.
+The publisher enforces this: only `CHANGES_REQUESTED` / `APPROVED`
+trigger formal reviews; a `COMMENT` verdict never reaches the publisher
+because constructing one is rejected up front.
 For `APPROVED`, blocking items are logically empty because the LLM wouldn't
 return blocking items alongside an approve verdict.
 
@@ -82,8 +83,9 @@ is platform-dependent:
   review; non-blocking items are published as a separate PR comment with a
   `COMMENTED`-style body (no verdict header).
 
-The `COMMENTED` verdict path (`_build_comment_path`) is unchanged — it always
-emits a single comment containing all items, regardless of platform.
+The `COMMENTED` path (`_build_comment_path`) is kept defensively in the
+mapper and processor but is unreachable: no valid `CodeReview` carries a
+`COMMENTED` verdict, so the publisher only ever sees formal verdicts.
 ---
 
 ## Danger Zones: Places That Construct `CodeReview`

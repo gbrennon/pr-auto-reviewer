@@ -9,8 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,12 @@ class ExplorationToolService:
     Results are JSON-serializable dicts suitable for injection into chat messages.
     """
 
-    def __init__(self, repo_path: Path | str, changed_files: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        repo_path: Path | str,
+        changed_files: list[str] | None = None,
+        base_sha: str = "",
+    ) -> None:
         if not repo_path:
             raise ValueError("repo_path cannot be empty")
         resolved = Path(repo_path).resolve()
@@ -48,6 +53,7 @@ class ExplorationToolService:
             raise ValueError(f"repo_path is not a directory: {repo_path}")
         self._repo_root = resolved
         self._changed_files = changed_files or []
+        self._base_sha = base_sha
 
     def _parse_read_args(self, args: str) -> tuple[str, int | None, int | None]:
         """Parse the read_file argument string.
@@ -213,6 +219,12 @@ class ExplorationToolService:
         """Execute a read-only git subcommand against the repo.
 
         Args: ``<subcommand> [args...]`` — subcommand must be in the whitelist.
+
+        When a base SHA is configured and the subcommand is a
+        range-sensitive read (``diff``/``log``), a bare invocation with no
+        explicit commit range or ref is scoped to ``<base>..HEAD`` so it
+        reflects the PR's changes instead of the (clean) checked-out
+        working tree.
         """
         tokens = args.strip().split()
         if not tokens:
@@ -224,9 +236,16 @@ class ExplorationToolService:
                 "error": f"Git subcommand '{subcommand}' is not allowed. "
                 f"Allowed: {', '.join(sorted(_GIT_READONLY_SUBCOMMANDS))}",
             }
+        command_args = list(tokens[1:])
+        if (
+            self._base_sha
+            and subcommand in ("diff", "log")
+            and self._is_bare_range_call(command_args)
+        ):
+            command_args = [f"{self._base_sha}..HEAD", *command_args]
         try:
             result = subprocess.run(
-                ["git", subcommand, *tokens[1:]],
+                ["git", subcommand, *command_args],
                 capture_output=True,
                 text=True,
                 cwd=str(self._repo_root),
@@ -245,6 +264,17 @@ class ExplorationToolService:
             "subcommand": subcommand,
             "output": result.stdout,
         }
+
+    def _is_bare_range_call(self, args: list[str]) -> bool:
+        """Whether *args* carry no explicit commit range or ref to anchor a diff.
+
+        Returns: ``True`` when the invocation only carries flags and path
+            arguments — nothing that already pins the PR range.
+        """
+        ref_markers = ("..", "HEAD", "origin/", "main", "master")
+        return not any(
+            marker in arg for arg in args for marker in ref_markers
+        )
 
     def get_changed_files(self) -> dict[str, Any]:
         """Return the list of files modified in the PR under review.

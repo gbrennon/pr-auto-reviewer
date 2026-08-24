@@ -22,14 +22,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
+
 import httpx
 
 from .ollama_streaming_chat_abc import (
     OllamaReviewStream,
     OllamaStreamingChatABC,
 )
-
 
 _REVIEW_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -104,6 +105,8 @@ will guarantee validity; do not add any text before or after the JSON.
 """
 
     return prompt
+
+
 
 
 class OllamaStreamingChatClient(OllamaStreamingChatABC):
@@ -274,7 +277,6 @@ class OllamaStreamingChatClient(OllamaStreamingChatABC):
         def _stream_lines() -> None:
             """Synchronous helper that populates ``accumulated``."""
             nonlocal verdict_seen
-            import httpx
 
             body: dict[str, Any] = {
                 "model": self._model,

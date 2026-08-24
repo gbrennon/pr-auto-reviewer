@@ -10,10 +10,16 @@ from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
+    ReasonFactory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,15 +119,42 @@ class ReviewResponseParser:
     def __init__(self) -> None:
         pass
 
-    @classmethod
-    def _parse_markdown_fallback(cls, content: str, model: str) -> CodeReview:
-        verdict = ReviewResponseParser._extract_verdict_md(content)
-        reason = ReviewResponseParser._extract_reason_md(content)
-        summary = ReviewResponseParser._extract_summary_md(content)
+    def _derive_summary(self, items: list[ReviewItem]) -> str:
+        """Build a summary from the items when the LLM omitted one."""
+        files = sorted({item.file_path for item in items if item.file_path})
+        blocking = sum(1 for item in items if item.is_blocking)
+        base = (
+            f"Found {len(items)} issue(s)"
+            f" ({blocking} blocking"
+            f" across {len(files)} file(s))."
+        )
+        if files:
+            base += " Files: " + ", ".join(files[:5])
+        return base
+
+    def _try_parse_markdown_fallback(
+        self, content: str, model: str,
+    ) -> CodeReview | None:
+        """Parse markdown supplementally, or return None when there is none."""
+        try:
+            return self._parse_markdown_fallback(content, model)
+        except ReviewVerdictError:
+            return None
+
+    def _parse_markdown_fallback(self, content: str, model: str) -> CodeReview:
+        verdict = self.extract_verdict_md(content)
+        reason = self._extract_reason_md(content)
+        summary = self._extract_summary_md(content)
         if not summary:
-            first_para = ReviewResponseParser._extract_first_paragraph(content)
+            first_para = self._extract_first_paragraph(content)
             summary = first_para if first_para else content.strip()[:500]
-        items_data = ReviewResponseParser._parse_markdown_items(content)
+        items_data = self._parse_markdown_items(content)
+        if not reason and items_data:
+            reason = ReasonFactory().make(items_data)
+        if not reason and summary:
+            reason = summary
+        if not summary and items_data:
+            summary = self._derive_summary(items_data)
         suggestions = [
             ReviewItem(
                 severity=ItemSeverity.INFO,
@@ -133,7 +166,7 @@ class ReviewResponseParser:
                 current_code=s.get("current_code", ""),
                 suggested_fix=s.get("suggested_code", ""),
             )
-            for s in ReviewResponseParser._extract_suggestions_md(content)
+            for s in self._extract_suggestions_md(content)
         ]
         praise = [
             ReviewItem(
@@ -146,7 +179,7 @@ class ReviewResponseParser:
                 current_code="",
                 suggested_fix=str(p.get("description", "")),
             )
-            for p in ReviewResponseParser._extract_praise_md(content)
+            for p in self._extract_praise_md(content)
         ]
         return CodeReview(
             verdict=verdict,
@@ -158,9 +191,8 @@ class ReviewResponseParser:
             model_used=model,
         )
 
-    @classmethod
     def _merge_json_markdown(
-        cls, json_result: CodeReview, markdown_result: CodeReview, model: str
+        self, json_result: CodeReview, markdown_result: CodeReview, model: str
     ) -> CodeReview:
         summary_is_string = isinstance(json_result.summary, str)
         summary_empty = (not summary_is_string or not json_result.summary.strip())
@@ -195,8 +227,7 @@ class ReviewResponseParser:
             model_used=model,
         )
 
-    @classmethod
-    def _parse_markdown_items(cls, content: str) -> list[ReviewItem]:
+    def _parse_markdown_items(self, content: str) -> list[ReviewItem]:
         pattern = re.compile(
             r"^-\s*\[(\w+)\]\s+(\w+)\s+\(([^)]+)\)\s+(.+)$",
             re.MULTILINE,
@@ -219,31 +250,29 @@ class ReviewResponseParser:
             )
         return items
 
-    @classmethod
-    def _parse_prose_items(cls, content: str) -> list[dict[str, Any]]:
+    def _parse_prose_items(self, content: str) -> list[dict[str, Any]]:
         content = content.strip()
         items: list[dict[str, Any]] = []
-        structured = cls._parse_structured_items(content)
-        concrete_structured = cls._only_concrete(structured)
+        structured = self._parse_structured_items(content)
+        concrete_structured = self._only_concrete(structured)
         if concrete_structured:
             return concrete_structured
 
-        for section_match in cls._ISSUE_SECTION.finditer(content):
+        for section_match in self._ISSUE_SECTION.finditer(content):
             section_body = section_match.group(1)
-            section_items = cls._items_from_segment(section_body)
+            section_items = self._items_from_segment(section_body)
             if section_items:
                 items.extend(section_items)
                 return items
 
-        flat = cls._parse_flat_prose_items(content)
-        return cls._only_concrete(flat)
+        flat = self._parse_flat_prose_items(content)
+        return self._only_concrete(flat)
 
-    @classmethod
-    def _items_from_segment(cls, section_body: str) -> list[dict[str, Any]]:
+    def _items_from_segment(self, section_body: str) -> list[dict[str, Any]]:
         """Extract concrete findings from an issue section, one item per heading."""
         produced: list[dict[str, Any]] = []
-        matches = list(cls._H4_ITEM.finditer(section_body))
-        matches += list(cls._NUMBERED_ITEM.finditer(section_body))
+        matches = list(self._H4_ITEM.finditer(section_body))
+        matches += list(self._NUMBERED_ITEM.finditer(section_body))
         if not matches:
             return produced
         matches.sort(key=lambda m: m.start())
@@ -252,28 +281,27 @@ class ReviewResponseParser:
             title = m.group(1).strip().rstrip("*:").strip()
             if len(title) < 5:
                 continue
-            item = cls._make_prose_item(title, section_body, m.end(), end)
+            item = self._make_prose_item(title, section_body, m.end(), end)
             if item is not None:
                 produced.append(item)
         return produced
 
-    @classmethod
-    def _parse_structured_items(cls, content: str) -> list[dict[str, Any]]:
+    def _parse_structured_items(self, content: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        for match in cls._STRUCTURED_ITEM.finditer(content):
+        for match in self._STRUCTURED_ITEM.finditer(content):
             severity_raw, category_raw, file_path, line, description = match.groups()
             item_start = match.start()
-            next_match = cls._STRUCTURED_ITEM.search(content, match.end())
+            next_match = self._STRUCTURED_ITEM.search(content, match.end())
             section_end = next_match.start() if next_match else len(content)
             section_body = content[item_start:section_end]
-            code_blocks = cls._CODE_BLOCK.findall(section_body)
+            code_blocks = self._CODE_BLOCK.findall(section_body)
             current_code = code_blocks[0].strip() if len(code_blocks) >= 1 else ""
             suggested_fix = code_blocks[1].strip() if len(code_blocks) >= 2 else ""
             if not suggested_fix and len(code_blocks) >= 1:
-                fix_match = cls._FIX_HEADER.search(section_body)
+                fix_match = self._FIX_HEADER.search(section_body)
                 if fix_match:
                     after_fix = section_body[fix_match.end():]
-                    fix_blocks = cls._CODE_BLOCK.findall(after_fix)
+                    fix_blocks = self._CODE_BLOCK.findall(after_fix)
                     if fix_blocks:
                         suggested_fix = fix_blocks[0].strip()
             items.append({
@@ -287,25 +315,23 @@ class ReviewResponseParser:
             })
         return items
 
-    @classmethod
-    def _parse_flat_prose_items(cls, content: str) -> list[dict[str, Any]]:
+    def _parse_flat_prose_items(self, content: str) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        matches = list(cls._H4_ITEM.finditer(content))
+        matches = list(self._H4_ITEM.finditer(content))
         if not matches:
-            matches = list(cls._NUMBERED_ITEM.finditer(content))
+            matches = list(self._NUMBERED_ITEM.finditer(content))
         for i, match in enumerate(matches):
             end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
             title = match.group(1).strip().rstrip("*:").strip()
             if len(title) < 5:
                 continue
-            item = cls._make_prose_item(title, content, match.end(), end)
+            item = self._make_prose_item(title, content, match.end(), end)
             if item is not None:
                 items.append(item)
         return items
 
-    @classmethod
     def _only_concrete(
-        cls, items: list[dict[str, Any]],
+        self, items: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Keep only items that carry a concrete current_code + suggested_fix pair."""
         concrete: list[dict[str, Any]] = []
@@ -316,25 +342,23 @@ class ReviewResponseParser:
                 concrete.append(item)
         return concrete
 
-    @classmethod
-    def _parse_recommendation_sections(cls, content: str) -> list[dict[str, str]]:
+    def _parse_recommendation_sections(self, content: str) -> list[dict[str, str]]:
         """Extract non-blocking improvement/recommendation prose as suggestions."""
         suggestions: list[dict[str, str]] = []
-        for match in cls._RECOMMENDATION_SECTION.finditer(content):
+        for match in self._RECOMMENDATION_SECTION.finditer(content):
             section = match.group(1)
-            for item_match in cls._NUMBERED_ITEM.finditer(section):
-                entry = cls._prose_suggestion_entry(item_match.group(1), section)
+            for item_match in self._NUMBERED_ITEM.finditer(section):
+                entry = self._prose_suggestion_entry(item_match.group(1), section)
                 if entry is not None:
                     suggestions.append(entry)
-            for item_match in cls._H4_ITEM.finditer(section):
-                entry = cls._prose_suggestion_entry(item_match.group(1), section)
+            for item_match in self._H4_ITEM.finditer(section):
+                entry = self._prose_suggestion_entry(item_match.group(1), section)
                 if entry is not None:
                     suggestions.append(entry)
         return suggestions
 
-    @classmethod
     def _prose_suggestion_entry(
-        cls, title: str, section: str,
+        self, title: str, section: str,
     ) -> dict[str, str] | None:
         """Turn a numbered recommendation heading into a suggestion entry."""
         slim = title.strip().rstrip("*:").strip()
@@ -345,14 +369,14 @@ class ReviewResponseParser:
             return None
         chunk = section[idx : idx + 800]
         file_path = ""
-        path_match = cls._BACKTICK_PATH.search(chunk)
+        path_match = self._BACKTICK_PATH.search(chunk)
         if path_match:
             candidate = path_match.group(1)
             if "." in candidate:
                 file_path = candidate.lstrip("/")
-        line = cls._extract_line_range(chunk) or ""
-        description = cls._prose_description(slim, chunk)
-        current_code, suggested_fix = cls._extract_code_blocks(chunk)
+        line = self._extract_line_range(chunk) or ""
+        description = self._prose_description(slim, chunk)
+        current_code, suggested_fix = self._extract_code_blocks(chunk)
         return {
             "file": file_path,
             "line": line,
@@ -361,8 +385,7 @@ class ReviewResponseParser:
             "suggested_fix": suggested_fix,
         }
 
-    @classmethod
-    def _extract_code_blocks(cls, chunk: str) -> tuple[str, str]:
+    def _extract_code_blocks(self, chunk: str) -> tuple[str, str]:
         """Extract current_code and suggested_fix from code blocks in chunk."""
         current_code = ""
         suggested_fix = ""
@@ -392,8 +415,7 @@ class ReviewResponseParser:
                 suggested_fix = current_code
         return current_code, suggested_fix
 
-    @classmethod
-    def _prose_description(cls, title: str, chunk: str) -> str:
+    def _prose_description(self, title: str, chunk: str) -> str:
         """Build a deep prose description from the section body."""
         code_clean = re.sub(r"```(?:[a-zA-Z0-9]+)?\s*\n.*?```", " ", chunk, flags=re.DOTALL)
         lines: list[str] = []
@@ -414,40 +436,36 @@ class ReviewResponseParser:
         combined = (title + ": " + body).strip() if body else title
         return combined.strip()[:600]
 
-    @classmethod
-    def parse_prose_recommendations(cls, content: str) -> list[dict[str, str]]:
+    def parse_prose_recommendations(self, content: str) -> list[dict[str, str]]:
         """Extract non-blocking improvement/recommendation prose as suggestions."""
-        return cls._parse_recommendation_sections(content)
+        return self._parse_recommendation_sections(content)
 
-    @classmethod
-    def parse_prose_praise(cls, content: str) -> list[dict[str, str]]:
+    def parse_prose_praise(self, content: str) -> list[dict[str, str]]:
         """Extract strengths / positive prose as praise entries."""
         praise: list[dict[str, str]] = []
-        for match in cls._STRENGTHS_SECTION.finditer(content):
+        for match in self._STRENGTHS_SECTION.finditer(content):
             section = match.group(1)
-            praise.extend(cls._strength_entries(section))
-        explicit = cls._extract_praise_md(content)
+            praise.extend(self._strength_entries(section))
+        explicit = self._extract_praise_md(content)
         for entry in explicit:
             if entry not in praise:
                 praise.append(entry)
         return praise
 
-    @classmethod
-    def _strength_entries(cls, section: str) -> list[dict[str, str]]:
+    def _strength_entries(self, section: str) -> list[dict[str, str]]:
         entries: list[dict[str, str]] = []
-        for item_match in cls._NUMBERED_ITEM.finditer(section):
-            entry = cls._prose_praise_entry(item_match.group(1), section)
+        for item_match in self._NUMBERED_ITEM.finditer(section):
+            entry = self._prose_praise_entry(item_match.group(1), section)
             if entry is not None:
                 entries.append(entry)
-        for item_match in cls._H4_ITEM.finditer(section):
-            entry = cls._prose_praise_entry(item_match.group(1), section)
+        for item_match in self._H4_ITEM.finditer(section):
+            entry = self._prose_praise_entry(item_match.group(1), section)
             if entry is not None:
                 entries.append(entry)
         return entries
 
-    @classmethod
     def _prose_praise_entry(
-        cls, title: str, section: str,
+        self, title: str, section: str,
     ) -> dict[str, str] | None:
         slim = title.strip().rstrip("*:").strip()
         if len(slim) < 5:
@@ -457,26 +475,25 @@ class ReviewResponseParser:
             return None
         chunk = section[idx : idx + 600]
         file_path = ""
-        path_match = cls._BACKTICK_PATH.search(chunk)
+        path_match = self._BACKTICK_PATH.search(chunk)
         if path_match:
             candidate = path_match.group(1)
             if "." in candidate:
                 file_path = candidate.lstrip("/")
-        description = cls._prose_description(slim, chunk)
+        description = self._prose_description(slim, chunk)
         return {
             "file": file_path,
             "description": description,
         }
 
-    @classmethod
-    def _extract_line_range(cls, context: str) -> str:
+    def _extract_line_range(self, context: str) -> str:
         """Return ``"start-end"`` (or ``"start"``) from line references."""
-        for pattern in (ReviewResponseParser._LOC_RANGE,
-                        ReviewResponseParser._FILE_LINE,
-                        ReviewResponseParser._LINE_RANGE):
+        for pattern in (self._LOC_RANGE,
+                        self._FILE_LINE,
+                        self._LINE_RANGE):
             m = re.search(pattern, context)
             if m:
-                if pattern is ReviewResponseParser._FILE_LINE:
+                if pattern is self._FILE_LINE:
                     start = m.group(2)
                     end_offset = 3
                 else:
@@ -486,64 +503,63 @@ class ReviewResponseParser:
                 return f"{start}-{end}" if end else start
         return ""
 
-    @classmethod
     def _make_prose_item(
-        cls, title: str, section_body: str, match_start: int,
+        self, title: str, section_body: str, match_start: int,
         segment_end: int | None = None,
     ) -> dict[str, Any] | None:
         context_end = segment_end if segment_end is not None else min(match_start + 1200, len(section_body))
         context = section_body[match_start:context_end]
-        code_blocks = cls._CODE_BLOCK.findall(context)
+        code_blocks = self._CODE_BLOCK.findall(context)
         current_code = code_blocks[0].strip() if len(code_blocks) >= 1 else ""
         suggested_fix = ""
         if len(code_blocks) >= 2:
             suggested_fix = code_blocks[1].strip()
         elif len(code_blocks) >= 1:
-            fix_match = cls._FIX_HEADER.search(context)
+            fix_match = self._FIX_HEADER.search(context)
             if fix_match:
                 after_fix = context[fix_match.end():]
-                fix_blocks = cls._CODE_BLOCK.findall(after_fix)
+                fix_blocks = self._CODE_BLOCK.findall(after_fix)
                 if fix_blocks:
                     suggested_fix = fix_blocks[0].strip()
         if not current_code:
-            current_match = cls._CURRENT_HEADER.search(context)
+            current_match = self._CURRENT_HEADER.search(context)
             if current_match:
                 after_current = context[current_match.end():]
-                cur_blocks = cls._CODE_BLOCK.findall(after_current)
+                cur_blocks = self._CODE_BLOCK.findall(after_current)
                 if cur_blocks:
                     current_code = cur_blocks[0].strip()
         if not current_code or not suggested_fix:
             return None
         file_path = ""
-        path_match = cls._BACKTICK_PATH.search(context)
+        path_match = self._BACKTICK_PATH.search(context)
         if path_match:
             candidate = path_match.group(1)
             if "." in candidate and not candidate.startswith("`"):
                 file_path = candidate
         if not file_path:
-            path_in_title = cls._BACKTICK_PATH.search(title)
+            path_in_title = self._BACKTICK_PATH.search(title)
             if path_in_title:
                 candidate = path_in_title.group(1)
                 if "." in candidate:
                     file_path = candidate
         if not file_path:
-            file_line = cls._FILE_LINE.search(context)
+            file_line = self._FILE_LINE.search(context)
             if file_line:
                 file_path = file_line.group(1).lstrip("/")
-        line = cls._extract_line_range(context)
+        line = self._extract_line_range(context)
         severity = "minor"
-        sev_match = cls._SEVERITY_PATTERN.search(title)
+        sev_match = self._SEVERITY_PATTERN.search(title)
         if not sev_match:
-            sev_match = cls._SEVERITY_PATTERN.search(context[:200])
+            sev_match = self._SEVERITY_PATTERN.search(context[:200])
         if sev_match:
             severity = sev_match.group(1).lower()
         category = "maintainability"
-        cat_match = cls._CATEGORY_PATTERN.search(title)
+        cat_match = self._CATEGORY_PATTERN.search(title)
         if not cat_match:
-            cat_match = cls._CATEGORY_PATTERN.search(context[:200])
+            cat_match = self._CATEGORY_PATTERN.search(context[:200])
         if cat_match:
             category = cat_match.group(1).lower()
-        description = cls._prose_description(title.strip(), context)
+        description = self._prose_description(title.strip(), context)
         return {
             "file": file_path,
             "severity": severity,
@@ -554,8 +570,7 @@ class ReviewResponseParser:
             "suggested_fix": suggested_fix,
         }
 
-    @classmethod
-    def _extract_verdict_md(cls, raw_text: str) -> ReviewVerdict:
+    def extract_verdict_md(self, raw_text: str) -> ReviewVerdict:
         match = re.search(r"##\s*Verdict\s*\n\s*(.+)", raw_text, re.IGNORECASE)
         if match:
             value = match.group(1).strip().lower()
@@ -572,8 +587,6 @@ class ReviewResponseParser:
                 return ReviewVerdict.CHANGES_REQUESTED
             if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
-            if "commented" in value:
-                return ReviewVerdict.COMMENTED
         match = re.search(r"Verdict:\s*(.+)", raw_text, re.IGNORECASE)
         if match:
             value = match.group(1).strip().lower()
@@ -581,18 +594,19 @@ class ReviewResponseParser:
                 return ReviewVerdict.CHANGES_REQUESTED
             if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
-        return ReviewVerdict.COMMENTED
+        raise ReviewVerdictError(
+            "Could not extract an APPROVED or CHANGES_REQUESTED verdict "
+            "from the LLM markdown output; refusing to default to COMMENTED."
+        )
 
-    @classmethod
-    def _extract_summary_md(cls, raw_text: str) -> str:
+    def _extract_summary_md(self, raw_text: str) -> str:
         pattern = r"##\s*Summary\s*\n(.*?)(?=##\s*|\Z)"
         match = re.search(pattern, raw_text, re.IGNORECASE | re.DOTALL)
         if not match:
             return ""
         return match.group(1).strip()
 
-    @classmethod
-    def _extract_reason_md(cls, raw_text: str) -> str:
+    def _extract_reason_md(self, raw_text: str) -> str:
         patterns = [
             r"\*\*Reason:\s*\*\*(.+)",
             r"Reason[:\s]+(.+)",
@@ -605,8 +619,7 @@ class ReviewResponseParser:
                     return value
         return ""
 
-    @classmethod
-    def _extract_first_paragraph(cls, raw_text: str) -> str | None:
+    def _extract_first_paragraph(self, raw_text: str) -> str | None:
         match = re.search(r"^(.+?)\n##\s", raw_text, re.DOTALL)
         if match:
             para = match.group(1).strip()
@@ -617,26 +630,13 @@ class ReviewResponseParser:
             return para if len(para) > 20 else None
         return None
 
-    @classmethod
-    def _empty_review(cls, model: str, *, reason: str) -> CodeReview:
-        return CodeReview(
-            verdict=ReviewVerdict.COMMENTED,
-            reason=reason or (
-                "Application could not extract a structured verdict "
-                "from the LLM output."
-            ),
-            summary=(
-                "No structured review data was obtained from the LLM output. "
-                "This is a pipeline failure signal, not a clean review."
-            ),
-            items=[],
-            suggestions=[],
-            praise=[],
-            model_used=model,
+    def _empty_review(self, model: str, *, reason: str) -> CodeReview:
+        raise ReviewVerdictError(
+            "No structured review data was obtained from the LLM output; "
+            "refusing to return a default COMMENTED review."
         )
 
-    @classmethod
-    def _resolve_verdict(cls, 
+    def _resolve_verdict(self, 
         explicit: str | None, items: list[ReviewItem],
     ) -> ReviewVerdict:
         if explicit:
@@ -645,13 +645,13 @@ class ReviewResponseParser:
                 return ReviewVerdict.CHANGES_REQUESTED
             if "approved" in value or value == "approve":
                 return ReviewVerdict.APPROVED
-            if "commented" in value:
-                return ReviewVerdict.COMMENTED
-            return ReviewVerdict(explicit)
-        return ReviewResponseParser._determine_verdict(items)
+            raise ReviewVerdictError(
+                f"LLM returned an unrecognized verdict {explicit!r}; "
+                "refusing to default to COMMENTED."
+            )
+        return self._determine_verdict(items)
 
-    @classmethod
-    def _resolve_reason(cls, data: dict[str, Any]) -> str:
+    def _resolve_reason(self, data: dict[str, Any]) -> str:
         reason_value = data.get("reason")
         if isinstance(reason_value, str) and reason_value:
             return reason_value
@@ -662,17 +662,16 @@ class ReviewResponseParser:
             return reasons_value
         return ""
 
-    @classmethod
-    def _determine_verdict(cls, items: list[ReviewItem]) -> ReviewVerdict:
+    def _determine_verdict(self, items: list[ReviewItem]) -> ReviewVerdict:
         for item in items:
             if item.severity in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR):
                 return ReviewVerdict.CHANGES_REQUESTED
         if items:
             return ReviewVerdict.CHANGES_REQUESTED
-        return ReviewVerdict.COMMENTED
+        return ReviewVerdict.APPROVED
 
-    @classmethod
-    def extract_outermost_json(cls, text: str) -> str | None:
+    @staticmethod
+    def extract_outermost_json(text: str) -> str | None:
         brace_level = 0
         start = -1
         for i, ch in enumerate(text):
@@ -686,8 +685,7 @@ class ReviewResponseParser:
                     return text[start : i + 1]
         return None
 
-    @classmethod
-    def _find_items_in_dict(cls, data: dict[str, Any]) -> list[dict[str, Any]]:
+    def _find_items_in_dict(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         items_key = (
             data.get("items")
             or data.get("findings")
@@ -700,19 +698,18 @@ class ReviewResponseParser:
             ]
         for value in data.values():
             if isinstance(value, dict):
-                result = ReviewResponseParser._find_items_in_dict(value)
+                result = self._find_items_in_dict(value)
                 if result:
                     return result
             if isinstance(value, list):
                 for entry in value:
                     if isinstance(entry, dict):
-                        result = ReviewResponseParser._find_items_in_dict(entry)
+                        result = self._find_items_in_dict(entry)
                         if result:
                             return result
         return []
 
-    @classmethod
-    def _infer_severity(cls, description: str) -> tuple[ItemSeverity, str]:
+    def _infer_severity(self, description: str) -> tuple[ItemSeverity, str]:
         lower = description.lower()
         if any(kw in lower for kw in ("security", "vulnerability", "injection", "leak", "hardcoded", "hard-coded")):
             return ItemSeverity.CRITICAL, ItemSeverity.CRITICAL.value
@@ -722,8 +719,7 @@ class ReviewResponseParser:
             return ItemSeverity.INFO, ItemSeverity.INFO.value
         return ItemSeverity.MINOR, "medium"
 
-    @classmethod
-    def _infer_type(cls, description: str, severity_str: str) -> str:
+    def _infer_type(self, description: str, severity_str: str) -> str:
         lower = description.lower()
         if any(kw in lower for kw in ("security", "injection", "hardcoded", "leak")):
             return "security"
@@ -737,8 +733,7 @@ class ReviewResponseParser:
             return "bug"
         return "quality"
 
-    @classmethod
-    def _extract_suggestions_md(cls, content: str) -> list[dict[str, str]]:
+    def _extract_suggestions_md(self, content: str) -> list[dict[str, str]]:
         section_match = re.search(
             r"## Suggestions\n(.*?)(?=\n## |\Z)", content, re.DOTALL
         )
@@ -750,14 +745,13 @@ class ReviewResponseParser:
             stripped = line.strip()
             if not stripped:
                 continue
-            parsed = ReviewResponseParser._parse_md_suggestion_line(stripped)
+            parsed = self._parse_md_suggestion_line(stripped)
             if parsed is None:
                 continue
             results.append(parsed)
         return results
 
-    @classmethod
-    def _extract_praise_md(cls, content: str) -> list[dict[str, str]]:
+    def _extract_praise_md(self, content: str) -> list[dict[str, str]]:
         section_match = re.search(
             r"## Praise\n(.*?)(?=\n## |\Z)", content, re.DOTALL
         )
@@ -769,14 +763,13 @@ class ReviewResponseParser:
             stripped = line.strip()
             if not stripped:
                 continue
-            parsed = ReviewResponseParser._parse_md_praise_line(stripped)
+            parsed = self._parse_md_praise_line(stripped)
             if parsed is None:
                 continue
             results.append(parsed)
         return results
 
-    @classmethod
-    def _parse_md_suggestion_line(cls, line: str) -> dict[str, str] | None:
+    def _parse_md_suggestion_line(self, line: str) -> dict[str, str] | None:
         match = re.match(r"(?:\d+\.|[*-])\s+(.*)", line)
         if not match:
             return None
@@ -795,8 +788,7 @@ class ReviewResponseParser:
             }
         return {"file": "", "line": "", "description": rest}
 
-    @classmethod
-    def _parse_md_praise_line(cls, line: str) -> dict[str, str] | None:
+    def _parse_md_praise_line(self, line: str) -> dict[str, str] | None:
         match = re.match(r"[*-]\s+(.*)", line)
         if not match:
             return None
@@ -811,18 +803,17 @@ class ReviewResponseParser:
             return {"file": file_match.group(1), "description": file_match.group(2).strip()}
         return {"file": "", "description": rest}
 
-    @classmethod
-    def parse_item_observations(cls, raw_text: str) -> list[dict[str, str]]:
+    def parse_item_observations(self, raw_text: str) -> list[dict[str, str]]:
         """Extract fix-less LLM item dicts as non-blocking suggestions."""
-        normalized = cls._extract_item_dicts(raw_text)
+        normalized = self._extract_item_dicts(raw_text)
         concrete_keys = {
             (str(i.get("file") or ""), str(i.get("description") or ""))
-            for i in cls._only_concrete(normalized)
+            for i in self._only_concrete(normalized)
         }
         observations: list[dict[str, str]] = []
         seen: set[tuple[str, str]] = set()
         for i in normalized:
-            if cls._is_concrete(i):
+            if self._is_concrete(i):
                 continue
             key = (str(i.get("file") or ""), str(i.get("description") or ""))
             if key in concrete_keys or key in seen:
@@ -837,8 +828,7 @@ class ReviewResponseParser:
             })
         return observations
 
-    @classmethod
-    def _extract_item_dicts(cls, raw_text: str) -> list[dict[str, Any]]:
+    def _extract_item_dicts(self, raw_text: str) -> list[dict[str, Any]]:
         """Extract all normalized item dicts from JSON content (concrete or not)."""
         cleaned = raw_text.strip()
         code_block_match = re.search(
@@ -852,7 +842,7 @@ class ReviewResponseParser:
                 pass
         for source in (cleaned,):
             try:
-                data = json.loads(ReviewResponseParser._sanitize_json_literals(source))
+                data = json.loads(self.sanitize_json_literals(source))
             except (json.JSONDecodeError, ValueError):
                 continue
             if isinstance(data, dict):
@@ -861,26 +851,25 @@ class ReviewResponseParser:
                 )
                 if isinstance(candidates, list):
                     return [
-                        ReviewResponseParser._normalize_item_dict(item)
+                        self.normalize_item_dict(item)
                         for item in candidates
                         if isinstance(item, dict)
                     ]
-                fallback = ReviewResponseParser._find_items_in_dict(data)
+                fallback = self._find_items_in_dict(data)
                 if fallback:
                     return [
-                        ReviewResponseParser._normalize_item_dict(item)
+                        self.normalize_item_dict(item)
                         for item in fallback
                     ]
             elif isinstance(data, list):
                 return [
-                    ReviewResponseParser._normalize_item_dict(item)
+                    self.normalize_item_dict(item)
                     for item in data
                     if isinstance(item, dict)
                 ]
         return []
 
-    @classmethod
-    def parse_items(cls, raw_text: str) -> list[dict[str, Any]]:
+    def parse_items(self, raw_text: str) -> list[dict[str, Any]]:
         """Extract a list of item dicts from a phase response.
 
         Each dict contains ``file``, ``severity``, ``category``,
@@ -901,10 +890,10 @@ class ReviewResponseParser:
             except (json.JSONDecodeError, ValueError):
                 pass
         try:
-            data = json.loads(ReviewResponseParser._sanitize_json_literals(cleaned))
+            data = json.loads(self.sanitize_json_literals(cleaned))
             if isinstance(data, list):
-                return cls._only_concrete([
-                    ReviewResponseParser._normalize_item_dict(item)
+                return self._only_concrete([
+                    self.normalize_item_dict(item)
                     for item in data
                     if isinstance(item, dict)
                 ])
@@ -915,40 +904,40 @@ class ReviewResponseParser:
                     or data.get("findings")
                 )
                 if isinstance(candidates, list):
-                    return cls._only_concrete([
-                        ReviewResponseParser._normalize_item_dict(item)
+                    return self._only_concrete([
+                        self.normalize_item_dict(item)
                         for item in candidates
                         if isinstance(item, dict)
                     ])
-                fallback = ReviewResponseParser._find_items_in_dict(data)
+                fallback = self._find_items_in_dict(data)
                 if fallback:
-                    return cls._only_concrete([
-                        ReviewResponseParser._normalize_item_dict(item)
+                    return self._only_concrete([
+                        self.normalize_item_dict(item)
                         for item in fallback
                     ])
                 return []
         except (json.JSONDecodeError, ValueError):
             pass
-        extracted = ReviewResponseParser.extract_outermost_json(cleaned)
+        extracted = self.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
-                data = json.loads(ReviewResponseParser._sanitize_json_literals(extracted))
+                data = json.loads(self.sanitize_json_literals(extracted))
                 if isinstance(data, list):
-                    return cls._only_concrete([
-                        ReviewResponseParser._normalize_item_dict(item)
+                    return self._only_concrete([
+                        self.normalize_item_dict(item)
                         for item in data
                         if isinstance(item, dict)
                     ])
                 if isinstance(data, dict):
-                    fallback = ReviewResponseParser._find_items_in_dict(data)
-                    return cls._only_concrete([
-                        ReviewResponseParser._normalize_item_dict(item)
+                    fallback = self._find_items_in_dict(data)
+                    return self._only_concrete([
+                        self.normalize_item_dict(item)
                         for item in fallback
                     ])
             except (json.JSONDecodeError, ValueError):
                 pass
         logger.debug("parse_items: JSON and extraction failed, trying markdown fallback")
-        markdown_items = ReviewResponseParser._parse_markdown_items(cleaned)
+        markdown_items = self._parse_markdown_items(cleaned)
         if markdown_items:
             return [
                 {
@@ -962,7 +951,7 @@ class ReviewResponseParser:
                 }
                 for item in markdown_items
             ]
-        prose_items = ReviewResponseParser._parse_prose_items(cleaned)
+        prose_items = self._parse_prose_items(cleaned)
         if prose_items:
             logger.info("parse_items: extracted %d items via prose parser", len(prose_items))
             return prose_items
@@ -973,8 +962,8 @@ class ReviewResponseParser:
         Path("/tmp/parse_items_failed.txt").write_text(raw_text)
         return []
 
-    @classmethod
-    def strip_frontmatter(cls, text: str) -> str:
+    @staticmethod
+    def strip_frontmatter(text: str) -> str:
         """Remove YAML frontmatter delimited by ``---`` lines."""
         cleaned = text.strip()
         if not cleaned.startswith("---"):
@@ -985,7 +974,7 @@ class ReviewResponseParser:
         return cleaned[second + 3:].strip()
 
     @staticmethod
-    def _normalize_item_dict(item: dict[str, Any]) -> dict[str, Any]:
+    def normalize_item_dict(item: dict[str, Any]) -> dict[str, Any]:
         """Map LLM JSON item fields onto the canonical parser schema."""
         severity_raw = str(item.get("severity") or "minor").lower().strip()
         severity_map = {
@@ -1035,7 +1024,7 @@ class ReviewResponseParser:
         return bool(code) and bool(fix)
 
     @staticmethod
-    def _sanitize_json_literals(text: str) -> str:
+    def sanitize_json_literals(text: str) -> str:
         """Escape raw control characters inside JSON string literals."""
         out: list[str] = []
         in_string = False
@@ -1063,26 +1052,28 @@ class ReviewResponseParser:
     def parse(self, content: str, model: str) -> CodeReview:
         cleaned = self._clean_response(content)
         try:
-            data = json.loads(self._sanitize_json_literals(cleaned))
+            data = json.loads(self.sanitize_json_literals(cleaned))
             result = self._code_review_from_dict(data, model)
             summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
             praise_empty = (not isinstance(result.praise, list) or not result.praise)
             if summary_empty or praise_empty:
-                markdown_result = self._parse_markdown_fallback(content, model)
-                result = self._merge_json_markdown(result, markdown_result, model)
+                markdown_result = self._try_parse_markdown_fallback(content, model)
+                if markdown_result is not None:
+                    result = self._merge_json_markdown(result, markdown_result, model)
             return result
         except (json.JSONDecodeError, ValueError):
             logger.debug("parse: JSON decode failed, trying text extraction")
         extracted = self.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
-                data = json.loads(self._sanitize_json_literals(extracted))
+                data = json.loads(self.sanitize_json_literals(extracted))
                 result = self._code_review_from_dict(data, model)
                 summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
                 praise_empty = (not isinstance(result.praise, list) or not result.praise)
                 if summary_empty or praise_empty:
-                    markdown_result = self._parse_markdown_fallback(content, model)
-                    result = self._merge_json_markdown(result, markdown_result, model)
+                    markdown_result = self._try_parse_markdown_fallback(content, model)
+                    if markdown_result is not None:
+                        result = self._merge_json_markdown(result, markdown_result, model)
                 return result
             except (json.JSONDecodeError, ValueError):
                 logger.debug("parse: extracted JSON decode also failed")
@@ -1121,12 +1112,12 @@ class ReviewResponseParser:
             if ItemSeverity.accepts(raw_severity):
                 severity_value = raw_severity
             else:
-                _, severity_value = ReviewResponseParser._infer_severity(description)
+                _, severity_value = self._infer_severity(description)
             raw_category = item_dict.get("category") or item_dict.get("type")
             if raw_category:
                 category_value = str(raw_category)
             else:
-                category_value = ReviewResponseParser._infer_type(description, severity_value)
+                category_value = self._infer_type(description, severity_value)
             review_item = ReviewItem(
                 severity=ItemSeverity.from_value(severity_value),
                 category=IssueCategory.from_value(category_value),
@@ -1140,10 +1131,23 @@ class ReviewResponseParser:
             if not review_item.file_path and not review_item.description:
                 continue
             items.append(review_item)
+        verdict = self._resolve_verdict(data.get("verdict"), items)
+        reason = self._resolve_reason(data)
+        summary = str(data.get("summary", ""))
+        if not reason and items:
+            reason = ReasonFactory().make(items)
+        if not reason and summary:
+            reason = summary
+        if not summary and items:
+            summary = self._derive_summary(items)
+        if not reason:
+            reason = f"Review resolved as {verdict.value}."
+        if not summary:
+            summary = reason
         return CodeReview(
-            verdict=self._resolve_verdict(data.get("verdict"), items),
-            reason=self._resolve_reason(data),
-            summary=str(data.get("summary", "")),
+            verdict=verdict,
+            reason=reason,
+            summary=summary,
             items=items,
             suggestions=[
                 ReviewItem(

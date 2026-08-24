@@ -33,7 +33,7 @@ class TestCompositeReviewPublisher:
             "github": github_publisher,
         })
 
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test", reason="test reason", summary="test summary")
         github_pr_id = PullRequestId(repository="github:owner/repo", number=1)
         codeberg_pr_id = PullRequestId(repository="codeberg:org/proj", number=2)
 
@@ -55,7 +55,7 @@ class TestCompositeReviewPublisher:
             "forgejo": codeberg_publisher,
         })
 
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test", reason="test reason", summary="test summary")
         pr_id = PullRequestId(repository="owner/repo", number=1)
 
         composite.publish(pr_id, review)
@@ -66,7 +66,7 @@ class TestCompositeReviewPublisher:
     def test_publish_raises_for_unknown_platform(self):
         composite = CompositeReviewPublisher({})
 
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="test", reason="test reason", summary="test summary")
         pr_id = PullRequestId(repository="unknown:owner/repo", number=1)
 
         with pytest.raises(ValueError, match="No publisher for platform unknown"):

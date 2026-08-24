@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )

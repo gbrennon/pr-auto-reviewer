@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 
 
 @dataclass(frozen=True)

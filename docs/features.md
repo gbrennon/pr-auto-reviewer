@@ -12,7 +12,7 @@ This document outlines what is currently implemented and what is planned.
 - **Duplicate Prevention** — Uses SHA-based state to avoid re-reviewing unchanged PRs
 - **AI Code Review** — Sends PR diff to Ollama and receives review
 - **Review Posting** — Submits formal review (approve/request_changes) with inline diff comments. Forgejo splits non-blocking items (MINOR/INFO) into a separate comment; GitHub keeps all items in the formal review.
-- **Comment Review** — COMMENTED verdict path: all items posted as a single comment on the PR (no formal review)
+- **No silent comment default** — the `COMMENTED` verdict is a pipeline failure, not an outcome: constructing it raises `ReviewVerdictError`. A review is always published as an explicit formal review with a real `APPROVED` or `CHANGES_REQUESTED` verdict.
 - **Local Git Clone Diff Fetching** — Uses local git clones to compute diffs and read file contents, avoiding API rate limits and providing full file context
 - **Multi-Platform Support** — Single application instance polls PRs on both GitHub and Codeberg/Forgejo; each PR is reviewed on its originating platform (determined by platform prefix or platform mode)
 
@@ -42,7 +42,7 @@ This document outlines what is currently implemented and what is planned.
 
 ### Code Review Features
 
-- **Verdict System** — AI determines Approved, Changes Requested, or Commented based on findings
+- **Verdict System** — every review ends in an explicit `APPROVED` or `CHANGES_REQUESTED`; `COMMENTED` is treated as a failure and never published.
 - **Structured Domain Model** — Review output uses typed entities (ReviewItem, ReviewSuggestion, ReviewPraise)
 - **Severity Awareness** — AI identifies critical, major, minor, and info-level issues
 - **Blocking vs Non-Blocking** — CRITICAL and MAJOR severity items block merge; SECURITY category always blocks regardless of severity
@@ -70,8 +70,8 @@ This document outlines what is currently implemented and what is planned.
 
 ### Advanced Review Features
 
-- **Multi-Phase Review Orchestrator** — Runs review in multiple phases (e.g., security, architecture, style) with findings passed between phases
-- **Agent System** — Specialized agents for different review aspects: AdvisorAgent (advice), ArchitectAgent (architecture), EngineerAgent (implementation), ExplorerAgent (code exploration), ManagerAgent (orchestration), ReviewerAgent (review), with shared Conversation and ConversationMessage infrastructure
+- **Multi-Phase Review Orchestrator** — Runs Bug Hunt — Diff, Bug Hunt — Branch, and Architecture Review as staged phases, with a manager planning every phase and findings passed between phases.
+- **Agent System** — Specialized agents: ManagerAgent (plans and briefs every phase), AdvisorAgent (grades every turn on S/A/B/C/D/F and hands blockers to the manager), EngineerAgent (bug/security review incl. indirect callers), ArchitectAgent (structure and anti-patterns), and the Teacher (the coaching approach documented per role).
 - **Agent Conversation Service** — Multi-turn agentic conversation with tool access (read_file, search_codebase, list_directory, run_git, get_changed_files)
 - **Finding Verification** — Validates LLM findings against actual source code before publishing
 - **Finding Aggregation** — Merges findings from multiple phases, deduplicates

@@ -2,7 +2,7 @@
 
 import pytest
 
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )
@@ -32,6 +32,37 @@ def git_repo(repo, monkeypatch):
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=repo, check=True)
     return repo
+
+
+@pytest.fixture
+def git_pr_repo(git_repo, monkeypatch):
+    """A PR-shaped clone: base commit, then a head commit checked out at HEAD.
+
+    The worktree is clean at the head commit, so a bare ``git diff`` shows
+    nothing — exactly the situation the base-SHA scoping exists to fix.
+    """
+    import subprocess as sp
+
+    base_sha = sp.run(
+        ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    (git_repo / "src" / "new.py").write_text("CHANGED\n")
+    sp.run(["git", "add", "-A"], cwd=git_repo, check=True)
+    sp.run(
+        ["git", "commit", "-q", "-m", "add feature"],
+        cwd=git_repo, check=True,
+    )
+    return _ServiceWithBase(base_sha)
+
+
+class _ServiceWithBase:
+    """Holds the base SHA together with a convenience constructor."""
+
+    def __init__(self, base_sha):
+        self.base_sha = base_sha
+
+    def service(self, repo):
+        return ExplorationToolService(repo, base_sha=self.base_sha)
 
 
 def _service(repo):
@@ -195,6 +226,41 @@ class TestRunGit:
         result = _service(repo).run_git("show HEAD")
 
         assert result["status"] == "error"
+
+
+class TestRunGitPrRangeScoping:
+    """Bare diff/log resolve to the PR base→head range when a base SHA is set."""
+
+    def test_diff_when_bare_and_base_sha_then_scoped_to_pr_range(self, git_pr_repo, git_repo) -> None:
+        result = git_pr_repo.service(git_repo).run_git("diff --name-only")
+
+        assert result["status"] == "ok"
+        assert "src/new.py" in result["output"]
+
+    def test_log_when_bare_and_base_sha_then_scoped_to_pr_range(self, git_pr_repo, git_repo) -> None:
+        result = git_pr_repo.service(git_repo).run_git("log --oneline")
+
+        assert result["status"] == "ok"
+        assert "add feature" in result["output"]
+        assert "init" not in result["output"]
+
+    def test_diff_when_explicit_range_then_left_untouched(self, git_pr_repo, git_repo) -> None:
+        result = git_pr_repo.service(git_repo).run_git("diff --name-only HEAD~1..HEAD")
+
+        assert result["status"] == "ok"
+        assert "src/new.py" in result["output"]
+
+    def test_diff_when_base_sha_absent_then_not_scoped(self, git_repo) -> None:
+        result = _service(git_repo).run_git("diff --name-only")
+
+        assert result["status"] == "ok"
+        assert result["output"] == ""
+
+    def test_status_when_base_sha_then_not_scoped(self, git_pr_repo, git_repo) -> None:
+        result = git_pr_repo.service(git_repo).run_git("status --short")
+
+        assert result["status"] == "ok"
+        assert result["output"] == ""
 
 
 class TestExecute:

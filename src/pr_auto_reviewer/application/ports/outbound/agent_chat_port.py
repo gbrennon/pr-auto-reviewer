@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from pr_auto_reviewer.domain.agent.conversation_message import (
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 

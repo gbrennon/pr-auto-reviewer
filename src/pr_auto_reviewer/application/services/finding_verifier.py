@@ -15,12 +15,27 @@ from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import 
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
-from pr_auto_reviewer.domain.agent.conversation_message import (
-    ConversationMessage,
+from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
+    CommandBusPort,
+)
+from pr_auto_reviewer.application.services.pr_identifier import (
+    PRIdentifier,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
+)
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    VerifyEmptyResponseRenderer,
+    VerifyInitialUserRenderer,
+    VerifyUnparseableResponseRenderer,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,11 +62,18 @@ class FindingVerifier(VerifyFindingsUseCase):
         self,
         chat_port: AgentChatPort,
         verify_prompt: str,
-        tool_factory: Callable[[Path, list[str]], Any],
+        tool_factory: Callable[[Path, list[str], str], Any],
+        command_bus: CommandBusPort | None = None,
+        max_turns: int = _VERIFY_MAX_TURNS,
     ) -> None:
         self._chat_port = chat_port
         self._verify_prompt = verify_prompt
         self._tool_factory = tool_factory
+        self._command_bus = command_bus
+        self._max_turns = max_turns
+        self._initial_user = VerifyInitialUserRenderer()
+        self._empty_user = VerifyEmptyResponseRenderer()
+        self._unparseable_user = VerifyUnparseableResponseRenderer()
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Verify blocking findings, returning only those confirmed by the LLM."""
@@ -66,10 +88,14 @@ class FindingVerifier(VerifyFindingsUseCase):
         )
         prompt = self._verify_prompt.replace("{findings}", findings_text)
 
-        results = self._run_verification_conversation(
+        results, transcript = self._run_verification_transcript(
             system_prompt=prompt,
             repo_path=command.repo_path,
             changed_files=command.changed_files,
+            base_sha=command.base_sha,
+        )
+        self._publish_exchange(
+            command.repo_path, command.review_session, prompt, transcript,
         )
 
         if results is None:
@@ -129,36 +155,39 @@ class FindingVerifier(VerifyFindingsUseCase):
         system_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        base_sha: str = "",
     ) -> list[dict[str, Any]] | None:
-        """Run a multi-turn verification conversation with tool access."""
-        tool_service = self._tool_factory(repo_path, changed_files)
+        """Run the verification conversation, returning only its results."""
+        results, _transcript = self._run_verification_transcript(
+            system_prompt=system_prompt,
+            repo_path=repo_path,
+            changed_files=changed_files,
+            base_sha=base_sha,
+        )
+        return results
+
+    def _run_verification_transcript(
+        self,
+        system_prompt: str,
+        repo_path: Path,
+        changed_files: list[str],
+        base_sha: str = "",
+    ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
+        """Run the verification conversation, returning results and transcript."""
+        tool_service = self._tool_factory(repo_path, changed_files, base_sha)
 
         messages: list[ConversationMessage] = [
             ConversationMessage(
                 role="system", content=system_prompt
             ),
-            ConversationMessage(
-                role="user",
-                content=(
-                    f"Repository path: {repo_path}\n\n"
-                    "Verify each finding above against the ACTUAL source code. "
-                    "Use read_file to inspect files, search_codebase to locate "
-                    "symbols, and list_directory to explore the repository. "
-                    "You have access to read_file, search_codebase, "
-                    "list_directory, run_git, and get_changed_files tools.\n\n"
-                    "For tool calls, respond with a JSON object containing "
-                    "'action' and 'args' keys.\n"
-                    "When verification is complete, respond with a JSON object "
-                    "containing a 'results' array."
-                ),
-            ),
+            self._initial_user.render(repo_path=repo_path),
         ]
 
         empty_consecutive = 0
         unparseable_consecutive = 0
-        for turn in range(_VERIFY_MAX_TURNS):
+        for turn in range(self._max_turns):
             logger.debug(
-                "Verify turn %d/%d", turn + 1, _VERIFY_MAX_TURNS
+                "Verify turn %d/%d", turn + 1, self._max_turns
             )
             content = self._chat_port.send(messages)
             if not content:
@@ -169,19 +198,12 @@ class FindingVerifier(VerifyFindingsUseCase):
                         "aborting",
                         empty_consecutive,
                     )
-                    return None
+                    return None, messages
                 logger.debug(
                     "Empty response at verify turn %d; reprompting",
                     turn + 1,
                 )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "Your previous response was empty. Please verify "
-                        "each finding and respond with a JSON object "
-                        "containing a 'results' array."
-                    ),
-                ))
+                messages.append(self._empty_user.render())
                 continue
 
             empty_consecutive = 0
@@ -198,20 +220,12 @@ class FindingVerifier(VerifyFindingsUseCase):
                         "responses; aborting",
                         unparseable_consecutive,
                     )
-                    return None
+                    return None, messages
                 logger.debug(
                     "Unparseable response at verify turn %d; reprompting",
                     turn + 1,
                 )
-                messages.append(ConversationMessage(
-                    role="user",
-                    content=(
-                        "Your previous response was not valid JSON. "
-                        "Please respond with a JSON object containing "
-                        "either 'action' and 'args' for tool calls, "
-                        "or 'results' for your verification results."
-                    ),
-                ))
+                messages.append(self._unparseable_user.render())
                 continue
             unparseable_consecutive = 0
 
@@ -223,7 +237,7 @@ class FindingVerifier(VerifyFindingsUseCase):
                 logger.debug(
                     "Got verification results at turn %d", turn + 1
                 )
-                return parsed
+                return parsed, messages
 
             action = parsed["action"]
             args = parsed.get("args", "")
@@ -247,7 +261,7 @@ class FindingVerifier(VerifyFindingsUseCase):
         logger.warning(
             "Verification exceeded max turns (%d)", _VERIFY_MAX_TURNS
         )
-        return None
+        return None, messages
 
     def _parse_verify_turn(
         self, content: str
@@ -366,3 +380,21 @@ class FindingVerifier(VerifyFindingsUseCase):
         window_start = max(0, match_line - 10)
         window_end = min(len(file_lines), match_line + 50)
         return "\n".join(file_lines[window_start:window_end])
+
+    def _publish_exchange(
+        self,
+        repo_path: Path,
+        review_session: str,
+        system_prompt: str,
+        transcript: list[ConversationMessage],
+    ) -> None:
+        """Emit the finished verification exchange for the transcript log."""
+        if self._command_bus is None:
+            return
+        self._command_bus.dispatch(AgentExchangeEvent(
+            role=SubAgentRole.VERIFIER,
+            phase_name="Verify Findings",
+            pr_identifier=PRIdentifier.derive(repo_path),
+            review_session=review_session,
+            messages=transcript,
+        ))

@@ -12,11 +12,11 @@ import requests
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
-from pr_auto_reviewer.domain.agent.conversation_message import (
-    ConversationMessage,
-)
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
 )
 
 logger = logging.getLogger(__name__)

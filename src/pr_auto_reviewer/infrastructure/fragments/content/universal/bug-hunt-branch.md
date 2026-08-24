@@ -14,10 +14,14 @@ Find behavioral and runtime bugs that span multiple files or require deeper expl
 
 ## TOOLS
 
-You may use `read_file`, `search_codebase`, `list_directory`, and `run_git` to explore the full repository.
+You may use `read_file`, `search_codebase`, `list_directory`, `run_git`, and `get_changed_files` to explore the full repository.
 
 `run_git` accepts read-only subcommands: `log`, `diff`, `show`, `blame`, `branch`, `status`, `ls-files`, `rev-parse`, `rev-list`. Example: `run_git log --oneline -10`.
 
+The review clone is checked out at the PR head with a clean working tree, so
+`status` will be empty and bare `diff`/`log` are scoped to the PR's merge-base
+→ head range automatically. Use `get_changed_files` to list what the PR changed
+and `run_git diff -- <path>` for a specific file's raw diff.
 
 The findings below are already recorded. Do NOT re-report them. If a file
 appears in the list, only raise new, distinct issues not already covered.
@@ -26,7 +30,7 @@ __PREVIOUS_FINDINGS__
 
 ## METHODOLOGY
 
-1. Start from changed files and trace their callers across the full codebase
+1. Call `get_changed_files` to know what this PR changed, then trace their callers across the full codebase
 2. Search for all importers of modified symbols
 3. Check that shared interfaces/contracts are honored by all implementations
 4. Inspect test files for coverage gaps on changed behavior

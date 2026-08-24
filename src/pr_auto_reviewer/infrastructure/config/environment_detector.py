@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from pr_auto_reviewer.infrastructure.config.repo_root import RepoRoot
 
 
@@ -14,7 +16,6 @@ class EnvironmentDetector:
     """
 
     def __init__(self, environ: dict[str, str] | None = None) -> None:
-        import os
         self._environ = environ if environ is not None else os.environ
 
     @classmethod

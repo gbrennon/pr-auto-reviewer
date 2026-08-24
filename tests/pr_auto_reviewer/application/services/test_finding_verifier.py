@@ -54,7 +54,8 @@ class TestFindingVerifierExecute:
 
         result = verifier.execute(
             VerifyFindingsCommand(
-                items=items, repo_path=Path("."), changed_files=[]
+                items=items, repo_path=Path("."), changed_files=[],
+                review_session="test-session",
             )
         )
 
@@ -70,7 +71,8 @@ class TestFindingVerifierExecute:
 
         result = verifier.execute(
             VerifyFindingsCommand(
-                items=items, repo_path=Path("."), changed_files=[]
+                items=items, repo_path=Path("."), changed_files=[],
+                review_session="test-session",
             )
         )
 
@@ -87,7 +89,8 @@ class TestFindingVerifierExecute:
 
         result = verifier.execute(
             VerifyFindingsCommand(
-                items=items, repo_path=Path("."), changed_files=[]
+                items=items, repo_path=Path("."), changed_files=[],
+                review_session="test-session",
             )
         )
 
@@ -119,6 +122,7 @@ class TestFindingVerifierExecute:
                 items=blocking + [minor],
                 repo_path=Path("."),
                 changed_files=[],
+                review_session="test-session",
             )
         )
 
@@ -138,7 +142,8 @@ class TestFindingVerifierExecute:
 
         result = verifier.execute(
             VerifyFindingsCommand(
-                items=items, repo_path=Path("."), changed_files=[]
+                items=items, repo_path=Path("."), changed_files=[],
+                review_session="test-session",
             )
         )
 
@@ -158,7 +163,8 @@ class TestFindingVerifierExecute:
 
         result = verifier.execute(
             VerifyFindingsCommand(
-                items=items, repo_path=Path("."), changed_files=[]
+                items=items, repo_path=Path("."), changed_files=[],
+                review_session="test-session",
             )
         )
 

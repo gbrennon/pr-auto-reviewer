@@ -100,29 +100,29 @@ class TestReviewJsonSerializer:
         data = json.loads(ReviewJsonSerializer().serialize(_full_review()))
         assert data["praise"] == [{"severity": "info", "category": "general", "file_path": "c.py", "description": "great design", "suggested_fix": "great design"}]
 
-    def test_top_level_empty_fields_are_preserved_as_empty(self) -> None:
+    def test_top_level_fields_round_trip_and_empty_lists_serialize(self) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.APPROVED,
-            reason="",
-            summary="",
+            reason="clean",
+            summary="no findings",
             items=[],
             suggestions=[],
             praise=[],
-            model_used="",
+            model_used="llama3",
         )
         data = json.loads(ReviewJsonSerializer().serialize(review))
-        assert data["reason"] == ""
-        assert data["summary"] == ""
-        assert data["model_used"] == ""
+        assert data["reason"] == "clean"
+        assert data["summary"] == "no findings"
+        assert data["model_used"] == "llama3"
         assert data["items"] == []
         assert data["suggestions"] == []
         assert data["praise"] == []
 
     def test_serializes_item_without_optionals(self) -> None:
         review = CodeReview(
-            verdict=ReviewVerdict.COMMENTED,
+            verdict=ReviewVerdict.APPROVED,
             reason="comment only",
-            summary="",
+            summary="minor nits",
             items=[
                 ReviewItem(
                     id="t1",
@@ -134,7 +134,7 @@ class TestReviewJsonSerializer:
             ],
             suggestions=[],
             praise=[],
-            model_used="",
+            model_used="llama3",
         )
         data = json.loads(ReviewJsonSerializer().serialize(review))
         item = data["items"][0]

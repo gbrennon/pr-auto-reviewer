@@ -12,6 +12,7 @@ from .pull_request_not_found_error import PullRequestNotFoundError
 from .repository_corrupted_error import RepositoryCorruptedError
 from .review_item_not_found_error import ReviewItemNotFoundError
 from .review_publish_error import ReviewPublishError
+from .review_verdict_error import ReviewVerdictError
 
 __all__ = [
     "DomainError",
@@ -28,4 +29,5 @@ __all__ = [
     "RepositoryCorruptedError",
     "ReviewItemNotFoundError",
     "ReviewPublishError",
+    "ReviewVerdictError",
 ]

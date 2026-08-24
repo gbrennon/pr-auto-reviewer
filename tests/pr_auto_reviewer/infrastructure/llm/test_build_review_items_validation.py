@@ -208,8 +208,8 @@ class TestBuildReviewItemsValidation:
         assert len(result) == 1
         assert result[0].description == "valid line"
 
-    def test_drops_items_with_mismatched_code(self, tmp_path: Path) -> None:
-        """Items whose current_code doesn't match file content are dropped."""
+    def test_keeps_item_with_unlocatable_code(self, tmp_path: Path) -> None:
+        """A finding whose code snippet isn't in the file is kept, not dropped."""
         (tmp_path / "src").mkdir(parents=True)
         (tmp_path / "src" / "foo.py").write_text("def foo():\n    return 42")
         item_dicts: list[dict[str, Any]] = [
@@ -232,9 +232,60 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "def bar() -> int:",
             },
         ]
+        result, skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        # A snippet that anchors in the file counts as located even with a
+        # matching line adjustment; an unlocatable snippet no longer drops the
+        # item — it is kept with its claimed anchor and only warned about.
+        assert len(result) == 2
+        assert {item.description for item in result} == {
+            "correct code",
+            "hallucinated code",
+        }
+        assert skip_reasons == []
+
+    def test_relocates_snippet_to_matching_line(self, tmp_path: Path) -> None:
+        """A single-line snippet found at another line corrects the anchor."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text(
+            "def foo():\n    x = 1\n    return 42\n"
+        )
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/foo.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "returns wrong value",
+                "line": "2",
+                "current_code": "    x = 1",
+                "suggested_fix": "    x = 2",
+            },
+        ]
         result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
         assert len(result) == 1
-        assert result[0].description == "correct code"
+        assert result[0].line == "2"
+
+    def test_multiline_snippet_matching_files_is_kept(
+        self, tmp_path: Path
+    ) -> None:
+        """A multi-line current_code that spans matching file lines is kept."""
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text(
+            "def foo():\n    a = 1\n    b = 2\n    return a + b\n"
+        )
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "src/foo.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "off-by-one in total",
+                "line": "2",
+                "current_code": "    a = 1\n    b = 2",
+                "suggested_fix": "    a = 2\n    b = 2",
+            },
+        ]
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        assert len(result) == 1
+        assert result[0].line == "2"
 
     def test_fabricated_error_description_skipped(self, tmp_path: Path) -> None:
         """Findings with error-pattern description and no code evidence are dropped."""

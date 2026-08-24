@@ -56,32 +56,21 @@ index def456..ghi789 100644
 
     def test_publish(self, adapter):
         """Publish sends a formal PR review."""
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
 
     @pytest.mark.parametrize("verdict", [
         ReviewVerdict.APPROVED,
         ReviewVerdict.CHANGES_REQUESTED,
-        ReviewVerdict.COMMENTED,
     ])
     def test_publish_maps_verdict(self, adapter, verdict):
         """Publish maps ReviewVerdict to correct event."""
-        review = CodeReview(verdict=verdict, summary="Test", items=[], model_used="t")
+        review = CodeReview(verdict=verdict, summary="Test", items=[], model_used="t", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
 
-    def test_format_body_none_summary(self, adapter):
-        """_format_body handles None summary."""
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary=None, items=[], model_used=None)
-        pr_id = PullRequestId(repository="o/r", number=1)
-        adapter.publish(pr_id, review)
 
-    def test_format_body_none_model(self, adapter):
-        """_format_body handles None model_used."""
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used=None)
-        pr_id = PullRequestId(repository="o/r", number=1)
-        adapter.publish(pr_id, review)
 
     def test_format_body_none_file_path(self, adapter):
         """_format_body handles None file_path."""
@@ -90,13 +79,14 @@ index def456..ghi789 100644
             items=[ReviewItem(id="1,", category="c", severity=ItemSeverity.INFO,
                               description="d", file_path=None)],
             model_used="m",
+            reason="test reason",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
 
     def test_format_body_empty_items(self, adapter):
         """_format_body handles empty items list."""
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
 
@@ -108,7 +98,7 @@ index def456..ghi789 100644
             return {"id": 1}
         monkeypatch.setattr(patched_private_client, "post", fake_post)
         adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         assert len(call_paths) == 1
@@ -221,6 +211,7 @@ index def456..ghi789 100644
                               description="Use return True", file_path="src/main.py",
                               current_code="return True", suggested_fix="x")],
             model_used="m",
+            reason="test reason",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
@@ -240,7 +231,7 @@ index def456..ghi789 100644
                             lambda path, headers=None, *, repo=None: (_ for _ in ()).throw(requests.exceptions.HTTPError("diff fetch failed")))
 
         adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)
         assert "Failed to resolve inline comments" in caplog.text
@@ -252,7 +243,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
         adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
 
         with pytest.raises(ReviewPublishError):
@@ -265,7 +256,7 @@ index def456..ghi789 100644
         monkeypatch.setattr(patched_private_client, "post", fake_post)
 
         adapter = GitReviewPublisherAdapter(_BODY, patched_private_client, patched_private_client)
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="s", items=[], model_used="m", reason="test reason")
         pr_id = PullRequestId(repository="o/r", number=1)
 
         with pytest.raises(ReviewPublishError):
@@ -394,46 +385,6 @@ index def456..ghi789 100644
         assert result[0]["body"] == "Use a constant instead"
         assert result[0]["old_position"] == 0
         assert result[0]["new_position"] == 2
-    def test_comment_verdict_filters_blocking_items(
-        self, patched_private_client, monkeypatch,
-    ):
-        post_payloads = []
-        def fake_post(path, body, *, repo=None):
-            post_payloads.append((path, body))
-            return {"id": 1}
-        monkeypatch.setattr(patched_private_client, "post", fake_post)
-        adapter = GitReviewPublisherAdapter(
-            _BODY, patched_private_client, patched_private_client,
-        )
-        review = CodeReview(
-            verdict=ReviewVerdict.COMMENTED, summary="s",
-            items=[
-                ReviewItem(id="1,", severity=ItemSeverity.MAJOR, category="bug",
-                           description="Blocking", file_path="f.py",
-                           current_code="x"),
-                ReviewItem(id="2,", severity=ItemSeverity.MINOR, category="style",
-                           description="Nit", file_path="f.py",
-                           current_code="x"),
-            ],
-            praise=[ReviewItem(
-                    severity="info",
-                    category="general",
-                    file_path="",
-                    description="nice",
-                    line="",
-                    id="",
-                    current_code="",
-                    suggested_fix="nice",
-                )],
-            model_used="m",
-        )
-        pr_id = PullRequestId(repository="o/r", number=1)
-        adapter.publish(pr_id, review)
-        comment_calls = [p for p in post_payloads if "/comments" in p[0]]
-        assert len(comment_calls) == 1
-        body = comment_calls[0][1]["body"]
-        assert "Nit" in body
-        assert "Blocking" not in body
 
     def test_formal_review_excludes_non_blocking_from_body(
         self, patched_private_client, monkeypatch,
@@ -467,6 +418,7 @@ index def456..ghi789 100644
                     suggested_fix="nice",
                 )],
             model_used="m",
+            reason="test reason",
         )
         pr_id = PullRequestId(repository="o/r", number=1)
         adapter.publish(pr_id, review)

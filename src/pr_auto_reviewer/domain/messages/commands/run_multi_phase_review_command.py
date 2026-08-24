@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
 
 @dataclass(frozen=True)
@@ -16,4 +16,8 @@ class RunMultiPhaseReviewCommand:
     repo_path: Path
     changed_files: list[str]
     model: str
+    review_session: str
+    """Opaque review-run key (start timestamp) grouping transcripts for one run."""
+    base_sha: str = ""
+    """PR merge-base against the default branch; scopes the LLM's git reads."""
     existing_item_ids: frozenset[str] = frozenset()

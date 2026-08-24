@@ -59,6 +59,7 @@ class BodyFormatterFixtures:
                     current_code="",
                     suggested_fix="Consider adding integration tests",
                 )],
+            reason="test reason",
         )
 
     @staticmethod
@@ -68,4 +69,5 @@ class BodyFormatterFixtures:
             verdict=ReviewVerdict.APPROVED,
             model_used="code-review:latest",
             summary="Looks good!",
+            reason="test reason",
         )

@@ -2,7 +2,6 @@
 
 import json
 
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 
 

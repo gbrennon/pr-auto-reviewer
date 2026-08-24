@@ -4,13 +4,13 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+import requests
+
 from .types import PepEntry
 
 logger = logging.getLogger(__name__)
 
 def _default_http_get(url: str) -> dict[str, Any]:
-    import requests
-
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     return resp.json()

@@ -88,7 +88,7 @@ class TestReviewVerdict:
         )
         fetcher = FakeChangesetFetcher(diff)
 
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review", reason="test reason", summary="test summary")
         llm_stub = FakeLlmReview(review)
         publisher = FakeReviewPublisher()
         ctx_factory = FakeReviewContextFactory()
@@ -134,6 +134,8 @@ class TestReviewVerdict:
                     description="Missing shebang in deploy script",
                 ),
             ],
+            reason="test reason",
+            summary="test summary",
         )
 
         fetcher = FakeChangesetFetcher(diff)
@@ -169,7 +171,7 @@ class TestReviewVerdict:
                 "scripts/deploy.sh": _load_fixture("diffs/shell-with-shebang.full"),
             },
         )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, model_used="code-review", reason="test reason", summary="test summary")
 
         fetcher = FakeChangesetFetcher(diff)
         llm_stub = FakeLlmReview(review)
@@ -218,6 +220,7 @@ class TestReviewVerdict:
             verdict=ReviewVerdict.APPROVED,
             summary="Minor issues only",
             model_used="code-review",
+            reason="test reason",
         )
         llm_stub1 = FakeLlmReview(approved_review)
 
@@ -239,6 +242,7 @@ class TestReviewVerdict:
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             summary="Critical found",
             model_used="code-review",
+            reason="test reason",
         )
         llm_stub2 = FakeLlmReview(cr_review)
 
@@ -286,6 +290,7 @@ class TestReviewVerdict:
             verdict=ReviewVerdict.APPROVED,
             summary="Good changes, approved",
             model_used="code-review",
+            reason="test reason",
         )
         llm_stub = FakeLlmReview(review)
         publisher = FakeReviewPublisher()
@@ -339,6 +344,7 @@ class TestReviewVerdict:
                     description="Missing shebang in deploy script",
                 ),
             ],
+            reason="test reason",
         )
         llm_stub = FakeLlmReview(review)
         publisher = FakeReviewPublisher()

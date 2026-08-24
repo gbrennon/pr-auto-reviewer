@@ -1,0 +1,7 @@
+{{ phase_prompt }}
+
+ADVISOR CORRECTION — this phase drifted off the task it was assigned. Restart with the task explained again:
+{{ correction }}{% if manager_replan %}
+
+MANAGER RE-PLAN — the manager improved your task for this restart:
+{{ manager_replan }}{% endif %}

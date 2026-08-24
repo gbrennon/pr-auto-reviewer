@@ -64,6 +64,7 @@ class TestRetryOrchestrator:
             reason="Issues found",
             items=items,
             model_used="test-model",
+            summary="test summary",
         )
 
     def test_success_on_first_attempt(self) -> None:
