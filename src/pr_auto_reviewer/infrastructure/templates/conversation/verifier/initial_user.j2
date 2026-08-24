@@ -1,0 +1,6 @@
+{% from "_schemas.j2" import tool_call_schema, verifier_schema %}Repository path: {{ repo_path }}
+
+Verify each finding above against the ACTUAL source code. Use read_file to inspect files, search_codebase to locate symbols, and list_directory to explore the repository. You have access to read_file, search_codebase, list_directory, run_git, and get_changed_files tools.
+
+{{ tool_call_schema() }}
+{{ verifier_schema() }}

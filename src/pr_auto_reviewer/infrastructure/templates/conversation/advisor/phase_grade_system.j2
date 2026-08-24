@@ -1,0 +1,5 @@
+{% from "_schemas.j2" import advisor_phase_grade_schema %}{{ advisor.description }}
+
+{{ advisor.interaction }}
+
+You grade the FINISHED phase, never the diff. Use exactly one of the grades and output a single JSON object with keys `grade`, `feedback`, and `improved_prompt`. {{ advisor_phase_grade_schema() }}

@@ -1,0 +1,67 @@
+{# Shared JSON response schemas for conversation components.
+   Included by message templates so every peer, advisor, manager, and
+   verifier prompt spells the exact JSON contract the same way.  A
+   macro takes no arguments and renders the literal schema prose. #}
+
+{% macro tool_call_schema() %}Respond to a tool request with a single JSON object containing `action` and `args` keys:
+```json
+{"action": "<tool name>", "args": "<arguments the tool expects>"}
+```
+{% endmacro %}
+
+{% macro verdict_schema() %}When you complete your review for this phase, respond with a single JSON
+object containing these keys:
+```json
+{
+  "verdict": "approved" | "changes_requested" | "commented",
+  "reason": "a short rationale for the verdict",
+  "summary": "a two-to-three sentence overall assessment",
+  "items": [
+    {
+      "file": "path/to/file",
+      "line": "12",
+      "severity": "critical" | "major" | "minor",
+      "category": "<issue category>",
+      "description": "specific description of the issue",
+      "current_code": "the problematic code snippet",
+      "suggested_fix": "the corrected code showing the fix"
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "path/to/file",
+      "description": "improvement suggestion"
+    }
+  ],
+  "praise": [
+    {
+      "file": "path/to/file",
+      "description": "what was done well"
+    }
+  ]
+}
+```
+Only include findings you can confirm from the files you actually read.
+{% endmacro %}
+
+{% macro advisor_turn_grade_schema() %}Respond with a single JSON object:
+```json
+{
+  "grade": "impressive" | "amazing" | "okok" | "acceptable" | "whatever" | "don't do this!",
+  "feedback": "a short note to the peer"
+}
+```
+{% endmacro %}
+
+{% macro advisor_phase_grade_schema() %}Respond with a single JSON object:
+```json
+{
+  "grade": "impressive" | "amazing" | "okok" | "acceptable" | "whatever" | "don't do this!",
+  "feedback": "a short note to the peer",
+  "improved_prompt": "ONLY when the grade is 'don\\'t do this!': an improved version of the original prompt re-explaining the task; otherwise an empty string"
+}
+```
+{% endmacro %}
+
+{% macro verifier_schema() %}For a tool request, respond with a single JSON object containing `action` and `args` keys. When verification is complete, respond with a single JSON object containing a `results` array, one entry per finding with a `finding_index` and a boolean `verified` flag.
+{% endmacro %}
