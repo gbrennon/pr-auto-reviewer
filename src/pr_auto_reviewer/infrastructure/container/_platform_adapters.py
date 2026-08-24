@@ -113,7 +113,9 @@ if TYPE_CHECKING:
     from pr_auto_reviewer.presentation.ports import PrListerPort, RepoListerPort
 
 
-_BODY_TEMPLATE_DIR = Path("src/pr_auto_reviewer/infrastructure/templates")
+_BODY_TEMPLATE_DIR = (
+    Path(__file__).resolve().parent.parent / "templates"
+)
 
 
 @dataclass

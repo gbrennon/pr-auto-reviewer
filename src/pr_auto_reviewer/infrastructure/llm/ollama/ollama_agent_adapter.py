@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
@@ -84,5 +85,6 @@ class OllamaAgentAdapter(LlmReviewPort):
                 repo_path=Path(repo_path.strip()),
                 changed_files=changed_files,
                 model=self._chat_client._model,
+                review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
             )
         )
