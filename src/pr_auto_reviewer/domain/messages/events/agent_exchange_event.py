@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 
 
 @dataclass(frozen=True)
@@ -18,8 +19,9 @@ class AgentExchangeEvent:
     transcript so every LLM interaction leaves an audit trail.
     """
 
-    role: str
+    role: SubAgentRole
     phase_name: str
     pr_identifier: str
+    review_session: str
     messages: list[ConversationMessage]
     metadata: dict[str, str] = field(default_factory=dict)

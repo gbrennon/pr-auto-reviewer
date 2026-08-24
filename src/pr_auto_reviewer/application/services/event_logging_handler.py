@@ -3,6 +3,9 @@
 import logging
 from typing import Any
 
+from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
+    TranscriptMetadata,
+)
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
 )
@@ -37,10 +40,14 @@ class EventLoggingHandler:
         """Persist a support-role transcript and log a summary line."""
         if self._exchange_logger is not None:
             self._exchange_logger.log_conversation(
-                phase_name=f"{event.role} — {event.phase_name}",
+                phase_name=event.phase_name,
                 pr_identifier=event.pr_identifier,
                 messages=event.messages,
-                metadata={**event.metadata, "agent_role": event.role},
+                metadata={
+                    **event.metadata,
+                    TranscriptMetadata.AGENT_ROLE: event.role,
+                },
+                review_session=event.review_session,
             )
             return
         logger.info(

@@ -20,6 +20,7 @@ class BriefNextPhaseUseCase(Protocol):
         self,
         next_phase: ReviewPhase,
         findings_summary: str,
+        review_session: str,
         pr_identifier: str = "",
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""

@@ -16,4 +16,8 @@ class RunMultiPhaseReviewCommand:
     repo_path: Path
     changed_files: list[str]
     model: str
+    review_session: str
+    """Opaque review-run key (start timestamp) grouping transcripts for one run."""
+    base_sha: str = ""
+    """PR merge-base against the default branch; scopes the LLM's git reads."""
     existing_item_ids: frozenset[str] = frozenset()

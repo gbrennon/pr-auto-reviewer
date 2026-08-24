@@ -20,5 +20,7 @@ class RunAgentConversationCommand:
     repo_path: Path
     changed_files: list[str]
     tool_execution: Any
+    review_session: str
+    """Opaque review-run key (start timestamp) grouping transcripts for one run."""
     phase_name: str = ""
     existing_item_ids: frozenset[str] = frozenset()

@@ -10,12 +10,12 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 
 @dataclass(frozen=True)
 class VerifyFindingsCommand:
-    """Command to verify CRITICAL/MAJOR findings against actual source code.
-
-    The verifier runs a separate agentic conversation that reads files,
-    searches for symbols, and confirms or rejects each finding.
-    """
+    """Command to verify CRITICAL/MAJOR findings against actual source code."""
 
     items: list[ReviewItem]
     repo_path: Path
     changed_files: list[str]
+    review_session: str
+    """Opaque review-run key (start timestamp) grouping transcripts for one run."""
+    base_sha: str = ""
+    """PR merge-base against the default branch; scopes the verifier's git reads."""

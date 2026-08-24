@@ -22,6 +22,7 @@ class PhaseTurnObserver(Protocol):
         self,
         peer_content: str,
         phase_name: str,
+        review_session: str,
         pr_identifier: str = "",
     ) -> AdvisorDirective:
         """Grade one peer turn and return the directive for it."""
