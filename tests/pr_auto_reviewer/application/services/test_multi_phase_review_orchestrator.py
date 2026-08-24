@@ -23,6 +23,9 @@ from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
     MaxTurnsExceededError,
 )
 from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
+from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
+    AggregateReviewFindingsCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
@@ -540,9 +543,17 @@ class TestMultiPhaseReviewOrchestrator:
             verdict="approved",
             items=[_make_review_item("src/main.py", "budget item")],
         )
-        # The first dispatch consumes the budget; the second phase must never
-        # start a conversation, so dispatch is called exactly once.
-        mock_command_bus.dispatch.side_effect = [engineer_result]
+        # The first conversation consumes the budget; the second phase must
+        # never start one. Event publishes are satisfied ad hoc so they don't
+        # exhaust the mock — only the conversation dispatch is budgeted.
+        def dispatch(command):
+            if isinstance(command, RunAgentConversationCommand):
+                return engineer_result
+            if isinstance(command, AggregateReviewFindingsCommand):
+                return _code_review(items=list(command.items))
+            return MagicMock()
+
+        mock_command_bus.dispatch.side_effect = dispatch
 
         result = orchestrator.execute(
             type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
@@ -554,7 +565,12 @@ class TestMultiPhaseReviewOrchestrator:
             })()
         )
 
-        assert mock_command_bus.dispatch.call_count == 1
+        conversation_calls = [
+            call
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call.args[0], RunAgentConversationCommand)
+        ]
+        assert len(conversation_calls) == 1
         # The first phase's item is salvaged into the published review rather
         # than everything being lost to the budget stop.
         assert len(result.items) == 1
