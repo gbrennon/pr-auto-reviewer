@@ -99,6 +99,47 @@ class ReviewItemFactory:
                 return idx + 1, window.strip()
         return None
 
+    _SNIPPET_SEARCH_WINDOW = 5
+
+    @classmethod
+    def _locate_snippet(
+        cls,
+        file_lines: list[str],
+        current_code: str,
+        claimed_line: int,
+    ) -> int | None:
+        """Return the 1-based line where *current_code* anchors in the file.
+
+        Matches multi-line snippets by their normalized non-blank lines
+        and single-line snippets by stripped equality. The search starts
+        in a window around *claimed_line* — models are frequently off by
+        a few lines on poorly written code — then widens to the whole
+        file. None means nothing matched anywhere; callers keep the
+        finding with its claimed anchor instead of discarding a real
+        issue over an imprecise snippet.
+        """
+        snippet = [
+            line.strip() for line in current_code.splitlines() if line.strip()
+        ]
+        if not snippet:
+            return None
+        total = len(file_lines)
+        span = len(snippet)
+        window = range(
+            max(0, claimed_line - 1 - cls._SNIPPET_SEARCH_WINDOW),
+            min(total - span + 1, claimed_line - 1 + cls._SNIPPET_SEARCH_WINDOW + 1),
+        )
+        order = list(window) + [
+            i for i in range(max(0, total - span + 1)) if i not in set(window)
+        ]
+        for start in order:
+            if all(
+                file_lines[start + offset].strip() == snippet[offset]
+                for offset in range(span)
+            ):
+                return start + 1
+        return None
+
     @classmethod
     def generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
         """Generate a unique ID for a review item.
@@ -342,35 +383,34 @@ class ReviewItemFactory:
                 if line_str:
                     try:
                         line_num = int(line_str)
-
-                        if not (1 <= line_num <= len(file_lines)):
-                            reason = (
-                                f"line {line_str} out of range in "
-                                f"{file_path} ({len(file_lines)} lines)"
-                            )
-                            logger.warning(
-                                "Skipping finding — %s", reason
-                            )
-                            skip_reasons.append(reason)
-                            continue
-
-                        if current_code:
-                            actual_line = file_lines[
-                                line_num - 1
-                            ].strip()
-
-                            if current_code.strip() != actual_line:
-                                reason = (
-                                    f"code mismatch at "
-                                    f"{file_path}:{line_str}"
-                                )
-                                logger.warning(
-                                    "Skipping finding — %s", reason
-                                )
-                                skip_reasons.append(reason)
-                                continue
                     except ValueError:
-                        pass
+                        line_num = 0
+
+                    located = (
+                        cls._locate_snippet(
+                            file_lines, current_code, line_num or 1
+                        )
+                        if current_code
+                        else None
+                    )
+                    if located is not None:
+                        line_num = located
+                        line_str = str(located)
+                    elif not (1 <= line_num <= len(file_lines)):
+                        reason = (
+                            f"line {line_str} out of range in "
+                            f"{file_path} ({len(file_lines)} lines)"
+                        )
+                        logger.warning("Skipping finding — %s", reason)
+                        skip_reasons.append(reason)
+                        continue
+                    elif current_code:
+                        logger.warning(
+                            "Keeping finding with unverified code"
+                            " anchor at %s:%s",
+                            file_path,
+                            line_str,
+                        )
             description = str(item_dict.get("description", ""))
 
             if (
@@ -415,8 +455,6 @@ class ReviewItemFactory:
                 if hit is not None:
                     line_str = hit
 
-            # Fallback: if we have current_code but no suggested_fix, use current_code as suggested_fix
-            # This handles cases where the LLM doesn't provide a fix but we can still show the current code
             if current_code and not suggested_fix:
                 suggested_fix = current_code
 
