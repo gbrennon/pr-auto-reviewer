@@ -9,7 +9,7 @@ from .sub_agent_grade import SubAgentGrade
 
 @dataclass(frozen=True)
 class AdvisorDirective:
-    """The advisor's verdict on a finished phase and how to correct it.
+    """The advisor's grade on a peer's work and how to correct it.
 
     ``grade`` is the advisor's assessment of how the peer stayed on the
     task the manager assigned. ``feedback`` is the interjection returned
