@@ -12,6 +12,7 @@ from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import 
     ParseReviewTurnCommand,
 )
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
 )
@@ -94,7 +95,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content="any")
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert len(result.raw_items) == 1
 
     def test_verdict_with_items_merges_deduped_observations(self) -> None:
@@ -105,7 +106,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content="any")
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert len(result.raw_items) == 1
         assert len(result.metadata.get("suggestions", [])) >= 1
 
@@ -120,7 +121,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content="any")
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert len(result.metadata.get("suggestions", [])) == 2
 
     def test_duplicate_observations_are_deduplicated(self) -> None:
@@ -176,7 +177,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content="not json at all")
         result = service.execute(command)
 
-        assert result.kind == "unparseable"
+        assert result.kind is TurnKind.UNPARSEABLE
 
     def test_unparseable_when_extracted_json_is_invalid(self) -> None:
         parser = make_parser(extracted_json="invalid json {")
@@ -184,7 +185,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content="text")
         result = service.execute(command)
 
-        assert result.kind == "unparseable"
+        assert result.kind is TurnKind.UNPARSEABLE
 
     def test_tool_call_extracted_from_prose_wrapper(self) -> None:
         content = '```json\n{"action": "read_file", "args": {"path": "x.py"}}\n```'
@@ -194,7 +195,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert result.tool_call is not None
         assert result.tool_call.tool_name == "read_file"
 
@@ -206,7 +207,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert "arg1" in result.tool_call.arguments["args"]
         assert "arg2" in result.tool_call.arguments["args"]
 
@@ -220,7 +221,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert result.tool_call.tool_name == "edit"
 
     def test_tool_call_with_dict_args_via_fallback(self) -> None:
@@ -231,7 +232,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert result.tool_call.arguments["args"] == "x.py"
 
     def test_tool_call_with_dict_args_no_match_returns_raw(self) -> None:
@@ -242,7 +243,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert "foo" in result.tool_call.arguments["args"]
 
     def test_tool_call_with_scalar_args(self) -> None:
@@ -253,7 +254,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "tool_call"
+        assert result.kind is TurnKind.TOOL_CALL
         assert "echo hello" in result.tool_call.arguments["args"]
 
     def test_list_json_parses_items_into_raw_items(self) -> None:
@@ -263,7 +264,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert len(result.raw_items) == 1
 
     def test_scalar_json_returns_unparseable(self) -> None:
@@ -273,7 +274,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "unparseable"
+        assert result.kind is TurnKind.UNPARSEABLE
 
     def test_verdict_metadata_from_markdown_when_no_json(self) -> None:
         content = "## Verdict\napproved\n\n## Summary\nlooks good"
@@ -283,7 +284,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "approved"
 
     def test_verdict_metadata_from_extracted_json(self) -> None:
@@ -296,7 +297,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "changes_requested"
 
     def test_verdict_metadata_falls_back_when_extracted_invalid(self) -> None:
@@ -307,7 +308,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "changes_requested"
 
     def test_verdict_metadata_without_verdict_key_falls_back(self) -> None:
@@ -318,7 +319,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "approved"
 
     def test_praise_as_non_list_normalizes_to_empty(self) -> None:
@@ -347,7 +348,7 @@ class TestTurnParserService:
         command = ParseReviewTurnCommand(content=content)
         result = service.execute(command)
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert len(result.raw_items) == 1
         assert result.raw_items[0]["file"] == "x.py"
 
@@ -379,7 +380,7 @@ class TestTurnParserServiceItemExtraction:
                  "severity": "High"},
             ],
         })))
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata is not None
         assert len(result.raw_items or []) == 1
         assert result.raw_items[0]["description"] == "No error handling."
@@ -391,7 +392,7 @@ class TestTurnParserServiceItemExtraction:
             "verdict": "approved",
             "items": ["Review multi_phase_orchestrator.py"],
         })))
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.raw_items == []
         assert result.metadata is not None
         assert result.metadata["suggestions"] != []
@@ -430,7 +431,7 @@ class TestTurnParserServiceItemExtraction:
         parser = TurnParserService(ReviewResponseParser())
         result = parser.execute(ParseReviewTurnCommand(content=content))
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "changes_requested"
         assert result.metadata["reason"] != ""
         assert result.metadata["summary"] != ""
@@ -449,7 +450,7 @@ class TestTurnParserServiceItemExtraction:
         parser = TurnParserService(ReviewResponseParser())
         result = parser.execute(ParseReviewTurnCommand(content=content))
 
-        assert result.kind == "verdict"
+        assert result.kind is TurnKind.VERDICT
         assert result.metadata["verdict"] == "approved"
         assert result.metadata["reason"] != ""
 

@@ -1,13 +1,15 @@
 """Tests for EventLoggingHandler application service."""
 
 import logging
+from pathlib import Path
 
 from pr_auto_reviewer.application.services.event_logging_handler import (
     EventLoggingHandler,
 )
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
     ConversationCompletedEvent,
 )
@@ -23,7 +25,14 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.infrastructure.conversation_logger import (
+    MarkdownConversationLogger,
+)
 
 
 def _review_item() -> ReviewItem:
@@ -42,7 +51,7 @@ class TestEventLoggingHandler:
         caplog.set_level(logging.INFO)
         event = ReviewTurnParsedEvent(
             turn_number=3,
-            result=TurnParseResult(kind="verdict", raw_items=[{"file": "a.py"}]),
+            result=TurnParseResult(kind=TurnKind.VERDICT, raw_items=[{"file": "a.py"}]),
         )
 
         EventLoggingHandler().handle_review_turn_parsed(event)
@@ -53,7 +62,7 @@ class TestEventLoggingHandler:
         caplog.set_level(logging.INFO)
         event = ReviewTurnParsedEvent(
             turn_number=1,
-            result=TurnParseResult(kind="unparseable"),
+            result=TurnParseResult(kind=TurnKind.UNPARSEABLE),
         )
 
         EventLoggingHandler().handle_review_turn_parsed(event)
@@ -133,3 +142,51 @@ class TestEventLoggingHandler:
         EventLoggingHandler().handle_findings_aggregated(event)
 
         assert "Findings aggregated: verdict=approved items=0" in caplog.text
+
+    def test_agent_exchange_persists_unprefixed_phase_name(self) -> None:
+        logged: dict = {}
+
+        class _FakeExchangeLogger:
+            def log_conversation(self, **kwargs) -> Path:
+                logged.update(kwargs)
+                return Path("/tmp/fake-transcript.md")
+        event = AgentExchangeEvent(
+            role=SubAgentRole.ADVISOR,
+            phase_name="Bug Hunt — Diff",
+            pr_identifier="o/r#1",
+            review_session="session-1",
+            messages=[],
+        )
+
+        EventLoggingHandler(
+            exchange_logger=_FakeExchangeLogger()
+        ).handle_agent_exchange(event)
+
+        assert logged["phase_name"] == "Bug Hunt — Diff"
+        assert logged["metadata"]["agent_role"] == "advisor"
+
+    def test_advisor_exchange_transcript_shows_grade_not_verdict(
+        self, tmp_path,
+    ) -> None:
+        event = AgentExchangeEvent(
+            role=SubAgentRole.ADVISOR,
+            phase_name="Bug Hunt — Diff",
+            pr_identifier="gbrennon/pr-auto-reviewer#147",
+            review_session="20260824_014537",
+            messages=[],
+            metadata={"grade": "okok", "feedback": "stayed on task"},
+        )
+
+        EventLoggingHandler(
+            exchange_logger=MarkdownConversationLogger(tmp_path)
+        ).handle_agent_exchange(event)
+
+        transcript = (
+            tmp_path / "gbrennon_pr-auto-reviewer_147"
+            / "20260824_014537" / "01-bug-hunt-diff.md"
+        )
+        text = transcript.read_text()
+        assert "# advisor — " in text
+        assert "Grade: okok" in text
+        assert "Feedback: stayed on task" in text
+        assert "Verdict:" not in text

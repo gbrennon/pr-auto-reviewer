@@ -800,3 +800,53 @@ class TestReviewPullRequestServiceTokenVerifier:
 
         mock_llm_review.review_prompt.assert_called_once()
         command_bus.dispatch.assert_not_called()
+
+    def test_multi_phase_dispatch_carries_base_sha(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """The PR merge-base is forwarded into the RunMultiPhaseReviewCommand."""
+        from unittest.mock import MagicMock
+
+        from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+            RunMultiPhaseReviewCommand,
+        )
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            base_sha=CommitSha(value="d896687cafc093f113ade5444f02df98fcfc9042"),
+            diff_content=(
+                "diff --git a/src/a.py b/src/a.py\n"
+                "+++ b/src/a.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            ),
+            clone_path="/repos/owner_repo_42",
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        command_bus = MagicMock()
+        command_bus.dispatch.return_value = _review(ReviewVerdict.APPROVED)
+        plan = ReviewPlan(methodology="sub-agent-multi-phase", phases=[])
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=plan,
+        ).execute(cmd)
+
+        dispatch_args, _ = command_bus.dispatch.call_args
+        dispatched = dispatch_args[0]
+        assert isinstance(dispatched, RunMultiPhaseReviewCommand)
+        assert dispatched.base_sha == "d896687cafc093f113ade5444f02df98fcfc9042"
+        assert dispatched.repo_path == "/repos/owner_repo_42"

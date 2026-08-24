@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.services.agent_conversation_service import (
@@ -25,11 +26,16 @@ from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFacto
 from pr_auto_reviewer.domain.value_objects.advisor_directive import (
     AdvisorDirective,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
     SubAgentGrade,
 )
 from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
 from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -44,7 +50,7 @@ EXPLORATION_DEMAND = "MUST use the exploration tools"
 def _verdict_parse() -> TurnParseResult:
     """Return a no-tool-call verdict parse result."""
     return TurnParseResult(
-        kind="verdict",
+        kind=TurnKind.VERDICT,
         raw_items=[],
         metadata={
             "verdict": "approved",
@@ -57,7 +63,7 @@ def _verdict_parse() -> TurnParseResult:
 def _tool_parse() -> TurnParseResult:
     """Return a read_file tool-call parse result."""
     return TurnParseResult(
-        kind="tool_call",
+        kind=TurnKind.TOOL_CALL,
         tool_call=ToolCall(
             tool_name="read_file", arguments={"file": "src/a.py"}
         ),
@@ -73,7 +79,7 @@ class _StubToolExecution:
         return SimpleNamespace(status="ok", data={"output": "stub"}, error=None)
 
 
-def _command(tool_execution: MagicMock) -> RunAgentConversationCommand:
+def _command(tool_execution: Any) -> RunAgentConversationCommand:
     """Build a single-phase conversation command."""
     return RunAgentConversationCommand(
         system_prompt="Review the changes.",
@@ -81,6 +87,7 @@ def _command(tool_execution: MagicMock) -> RunAgentConversationCommand:
         changed_files=["src/a.py"],
         tool_execution=tool_execution,
         phase_name="phase",
+        review_session="test-session",
     )
 
 
@@ -242,9 +249,9 @@ class TestConversationLoopGuardrails:
             conversation_logger=None,
             max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
         messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(2)
+            ConversationMessage(role="user", content="test") for _ in range(2)
         ]
         with caplog.at_level("DEBUG"):
             service._log_conversation_debug(
@@ -260,9 +267,9 @@ class TestConversationLoopGuardrails:
             conversation_logger=None,
             max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
         messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(2)
+            ConversationMessage(role="user", content="test") for _ in range(2)
         ]
         with caplog.at_level("INFO"):
             service._log_conversation_debug(
@@ -337,20 +344,19 @@ class TestConversationLoopGuardrails:
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             max_turns=2,
         )
-        # Configure the command's tool_execution after service creation
         command = _command(tool_execution)
     
         try:
             service.execute(command)
             assert False, "Expected LlmUnavailableError"
-        except Exception as e:
+        except LlmUnavailableError as e:
             assert "max turns" in str(e).lower() or "exceeded" in str(e).lower()
 
     def test_build_phase_result_with_items(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         parsed = TurnParseResult(
-            kind="verdict",
+            kind=TurnKind.VERDICT,
             raw_items=[
                 {"description": "issue", "file": "src/a.py", "line": "10", "current_code": "x"},
             ],
@@ -374,7 +380,7 @@ class TestConversationLoopGuardrails:
     ) -> None:
         """Rejected raw items stay out of suggestions; only explicit LLM suggestions pass through."""
         parsed = TurnParseResult(
-            kind="verdict",
+            kind=TurnKind.VERDICT,
             raw_items=[
                 {"description": "rejected issue", "file": "src/a.py", "line": "10", "current_code": "x"},
             ],
@@ -418,19 +424,13 @@ class TestConversationLoopGuardrails:
             conversation_logger=MagicMock(),
             max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {
-            "llm_verdict": "approved",
-            "items": []
-        })()
-        messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(1)
-        ]
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
+        messages = [ConversationMessage(role="user", content="test")]
         with caplog.at_level("INFO"):
             service._log_conversation(
                 "test_phase", messages, 1, phase_result,
                 repo_path=Path("/repos/owner_repo_42"),
             )
-        # ensure no crash
 
     def test_repeated_tool_call_is_refused_and_reprompted(
         self, mock_chat_port, mock_command_bus,
@@ -444,7 +444,7 @@ class TestConversationLoopGuardrails:
             tool_name="read_file", arguments={"file": "src/a.py"}
         )
         repeated_parse = TurnParseResult(
-            kind="tool_call", tool_call=repeated,
+            kind=TurnKind.TOOL_CALL, tool_call=repeated,
         )
         mock_chat_port.send.side_effect = [
             "first", "second", "third", "verdict",
@@ -490,7 +490,7 @@ class TestConversationLoopGuardrails:
         # Budget is 8 tool calls; use 8 DISTINCT calls so none are refused.
         tool_parses = [
             TurnParseResult(
-                kind="tool_call",
+                kind=TurnKind.TOOL_CALL,
                 tool_call=ToolCall(
                     tool_name="read_file",
                     arguments={"file": f"src/file_{i}.py"},
@@ -526,7 +526,7 @@ class TestTurnObserverWiring:
             def __init__(self, script):
                 self._script = list(script)
 
-            def observe(self, peer_content, phase_name, pr_identifier=""):
+            def observe(self, peer_content, phase_name, review_session, pr_identifier=""):
                 return AdvisorDirective(
                     grade=SubAgentGrade.from_phrase(self._script.pop(0)),
                     feedback="off task",
@@ -562,6 +562,38 @@ class TestTurnObserverWiring:
         ]
         assert len(advisor_notes) == 1
         assert "off task" in advisor_notes[0].content
+
+    def test_observer_is_not_called_on_the_final_verdict_turn(self) -> None:
+        observed: list[str] = []
+
+        class _RecordingObserver:
+            def observe(self, peer_content, phase_name, review_session,
+                        pr_identifier=""):
+                observed.append(peer_content)
+                return AdvisorDirective(grade=SubAgentGrade.OKOK)
+
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"verdict": "approved", "reason": "clean", "items": []}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=_RecordingObserver(),
+        )
+
+        result = service.execute(_command(_StubToolExecution()))
+
+        assert result.llm_verdict == "approved"
+        assert len(observed) == 1
+        assert '"verdict"' not in observed[0]
 
     def test_repeated_blocks_abort_the_phase(self) -> None:
         import pytest as _pytest

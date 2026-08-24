@@ -25,6 +25,8 @@ class TestPhaseManager:
                 role=ArchitectAgent(),
             ),
             "found bugs in src/a.py",
+
+            review_session="test-session",
         )
 
         assert brief == "assign the architecture review to the architect"
@@ -41,6 +43,8 @@ class TestPhaseManager:
         brief = manager.brief(
             ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
             "",
+
+            review_session="test-session",
         )
 
         assert brief == ""
@@ -53,6 +57,8 @@ class TestPhaseManager:
         brief = manager.brief(
             ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
             "findings",
+
+            review_session="test-session",
         )
 
         assert brief == ""
@@ -68,6 +74,8 @@ class TestPhaseManager:
                 system_prompt="AAP", role=ArchitectAgent(),
             ),
             "found bugs in src/a.py\nfound leak in src/b.py",
+
+            review_session="test-session",
         )
 
         messages = chat.send.call_args.args[0]
