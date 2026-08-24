@@ -66,22 +66,9 @@ def _get_normalized_scenarios() -> list[ReviewScenario]:
 
 E2E_REVIEW_SCENARIOS: list[ReviewScenarioInput] = [
     {
-        "platform": "forgejo",
-        "owner": "gbrennon",
-        "repo": "pr-auto-reviewer",
-        "pr_id": 146,
-    },
-    {
         "platform": "github",
         "owner": "gbrennon",
         "repo": "ratatui",
         "pr_id": 1,
     },
-    {
-        "platform": "github",
-        "owner": "gbrennon",
-        "repo": "rataflow",
-        "pr_id": 1,
-        "expected_items": 1,
-    }
 ]

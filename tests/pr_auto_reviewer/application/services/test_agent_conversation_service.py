@@ -3,18 +3,46 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
-from pr_auto_reviewer.domain.agent.tool_call import ToolCall
-from pr_auto_reviewer.domain.agent.tool_result import ToolResult
-from pr_auto_reviewer.domain.agent.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.application.services.turn_parser_service import (
+    TurnParserService,
+)
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
+from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+    ParseReviewTurnCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
 from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
+from pr_auto_reviewer.domain.value_objects.advisor_directive import (
+    AdvisorDirective,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_message import (
+    ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
+    SubAgentGrade,
+)
+from pr_auto_reviewer.domain.value_objects.tool_call import ToolCall
+from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
+from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
+    InMemoryCommandBus,
+)
+from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
+    ReviewResponseParser,
+)
 
 EXPLORATION_DEMAND = "MUST use the exploration tools"
 
@@ -22,7 +50,7 @@ EXPLORATION_DEMAND = "MUST use the exploration tools"
 def _verdict_parse() -> TurnParseResult:
     """Return a no-tool-call verdict parse result."""
     return TurnParseResult(
-        kind="verdict",
+        kind=TurnKind.VERDICT,
         raw_items=[],
         metadata={
             "verdict": "approved",
@@ -35,14 +63,23 @@ def _verdict_parse() -> TurnParseResult:
 def _tool_parse() -> TurnParseResult:
     """Return a read_file tool-call parse result."""
     return TurnParseResult(
-        kind="tool_call",
+        kind=TurnKind.TOOL_CALL,
         tool_call=ToolCall(
             tool_name="read_file", arguments={"file": "src/a.py"}
         ),
     )
 
 
-def _command(tool_execution: MagicMock) -> RunAgentConversationCommand:
+
+
+class _StubToolExecution:
+    """Tool execution stub returning JSON-serializable results."""
+
+    def execute_tool(self, tool_call):
+        return SimpleNamespace(status="ok", data={"output": "stub"}, error=None)
+
+
+def _command(tool_execution: Any) -> RunAgentConversationCommand:
     """Build a single-phase conversation command."""
     return RunAgentConversationCommand(
         system_prompt="Review the changes.",
@@ -50,6 +87,7 @@ def _command(tool_execution: MagicMock) -> RunAgentConversationCommand:
         changed_files=["src/a.py"],
         tool_execution=tool_execution,
         phase_name="phase",
+        review_session="test-session",
     )
 
 
@@ -63,9 +101,10 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 2
@@ -93,7 +132,8 @@ class TestConversationLoopGuardrails:
         )
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
@@ -113,7 +153,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(
             Path("/repos/owner_repo_42")
@@ -124,7 +165,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(None)
         assert result == "unknown"
@@ -133,7 +175,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._derive_pr_identifier(Path("/some/other/path"))
         assert result == "path"
@@ -142,7 +185,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "src/client.py is the file", ["src/client.py"]
@@ -153,7 +197,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "client python file", ["src/client.py"]
@@ -164,7 +209,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "other file", ["src/client.py"]
@@ -175,7 +221,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "", ["src/client.py"]
@@ -186,7 +233,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service._find_mentioned_file(
             "something", []
@@ -199,10 +247,11 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=None,
+            max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
         messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(2)
+            ConversationMessage(role="user", content="test") for _ in range(2)
         ]
         with caplog.at_level("DEBUG"):
             service._log_conversation_debug(
@@ -216,10 +265,11 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=None,
+            max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {"llm_verdict": "approved", "items": []})()
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
         messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(2)
+            ConversationMessage(role="user", content="test") for _ in range(2)
         ]
         with caplog.at_level("INFO"):
             service._log_conversation_debug(
@@ -234,9 +284,10 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 3
@@ -248,9 +299,10 @@ class TestConversationLoopGuardrails:
         mock_command_bus.dispatch.return_value = _verdict_parse()
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
-        result = service.execute(_command(MagicMock()))
+        result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 2
@@ -274,7 +326,8 @@ class TestConversationLoopGuardrails:
         ]
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
@@ -291,27 +344,27 @@ class TestConversationLoopGuardrails:
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             max_turns=2,
         )
-        # Configure the command's tool_execution after service creation
         command = _command(tool_execution)
     
         try:
             service.execute(command)
             assert False, "Expected LlmUnavailableError"
-        except Exception as e:
+        except LlmUnavailableError as e:
             assert "max turns" in str(e).lower() or "exceeded" in str(e).lower()
 
     def test_build_phase_result_with_items(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         parsed = TurnParseResult(
-            kind="verdict",
+            kind=TurnKind.VERDICT,
             raw_items=[
                 {"description": "issue", "file": "src/a.py", "line": "10", "current_code": "x"},
             ],
             metadata={"verdict": "approved", "reason": "LGTM"},
         )
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         # Mock ReviewItemFactory.create
         original_create = ReviewItemFactory.create
@@ -327,7 +380,7 @@ class TestConversationLoopGuardrails:
     ) -> None:
         """Rejected raw items stay out of suggestions; only explicit LLM suggestions pass through."""
         parsed = TurnParseResult(
-            kind="verdict",
+            kind=TurnKind.VERDICT,
             raw_items=[
                 {"description": "rejected issue", "file": "src/a.py", "line": "10", "current_code": "x"},
             ],
@@ -338,7 +391,8 @@ class TestConversationLoopGuardrails:
             },
         )
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         original_create = ReviewItemFactory.create
         ReviewItemFactory.create = lambda *a, **kw: ([], [])
@@ -356,7 +410,8 @@ class TestConversationLoopGuardrails:
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         service._publish("test_event")
         mock_command_bus.dispatch.assert_called_once()
@@ -367,20 +422,15 @@ class TestConversationLoopGuardrails:
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
             conversation_logger=MagicMock(),
+            max_turns=10,
         )
-        phase_result = type("PhaseResult", (), {
-            "llm_verdict": "approved",
-            "items": []
-        })()
-        messages = [
-            type("Message", (), {"role": "user", "content": "test"})() for _ in range(1)
-        ]
+        phase_result = PhaseResult(items=[], llm_verdict="approved")
+        messages = [ConversationMessage(role="user", content="test")]
         with caplog.at_level("INFO"):
             service._log_conversation(
                 "test_phase", messages, 1, phase_result,
                 repo_path=Path("/repos/owner_repo_42"),
             )
-        # ensure no crash
 
     def test_repeated_tool_call_is_refused_and_reprompted(
         self, mock_chat_port, mock_command_bus,
@@ -394,7 +444,7 @@ class TestConversationLoopGuardrails:
             tool_name="read_file", arguments={"file": "src/a.py"}
         )
         repeated_parse = TurnParseResult(
-            kind="tool_call", tool_call=repeated,
+            kind=TurnKind.TOOL_CALL, tool_call=repeated,
         )
         mock_chat_port.send.side_effect = [
             "first", "second", "third", "verdict",
@@ -410,7 +460,8 @@ class TestConversationLoopGuardrails:
         ]
 
         service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
         )
         result = service.execute(_command(tool_execution))
 
@@ -439,7 +490,7 @@ class TestConversationLoopGuardrails:
         # Budget is 8 tool calls; use 8 DISTINCT calls so none are refused.
         tool_parses = [
             TurnParseResult(
-                kind="tool_call",
+                kind=TurnKind.TOOL_CALL,
                 tool_call=ToolCall(
                     tool_name="read_file",
                     arguments={"file": f"src/file_{i}.py"},
@@ -464,3 +515,108 @@ class TestConversationLoopGuardrails:
             for message in final_messages
         )
         assert nudge_count == 1
+
+
+class TestTurnObserverWiring:
+    """The advisor observes turns and blocks repeat offenders."""
+
+    def _observer(self, grades):
+                
+        class _ScriptedObserver:
+            def __init__(self, script):
+                self._script = list(script)
+
+            def observe(self, peer_content, phase_name, review_session, pr_identifier=""):
+                return AdvisorDirective(
+                    grade=SubAgentGrade.from_phrase(self._script.pop(0)),
+                    feedback="off task",
+                )
+
+        return _ScriptedObserver(grades)
+
+    def test_blocking_turn_injects_advisor_feedback(self) -> None:
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"verdict": "approved", "reason": "clean", "items": []}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=self._observer(["whatever", "okok"]),
+        )
+        result = service.execute(_command(_StubToolExecution()))
+
+        assert result.llm_verdict == "approved"
+        # The turn following the drifted one opens with the correction.
+        post_drift_messages = chat.send.call_args_list[1][0][0]
+        advisor_notes = [
+            m for m in post_drift_messages
+            if m.role == "user" and "ADVISOR" in m.content
+        ]
+        assert len(advisor_notes) == 1
+        assert "off task" in advisor_notes[0].content
+
+    def test_observer_is_not_called_on_the_final_verdict_turn(self) -> None:
+        observed: list[str] = []
+
+        class _RecordingObserver:
+            def observe(self, peer_content, phase_name, review_session,
+                        pr_identifier=""):
+                observed.append(peer_content)
+                return AdvisorDirective(grade=SubAgentGrade.OKOK)
+
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"verdict": "approved", "reason": "clean", "items": []}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=_RecordingObserver(),
+        )
+
+        result = service.execute(_command(_StubToolExecution()))
+
+        assert result.llm_verdict == "approved"
+        assert len(observed) == 1
+        assert '"verdict"' not in observed[0]
+
+    def test_repeated_blocks_abort_the_phase(self) -> None:
+        import pytest as _pytest
+        
+                
+        
+        chat = MagicMock()
+        chat.send.side_effect = [
+            '{"action": "run_git", "args": "log --oneline -1"}',
+            '{"action": "run_git", "args": "log --oneline -2"}',
+        ]
+        bus = InMemoryCommandBus()
+        bus.register(
+            ParseReviewTurnCommand,
+            TurnParserService(ReviewResponseParser()).execute,
+        )
+        service = AgentConversationService(
+            chat_port=chat,
+            command_bus=bus,
+            max_turns=6,
+            turn_observer=self._observer(["don't do this!", "don't do this!"]),
+            max_advisor_blocks=2,
+        )
+
+        with _pytest.raises(LlmUnavailableError, match="Advisor blocked"):
+            service.execute(_command(_StubToolExecution()))

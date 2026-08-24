@@ -154,6 +154,7 @@ review = CodeReview(
     id=CommentId("test-1"), verdict=ReviewVerdict.APPROVED,
     summary="Test review from capture script",
     items=[ReviewItem(id="test-001", category="test", severity=ItemSeverity.LOW, description="Test item.", file_path="README.md")],
+    reason="test reason",
     pr_id=pid, model_used="test-capture")
 try:
     rp.publish(pid, review)

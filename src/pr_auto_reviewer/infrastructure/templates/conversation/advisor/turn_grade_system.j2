@@ -1,0 +1,5 @@
+{% from "_schemas.j2" import advisor_turn_grade_schema %}{{ advisor.description }}
+
+{{ advisor.interaction }}
+
+You are watching ONE turn of an in-progress review phase. Grade the peer focus only. {{ advisor_turn_grade_schema() }}

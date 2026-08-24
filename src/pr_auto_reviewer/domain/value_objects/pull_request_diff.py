@@ -14,6 +14,7 @@ class PullRequestDiff:
     pr_id: PullRequestId
     head_sha: CommitSha
     diff_content: str
+    base_sha: CommitSha | None = None
     file_contents: dict[str, str] = field(default_factory=dict)
     repository_structure: str | None = None
     conventions: str | None = None

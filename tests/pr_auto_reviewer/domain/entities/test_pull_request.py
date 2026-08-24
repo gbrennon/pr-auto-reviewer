@@ -49,7 +49,7 @@ class TestPullRequest:
             title="Test PR",
             head_sha=CommitSha(value="sha1"),
         )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         pr = pr.add_review(review, CommitSha(value="sha1"))
         assert pr.needs_review(CommitSha(value="sha1")) is False
 
@@ -59,7 +59,7 @@ class TestPullRequest:
             title="Test PR",
             head_sha=CommitSha(value="sha1"),
         )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM", reason="test reason", model_used="test model")
         pr = pr.add_review(review, CommitSha(value="sha2"))
 
         assert pr.head_sha == CommitSha(value="sha2")
@@ -72,7 +72,7 @@ class TestPullRequest:
             title="Test PR",
             head_sha=CommitSha(value="sha1"),
         )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="LGTM", reason="test reason", model_used="test model")
         updated = original.add_review(review, CommitSha(value="sha2"))
 
         assert original.reviews == ()
@@ -86,8 +86,8 @@ class TestPullRequest:
             title="Test PR",
             head_sha=CommitSha(value="sha1"),
         )
-        r1 = CodeReview(verdict=ReviewVerdict.COMMENTED, summary="First pass")
-        r2 = CodeReview(verdict=ReviewVerdict.APPROVED, summary="All good")
+        r1 = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="First pass", reason="test reason", model_used="test model")
+        r2 = CodeReview(verdict=ReviewVerdict.APPROVED, summary="All good", reason="test reason", model_used="test model")
 
         pr = pr.add_review(r1, CommitSha(value="sha2"))
         pr = pr.add_review(r2, CommitSha(value="sha3"))
@@ -145,7 +145,7 @@ class TestPullRequest:
         pr = PullRequest(id=pr_id, title="Test", head_sha=CommitSha(value="s1"))
         assert pr.id == pr_id
 
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         pr = pr.add_review(review, CommitSha(value="s2"))
         assert pr.id == pr_id
         assert pr.id.repository == "r"
@@ -174,6 +174,7 @@ class TestPullRequest:
                 ),
             ],
             model_used="llama3",
+            reason="test reason",
         )
         pr = pr.add_review(review, CommitSha(value="commit1"))
 
@@ -200,7 +201,7 @@ class TestPullRequest:
             head_sha=CommitSha(value="s1"),
         )
         pr = pr.add_review(
-            CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok"),
+            CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok", reason="test reason", model_used="test model"),
             CommitSha(value="s1"),
         )
         assert pr.needs_review(CommitSha(value="s1")) is False
@@ -334,7 +335,7 @@ class TestPullRequestLastReviewedAt:
             head_sha=CommitSha(value="aaa"),
             last_reviewed_at="2025-01-01T00:00:00Z",
         )
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="ok", reason="test reason", model_used="test model")
         pr = pr.add_review(review, CommitSha(value="aaa"))
         assert not pr.needs_review(CommitSha(value="aaa"))
         assert pr.needs_review(CommitSha(value="bbb"))

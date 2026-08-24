@@ -5,6 +5,11 @@ import re
 
 logger = logging.getLogger(__name__)
 
+from pr_auto_reviewer.infrastructure.llm.prompt_budget import (
+    PromptBudget,
+)
+
+
 class DiffAnalyzer:
 
     _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
@@ -144,8 +149,6 @@ class DiffAnalyzer:
         return "\n".join(annotated)
 
     def trim_diff_by_file_boundaries(self, raw_diff: str, max_tokens: int) -> str:
-        from pr_auto_reviewer.infrastructure.llm.prompt_budget import PromptBudget
-
         if PromptBudget.estimate_tokens(raw_diff) <= max_tokens:
             logger.debug("Diff fits within budget (%d tokens)", max_tokens)
             return raw_diff

@@ -72,6 +72,7 @@ class TestJsonFilePullRequestRepository:
             summary=summary,
             model_used=model_used,
             items=items or [],
+            reason="test reason",
         )
 
     @staticmethod
@@ -202,7 +203,7 @@ class TestJsonFilePullRequestRepository:
         pr = self._pr(number=1, title="Old", sha="s1")
         repo.save(pr)
         updated = pr.add_review(
-            self._review(verdict=ReviewVerdict.COMMENTED, summary="Reviewed"),
+            self._review(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="Reviewed"),
             CommitSha(value="s2"),
         )
         repo.save(updated)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
@@ -11,7 +12,6 @@ from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case 
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
 )
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
     ComposedPrompt,
 )
@@ -19,6 +19,7 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
     RunMultiPhaseReviewCommand,
 )
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
 )
@@ -84,5 +85,6 @@ class OllamaAgentAdapter(LlmReviewPort):
                 repo_path=Path(repo_path.strip()),
                 changed_files=changed_files,
                 model=self._chat_client._model,
+                review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
             )
         )

@@ -88,6 +88,7 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
         return PullRequestDiff(
             pr_id=pr_id,
             head_sha=sha,
+            base_sha=CommitSha(base_sha),
             diff_content=raw_diff,
             file_contents=file_contents,
             commit_messages=commit_messages,

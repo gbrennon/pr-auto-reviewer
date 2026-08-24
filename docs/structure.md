@@ -154,8 +154,8 @@ layers:
 │  └─────────────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │   Agent System                                          │    │
-│  │   AdvisorAgent, ArchitectAgent, EngineerAgent           │    │
-│  │   ExplorerAgent, ManagerAgent, ReviewerAgent            │    │
+│  │   AdvisorAgent, ArchitectAgent, EngineerAgent,         │    │
+│  │   ManagerAgent                                          │    │
 │  │   Conversation, ConversationMessage, PhaseResult        │    │
 │  │   TurnParseResult, ReviewPhase                          │    │
 │  └─────────────────────────────────────────────────────────┘    │

@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import StrEnum
-
 from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
     AggregateReviewFindingsUseCase,
 )
 from pr_auto_reviewer.application.ports.outbound.reason_factory_port import (
     ReasonFactoryPort,
-)
-from pr_auto_reviewer.domain.agent.phase_result import PhaseResult
-from pr_auto_reviewer.domain.agent.sub_review_guardrails import (
-    SubReviewGuardrails,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -21,10 +14,14 @@ from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command
 )
 from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
+)
+from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
+    SubReviewGuardrails,
 )
 
 
@@ -126,7 +123,7 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
                     file_path=s.get("file", ""),
                     description=s.get("description", ""),
                     line=s.get("line", ""),
-                    id=s.get("id", "") or ReviewItemFactory._generate_id(),
+                    id=s.get("id", "") or ReviewItemFactory.generate_id(),
                     current_code=s.get("current_code", ""),
                     suggested_fix=s.get("suggested_fix", ""),
                 ))
@@ -143,7 +140,7 @@ class FindingAggregator(AggregateReviewFindingsUseCase):
                     suggested_fix=p.get("description", ""),
                 ))
 
-        if not summary and merged:
+        if not summary:
             summary = self._build_summary(merged)
 
         return CodeReview(

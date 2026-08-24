@@ -24,13 +24,13 @@ from pr_auto_reviewer.application.services.finding_verifier import (
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
     MultiPhaseReviewOrchestrator,
 )
-from pr_auto_reviewer.application.services.turn_parser import TurnParser
-from pr_auto_reviewer.domain.agent.advisor_agent import AdvisorAgent
-from pr_auto_reviewer.domain.agent.architect_agent import ArchitectAgent
-from pr_auto_reviewer.domain.agent.engineer_agent import EngineerAgent
-from pr_auto_reviewer.domain.agent.manager_agent import ManagerAgent
-from pr_auto_reviewer.domain.agent.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
+from pr_auto_reviewer.application.services.phase_advisor import PhaseAdvisor
+from pr_auto_reviewer.application.services.phase_manager import PhaseManager
+from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
+from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
+from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
+from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
@@ -46,6 +46,9 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
+from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
+    AgentExchangeEvent,
+)
 from pr_auto_reviewer.domain.messages.events.conversation_completed_event import (
     ConversationCompletedEvent,
 )
@@ -58,6 +61,9 @@ from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
 from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
     ReviewTurnParsedEvent,
 )
+from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
@@ -98,6 +104,7 @@ from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import 
 from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
     ReasonFactory,
 )
+from pr_auto_reviewer.infrastructure.transcript_routing import PEER_PHASE_ROUTES
 
 logger = logging.getLogger(__name__)
 
@@ -108,10 +115,14 @@ _PHASE_PROMPT_DIR = (
     / "universal"
 )
 
+_AGENT_BY_ROLE = {
+    SubAgentRole.ENGINEER: EngineerAgent(),
+    SubAgentRole.ARCHITECT: ArchitectAgent(),
+}
+
 _PHASES: list[tuple[str, str, Any]] = [
-    ("bug-hunt-diff", "Bug Hunt — Diff", EngineerAgent()),
-    ("bug-hunt-branch", "Bug Hunt — Branch", EngineerAgent()),
-    ("architecture-review", "Architecture Review", ArchitectAgent()),
+    (route.slug, route.label, _AGENT_BY_ROLE[route.role])
+    for route in PEER_PHASE_ROUTES
 ]
 
 _METHODOLOGY = (
@@ -237,11 +248,15 @@ def wire_core_services(
     conversation_logger = MarkdownConversationLogger(
         base_dir=Path(config_dir) / "conversations"
     )
-    turn_parser = TurnParser(ReviewResponseParser())
+    turn_parser = TurnParserService(ReviewResponseParser())
+    advisor = PhaseAdvisor(chat_port=chat_client, command_bus=command_bus)
     conversation_service = AgentConversationService(
         chat_port=chat_client,
         command_bus=command_bus,
         conversation_logger=conversation_logger,
+        max_turns=config.llm_max_turns,
+        turn_observer=advisor,
+        max_advisor_blocks=config.advisor_max_blocks,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
     verify_prompt = ReviewResponseParser.strip_frontmatter(
@@ -250,16 +265,21 @@ def wire_core_services(
     verifier = FindingVerifier(
         chat_port=chat_client,
         verify_prompt=verify_prompt,
-        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
-            repo_path, changed_files=changed_files
+        tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
+            repo_path, changed_files=changed_files, base_sha=base_sha
         ),
+        command_bus=command_bus,
+        max_turns=config.llm_max_turns,
     )
     aggregator = FindingAggregator(ReasonFactory())
     orchestrator = MultiPhaseReviewOrchestrator(
         command_bus=command_bus,
-        tool_factory=lambda repo_path, changed_files: ExplorationToolService(
-            repo_path, changed_files=changed_files
+        tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
+            repo_path, changed_files=changed_files, base_sha=base_sha
         ),
+        max_conversations=config.review_max_conversations,
+        advisor=advisor,
+        manager=PhaseManager(chat_port=chat_client, command_bus=command_bus),
     )
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
@@ -270,7 +290,8 @@ def wire_core_services(
     )
     command_bus.register(VerifyFindingsCommand, verifier.execute)
     command_bus.register(ParseReviewTurnCommand, turn_parser.execute)
-    event_logger = EventLoggingHandler()
+    event_logger = EventLoggingHandler(exchange_logger=conversation_logger)
+    command_bus.register(AgentExchangeEvent, event_logger.handle_agent_exchange)
     command_bus.register(
         ReviewTurnParsedEvent, event_logger.handle_review_turn_parsed
     )

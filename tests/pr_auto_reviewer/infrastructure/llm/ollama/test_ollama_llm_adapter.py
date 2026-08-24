@@ -199,7 +199,15 @@ class TestOllamaLlmAdapter:
 
         call_count = 0
 
-        bad_raw = "{}"
+        bad_raw = json.dumps({
+            "verdict": "changes_requested",
+            "issues": [{
+                "file": "src/foo.py",
+                "description": "bad code",
+                "severity": "major",
+                "type": "maintainability",
+            }],
+        })
         good_raw = json.dumps({
             "verdict": "changes_requested",
             "issues": [{
@@ -247,7 +255,15 @@ class TestOllamaLlmAdapter:
         )
 
         call_count = 0
-        bad_raw = "{}"
+        bad_raw = json.dumps({
+            "verdict": "changes_requested",
+            "issues": [{
+                "file": "src/foo.py",
+                "description": "bad code",
+                "severity": "major",
+                "type": "maintainability",
+            }],
+        })
 
         def fake_request_ollama(_prompt_text: str, _timeout: int):
             nonlocal call_count
@@ -262,8 +278,8 @@ class TestOllamaLlmAdapter:
 
         assert call_count == max_retries
         assert isinstance(result, CodeReview)
-        # With empty JSON, parse falls back to markdown which may produce COMMENTED
-        assert result.verdict is not None
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert len(result.items) == 1
 
 class TestPromptBuilder:
     """Tests for PromptBuilder."""
@@ -416,7 +432,7 @@ None
         result = ReviewResponseParser().parse(raw_text, "code-review")
 
         assert len(result.items) == 0
-        assert result.verdict == ReviewVerdict.COMMENTED
+        assert result.verdict == ReviewVerdict.APPROVED
 
     @pytest.mark.parametrize("severity,expected_verdict", [
         ("critical", ReviewVerdict.CHANGES_REQUESTED),

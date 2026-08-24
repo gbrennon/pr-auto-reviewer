@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
-from pr_auto_reviewer.domain.agent.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -233,6 +234,9 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
             return self._run_single_turn_review(composed)
 
         changed_files: list[str] = sorted(diff.file_contents.keys()) if diff.file_contents else []
+        base_sha: str = (
+            str(diff.base_sha) if diff.base_sha is not None else ""
+        )
 
         # Load existing PR to get existing review item IDs for unique ID generation
         existing_pr = self._pr_repository.find(command.pr_id)
@@ -257,6 +261,8 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                 repo_path=diff.clone_path,
                 changed_files=changed_files,
                 model="code-review:latest",
+                review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
+                base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
             )
         )
@@ -314,7 +320,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
                     ),
                     current_code=current_code,
                     suggested_fix=suggested_fix,
-                    id=ReviewItemFactory._generate_id(),
+                    id=ReviewItemFactory.generate_id(),
                 )
             )
             if len(items) >= 5:
