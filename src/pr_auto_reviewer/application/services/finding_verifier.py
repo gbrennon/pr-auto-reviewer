@@ -28,11 +28,18 @@ from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_decision import (
+    ConversationDecision,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
+    ConversationGuardrails,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
+    ExploreBeforeResultsRenderer,
     VerifyEmptyResponseRenderer,
     VerifyInitialUserRenderer,
     VerifyUnparseableResponseRenderer,
@@ -74,17 +81,30 @@ class FindingVerifier(VerifyFindingsUseCase):
         self._initial_user = VerifyInitialUserRenderer()
         self._empty_user = VerifyEmptyResponseRenderer()
         self._unparseable_user = VerifyUnparseableResponseRenderer()
+        self._explore_before_results = ExploreBeforeResultsRenderer()
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
-        """Verify blocking findings, returning only those confirmed by the LLM."""
-        blocking = [
-            i for i in command.items if i.is_blocking
-        ]
-        if not blocking:
-            return list(command.items)
+        """Drop synthetic findings, then LLM-verify every survivor.
+
+        Verification covers all severities: the observed fabrication
+        class publishes as minor findings that mechanical gates cannot
+        refute (real snippets, wrong semantics), so severity is never a
+        reason to skip semantic verification.  On verifier abort the
+        fail-closed rule applies to blocking items only; non-blocking
+        survivors pass through unverified rather than unpublished.
+        """
+        survivors = self._filter_synthetic_findings(
+            list(command.items), command.repo_path,
+        )
+        if not survivors:
+            logger.debug(
+                "No findings survived the synthetic filter; "
+                "verification skipped"
+            )
+            return []
 
         findings_text = self._format_findings_for_verification(
-            blocking, command.repo_path
+            survivors, command.repo_path
         )
         prompt = self._verify_prompt.replace("{findings}", findings_text)
 
@@ -100,11 +120,11 @@ class FindingVerifier(VerifyFindingsUseCase):
 
         if results is None:
             logger.warning(
-                "Verification failed to produce results; preserving all "
-                "%d blocking findings",
-                len(blocking),
+                "Verification aborted; dropping all %d blocking "
+                "findings as unverified",
+                sum(1 for i in survivors if i.is_blocking),
             )
-            return list(command.items)
+            return [i for i in survivors if not i.is_blocking]
 
         verified_indices: set[int] = set()
         for r in results:
@@ -120,35 +140,21 @@ class FindingVerifier(VerifyFindingsUseCase):
                     r.get("reasoning", "")[:120],
                 )
 
-        verified_blocking: list[ReviewItem] = []
-        for i, item in enumerate(blocking):
-            if i not in verified_indices:
-                continue
-            item_current = item.current_code.strip()
-            item_suggested = item.suggested_fix.strip()
-            if item_current == item_suggested and item_current:
-                logger.debug(
-                    "Item %s: current_code == suggested_fix; "
-                    "treating as unverified",
-                    item.id,
-                )
-                continue
-            verified_blocking.append(item)
-
-        dropped = len(blocking) - len(verified_blocking)
-        if dropped == 0:
-            return list(command.items)
-
-        logger.info(
-            "Verification dropped %d/%d blocking findings as hallucinations",
-            dropped,
-            len(blocking),
-        )
-
-        non_blocking = [
-            i for i in command.items if not i.is_blocking
+        kept = [
+            item
+            for i, item in enumerate(survivors)
+            if i in verified_indices
         ]
-        return non_blocking + verified_blocking
+
+        dropped = len(survivors) - len(kept)
+        if dropped:
+            logger.info(
+                "Verification dropped %d/%d findings as hallucinations",
+                dropped,
+                len(survivors),
+            )
+
+        return kept
 
     def _run_verification_conversation(
         self,
@@ -183,62 +189,93 @@ class FindingVerifier(VerifyFindingsUseCase):
             self._initial_user.render(repo_path=repo_path),
         ]
 
-        empty_consecutive = 0
-        unparseable_consecutive = 0
-        for turn in range(self._max_turns):
+        guardrails = ConversationGuardrails(
+            max_turns=self._max_turns,
+            max_empty_responses=_MAX_EMPTY_RESPONSES,
+            max_unparseable_responses=_MAX_UNPARSEABLE_RESPONSES,
+            exploration_required=True,
+        )
+
+        while guardrails.has_turns_remaining():
+            guardrails = guardrails.advance_turn()
             logger.debug(
-                "Verify turn %d/%d", turn + 1, self._max_turns
+                "Verify turn %d/%d",
+                guardrails.turn,
+                guardrails.max_turns,
             )
             content = self._chat_port.send(messages)
             if not content:
-                empty_consecutive += 1
-                if empty_consecutive >= _MAX_EMPTY_RESPONSES:
+                decision, guardrails = guardrails.record_empty_response()
+                if decision == ConversationDecision.EXCEEDED_EMPTY:
                     logger.warning(
                         "Verification: %d consecutive empty responses; "
                         "aborting",
-                        empty_consecutive,
+                        guardrails.consecutive_empty,
                     )
                     return None, messages
                 logger.debug(
                     "Empty response at verify turn %d; reprompting",
-                    turn + 1,
+                    guardrails.turn,
                 )
                 messages.append(self._empty_user.render())
                 continue
 
-            empty_consecutive = 0
-
             parsed = self._parse_verify_turn(content)
             if parsed is None:
-                unparseable_consecutive += 1
+                decision, guardrails = (
+                    guardrails.record_unparseable_response()
+                )
                 if (
-                    unparseable_consecutive
-                    >= _MAX_UNPARSEABLE_RESPONSES
+                    decision
+                    == ConversationDecision.EXCEEDED_UNPARSEABLE
                 ):
                     logger.warning(
                         "Verification: %d consecutive unparseable "
                         "responses; aborting",
-                        unparseable_consecutive,
+                        guardrails.consecutive_unparseable,
                     )
                     return None, messages
                 logger.debug(
-                    "Unparseable response at verify turn %d; reprompting",
-                    turn + 1,
+                    "Unparseable response at verify turn %d; "
+                    "reprompting",
+                    guardrails.turn,
                 )
                 messages.append(self._unparseable_user.render())
                 continue
-            unparseable_consecutive = 0
 
+            guardrails = guardrails.mark_consecutive_success()
             messages.append(ConversationMessage(
                 role="assistant", content=content
             ))
 
             if isinstance(parsed, list):
+                decision, guardrails = guardrails.judge_verdict()
+                if decision == ConversationDecision.DEMAND_EXPLORATION:
+                    logger.debug(
+                        "Verifier produced results with no tool calls; "
+                        "demanding exploration"
+                    )
+                    messages.append(
+                        self._explore_before_results.render()
+                    )
+                    continue
+                if (
+                    decision
+                    == ConversationDecision.REFUSED_EXPLORATION
+                ):
+                    logger.warning(
+                        "Model refused exploration after %d "
+                        "demand(s); aborting verification",
+                        guardrails.demands_issued,
+                    )
+                    return None, messages
                 logger.debug(
-                    "Got verification results at turn %d", turn + 1
+                    "Got verification results at turn %d",
+                    guardrails.turn,
                 )
                 return parsed, messages
 
+            guardrails = guardrails.record_tool_call()
             action = parsed["action"]
             args = parsed.get("args", "")
             logger.debug(
@@ -259,7 +296,7 @@ class FindingVerifier(VerifyFindingsUseCase):
             ))
 
         logger.warning(
-            "Verification exceeded max turns (%d)", _VERIFY_MAX_TURNS
+            "Verification exceeded max turns (%d)", self._max_turns
         )
         return None, messages
 
@@ -311,6 +348,81 @@ class FindingVerifier(VerifyFindingsUseCase):
                 }
             )
         return results if results else None
+
+
+    def _filter_synthetic_findings(
+        self, items: list[ReviewItem], repo_path: Path,
+    ) -> list[ReviewItem]:
+        """Drop findings that are mechanically synthetic before LLM spend.
+
+        Two gates, applied in order:
+
+        **S4 — no-op fix**: ``current_code == suggested_fix`` verbatim.
+        If the fix is byte-identical to the current code, the finding is
+        fabricated — the model invented a problem with no real change.
+
+        **S3 — snippet-existence**: ``current_code`` does not appear in
+        the cited file.  When the file exists but the quoted snippet is
+        absent, the model hallucinated the code it is "fixing."
+        """
+        survivors: list[ReviewItem] = []
+        for item in items:
+            current = item.current_code.strip()
+            suggested = item.suggested_fix.strip()
+            if current and current == suggested:
+                logger.debug(
+                    "S4 no-op gate: dropping finding %s — "
+                    "current_code == suggested_fix",
+                    item.id,
+                )
+                continue
+            if item.file_path and current:
+                full_path = repo_path / item.file_path
+                if full_path.exists() and not self._snippet_matches_file(
+                    current, full_path,
+                ):
+                    logger.debug(
+                        "S3 snippet-existence gate: dropping finding %s — "
+                        "current_code not found in %s",
+                        item.id, item.file_path,
+                    )
+                    continue
+            survivors.append(item)
+        dropped = len(items) - len(survivors)
+        if dropped:
+            logger.info(
+                "Synthetic-finding filter dropped %d/%d items before "
+                "LLM verification",
+                dropped, len(items),
+            )
+        return survivors
+
+    def _snippet_matches_file(self, snippet: str, file_path: Path) -> bool:
+        """Return whether *snippet* appears in *file_path*.
+
+        Matching is an in-order subsequence test over stripped lines:
+        every snippet line must appear in the file, in order, with
+        possible gaps between matches. A snippet anchored to a real
+        first line but carrying a fabricated body fails this gate.
+        """
+        try:
+            file_text = file_path.read_text()
+        except (OSError, UnicodeDecodeError):
+            return True
+        snippet_lines = [
+            ln.strip()
+            for ln in snippet.split("\n")
+            if ln.strip()
+        ]
+        if not snippet_lines:
+            return True
+        file_lines = iter(
+            [ln.strip() for ln in file_text.split("\n")]
+        )
+        return all(
+            any(snippet_line == file_line for file_line in file_lines)
+            for snippet_line in snippet_lines
+        )
 
     def _format_findings_for_verification(
         self, items: list[ReviewItem], repo_path: Path
