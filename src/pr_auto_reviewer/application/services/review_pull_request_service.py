@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,6 +26,7 @@ from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_verdict import ReviewVerdict
+from ...domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from ..ports.inbound.review_pull_request_port import ReviewPullRequestPort
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
@@ -255,7 +257,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                         existing_ids.add(praise.id)
             existing_item_ids = frozenset(existing_ids)
 
-        return self._command_bus.dispatch(
+        review = self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=plan,
                 repo_path=diff.clone_path,
@@ -265,6 +267,74 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
             )
+        )
+        return self._drop_persisted_duplicates(review, existing_pr)
+
+    def _drop_persisted_duplicates(
+        self,
+        review: CodeReview | None,
+        existing_pr: PullRequest | None,
+    ) -> CodeReview | None:
+        """Drop findings byte-equivalent to an already-published one.
+
+        Recycled fabrications reappear across runs under freshly
+        generated IDs (observed: ``1a0305`` republished as
+        ``1a0306``).  ID-level uniqueness cannot catch them, so a
+        normalized ``(file_path, current_code)`` signature from the
+        persisted reviews blocks republication.  Distinct findings on
+        the same file are unaffected.
+        """
+        if existing_pr is None or review is None or not review.items:
+            return review
+        published_signatures = {
+            self._content_signature(item)
+            for prior_review in existing_pr.reviews
+            for item in prior_review.items
+        }
+        kept: list[ReviewItem] = []
+        for item in review.items:
+            if self._content_signature(item) in published_signatures:
+                logger.warning(
+                    "Dropping finding %s — byte-equivalent to a "
+                    "previously published finding on %s",
+                    item.id, item.file_path,
+                )
+                continue
+            kept.append(item)
+        if len(kept) == len(review.items):
+            return review
+        dropped_count = len(review.items) - len(kept)
+        logger.info(
+            "Content dedup dropped %d finding(s) already present in "
+            "persisted reviews",
+            dropped_count,
+        )
+        verdict = SubReviewGuardrails().verdict_for(kept)
+        summary = (
+            f"{dropped_count} duplicate finding(s) already published "
+            "were suppressed; no new actionable findings remained."
+            if not kept
+            else review.summary
+        )
+        reason = (
+            "All findings were duplicates of previously published ones."
+            if not kept
+            else review.reason
+        )
+        return replace(
+            review,
+            items=kept,
+            verdict=verdict,
+            reason=reason,
+            summary=summary,
+        )
+
+    @staticmethod
+    def _content_signature(item: ReviewItem) -> tuple[str, str]:
+        """Return the whitespace-normalized content signature of *item*."""
+        return (
+            item.file_path or "",
+            " ".join((item.current_code or "").split()),
         )
 
     def _run_single_turn_review(self, prompt) -> CodeReview:
