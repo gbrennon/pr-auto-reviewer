@@ -1,4 +1,4 @@
-"""RunAgentConversationUseCase — inbound port for running a single-phase agent conversation."""
+"""RunAgentConversationPort — inbound port for running a single-phase agent conversation."""
 
 from typing import Protocol
 
@@ -8,7 +8,7 @@ from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command im
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 
 
-class RunAgentConversationUseCase(Protocol):
+class RunAgentConversationPort(Protocol):
     """Run a single-phase multi-turn agent conversation with tool access."""
 
     def execute(self, command: RunAgentConversationCommand) -> PhaseResult:

@@ -1,4 +1,4 @@
-"""BriefNextPhaseUseCase — the manager assigns the task for the next phase."""
+"""BriefNextPhasePort — the manager assigns the task for the next phase."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Protocol
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 
 
-class BriefNextPhaseUseCase(Protocol):
+class BriefNextPhasePort(Protocol):
     """Produce a focused task assignment for the upcoming phase.
 
     The manager acts at the start of the review and between phases:
@@ -21,7 +21,7 @@ class BriefNextPhaseUseCase(Protocol):
         next_phase: ReviewPhase,
         findings_summary: str,
         review_session: str,
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
         ...

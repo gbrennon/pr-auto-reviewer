@@ -1,4 +1,4 @@
-"""AssessPhaseUseCase — the advisor grades a finished peer phase."""
+"""AssessPhasePort — the advisor grades a finished peer phase."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 
 
-class AssessPhaseUseCase(Protocol):
+class AssessPhasePort(Protocol):
     """Grade a finished phase and, on a blocking grade, return a corrective prompt.
 
     The advisor watches what the peer sub-agent did in *phase* against
@@ -26,7 +26,7 @@ class AssessPhaseUseCase(Protocol):
         assignment: str,
         phase_result: PhaseResult,
         review_session: str,
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
     ) -> AdvisorDirective:
         """Return the advisor's directive for the finished *phase*."""
         ...

@@ -1,4 +1,4 @@
-"""RunMultiPhaseReviewUseCase — inbound port for executing a multi-phase review plan."""
+"""RunMultiPhaseReviewPort — inbound port for executing a multi-phase review plan."""
 
 from typing import Protocol
 
@@ -8,7 +8,7 @@ from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command im
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 
 
-class RunMultiPhaseReviewUseCase(Protocol):
+class RunMultiPhaseReviewPort(Protocol):
     """Execute a full multi-phase review plan with retry and feedback loops."""
 
     def execute(self, command: RunMultiPhaseReviewCommand) -> CodeReview:
