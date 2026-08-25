@@ -13,7 +13,6 @@ class TestFakeMarkdownConversationLogger:
     def test_fake_log_conversation(self) -> None:
         """Fake log_conversation tracks calls without writing to disk."""
         fake = FakeMarkdownConversationLogger()
-        from datetime import datetime
         from pathlib import Path
 
         messages = []

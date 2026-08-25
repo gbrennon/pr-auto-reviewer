@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
-from tests.fakes.fake_compose_review_prompt_adapter import FakeComposeReviewPromptAdapter
+from tests.fakes.fake_compose_review_prompt_adapter import (
+    FakeComposeReviewPromptAdapter,
+)
 
 
 class TestFakeComposeReviewPromptAdapter:

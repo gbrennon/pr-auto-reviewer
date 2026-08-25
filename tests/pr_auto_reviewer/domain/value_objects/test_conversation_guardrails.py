@@ -100,6 +100,6 @@ class TestConversationGuardrails:
     def test_accepts_when_tool_calls_after_demand(self) -> None:
         guardrails = ConversationGuardrails(demands_issued=1, tool_calls=1)
 
-        decision, state = guardrails.judge_verdict()
+        decision, _state = guardrails.judge_verdict()
 
         assert decision is ConversationDecision.ACCEPT_VERDICT

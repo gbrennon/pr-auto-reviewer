@@ -43,7 +43,6 @@ from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
 
-
 _BODY = FakeReviewBodyRendererFactory.make()
 
 _DIFF_TEXT = (

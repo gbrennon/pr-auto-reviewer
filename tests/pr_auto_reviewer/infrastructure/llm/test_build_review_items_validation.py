@@ -8,6 +8,7 @@ from typing import Any
 from pr_auto_reviewer.domain.services.review_item_factory import (
     ReviewItemFactory,
 )
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 
 
 class TestBuildReviewItemsValidation:
@@ -234,13 +235,18 @@ class TestBuildReviewItemsValidation:
         ]
         result, skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
         # A snippet that anchors in the file counts as located even with a
-        # matching line adjustment; an unlocatable snippet no longer drops the
-        # item — it is kept with its claimed anchor and only warned about.
+        # matching line adjustment; an unlocatable snippet no longer drops
+        # the item — it is downgraded to info and marked anchor_unverified.
         assert len(result) == 2
         assert {item.description for item in result} == {
             "correct code",
-            "hallucinated code",
+            "hallucinated code [anchor_unverified]",
         }
+        downgraded = next(
+            item for item in result
+            if "anchor_unverified" in item.description
+        )
+        assert downgraded.severity == ItemSeverity.INFO
         assert skip_reasons == []
 
     def test_relocates_snippet_to_matching_line(self, tmp_path: Path) -> None:

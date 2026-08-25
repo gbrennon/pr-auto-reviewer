@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tests.fakes.fake_github_pr_lister import FakeGithubPrLister
-from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest
 
 
 class TestFakeGithubPrLister:
