@@ -101,6 +101,20 @@ class FindingVerifierService(VerifyFindingsPort):
                 "No findings survived the synthetic filter; "
                 "verification skipped"
             )
+            self._publish_exchange(
+                command.repo_path,
+                command.review_session,
+                self._verify_prompt.replace("{findings}", "(none)"),
+                [ConversationMessage(
+                    role="assistant",
+                    content=(
+                        '{"results": [], "note": "All '
+                        f"{len(command.items)} findings were dropped by "
+                        "the mechanical synthetic-finding filter before "
+                        'verification."}'
+                    ),
+                )],
+            )
             return []
 
         findings_text = self._format_findings_for_verification(

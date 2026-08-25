@@ -98,7 +98,19 @@ class ExplorationToolService:
         if operation == "list_directory":
             return self.list_directory(args)
         if operation == "run_snippet":
-            return self.run_snippet(str(args))
+            if not isinstance(args, str):
+                logger.warning(
+                    "run_snippet received dict-shaped args; rejecting"
+                )
+                return {
+                    "status": "error",
+                    "error": (
+                        "run_snippet expects the raw Python source as a "
+                        "plain string, not a JSON object. Resend with "
+                        '{"action": "run_snippet", "args": "<python code>"}'
+                    ),
+                }
+            return self.run_snippet(args)
         if operation == "run_git":
             return self.run_git(args)
         if operation == "get_changed_files":
@@ -324,7 +336,8 @@ class ExplorationToolService:
 
         Writes the snippet to a temp ``.py`` file inside
         ``.pr-auto-reviewer-tmp/`` and runs it with ``python3`` from the
-        repo root (so relative imports resolve).
+        repo root (so relative imports resolve).  The temp file is
+        removed as soon as execution finishes.
 
         Args:
             args: Raw Python source code to execute.
@@ -356,6 +369,7 @@ class ExplorationToolService:
                     **os.environ,
                     "PYTHONPATH": str(self._repo_root),
                 },
+                check=False,
             )
         except subprocess.TimeoutExpired:
             return {
@@ -366,6 +380,8 @@ class ExplorationToolService:
             return {"status": "error", "error": str(exc)}
         except UnicodeDecodeError as exc:
             return {"status": "error", "error": str(exc)}
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
 
         logger.debug(
             "action=run_snippet exit_code=%d", result.returncode
