@@ -144,6 +144,58 @@ class AgentConversationService(RunAgentConversationUseCase):
                 return candidate
         return ""
 
+    def _ground_cited_paths(
+        self,
+        entries: list[dict[str, Any]],
+        kind: str,
+        repo_path: Path,
+        changed_files: list[str],
+    ) -> list[dict[str, Any]]:
+        """Validate cited ``file`` paths against the repository.
+
+        Models cite nonexistent files in praise and suggestions (e.g.
+        ``src/main.py``, ``adapters/shallow_inbound.py`` observed in
+        live runs).  A *suggestion* with a drifted path keeps its prose
+        but loses the citation; a *praise* entry is dropped outright —
+        ungrounded praise is worthless.  Entries with empty paths pass
+        through unchanged.
+
+        Existence checks resolve the citation and require containment
+        within the repo, so absolute or ``..``-escaping citations
+        cannot ground against files outside the repository.
+        """
+        grounded: list[dict[str, Any]] = []
+        for entry in entries:
+            cited = str(entry.get("file", "")).strip()
+            if not cited:
+                grounded.append(entry)
+                continue
+            exists = (
+                cited in changed_files
+                or self._resolves_inside_repo(cited, repo_path)
+            )
+            if exists:
+                grounded.append(entry)
+                continue
+            logger.info(
+                "Dropping %s citation of nonexistent path: %s",
+                kind, cited,
+            )
+            if kind == "praise":
+                continue
+            entry["file"] = ""
+            grounded.append(entry)
+        return grounded
+
+    @staticmethod
+    def _resolves_inside_repo(cited: str, repo_path: Path) -> bool:
+        """Return whether *cited* resolves to an existing repo-internal path."""
+        resolved = (repo_path / cited).resolve()
+        return (
+            resolved.is_relative_to(repo_path.resolve())
+            and resolved.exists()
+        )
+
     def _log_conversation_debug(
         self,
         phase_name: str,
@@ -197,6 +249,8 @@ class AgentConversationService(RunAgentConversationUseCase):
         seen_tool_calls: set[tuple[str, str]] = set()
         self._consecutive_blocks = 0
         verdict_nudged = False
+        read_file_count = 0
+        run_snippet_count = 0
         while guardrails.has_turns_remaining():
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
@@ -299,6 +353,10 @@ class AgentConversationService(RunAgentConversationUseCase):
                 seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
                 guardrails = guardrails.record_tool_call()
+                if tool_call.tool_name == "read_file":
+                    read_file_count += 1
+                elif tool_call.tool_name == "run_snippet":
+                    run_snippet_count += 1
                 result_json = json.dumps({
                     "status": result.status,
                     "data": result.data,
@@ -328,7 +386,11 @@ class AgentConversationService(RunAgentConversationUseCase):
                 if decision is ConversationDecision.ACCEPT_VERDICT:
                     logger.debug("Got verdict at turn %d", guardrails.turn)
                     phase_result = self._build_phase_result(
-                        parsed, repo_path, changed_files, existing_ids=existing_item_ids
+                        parsed, repo_path, changed_files,
+                        turn_count=guardrails.turn,
+                        read_file_calls=read_file_count,
+                        run_snippet_calls=run_snippet_count,
+                        existing_ids=existing_item_ids,
                     )
                     self._log_conversation(
                         phase_name, messages, guardrails.turn, phase_result,
@@ -338,6 +400,19 @@ class AgentConversationService(RunAgentConversationUseCase):
                         phase_result=phase_result
                     ))
                     return phase_result
+                if (
+                    decision
+                    == ConversationDecision.REFUSED_EXPLORATION
+                ):
+                    logger.warning(
+                        "Model refused exploration after %d "
+                        "demand(s); aborting phase",
+                        guardrails.demands_issued,
+                    )
+                    raise MaxTurnsExceededError(
+                        "Model refused exploration after "
+                        f"{guardrails.demands_issued} demand(s)"
+                    )
                 logger.debug(
                     "Verdict at turn %d with no tool exploration; "
                     "demanding exploration",
@@ -366,7 +441,10 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _build_phase_result(
-        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str], existing_ids: frozenset[str] = frozenset()
+        self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str],
+        turn_count: int = 0, read_file_calls: int = 0,
+        run_snippet_calls: int = 0,
+        existing_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
@@ -381,13 +459,23 @@ class AgentConversationService(RunAgentConversationUseCase):
                 s["file"] = self._find_mentioned_file(
                     str(s.get("description", "")), changed_files
                 )
+        suggestions = self._ground_cited_paths(
+            suggestions, "suggestion", repo_path, changed_files,
+        )
+        praise = self._ground_cited_paths(
+            list(metadata.get("praise", [])), "praise",
+            repo_path, changed_files,
+        )
         return PhaseResult(
             items=review_items,
             llm_verdict=metadata.get("verdict") or None,
             llm_reason=metadata.get("reason", ""),
             llm_summary=metadata.get("summary", ""),
             llm_suggestions=suggestions,
-            llm_praise=metadata.get("praise", []),
+            llm_praise=praise,
+            turn_count=turn_count,
+            read_file_calls=read_file_calls,
+            run_snippet_calls=run_snippet_calls,
             skip_reasons=skip_reasons,
         )
 
