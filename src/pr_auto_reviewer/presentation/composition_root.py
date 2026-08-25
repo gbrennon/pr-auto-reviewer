@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
-    ProcessIssueCommandsUseCase,
+from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
+    ProcessIssueCommandsPort,
 )
-from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
-    ReviewPullRequestUseCase,
+from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
+    ReviewPullRequestPort,
 )
 from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
     ConversationLoggerPort,
@@ -52,8 +52,8 @@ logger = logging.getLogger(__name__)
 class ApplicationComponents:
     """All application components wired together."""
 
-    review_service: ReviewPullRequestUseCase
-    process_commands_service: ProcessIssueCommandsUseCase
+    review_service: ReviewPullRequestPort
+    process_commands_service: ProcessIssueCommandsPort
     review_reader: ReviewReaderPort
     pr_lister: PrListerPort
     repo_lister: RepoListerPort

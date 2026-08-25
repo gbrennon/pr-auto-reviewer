@@ -86,12 +86,12 @@ class MarkdownConversationLogger(ConversationLoggerPort):
     def log_conversation(
         self,
         phase_name: str,
-        pr_identifier: str,
+        pr_identifier_service: str,
         messages: list[Any],
         metadata: dict[str, Any],
         review_session: str,
     ) -> Path:
-        safe_pr = pr_identifier.replace("/", "_").replace("#", "_")
+        safe_pr = pr_identifier_service.replace("/", "_").replace("#", "_")
         phase_dir = self._base_dir / safe_pr
         if review_session:
             phase_dir = phase_dir / review_session
@@ -115,7 +115,7 @@ class MarkdownConversationLogger(ConversationLoggerPort):
         if existing:
             blocks.append(existing.rstrip("\n"))
         else:
-            blocks.append(self._preamble(phase_name, pr_identifier, review_session))
+            blocks.append(self._preamble(phase_name, pr_identifier_service, review_session))
         blocks.append("---")
         blocks.append(f"# {agent_role} — {timestamp}")
         blocks.append(self._summary_line(agent_role, metadata, turn_count))
@@ -126,12 +126,12 @@ class MarkdownConversationLogger(ConversationLoggerPort):
         return file_path
 
     def _preamble(
-        self, phase_name: str, pr_identifier: str, review_session: str
+        self, phase_name: str, pr_identifier_service: str, review_session: str
     ) -> str:
         """Return the header block written when a transcript is created."""
         lines = [
             f"# Phase: {phase_name}",
-            f"# PR: {pr_identifier}",
+            f"# PR: {pr_identifier_service}",
         ]
         if review_session:
             lines.append(f"# Review: {review_session}")
