@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,14 @@ logger = logging.getLogger(__name__)
 _MAX_FILE_BYTES = 100 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
+_ARGUMENT_KEY_ALIASES = (
+    "args",
+    "arg",
+    "path",
+    "file_path",
+    "file",
+    "directory",
+)
 _GIT_READONLY_SUBCOMMANDS = frozenset({
     "diff",
     "log",
@@ -73,7 +82,7 @@ class ExplorationToolService:
         """Dispatch an operation by name.
 
         Args:
-        operations: read_file, search_codebase, list_directory, run_git, get_changed_files
+        operations: read_file, search_codebase, list_directory, run_git, run_snippet, get_changed_files
             args: Operation-specific arguments string, or a dict with a single key
                 mapping to the argument value (normalized here).
 
@@ -88,6 +97,8 @@ class ExplorationToolService:
             return self.search_codebase(args)
         if operation == "list_directory":
             return self.list_directory(args)
+        if operation == "run_snippet":
+            return self.run_snippet(str(args))
         if operation == "run_git":
             return self.run_git(args)
         if operation == "get_changed_files":
@@ -100,14 +111,37 @@ class ExplorationToolService:
         Delegates to the existing ``execute()`` method, mapping the
         dict return value to a ``ToolResult``.
         """
-        operation = tool_call.tool_name
-        args = tool_call.arguments.get("args", "")
-        result = self.execute(operation, args)
+        result = self.execute(
+            tool_call.tool_name,
+            self._extract_arguments(tool_call.arguments),
+        )
         return ToolResult(
             status=result.get("status", "error"),
             data=result if result.get("status") == "ok" else None,
             error=result.get("error"),
         )
+
+    @staticmethod
+    def _extract_arguments(arguments: dict[str, Any]) -> str:
+        """Return the argument payload from common LLM arg-key shapes.
+
+        Models emit the payload under ``args`` but also drift to alias
+        keys (``file_path``, ``path``, ...) observed in live runs, where
+        a strict read produced empty-argument tool errors.  The first
+        non-empty alias wins; a single non-empty string under any other
+        key is accepted as an unambiguous fallback.
+        """
+        for key in _ARGUMENT_KEY_ALIASES:
+            value = arguments.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        strings = [
+            v for v in arguments.values()
+            if isinstance(v, str) and v.strip()
+        ]
+        if len(strings) == 1:
+            return strings[0]
+        return ""
 
     def read_file(self, args: str) -> dict[str, Any]:
         """Read a file (or line range) relative to the repo root.
@@ -284,6 +318,64 @@ class ExplorationToolService:
             repo-relative paths, or ``files`` may be empty.
         """
         return {"status": "ok", "files": list(self._changed_files)}
+
+    def run_snippet(self, args: str) -> dict[str, Any]:
+        """Execute a Python code snippet against the repo root.
+
+        Writes the snippet to a temp ``.py`` file inside
+        ``.pr-auto-reviewer-tmp/`` and runs it with ``python3`` from the
+        repo root (so relative imports resolve).
+
+        Args:
+            args: Raw Python source code to execute.
+
+        Returns:
+            A dict with ``status`` (``ok``, ``timeout``, or ``error``),
+            ``stdout``, ``stderr``, and ``exit_code`` on success;
+            ``error`` on failure.
+        """
+        tmp_dir = self._repo_root / ".pr-auto-reviewer-tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=".py", dir=tmp_dir, delete=False, mode="w"
+            ) as f:
+                f.write(args)
+                tmp_path = f.name
+        except OSError as exc:
+            return {"status": "error", "error": str(exc)}
+
+        try:
+            result = subprocess.run(
+                ["python3", tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                cwd=self._repo_root,
+                env={
+                    **os.environ,
+                    "PYTHONPATH": str(self._repo_root),
+                },
+            )
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "timeout",
+                "error": "Snippet execution timed out after 15 seconds",
+            }
+        except OSError as exc:
+            return {"status": "error", "error": str(exc)}
+        except UnicodeDecodeError as exc:
+            return {"status": "error", "error": str(exc)}
+
+        logger.debug(
+            "action=run_snippet exit_code=%d", result.returncode
+        )
+        return {
+            "status": "ok",
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.returncode,
+        }
 
     def _resolve_safe(self, relative_path: str) -> Path | None:
         """Resolve a path against the repo root, blocking escapes.
