@@ -14,7 +14,7 @@ Find architecture violations, SOLID principle breaks, design-pattern misuse, dep
 
 ## TOOLS
 
-You may use `read_file`, `search_codebase`, `list_directory`, and `run_git` to explore the full repository.
+You may use `read_file`, `search_codebase`, `list_directory`, `run_git`, and `run_snippet` to explore the full repository.
 
 
 The findings below are already recorded. Do NOT re-report them. If a file
