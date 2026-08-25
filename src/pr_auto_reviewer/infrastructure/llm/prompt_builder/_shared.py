@@ -11,8 +11,7 @@ or dropped in this order (highest priority first):
 4. ``conventions`` — kept as-is
 5. ``architecture hint`` — kept as-is
 6. ``repo structure`` — trimmed to max line count
-7. ``static instructions`` — use compact template if configured
-"""
+7. ``static instructions`` — use compact template if configured"""
 
 from __future__ import annotations
 
@@ -28,51 +27,28 @@ from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestD
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
 _DIFF_CHUNK_RE = re.compile(r"(?=^diff --git )", re.MULTILINE)
+
+
 _DIFF_FILE_PATH_RE = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE)
+
+
 _DIFF_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", re.MULTILINE)
+
+
 _DELETED_FILE_RE = re.compile(r"^deleted file mode", re.MULTILINE)
+
+
 _NEW_FILE_RE = re.compile(r"^new file mode", re.MULTILINE)
+
+
 _DEVNULL_SRC_RE = re.compile(r"^--- /dev/null$", re.MULTILINE)
+
+
 _DEVNULL_DST_RE = re.compile(r"^\+\+\+ /dev/null$", re.MULTILINE)
+
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-@dataclass
-class PromptBudget:
-    """Tracks token consumption for budget-aware prompt construction.
-
-    Uses a rough heuristic of 1 token ≈ 4 characters. For production use
-    with more accurate counting, integrate ``tiktoken``.
-    """
-
-    max_tokens: int
-    _consumed: int = field(default=0, init=False, repr=False)
-
-    @property
-    def remaining_tokens(self) -> int:
-        return max(0, self.max_tokens - self._consumed)
-
-    @classmethod
-    def estimate_tokens(cls, text: str) -> int:
-        """Rough token estimate: 1 token ≈ 4 characters."""
-        return len(text) // 4
-
-    def consume(self, text: str) -> int:
-        """Mark *text* as consumed, return its estimated token count."""
-        tokens = self.estimate_tokens(text)
-        self._consumed += tokens
-        return tokens
-
-    def would_fit(self, text: str) -> bool:
-        """Return True if *text* fits within the remaining budget."""
-        return self._consumed + self.estimate_tokens(text) <= self.max_tokens
-
-    def try_consume(self, text: str) -> bool:
-        """Consume *text* if it fits; return True when consumed."""
-        if self.would_fit(text):
-            self.consume(text)
-            return True
-        return False
 
 def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
     """Parse unified diff to extract per-file hunk line ranges.
@@ -123,6 +99,7 @@ def _parse_diff_hunks(diff_content: str) -> dict[str, list[tuple[int, int]]]:
 
     return hunks
 
+
 def _extract_surrounding_context(
     content: str,
     hunks: list[tuple[int, int]],
@@ -163,6 +140,7 @@ def _extract_surrounding_context(
 
     return "\n".join(out_lines)
 
+
 def _classify_chunk(chunk: str) -> str:
     """Return '[ADDED]', '[DELETED]', or '[MODIFIED]' for a diff chunk."""
     if _DELETED_FILE_RE.search(chunk) or _DEVNULL_DST_RE.search(chunk):
@@ -170,6 +148,7 @@ def _classify_chunk(chunk: str) -> str:
     if _NEW_FILE_RE.search(chunk) or _DEVNULL_SRC_RE.search(chunk):
         return "[ADDED]"
     return "[MODIFIED]"
+
 
 def _annotate_diff(raw_diff: str) -> str:
     """Insert file-status markers into a unified diff."""
@@ -207,12 +186,15 @@ def _annotate_diff(raw_diff: str) -> str:
 
     return "\n".join(annotated)
 
+
 def _trim_diff(raw_diff: str, max_tokens: int) -> str:
     """Truncate diff at ``diff --git`` boundaries to fit *max_tokens*.
 
     Keeps whole per-file chunks in priority order:
     ``[ADDED]`` > ``[MODIFIED]`` > ``[DELETED]``.
     """
+
+    from .prompt_budget import PromptBudget
     if PromptBudget.estimate_tokens(raw_diff) <= max_tokens:
         return raw_diff
 
@@ -242,6 +224,7 @@ def _trim_diff(raw_diff: str, max_tokens: int) -> str:
         result = first_chunk[:max_tokens * 4] + "\n... (diff truncated)\n"
 
     return result
+
 
 def _trim_file_contents(
     file_contents: dict[str, str],
@@ -278,6 +261,7 @@ def _trim_file_contents(
 
     return trimmed
 
+
 def _trim_repo_structure(structure: str, max_lines: int = 100) -> str:
     """Truncate repository structure listing to *max_lines* lines."""
     lines = structure.split("\n")
@@ -287,143 +271,5 @@ def _trim_repo_structure(structure: str, max_lines: int = 100) -> str:
         f"\n... ({len(lines) - max_lines} more entries omitted)\n"
     )
 
-class PromptBuilder:
-    """Build the prompt sent to the LLM from a diff + review context.
 
-    Parameters
-    ----------
-    template_dir:
-        Directory containing Jinja2 templates. Defaults to ``templates/``.
-    max_tokens:
-        Soft cap on total prompt tokens. ``0`` = unlimited (legacy mode).
-    max_file_chars:
-        Maximum characters per file in the file-contents section.
-    max_files:
-        Maximum number of files to include in the file-contents section.
-    max_structure_lines:
-        Maximum lines in the repository-structure section.
-    use_compact_template:
-        Use ``review_prompt_compact.j2`` (~4 KB) instead of the full template.
-    """
-
-    def __init__(
-        self,
-        template_dir: Path | None = None,
-        max_tokens: int = 0,
-        max_file_chars: int = 3000,
-        max_files: int = 10,
-        max_structure_lines: int = 100,
-        use_compact_template: bool = False,
-    ) -> None:
-        self._max_tokens = max_tokens
-        self._max_file_chars = max_file_chars
-        self._max_files = max_files
-        self._max_structure_lines = max_structure_lines
-        self._use_compact_template = use_compact_template
-        self._env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(str(template_dir or _TEMPLATES_DIR)),
-            keep_trailing_newline=True,
-        )
-
-    def build(self, diff: PullRequestDiff, context: RepositoryContext) -> str:
-        """Build a prompt using token-budget-aware allocation.
-
-        When ``self._max_tokens > 0``, sections are prioritised and
-        trimmed to fit within the budget. In legacy mode (max_tokens=0),
-        all sections are included as-is for backward compatibility.
-        """
-        template_name = (
-            "review_prompt_compact.j2" if self._use_compact_template
-            else "review_prompt.j2"
-        )
-        template = self._env.get_template(template_name)
-
-        conventions = context.conventions or diff.conventions
-        repo_structure = context.repository_structure or diff.repository_structure
-        annotated_diff = _annotate_diff(diff.diff_content)
-
-        if self._max_tokens <= 0:
-            return template.render(
-                architecture_hint=(
-                    context.architecture_hint if context.architecture_hint else None
-                ),
-                conventions=conventions if conventions else None,
-                repository_structure=repo_structure if repo_structure else None,
-                file_contents=diff.file_contents if diff.file_contents else None,
-                annotated_diff=annotated_diff,
-                pr_title=context.pr_title if context.pr_title else None,
-                pr_description=(
-                    context.pr_description if context.pr_description else None
-                ),
-                commit_messages=(
-                    diff.commit_messages if diff.commit_messages else None
-                ),
-                issue_category_values=IssueCategory.prompt_values(),
-                issue_severity_values=ItemSeverity.prompt_values(),
-            )
-
-        budget = PromptBudget(max_tokens=self._max_tokens)
-
-        budget.consume(context.pr_title or "")
-        budget.consume(context.pr_description or "")
-        for msg in (diff.commit_messages or []):
-            budget.consume(msg)
-
-        if budget.would_fit(annotated_diff):
-            budget.consume(annotated_diff)
-        else:
-            allowed_diff_tokens = max(
-                int(self._max_tokens * 0.6),
-                self._max_tokens - budget._consumed - 500,
-            )
-            annotated_diff = _annotate_diff(
-                _trim_diff(diff.diff_content, allowed_diff_tokens)
-            )
-            budget.consume(annotated_diff)
-
-        file_contents = None
-        if diff.file_contents and budget.remaining_tokens > 500:
-            trimmed_fc = _trim_file_contents(
-                diff.file_contents,
-                diff.diff_content,
-                max_files=self._max_files,
-                max_chars_per_file=self._max_file_chars,
-            )
-            if trimmed_fc and budget.would_fit(str(trimmed_fc)):
-                file_contents = trimmed_fc
-                budget.consume(str(trimmed_fc))
-
-        if conventions and budget.remaining_tokens > 200:
-            budget.consume(conventions)
-
-        if context.architecture_hint and budget.remaining_tokens > 100:
-            budget.consume(context.architecture_hint)
-
-        if repo_structure and budget.remaining_tokens > 200:
-            trimmed_structure = _trim_repo_structure(
-                repo_structure, self._max_structure_lines
-            )
-            if budget.would_fit(trimmed_structure):
-                repo_structure = trimmed_structure
-                budget.consume(trimmed_structure)
-            else:
-                repo_structure = None
-
-        return template.render(
-            architecture_hint=(
-                context.architecture_hint if context.architecture_hint else None
-            ),
-            conventions=conventions if conventions else None,
-            repository_structure=repo_structure if repo_structure else None,
-            file_contents=file_contents,
-            annotated_diff=annotated_diff,
-            pr_title=context.pr_title if context.pr_title else None,
-            pr_description=(
-                context.pr_description if context.pr_description else None
-            ),
-            commit_messages=(
-                diff.commit_messages if diff.commit_messages else None
-            ),
-            issue_category_values=IssueCategory.prompt_values(),
-            issue_severity_values=ItemSeverity.prompt_values(),
-        )
+__all__ = ['_DELETED_FILE_RE', '_DEVNULL_DST_RE', '_DEVNULL_SRC_RE', '_DIFF_CHUNK_RE', '_DIFF_FILE_PATH_RE', '_DIFF_HUNK_RE', '_NEW_FILE_RE', '_TEMPLATES_DIR', 'IssueCategory', 'ItemSeverity', 'Path', 'PullRequestDiff', 'RepositoryContext', '_annotate_diff', '_classify_chunk', '_extract_surrounding_context', '_parse_diff_hunks', '_trim_diff', '_trim_file_contents', '_trim_repo_structure', 'annotations', 'dataclass', 'field', 'jinja2', 're']
