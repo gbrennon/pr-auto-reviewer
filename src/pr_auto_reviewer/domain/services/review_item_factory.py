@@ -144,25 +144,24 @@ class ReviewItemFactory:
     def generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
         """Generate a unique ID for a review item.
 
-        Uses 4 hex characters from uuid7 + 2 hex counter
-        for unique, short IDs without repo prefix.
+        Uses the 4 *lowest* hex digits of a uuid7 plus a 2-digit
+        process counter.  The low bits are freshly random on every
+        call; the high bits encode the unix-millisecond timestamp and
+        stay constant within minute-scale windows, which made IDs
+        repeat across runs (every review produced ``1a03xx``).
         """
-        if not hasattr(cls, '_id_counter'):
+        if not hasattr(cls, "_id_counter"):
             cls._id_counter = 0
-        cls._id_counter += 1
-        u = _uuid.uuid7()
-        uuid_part = format(u.int, "04x")[:4]
-        counter_part = format(cls._id_counter, "02x")
-        candidate = f"{uuid_part}{counter_part}"
-        
-        # Ensure uniqueness against existing IDs
-        while candidate in existing_ids:
+
+        def _candidate() -> str:
             cls._id_counter += 1
-            u = _uuid.uuid7()
-            uuid_part = format(u.int, "04x")[:4]
+            random_part = format(_uuid.uuid7().int & 0xFFFF, "04x")
             counter_part = format(cls._id_counter, "02x")
-            candidate = f"{uuid_part}{counter_part}"
-        
+            return f"{random_part}{counter_part}"
+
+        candidate = _candidate()
+        while candidate in existing_ids:
+            candidate = _candidate()
         return candidate
 
     @classmethod

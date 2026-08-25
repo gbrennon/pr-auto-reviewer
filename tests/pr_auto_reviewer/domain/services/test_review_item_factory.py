@@ -51,6 +51,65 @@ class TestReviewItemFactory:
         assert len(result_without_params) == 6
         int(result_without_params, 16)
 
+    @staticmethod
+    def _fake_uuid7(ints: list[int]):
+        import itertools
+
+        class _FakeUuid:
+            def __init__(self, value: int) -> None:
+                self.int = value
+
+        values = itertools.cycle(ints)
+        return lambda: _FakeUuid(next(values))
+
+    def test_generate_id_derives_randomness_from_low_bits(
+        self, monkeypatch,
+    ) -> None:
+        """High uuid7 bits are a timestamp; only low bits are random."""
+        import pr_auto_reviewer.domain.services.review_item_factory as mod
+
+        high_timestamp_low_random = 0x1A0300000000000000000000000000AB
+        monkeypatch.setattr(
+            mod._uuid, "uuid7",
+            self._fake_uuid7([high_timestamp_low_random]),
+        )
+        ReviewItemFactory._id_counter = 0
+
+        generated = ReviewItemFactory.generate_id()
+
+        assert generated.endswith("ab01")
+        assert not generated.startswith("1a03")
+
+    def test_fresh_process_state_produces_disjoint_ids(
+        self, monkeypatch,
+    ) -> None:
+        """Two runs must never emit the same ID sequence."""
+        import pr_auto_reviewer.domain.services.review_item_factory as mod
+
+        class _FakeItem:
+            def __init__(self, value: int) -> None:
+                self.int = value
+
+        batches = []
+        for lows in ([0x1000 + i for i in range(5)],
+                     [0x2000 + i for i in range(5)]):
+            items = iter(lows)
+            monkeypatch.setattr(
+                mod._uuid, "uuid7",
+                lambda: _FakeItem(next(items)),
+            )
+            ReviewItemFactory._id_counter = 0
+            batches.append(
+                [ReviewItemFactory.generate_id() for _ in range(5)]
+            )
+
+        first_run_ids = set(batches[0])
+        second_run_ids = set(batches[1])
+
+        assert len(first_run_ids) == 5
+        assert len(second_run_ids) == 5
+        assert first_run_ids.isdisjoint(second_run_ids)
+
     def test_resolve_exact_path(self) -> None:
         """Test resolving an exact repo-relative path."""
         with Path("/tmp/test_resolve.py").open("w") as f:
