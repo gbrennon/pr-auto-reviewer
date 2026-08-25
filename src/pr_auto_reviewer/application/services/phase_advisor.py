@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -92,7 +93,9 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        directive = self._parse_directive(raw)
+        directive = self._cap_unevidenced_grade(
+            self._parse_directive(raw), phase_result,
+        )
         self._publish_exchange(
             phase.phase_name, pr_identifier, review_session, messages, raw,
             directive,
@@ -206,8 +209,43 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 phase_verdict=phase_result.llm_verdict or "none",
                 phase_reason=phase_result.llm_reason or "",
                 findings=findings,
+                tool_evidence=PhaseAdvisor._format_tool_evidence(phase_result),
             ),
         ]
+
+    @staticmethod
+    def _format_tool_evidence(phase_result: PhaseResult) -> str:
+        """Format tool-use evidence as a concise summary string."""
+        return (
+            f"turns: {phase_result.turn_count}, "
+            f"read_file: {phase_result.read_file_calls}, "
+            f"run_snippet: {phase_result.run_snippet_calls}"
+        )
+
+    @staticmethod
+    def _cap_unevidenced_grade(
+        directive: AdvisorDirective, phase_result: PhaseResult,
+    ) -> AdvisorDirective:
+        """Demote S/A grades that lack ``run_snippet`` evidence.
+
+        The advisor cannot see tool execution; an LLM can rationalize
+        past the anti-praise prose clause and award IMPRESSIVE for a
+        fabricated finding.  This mechanical cap enforces that a top
+        grade with zero ``run_snippet`` calls is recorded as OKOK —
+        both in the returned directive and in the published transcript.
+        """
+        grade = directive.grade
+        if grade not in (SubAgentGrade.IMPRESSIVE, SubAgentGrade.AMAZING):
+            return directive
+        if phase_result.run_snippet_calls > 0:
+            return directive
+        logger.info(
+            "Publish-grade cap: demoting %s → okok "
+            "(zero run_snippet calls; %d read_file calls)",
+            grade.value,
+            phase_result.read_file_calls,
+        )
+        return dataclasses.replace(directive, grade=SubAgentGrade.OKOK)
 
     @classmethod
     def _parse_directive(cls, raw: str) -> AdvisorDirective:
