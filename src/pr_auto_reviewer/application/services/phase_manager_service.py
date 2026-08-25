@@ -13,6 +13,9 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
+from pr_auto_reviewer.application.services.identifier_grounding_filter_service import (
+    IdentifierGroundingFilterService,
+)
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
@@ -49,6 +52,7 @@ class PhaseManagerService(BriefNextPhasePort):
         self._command_bus = command_bus
         self._brief_system = ManagerBriefSystemRenderer()
         self._brief_user = ManagerBriefUserRenderer()
+        self._identifier_filter = IdentifierGroundingFilterService()
 
     def brief(
         self,
@@ -71,6 +75,15 @@ class PhaseManagerService(BriefNextPhasePort):
         brief = (raw or "").strip()
         if not brief:
             return ""
+        evidence = self._grounding_evidence(next_phase, findings_summary)
+        grounded = self._identifier_filter.strip_unobserved(brief, evidence)
+        if grounded != brief:
+            logger.warning(
+                "Manager brief for phase %s cited unevidenced "
+                "identifiers; genericized before use",
+                next_phase.phase_name,
+            )
+            brief = grounded
         self._publish_exchange(
             next_phase, pr_identifier_service, review_session, messages, raw,
         )
@@ -78,6 +91,22 @@ class PhaseManagerService(BriefNextPhasePort):
             "Manager briefed phase %s between phases", next_phase.phase_name,
         )
         return brief
+
+    def _grounding_evidence(
+        self, next_phase: ReviewPhase, findings_summary: str,
+    ) -> str:
+        """Return the observed text a brief may legitimately reference."""
+        peer = next_phase.role
+        role_text = ""
+        if peer is not None:
+            role_text = (
+                f"{peer.role}\n{peer.responsibility}\n{peer.behavior}"
+            )
+        return "\n".join([
+            findings_summary,
+            role_text,
+            next_phase.system_prompt[:400],
+        ])
 
     def _publish_exchange(
         self,
