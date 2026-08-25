@@ -39,6 +39,12 @@ from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.advisor_directive import (
+    AdvisorDirective,
+)
+from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
+    SubAgentGrade,
+)
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -807,6 +813,72 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert briefed_phase.phase_id == "engineer"
         assert seen_prompts
         assert "Focus exclusively on install scripts." in seen_prompts[0]
+
+    def test_advisor_backed_non_blocking_grade_accepts_output(self) -> None:
+        """A wired advisor with a non-blocking grade accepts the phase unchanged.
+
+        Regression: the grade cap moved into ``PhaseAdvisor.assess``; the
+        orchestrator must not reference its own (removed) copy.
+        """
+        advisor = MagicMock()
+        advisor.assess.return_value = AdvisorDirective(
+            grade=SubAgentGrade.OKOK,
+        )
+        bus = InMemoryCommandBus()
+
+        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
+            return PhaseResult(items=[], llm_verdict="approved")
+
+        bus.register(RunAgentConversationCommand, _phase_stub)
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
+        )
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(ReviewPhase(
+                phase_id="engineer", phase_name="Bug Hunt — Diff",
+                system_prompt="EEP",
+            ),),
+        )
+
+        review = orchestrator._run_phases(
+            plan=plan, repo_path=Path("."), changed_files=[], model="m",
+        )
+
+        assert advisor.assess.call_count == 1
+        assert review.verdict is ReviewVerdict.APPROVED
+        assert review.model_used == "m"
+
+    def test_advisor_blocked_grade_restarts_phase_once(self) -> None:
+        """A blocking F grade discards output and re-runs the phase."""
+        advisor = MagicMock()
+        advisor.assess.return_value = AdvisorDirective(
+            grade=SubAgentGrade.DONT_DO_THIS, feedback="drifted off task",
+        )
+        bus = InMemoryCommandBus()
+        runs: list[str] = []
+
+        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
+            runs.append(command.system_prompt)
+            return PhaseResult(items=[], llm_verdict="approved")
+
+        bus.register(RunAgentConversationCommand, _phase_stub)
+        orchestrator = MultiPhaseReviewOrchestrator(
+            command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
+        )
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(ReviewPhase(
+                phase_id="engineer", phase_name="Bug Hunt — Diff",
+                system_prompt="EEP",
+            ),),
+        )
+
+        orchestrator._run_phases(
+            plan=plan, repo_path=Path("."), changed_files=[], model="m",
+        )
+
+        assert len(runs) == 2
 
 
 class TestPhaseRetryForwardsBaseSha:
