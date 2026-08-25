@@ -10,7 +10,7 @@ from .llm_review_port import LlmReviewPort
 from .local_repository_port import LocalRepositoryPort
 from .notifier_port import NotifierPort
 from .prompt_renderer_port import PromptRendererPort
-from .pull_request_repository import PullRequestRepository
+from .pull_request_repository_port import PullRequestRepositoryPort
 from .reason_factory_port import ReasonFactoryPort
 from .repository_context_port import RepositoryContextPort
 from .response_parser_port import ResponseParserPort
@@ -32,7 +32,7 @@ __all__ = [
     "LocalRepositoryPort",
     "NotifierPort",
     "PromptRendererPort",
-    "PullRequestRepository",
+    "PullRequestRepositoryPort",
     "ReasonFactoryPort",
     "RepositoryContextPort",
     "ResponseParserPort",

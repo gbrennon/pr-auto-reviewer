@@ -25,7 +25,7 @@ class ConversationLoggerPort(Protocol):
     def log_conversation(
         self,
         phase_name: str,
-        pr_identifier: str,
+        pr_identifier_service: str,
         messages: list[Any],
         metadata: dict[str, Any],
         review_session: str,
@@ -34,7 +34,7 @@ class ConversationLoggerPort(Protocol):
 
         Args:
             phase_name: Human-readable phase label (e.g. "Bug Hunt — Diff").
-            pr_identifier: Scoped PR key (e.g. ``"gbrennon/tmux-worktrees#63"``).
+            pr_identifier_service: Scoped PR key (e.g. ``"gbrennon/tmux-worktrees#63"``).
             messages: The full ``ConversationMessage`` list from the agent loop.
             metadata: Extra context (model, turn count, verdict, item count).
             review_session: Review-run key (start timestamp) grouping

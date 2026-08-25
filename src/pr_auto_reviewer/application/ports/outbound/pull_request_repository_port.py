@@ -1,4 +1,4 @@
-"""PullRequestRepository — persistence port for the PullRequest aggregate."""
+"""PullRequestRepositoryPort — persistence port for the PullRequest aggregate."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from ....domain.entities.pull_request import PullRequest
 from ....domain.value_objects.pull_request_id import PullRequestId
 
 
-class PullRequestRepository(Protocol):
+class PullRequestRepositoryPort(Protocol):
     def find(self, pr_id: PullRequestId) -> PullRequest | None:
         ...
 
