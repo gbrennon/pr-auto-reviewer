@@ -59,7 +59,9 @@ class TestPhaseAdvisor:
 
         advisor.assess(
             _phase(), "assignment",
-            PhaseResult(llm_verdict="approved", items=[]),
+            PhaseResult(
+                llm_verdict="approved", items=[], run_snippet_calls=1,
+            ),
             review_session="test-session",
         )
 
@@ -192,3 +194,74 @@ class TestPhaseAdvisor:
 
         assert directive.grade is SubAgentGrade.OKOK
         assert directive.blocks_output is False
+
+    def test_grade_prompt_carries_tool_evidence_counts(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = '{"grade": "okok"}'
+        advisor = PhaseAdvisor(chat_port=chat)
+        result = PhaseResult(
+            llm_verdict="approved",
+            turn_count=6,
+            read_file_calls=3,
+            run_snippet_calls=1,
+        )
+
+        advisor.assess(
+            _phase(), "find bugs", result,
+            review_session="test-session",
+        )
+
+        sent = chat.send.call_args.args[0]
+        evidence_lines = [
+            m.content for m in sent if "Tool evidence:" in m.content
+        ]
+        assert len(evidence_lines) == 1
+        assert "turns: 6" in evidence_lines[0]
+        assert "read_file: 3" in evidence_lines[0]
+        assert "run_snippet: 1" in evidence_lines[0]
+
+    def test_impressive_with_zero_snippets_is_capped_to_okok(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = '{"grade": "impressive"}'
+        bus = MagicMock()
+        advisor = PhaseAdvisor(chat_port=chat, command_bus=bus)
+        result = PhaseResult(
+            llm_verdict="approved", turn_count=4, run_snippet_calls=0,
+        )
+
+        directive = advisor.assess(
+            _phase(), "find bugs", result,
+            review_session="test-session",
+        )
+
+        assert directive.grade is SubAgentGrade.OKOK
+        event = bus.dispatch.call_args.args[0]
+        assert event.metadata["grade"] == "okok"
+
+    def test_impressive_survives_when_a_snippet_ran(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = '{"grade": "impressive"}'
+        advisor = PhaseAdvisor(chat_port=chat)
+        result = PhaseResult(
+            llm_verdict="approved", turn_count=6, run_snippet_calls=2,
+        )
+
+        directive = advisor.assess(
+            _phase(), "find bugs", result,
+            review_session="test-session",
+        )
+
+        assert directive.grade is SubAgentGrade.IMPRESSIVE
+
+    def test_non_top_grades_pass_through_uncapped(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = '{"grade": "whatever"}'
+        advisor = PhaseAdvisor(chat_port=chat)
+        result = PhaseResult(llm_verdict="approved", run_snippet_calls=0)
+
+        directive = advisor.assess(
+            _phase(), "find bugs", result,
+            review_session="test-session",
+        )
+
+        assert directive.grade is SubAgentGrade.WHATEVER
