@@ -82,9 +82,31 @@ class TestIssueBodyBuilder:
         prefix = "[INFO] general: "
         assert title.startswith(prefix)
         desc_part = title[len(prefix):]
-        assert len(desc_part) == 80
-        assert desc_part == long_desc[:80]
+        assert len(desc_part) == 81
+        assert desc_part == long_desc[:80] + "…"
         assert long_desc in body
+
+    def test_title_truncates_on_word_boundary(self) -> None:
+        builder = IssueBodyBuilder()
+        pr_id = PullRequestId(repository="owner/repo", number=1)
+        description = (
+            "Fixes the validation logic in several places where the "
+            "previous implementation skipped required checks entirely "
+            "for legacy request payloads"
+        )
+        item = ReviewItem(id="id-1",
+            severity=ItemSeverity.INFO,
+            category="general",
+            file_path=None,
+            description=description,
+        )
+
+        title, _body = builder.build(pr_id, item)
+        assert title.endswith("…")
+        prefix = "[INFO] general: "
+        stem = title[len(prefix):len(title) - 1]
+        assert stem == description[:len(stem)]
+        assert stem.split()[-1] in description.split()
 
     def test_title_uses_full_description_when_short(self) -> None:
         builder = IssueBodyBuilder()
