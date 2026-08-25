@@ -265,6 +265,18 @@ class PhaseAdvisorService(AssessPhasePort):
                 "Advisor reply was not JSON; accepting phase output"
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
+        grade_values = [
+            payload.get(key)
+            for key in cls._GRADE_KEYS
+            if isinstance(payload.get(key), str) and payload.get(key).strip()
+        ]
+        if len(grade_values) > 1:
+            logger.warning(
+                "Advisor reply contained %d grade directives (%r); "
+                "using the first and logging the raw reply",
+                len(grade_values), grade_values,
+            )
+            logger.debug("Raw advisor reply: %s", raw[:500])
         grade_text = cls._first_value(payload, cls._GRADE_KEYS) or ""
         feedback = cls._first_value(payload, cls._FEEDBACK_KEYS) or ""
         improved = cls._first_value(payload, cls._PROMPT_KEYS) or ""

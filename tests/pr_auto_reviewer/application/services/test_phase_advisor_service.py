@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from pr_auto_reviewer.application.services.phase_advisor_service import PhaseAdvisorService
+from pr_auto_reviewer.application.services.phase_advisor_service import (
+    PhaseAdvisorService,
+)
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
