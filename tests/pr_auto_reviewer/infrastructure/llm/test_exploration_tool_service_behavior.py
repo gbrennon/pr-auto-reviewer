@@ -316,6 +316,50 @@ class TestExecute:
         assert result.status == "error"
         assert result.error is not None
 
+    def test_execute_tool_when_file_path_alias_then_reads_file(
+        self, repo,
+    ) -> None:
+        tool = ToolCall(
+            tool_name="read_file",
+            arguments={"file_path": "src/app.py"},
+        )
+
+        result = _service(repo).execute_tool(tool)
+
+        assert result.status == "ok"
+        assert result.data["content"].startswith("line1")
+
+    def test_execute_tool_when_path_alias_then_reads_file(
+        self, repo,
+    ) -> None:
+        tool = ToolCall(
+            tool_name="read_file",
+            arguments={"path": "src/app.py"},
+        )
+
+        result = _service(repo).execute_tool(tool)
+
+        assert result.status == "ok"
+
+    def test_execute_tool_when_single_unknown_key_then_fallback(
+        self, repo,
+    ) -> None:
+        tool = ToolCall(
+            tool_name="read_file",
+            arguments={"target": "src/app.py"},
+        )
+
+        result = _service(repo).execute_tool(tool)
+
+        assert result.status == "ok"
+
+    def test_execute_tool_when_empty_args_then_error(self, repo) -> None:
+        tool = ToolCall(tool_name="read_file", arguments={})
+
+        result = _service(repo).execute_tool(tool)
+
+        assert result.status == "error"
+
 
 class TestChangedFiles:
     """Exercises the changed-files report."""
@@ -336,3 +380,26 @@ class TestChangedFiles:
 
         assert path is not None
         assert path.name == "app.py"
+
+
+class TestRunSnippet:
+    """Exercises run_snippet code execution."""
+
+    def test_executes_python_and_returns_output(self, repo) -> None:
+        (repo / "hello.py").write_text("print(42)")
+        service = _service(repo)
+
+        result = service.run_snippet("import hello")
+
+        assert result["status"] == "ok"
+        assert "42" in result["stdout"]
+        assert result["exit_code"] == 0
+
+    def test_reports_syntax_error(self, repo) -> None:
+        service = _service(repo)
+
+        result = service.run_snippet("def broken(")
+
+        assert result["status"] == "ok"
+        assert result["exit_code"] != 0
+        assert "SyntaxError" in result["stderr"]
