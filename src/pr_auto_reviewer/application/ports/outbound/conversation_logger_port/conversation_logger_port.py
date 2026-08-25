@@ -1,23 +1,4 @@
-"""ConversationLoggerPort — outbound port for persisting agent conversations."""
-
-from pathlib import Path
-from typing import Any, Protocol
-
-
-class TranscriptMetadata:
-    """The metadata keys every conversation logger understands.
-
-    Event publishers and the logger share these spellings, so a key
-    is declared once on the port contract instead of repeated as
-    string literals across layers.
-    """
-
-    AGENT_ROLE = "agent_role"
-    VERDICT = "verdict"
-    ITEM_COUNT = "item_count"
-    SKIPPED = "skipped"
-    GRADE = "grade"
-    FEEDBACK = "feedback"
+from ._shared import *
 
 
 class ConversationLoggerPort(Protocol):
@@ -43,4 +24,4 @@ class ConversationLoggerPort(Protocol):
         Returns:
             Absolute path to the transcript file.
         """
-        ...
+
