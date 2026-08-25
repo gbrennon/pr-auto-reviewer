@@ -1,10 +1,10 @@
-"""Tests for PhaseAdvisor."""
+"""Tests for PhaseAdvisorService."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from pr_auto_reviewer.application.services.phase_advisor import PhaseAdvisor
+from pr_auto_reviewer.application.services.phase_advisor_service import PhaseAdvisorService
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
@@ -32,7 +32,7 @@ class TestPhaseAdvisor:
             '{"grade": "okok", "feedback": "stayed on task", '
             '"improved_prompt": ""}'
         )
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(),
@@ -55,7 +55,7 @@ class TestPhaseAdvisor:
             '{"grade": "amazing", "feedback": "grounded progress"}'
         )
         bus = MagicMock()
-        advisor = PhaseAdvisor(chat_port=chat, command_bus=bus)
+        advisor = PhaseAdvisorService(chat_port=chat, command_bus=bus)
 
         advisor.assess(
             _phase(), "assignment",
@@ -74,7 +74,7 @@ class TestPhaseAdvisor:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "whatever", "feedback": "drifted"}'
         bus = MagicMock()
-        advisor = PhaseAdvisor(chat_port=chat, command_bus=bus)
+        advisor = PhaseAdvisorService(chat_port=chat, command_bus=bus)
 
         advisor.observe(
             peer_content='{"action": "run_git", "args": ""}',
@@ -93,7 +93,7 @@ class TestPhaseAdvisor:
             '```json\n{"grade": "don\'t do this!", "feedback": "off task", '
             '"improved_prompt": "re-explain the task"}\n```'
         )
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(), "assignment", PhaseResult(),
@@ -109,7 +109,7 @@ class TestPhaseAdvisor:
     def test_assess_unparseable_accepts_output(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "the phase was great"
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(), "assignment", PhaseResult(llm_verdict="approved"),
@@ -123,7 +123,7 @@ class TestPhaseAdvisor:
     def test_assess_chat_failure_accepts_output(self) -> None:
         chat = MagicMock()
         chat.send.side_effect = RuntimeError("ollama down")
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(), "assignment", PhaseResult(),
@@ -137,7 +137,7 @@ class TestPhaseAdvisor:
     def test_assess_prompt_includes_peer_role_contract(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "whatever"}'
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         advisor.assess(
             _phase(), "find bugs", PhaseResult(),
@@ -156,7 +156,7 @@ class TestPhaseAdvisor:
         chat.send.return_value = (
             '{"grade": "whatever", "feedback": "drifted"}'
         )
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(), "assignment", PhaseResult(),
@@ -171,7 +171,7 @@ class TestPhaseAdvisor:
         chat.send.return_value = (
             '{"verdict": "changes_requested", "reason": "found bugs"}'
         )
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
             _phase(), "assignment", PhaseResult(),
@@ -185,7 +185,7 @@ class TestPhaseAdvisor:
     def test_observe_never_treats_a_verdict_key_as_a_grade(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"verdict": "approved"}'
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.observe(
             peer_content="turn", phase_name="Bug Hunt — Diff",
@@ -198,7 +198,7 @@ class TestPhaseAdvisor:
     def test_grade_prompt_carries_tool_evidence_counts(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "okok"}'
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
         result = PhaseResult(
             llm_verdict="approved",
             turn_count=6,
@@ -224,7 +224,7 @@ class TestPhaseAdvisor:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "impressive"}'
         bus = MagicMock()
-        advisor = PhaseAdvisor(chat_port=chat, command_bus=bus)
+        advisor = PhaseAdvisorService(chat_port=chat, command_bus=bus)
         result = PhaseResult(
             llm_verdict="approved", turn_count=4, run_snippet_calls=0,
         )
@@ -241,7 +241,7 @@ class TestPhaseAdvisor:
     def test_impressive_survives_when_a_snippet_ran(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "impressive"}'
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
         result = PhaseResult(
             llm_verdict="approved", turn_count=6, run_snippet_calls=2,
         )
@@ -256,7 +256,7 @@ class TestPhaseAdvisor:
     def test_non_top_grades_pass_through_uncapped(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "whatever"}'
-        advisor = PhaseAdvisor(chat_port=chat)
+        advisor = PhaseAdvisorService(chat_port=chat)
         result = PhaseResult(llm_verdict="approved", run_snippet_calls=0)
 
         directive = advisor.assess(

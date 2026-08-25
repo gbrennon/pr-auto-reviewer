@@ -1,10 +1,10 @@
-"""Tests for PhaseManager."""
+"""Tests for PhaseManagerService."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from pr_auto_reviewer.application.services.phase_manager import PhaseManager
+from pr_auto_reviewer.application.services.phase_manager_service import PhaseManagerService
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 
@@ -15,7 +15,7 @@ class TestPhaseManager:
     def test_brief_returns_manager_reply(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "assign the architecture review to the architect"
-        manager = PhaseManager(chat_port=chat)
+        manager = PhaseManagerService(chat_port=chat)
 
         brief = manager.brief(
             ReviewPhase(
@@ -38,7 +38,7 @@ class TestPhaseManager:
     def test_brief_empty_reply_returns_empty(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "   "
-        manager = PhaseManager(chat_port=chat)
+        manager = PhaseManagerService(chat_port=chat)
 
         brief = manager.brief(
             ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
@@ -52,7 +52,7 @@ class TestPhaseManager:
     def test_brief_chat_failure_returns_empty(self) -> None:
         chat = MagicMock()
         chat.send.side_effect = RuntimeError("ollama down")
-        manager = PhaseManager(chat_port=chat)
+        manager = PhaseManagerService(chat_port=chat)
 
         brief = manager.brief(
             ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
@@ -66,7 +66,7 @@ class TestPhaseManager:
     def test_brief_prompt_grounds_in_prior_findings(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "task"
-        manager = PhaseManager(chat_port=chat)
+        manager = PhaseManagerService(chat_port=chat)
 
         manager.brief(
             ReviewPhase(

@@ -566,7 +566,7 @@ class TestTurnObserverWiring:
             def __init__(self, script):
                 self._script = list(script)
 
-            def observe(self, peer_content, phase_name, review_session, pr_identifier=""):
+            def observe(self, peer_content, phase_name, review_session, pr_identifier_service=""):
                 return AdvisorDirective(
                     grade=SubAgentGrade.from_phrase(self._script.pop(0)),
                     feedback="off task",
@@ -608,7 +608,7 @@ class TestTurnObserverWiring:
 
         class _RecordingObserver:
             def observe(self, peer_content, phase_name, review_session,
-                        pr_identifier=""):
+                        pr_identifier_service=""):
                 observed.append(peer_content)
                 return AdvisorDirective(grade=SubAgentGrade.OKOK)
 

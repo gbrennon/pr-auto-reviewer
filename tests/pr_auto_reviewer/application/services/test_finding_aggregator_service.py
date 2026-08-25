@@ -1,7 +1,7 @@
-"""Tests for FindingAggregator application service."""
+"""Tests for FindingAggregatorService application service."""
 
-from pr_auto_reviewer.application.services.finding_aggregator import (
-    FindingAggregator,
+from pr_auto_reviewer.application.services.finding_aggregator_service import (
+    FindingAggregatorService,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
@@ -31,7 +31,7 @@ def _review_item(
 
 
 class TestFindingAggregator:
-    """Behaviour of FindingAggregator.execute(command) -> CodeReview."""
+    """Behaviour of FindingAggregatorService.execute(command) -> CodeReview."""
 
     def test_execute_generates_summary_from_merged_items(
         self, mock_reason_factory,
@@ -45,7 +45,7 @@ class TestFindingAggregator:
             _review_item("Use f-strings", file_path="src/main.py"),
         ]
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, model_used="m")
@@ -65,7 +65,7 @@ class TestFindingAggregator:
             _review_item("Off-by-one in loop"),
         ]
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, model_used="test model")
@@ -85,7 +85,7 @@ class TestFindingAggregator:
             ),
         ]
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, model_used="test model")
@@ -98,7 +98,7 @@ class TestFindingAggregator:
     ) -> None:
         items = [_review_item("SQL injection", category=IssueCategory.SECURITY)]
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, model_used="test model")
@@ -113,7 +113,7 @@ class TestFindingAggregator:
             _review_item("Use f-strings", severity=ItemSeverity.INFO, category=IssueCategory.STYLE),
         ]
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, model_used="test model")
@@ -125,7 +125,7 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=[], model_used="test model")
@@ -141,7 +141,7 @@ class TestFindingAggregator:
         items = [_review_item("Off-by-one in loop")]
         phase_result = PhaseResult(items=items, llm_summary="LLM summary")
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
@@ -155,7 +155,7 @@ class TestFindingAggregator:
         items = [_review_item("Use f-strings")]
         phase_result = PhaseResult(items=items, llm_verdict="changes requested")
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
@@ -173,7 +173,7 @@ class TestFindingAggregator:
             llm_praise=[{"file": "x.py", "description": "Clean structure"}],
         )
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
@@ -191,7 +191,7 @@ class TestFindingAggregator:
         items = [_review_item("Off-by-one in loop")]
         phase_result = PhaseResult(items=items, llm_reason="LLM reason")
         mock_reason_factory.make.return_value = ""
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
@@ -215,7 +215,7 @@ class TestFindingAggregator:
             llm_suggestions=[{"description": "architect suggestion"}],
         )
         mock_reason_factory.make.return_value = "Stub reason"
-        aggregator = FindingAggregator(mock_reason_factory)
+        aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
             AggregateReviewFindingsCommand(

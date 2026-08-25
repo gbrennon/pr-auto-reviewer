@@ -351,11 +351,11 @@ class TestAdvisorGranularityWiring:
             self._config(AdvisorGranularity.TURN), repo_context, _config_dir=None
         )
 
-        from pr_auto_reviewer.application.services.phase_advisor import (
-            PhaseAdvisor,
+        from pr_auto_reviewer.application.services.phase_advisor_service import (
+            PhaseAdvisorService,
         )
 
-        assert isinstance(result.conversation_service._turn_observer, PhaseAdvisor)
+        assert isinstance(result.conversation_service._turn_observer, PhaseAdvisorService)
 
 
 class TestLlmCallBudgetWiring:

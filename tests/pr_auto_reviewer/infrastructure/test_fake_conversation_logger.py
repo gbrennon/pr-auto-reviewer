@@ -26,15 +26,15 @@ class TestFakeMarkdownConversationLogger:
         }
 
         phase_name = "Bug Hunt — Diff"
-        pr_identifier = "owner/repo#1"
+        pr_identifier_service = "owner/repo#1"
 
-        result = fake.log_conversation(phase_name, pr_identifier, messages, metadata)
+        result = fake.log_conversation(phase_name, pr_identifier_service, messages, metadata)
 
         # Verify call was tracked
         assert len(fake.log_conversation_calls) == 1
         call_phase, call_pr, call_msgs, call_meta = fake.log_conversation_calls[0]
         assert call_phase == phase_name
-        assert call_pr == pr_identifier
+        assert call_pr == pr_identifier_service
         assert call_msgs == messages
         assert call_meta == metadata
 

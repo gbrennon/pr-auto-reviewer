@@ -1,10 +1,10 @@
-"""Tests for EventLoggingHandler application service."""
+"""Tests for EventLoggingHandlerService application service."""
 
 import logging
 from pathlib import Path
 
-from pr_auto_reviewer.application.services.event_logging_handler import (
-    EventLoggingHandler,
+from pr_auto_reviewer.application.services.event_logging_handler_service import (
+    EventLoggingHandlerService,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
@@ -54,7 +54,7 @@ class TestEventLoggingHandler:
             result=TurnParseResult(kind=TurnKind.VERDICT, raw_items=[{"file": "a.py"}]),
         )
 
-        EventLoggingHandler().handle_review_turn_parsed(event)
+        EventLoggingHandlerService().handle_review_turn_parsed(event)
 
         assert "Turn 3 parsed: kind=verdict items=1" in caplog.text
 
@@ -65,7 +65,7 @@ class TestEventLoggingHandler:
             result=TurnParseResult(kind=TurnKind.UNPARSEABLE),
         )
 
-        EventLoggingHandler().handle_review_turn_parsed(event)
+        EventLoggingHandlerService().handle_review_turn_parsed(event)
 
         assert "Turn 1 parsed: kind=unparseable items=0" in caplog.text
 
@@ -77,7 +77,7 @@ class TestEventLoggingHandler:
             )
         )
 
-        EventLoggingHandler().handle_conversation_completed(event)
+        EventLoggingHandlerService().handle_conversation_completed(event)
 
         assert (
             "Conversation completed: verdict=approved items=1" in caplog.text
@@ -91,7 +91,7 @@ class TestEventLoggingHandler:
             phase_result=PhaseResult(items=[])
         )
 
-        EventLoggingHandler().handle_conversation_completed(event)
+        EventLoggingHandlerService().handle_conversation_completed(event)
 
         assert "Conversation completed: verdict=unknown items=0" in caplog.text
 
@@ -103,7 +103,7 @@ class TestEventLoggingHandler:
             total_findings=4,
         )
 
-        EventLoggingHandler().handle_phase_completed(event)
+        EventLoggingHandlerService().handle_phase_completed(event)
 
         assert (
             "Phase 'Security Review' complete: 1 findings (total: 4)"
@@ -122,7 +122,7 @@ class TestEventLoggingHandler:
             )
         )
 
-        EventLoggingHandler().handle_findings_aggregated(event)
+        EventLoggingHandlerService().handle_findings_aggregated(event)
 
         assert (
             "Findings aggregated: verdict=changes_requested items=1"
@@ -139,7 +139,7 @@ class TestEventLoggingHandler:
             )
         )
 
-        EventLoggingHandler().handle_findings_aggregated(event)
+        EventLoggingHandlerService().handle_findings_aggregated(event)
 
         assert "Findings aggregated: verdict=approved items=0" in caplog.text
 
@@ -153,12 +153,12 @@ class TestEventLoggingHandler:
         event = AgentExchangeEvent(
             role=SubAgentRole.ADVISOR,
             phase_name="Bug Hunt — Diff",
-            pr_identifier="o/r#1",
+            pr_identifier_service="o/r#1",
             review_session="session-1",
             messages=[],
         )
 
-        EventLoggingHandler(
+        EventLoggingHandlerService(
             exchange_logger=_FakeExchangeLogger()
         ).handle_agent_exchange(event)
 
@@ -171,13 +171,13 @@ class TestEventLoggingHandler:
         event = AgentExchangeEvent(
             role=SubAgentRole.ADVISOR,
             phase_name="Bug Hunt — Diff",
-            pr_identifier="gbrennon/pr-auto-reviewer#147",
+            pr_identifier_service="gbrennon/pr-auto-reviewer#147",
             review_session="20260824_014537",
             messages=[],
             metadata={"grade": "okok", "feedback": "stayed on task"},
         )
 
-        EventLoggingHandler(
+        EventLoggingHandlerService(
             exchange_logger=MarkdownConversationLogger(tmp_path)
         ).handle_agent_exchange(event)
 

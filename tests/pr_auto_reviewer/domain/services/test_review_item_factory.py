@@ -327,7 +327,7 @@ class TestFactoryKeepsUnverifiedItems:
 
     def test_item_without_code_survives_with_evidence(self, tmp_path) -> None:
         repo = tmp_path / "repo"
-        target = repo / "src" / "multi_phase_review_orchestrator.py"
+        target = repo / "src" / "multi_phase_review_orchestrator_service.py"
         target.parent.mkdir(parents=True)
         target.write_text(
             "def run_phases(self, plan):\n"
@@ -336,14 +336,14 @@ class TestFactoryKeepsUnverifiedItems:
         )
         factory = ReviewItemFactory()
         normalized = ReviewResponseParser.normalize_item_dict({
-            "file": "src/multi_phase_review_orchestrator.py",
+            "file": "src/multi_phase_review_orchestrator_service.py",
             "issue": "Missing validation for phase dependencies.",
             "severity": "high",
         })
         items, _skips = factory.create(
             [normalized],
             repo,
-            ["src/multi_phase_review_orchestrator.py"],
+            ["src/multi_phase_review_orchestrator_service.py"],
         )
         assert len(items) == 1
         assert items[0].description == (

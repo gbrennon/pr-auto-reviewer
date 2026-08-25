@@ -1,4 +1,4 @@
-"""Tests for MultiPhaseReviewOrchestrator."""
+"""Tests for MultiPhaseReviewOrchestratorService."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 import pytest as _pytest
 
-from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
-    MultiPhaseReviewOrchestrator,
+from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
+    MultiPhaseReviewOrchestratorService,
 )
 from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
@@ -126,19 +126,19 @@ def _make_review_item(file_path, description) -> ReviewItem:
 
 
 class TestMultiPhaseReviewOrchestrator:
-    """Tests for the MultiPhaseReviewOrchestrator."""
+    """Tests for the MultiPhaseReviewOrchestratorService."""
 
     def test_execute_full_retry(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Full execution returns the review produced by the phase run."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_retries=2,
         )
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
@@ -158,7 +158,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test execution when LLM is unavailable."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_retries=1,
@@ -187,7 +187,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _run_phases_full_retry when no items are found."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_retries=3,
@@ -196,12 +196,12 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
@@ -224,7 +224,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _run_phases_full_retry when items are found."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_retries=1,
@@ -233,7 +233,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -255,7 +255,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _run_feedback_loop logic."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_feedback_rounds=2,
@@ -264,7 +264,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -277,7 +277,7 @@ class TestMultiPhaseReviewOrchestrator:
             changed_files=["src/main.py"],
             model="test",
             review_session="test-session",
-            pr_identifier="o/r#1",
+            pr_identifier_service="o/r#1",
             previous_result=_code_review(verdict=ReviewVerdict.CHANGES_REQUESTED),
         )
 
@@ -288,7 +288,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _build_feedback_context."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -320,7 +320,7 @@ class TestMultiPhaseReviewOrchestrator:
             ),
             methodology="MM",
         )
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -366,7 +366,7 @@ class TestMultiPhaseReviewOrchestrator:
             methodology="MM",
             manager_brief="MANAGER BRIEF TEXT",
         )
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -394,7 +394,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _run_phases with initial_feedback."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -402,14 +402,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -430,7 +430,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test _rebuild_after_verification."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -454,7 +454,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Verdict comes from surviving items only, never from the previous review."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -475,7 +475,7 @@ class TestMultiPhaseReviewOrchestrator:
 
     def test__is_max_turns_exceeded(self, mock_command_bus, mock_tool_factory) -> None:
         """Only MaxTurnsExceededError counts as turn exhaustion."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -494,7 +494,7 @@ class TestMultiPhaseReviewOrchestrator:
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         """Test full execute flow with command bus."""
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -502,7 +502,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -540,7 +540,7 @@ class TestMultiPhaseReviewOrchestrator:
             methodology="m",
             suggestions_phase_id="architect",
         )
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
             max_conversations=1,
@@ -600,7 +600,7 @@ class TestMultiPhaseReviewOrchestrator:
             methodology="m",
             suggestions_phase_id="architect",
         )
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -647,7 +647,7 @@ class TestMultiPhaseReviewOrchestrator:
             methodology="m",
             suggestions_phase_id="architect",
         )
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
         )
@@ -683,7 +683,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             return TurnParserService(parser).execute(command)
 
         bus.register(ParseReviewTurnCommand, _parse_turn)
-        return MultiPhaseReviewOrchestrator(
+        return MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=lambda *a: None
         ), bus
 
@@ -745,7 +745,7 @@ class TestOrchestratorCommentedIsFailureMarker:
 
     def test_rebuild_after_verification_explains_dropped_findings(self) -> None:
 
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=InMemoryCommandBus(), tool_factory=lambda *a: None
         )
         previous = CodeReview(
@@ -794,7 +794,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             return PhaseResult(items=[], llm_verdict="approved")
 
         bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=lambda *a: None, manager=manager,
         )
         plan = ReviewPlan(
@@ -817,7 +817,7 @@ class TestOrchestratorCommentedIsFailureMarker:
     def test_advisor_backed_non_blocking_grade_accepts_output(self) -> None:
         """A wired advisor with a non-blocking grade accepts the phase unchanged.
 
-        Regression: the grade cap moved into ``PhaseAdvisor.assess``; the
+        Regression: the grade cap moved into ``PhaseAdvisorService.assess``; the
         orchestrator must not reference its own (removed) copy.
         """
         advisor = MagicMock()
@@ -830,7 +830,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             return PhaseResult(items=[], llm_verdict="approved")
 
         bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
         )
         plan = ReviewPlan(
@@ -863,7 +863,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             return PhaseResult(items=[], llm_verdict="approved")
 
         bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
         )
         plan = ReviewPlan(
@@ -898,7 +898,7 @@ class TestPhaseRetryForwardsBaseSha:
             return PhaseResult(items=[], llm_verdict="approved")
 
         bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestrator(
+        orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=_factory,
         )
         result = orchestrator._run_phase_with_retry(

@@ -1,9 +1,9 @@
-"""Tests for FindingVerifier application service."""
+"""Tests for FindingVerifierService application service."""
 
 import json
 from pathlib import Path
 
-from pr_auto_reviewer.application.services.finding_verifier import FindingVerifier
+from pr_auto_reviewer.application.services.finding_verifier_service import FindingVerifierService
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
@@ -35,16 +35,16 @@ def _item(
 
 def _verifier(
     mock_chat_port, mock_tool_factory, responses: list[str] | None = None,
-) -> FindingVerifier:
+) -> FindingVerifierService:
     if responses is not None:
         mock_chat_port.send.side_effect = responses
-    return FindingVerifier(
+    return FindingVerifierService(
         mock_chat_port, "verify {findings}", mock_tool_factory
     )
 
 
 class TestFindingVerifierExecute:
-    """Behaviour of FindingVerifier.execute(command) -> list[ReviewItem]."""
+    """Behaviour of FindingVerifierService.execute(command) -> list[ReviewItem]."""
 
     def test_minor_items_are_llm_verified_and_kept_when_confirmed(
         self, mock_chat_port, mock_tool_factory,
@@ -339,7 +339,7 @@ class TestRunVerificationConversation:
         ]
         tool_service = mock_tool_factory.return_value
         tool_service.execute.return_value = {"status": "success", "data": {}}
-        verifier = FindingVerifier(
+        verifier = FindingVerifierService(
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
 
@@ -503,7 +503,7 @@ class TestReproScenario:
         def tool_factory(repo_path, changed_files, base_sha):
             return ExplorationToolService(str(repo_path), changed_files, base_sha)
 
-        verifier = FindingVerifier(
+        verifier = FindingVerifierService(
             mock_chat_port, "verify {findings}", tool_factory
         )
 
@@ -522,8 +522,8 @@ class TestReproScenario:
 class TestParseVerifyTurn:
     """Parsing a verification turn into results, tool call, or None."""
 
-    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifier:
-        return FindingVerifier(
+    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifierService:
+        return FindingVerifierService(
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
 
@@ -566,8 +566,8 @@ class TestParseVerifyTurn:
 class TestParseVerifyProse:
     """Parsing narrative prose into per-finding verification results."""
 
-    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifier:
-        return FindingVerifier(
+    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifierService:
+        return FindingVerifierService(
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
 
@@ -625,7 +625,7 @@ class TestFormatFindingsForVerification:
         repo = tmp_path / "repo"
         (repo / "src").mkdir(parents=True)
         (repo / "src" / "a.py").write_text("def f(): pass\n")
-        verifier = FindingVerifier(
+        verifier = FindingVerifierService(
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
         items = [
@@ -646,8 +646,8 @@ class TestFormatFindingsForVerification:
 class TestExtractFileContext:
     """Surrounding-context extraction for a code snippet."""
 
-    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifier:
-        return FindingVerifier(
+    def _verifier(self, mock_chat_port, mock_tool_factory) -> FindingVerifierService:
+        return FindingVerifierService(
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
 
