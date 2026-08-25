@@ -343,6 +343,7 @@ class ReviewItemFactory:
             current_code = str(item_dict.get("current_code", ""))
             suggested_fix = str(item_dict.get("suggested_fix", ""))
             line_str = str(item_dict.get("line", ""))
+            anchor_unverified = False
 
             if repo_root is not None and not file_path:
                 grounded = cls._ground_description(
@@ -404,9 +405,10 @@ class ReviewItemFactory:
                         skip_reasons.append(reason)
                         continue
                     elif current_code:
+                        anchor_unverified = True
                         logger.warning(
-                            "Keeping finding with unverified code"
-                            " anchor at %s:%s",
+                            "Downgrading finding with unverified code"
+                            " anchor to info at %s:%s",
                             file_path,
                             line_str,
                         )
@@ -457,15 +459,22 @@ class ReviewItemFactory:
             if current_code and not suggested_fix:
                 suggested_fix = current_code
 
+            severity = ItemSeverity.from_value(
+                str(item_dict.get("severity", "info"))
+            )
+            description = str(item_dict.get("description", ""))
+            cls._warn_on_intensity_mismatch(severity, description)
+            if anchor_unverified:
+                severity = ItemSeverity.INFO
+                description = f"{description} [anchor_unverified]"
+
             review_item = ReviewItem(
-                severity=ItemSeverity.from_value(
-                    str(item_dict.get("severity", "info"))
-                ),
+                severity=severity,
                 category=IssueCategory.from_value(
                     str(item_dict.get("category", "maintainability"))
                 ),
                 file_path=file_path,
-                description=str(item_dict.get("description", "")),
+                description=description,
                 line=line_str,
                 id=cls.generate_id(existing_ids),
                 current_code=current_code,
@@ -481,3 +490,26 @@ class ReviewItemFactory:
                 ", ".join(skip_reasons),
             )
         return review_items, skip_reasons
+
+    @staticmethod
+    def _warn_on_intensity_mismatch(
+        severity: ItemSeverity, description: str,
+    ) -> None:
+        """Warn when the description's intensity contradicts *severity*.
+
+        Observed live (1a030c): a description calling something a
+        "critical flaw" published under ``minor/maintainability``.
+        The mismatch is a fabrication signal, so it is logged loudly.
+        """
+        description_lower = description.lower()
+        intense = any(
+            word in description_lower
+            for word in ("critical", "severe", "crash", "dangerous")
+        )
+        if intense and severity in (ItemSeverity.INFO, ItemSeverity.MINOR):
+            logger.warning(
+                "Severity/intensity mismatch: description claims "
+                "critical impact but severity is %s — %s",
+                severity.value,
+                description[:80],
+            )

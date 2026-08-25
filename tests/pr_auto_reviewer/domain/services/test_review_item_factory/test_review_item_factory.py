@@ -1,21 +1,4 @@
-"""Tests for ReviewItemFactory domain service."""
-
-from __future__ import annotations
-
-import os
-import shutil
-from pathlib import Path
-from unittest.mock import patch
-
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-    ReviewResponseParser,
-)
+from ._helpers import *
 
 
 class TestReviewItemFactory:
@@ -86,17 +69,21 @@ class TestReviewItemFactory:
         """Two runs must never emit the same ID sequence."""
         import pr_auto_reviewer.domain.services.review_item_factory as mod
 
-        class _FakeItem:
-            def __init__(self, value: int) -> None:
-                self.int = value
+        def _fake_uuid7_for(values):
+            iterator = iter(values)
+
+            class _FakeItem:
+                def __init__(self, value: int) -> None:
+                    self.int = value
+
+            return lambda: _FakeItem(next(iterator))
 
         batches = []
         for lows in ([0x1000 + i for i in range(5)],
                      [0x2000 + i for i in range(5)]):
-            items = iter(lows)
             monkeypatch.setattr(
                 mod._uuid, "uuid7",
-                lambda: _FakeItem(next(items)),
+                _fake_uuid7_for(lows),
             )
             ReviewItemFactory._id_counter = 0
             batches.append(
@@ -334,80 +321,4 @@ class TestReviewItemFactory:
             assert item.suggested_fix == "logger.debug('test')"
         finally:
             shutil.rmtree(repo_path, ignore_errors=True)
-
-
-class TestEnsureUniqueIds:
-    """Tests for ReviewItemFactory.ensure_unique_ids."""
-
-    def _item(self, id: str) -> ReviewItem:
-        return ReviewItem(
-            severity=ItemSeverity.INFO,
-            category=IssueCategory.GENERAL,
-            file_path=None,
-            description="",
-            id=id,
-        )
-
-    def test_duplicate_and_empty_ids_become_globally_unique(self) -> None:
-        """Items, suggestions, and praise share one id space with no collisions."""
-        review = CodeReview(
-            verdict=ReviewVerdict.APPROVED,
-            items=[self._item("a1"), self._item("a1"), self._item("")],
-            suggestions=[self._item("a1"), self._item("b2")],
-            praise=[self._item("")],
-            reason="test reason",
-            summary="test summary",
-            model_used="test model",
-        )
-
-        result = ReviewItemFactory.ensure_unique_ids(review)
-
-        all_items = result.items + result.suggestions + result.praise
-        assert all(item.id for item in all_items)
-        assert len({item.id for item in all_items}) == len(all_items)
-
-    def test_preserves_existing_unique_id(self) -> None:
-        """A unique, truthy id is left untouched."""
-        review = CodeReview(
-            verdict=ReviewVerdict.APPROVED,
-            items=[self._item("b2")],
-            reason="test reason",
-            summary="test summary",
-            model_used="test model",
-        )
-
-        result = ReviewItemFactory.ensure_unique_ids(review)
-
-        assert result.items[0].id == "b2"
-
-
-class TestFactoryKeepsUnverifiedItems:
-    """Factory must not drop items solely for missing code snippets."""
-
-    def test_item_without_code_survives_with_evidence(self, tmp_path) -> None:
-        repo = tmp_path / "repo"
-        target = repo / "src" / "multi_phase_review_orchestrator_service.py"
-        target.parent.mkdir(parents=True)
-        target.write_text(
-            "def run_phases(self, plan):\n"
-            "    for phase in plan.phases:\n"
-            "        process(phase)\n"
-        )
-        factory = ReviewItemFactory()
-        normalized = ReviewResponseParser.normalize_item_dict({
-            "file": "src/multi_phase_review_orchestrator_service.py",
-            "issue": "Missing validation for phase dependencies.",
-            "severity": "high",
-        })
-        items, _skips = factory.create(
-            [normalized],
-            repo,
-            ["src/multi_phase_review_orchestrator_service.py"],
-        )
-        assert len(items) == 1
-        assert items[0].description == (
-            "Missing validation for phase dependencies."
-        )
-        assert items[0].suggested_fix != ""
-        assert items[0].current_code != ""
 
