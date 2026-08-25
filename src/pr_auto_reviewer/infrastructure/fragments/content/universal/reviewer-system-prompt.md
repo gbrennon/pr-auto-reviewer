@@ -48,6 +48,11 @@ To list a directory:
 {"action": "list_directory", "args": "<relative/path>"}
 ```
 
+To execute a Python snippet:
+```json
+{"action": "run_snippet", "args": "<python code>"}
+```
+
 Emit exactly ONE JSON object per message. Each tool call gets a result back. Explore thoroughly, one step at a time.
 
 ## VERDICT — WHEN READY
