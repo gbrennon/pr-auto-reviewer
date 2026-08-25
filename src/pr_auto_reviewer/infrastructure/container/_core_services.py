@@ -24,8 +24,12 @@ from pr_auto_reviewer.application.services.finding_verifier_service import (
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
     MultiPhaseReviewOrchestratorService,
 )
-from pr_auto_reviewer.application.services.phase_advisor_service import PhaseAdvisorService
-from pr_auto_reviewer.application.services.phase_manager_service import PhaseManagerService
+from pr_auto_reviewer.application.services.phase_advisor_service import (
+    PhaseAdvisorService,
+)
+from pr_auto_reviewer.application.services.phase_manager_service import (
+    PhaseManagerService,
+)
 from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent

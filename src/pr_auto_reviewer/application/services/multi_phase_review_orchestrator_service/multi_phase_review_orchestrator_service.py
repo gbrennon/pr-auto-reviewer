@@ -1,85 +1,6 @@
-"""MultiPhaseReviewOrchestratorService — run a multi-phase review plan with retry and feedback."""
+from ._shared import *
+from .phase_run_outcome import _PhaseRunOutcome
 
-from __future__ import annotations
-import json
-import logging
-from collections.abc import Callable
-from pathlib import Path
-from typing import Any, cast
-
-from pr_auto_reviewer.application.ports.inbound.assess_phase_port import (
-    AssessPhasePort,
-)
-from pr_auto_reviewer.application.ports.inbound.brief_next_phase_port import (
-    BriefNextPhasePort,
-)
-from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_port import (
-    RunMultiPhaseReviewPort,
-)
-from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
-    CommandBusPort,
-)
-from pr_auto_reviewer.application.services.pr_identifier_service import (
-    PRIdentifierService,
-)
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
-    AdvisorBlockedError,
-)
-from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
-    LlmUnavailableError,
-)
-from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
-    MaxTurnsExceededError,
-)
-from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
-    ReviewBudgetExhaustedError,
-)
-from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
-    ReviewVerdictError,
-)
-from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
-    AggregateReviewFindingsCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-    RunAgentConversationCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
-    RunMultiPhaseReviewCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
-    VerifyFindingsCommand,
-)
-from pr_auto_reviewer.domain.messages.events.findings_aggregated_event import (
-    FindingsAggregatedEvent,
-)
-from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
-    PhaseCompletedEvent,
-)
-from pr_auto_reviewer.domain.value_objects.advisor_directive import (
-    AdvisorDirective,
-)
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.value_objects.review_verdict import (
-    ReviewVerdict,
-)
-from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
-    SubReviewGuardrails,
-)
-from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
-    AdvisorCorrectionRenderer,
-    FeedbackContextRenderer,
-    PhasePromptRenderer,
-)
-
-logger = logging.getLogger(__name__)
-
-_FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
 class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     """Orchestrate a multi-phase review plan with retry and feedback loops.
@@ -112,6 +33,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self._phase_prompt_renderer = PhasePromptRenderer()
         self._correction_renderer = AdvisorCorrectionRenderer()
         self._feedback_renderer = FeedbackContextRenderer()
+        self._identifier_filter = IdentifierGroundingFilterService()
 
     def execute(
         self, command: RunMultiPhaseReviewCommand
@@ -142,6 +64,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         best_attempt_items: list[ReviewItem] = []
         result: CodeReview | None = None
         last_failure: Exception | None = None
+        dropped_findings = 0
         self._conversations_started = 0
 
         for full_retry in range(self._max_retries):
@@ -152,13 +75,15 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
             attempt_items: list[ReviewItem] = []
             try:
-                result = self._run_phases(
+                outcome = self._run_phases(
                     plan, repo_path, changed_files, model, attempt_items,
                     base_sha=base_sha,
                     existing_item_ids=existing_item_ids,
                     pr_identifier_service=f"{repo_name}/{pr_id_str}",
                     review_session=review_session,
                 )
+                result = outcome.review
+                dropped_findings = outcome.dropped_findings
                 if result.items:
                     return result
                 best_attempt_items = result.items
@@ -231,7 +156,13 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     "COMMENTED review."
                 ) from last_failure
 
-        if not result.items:
+        if not result.items and dropped_findings:
+            logger.info(
+                "Verification refuted all %d findings; publishing the "
+                "refusal as-is without feedback rounds",
+                dropped_findings,
+            )
+        elif not result.items:
             result = self._run_feedback_loop(
                 plan, repo_path, changed_files, model, result,
                 base_sha=base_sha,
@@ -276,7 +207,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     existing_item_ids=existing_item_ids,
                     pr_identifier_service=pr_identifier_service,
                     review_session=review_session,
-                )
+                ).review
             except LlmUnavailableError:
                 logger.warning(
                     "Feedback round %d: LLM unavailable, returning best",
@@ -305,25 +236,26 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self, result: CodeReview, round_number: int
     ) -> str:
         """Build a feedback prompt from a zero-item review result."""
-        escalation = (
-            "This is unusual for a real code change — please re-examine "
-            "the diff more carefully."
+        continuation = (
+            "Re-examine the diff carefully and confirm any issue by "
+            "reading the affected files before reporting it."
             if round_number == 1
             else (
-                f"This is your {round_number}{'st' if round_number == 1 else 'nd'} attempt. "
-                "Every prior attempt also found nothing actionable. "
-                "Re-examine with fresh eyes: assume the diff contains "
-                "issues and dig deeper."
+                f"This is re-examination attempt {round_number}. Prior "
+                "attempts found nothing actionable; finding nothing "
+                "again is a valid outcome — explain why the change is "
+                "correct."
             )
         )
         return self._feedback_renderer.render_content(
             round_number=round_number,
-            escalation=escalation,
+            escalation=continuation,
             previous_verdict=result.verdict.value,
             previous_explanation=(
                 result.summary or result.reason or "no explanation provided"
             ),
         )
+
 
     def _run_phases(
         self,
@@ -337,7 +269,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
-    ) -> CodeReview:
+    ) -> _PhaseRunOutcome:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
         last_phase_result: PhaseResult | None = None
@@ -539,13 +471,16 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     "default COMMENTED review."
                 )
 
-            return CodeReview(
-                verdict=verdict,
-                reason=reason,
-                summary=summary,
-                suggestions=suggestions,
-                praise=praise_list,
-                model_used=model,
+            return _PhaseRunOutcome(
+                review=CodeReview(
+                    verdict=verdict,
+                    reason=reason,
+                    summary=summary,
+                    suggestions=suggestions,
+                    praise=praise_list,
+                    model_used=model,
+                ),
+                dropped_findings=len(skipped),
             )
 
         code_review = self._command_bus.dispatch(
@@ -556,6 +491,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 model_used=model,
             )
         )
+        items_before_verification = len(code_review.items)
         if code_review.items:
             verified_items = self._command_bus.dispatch(
                 VerifyFindingsCommand(
@@ -574,7 +510,12 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     verified_items, model, previous=code_review,
                 )
         self._publish(FindingsAggregatedEvent(code_review=code_review))
-        return code_review
+        return _PhaseRunOutcome(
+            review=code_review,
+            dropped_findings=(
+                items_before_verification - len(code_review.items)
+            ),
+        )
 
     def _rebuild_after_verification(
         self, verified_items: list[Any], model: str,
@@ -707,6 +648,12 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         )
         if not directive.blocks_output:
             return phase_result
+        evidence = self._phase_evidence(
+            phase_prompt, assignment, phase_result,
+        )
+        correction_text = self._identifier_filter.strip_unobserved(
+            directive.improved_prompt or directive.feedback, evidence,
+        )
         improved_task = ""
         if self._manager is not None:
             improved_task = self._manager.brief(
@@ -717,7 +664,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
         corrected_prompt = self._correction_renderer.render_content(
             phase_prompt=phase_prompt,
-            correction=(directive.improved_prompt or directive.feedback),
+            correction=correction_text,
             manager_replan=improved_task,
         )
         logger.warning(
@@ -735,6 +682,26 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             existing_item_ids=existing_item_ids,
         )
 
+    @staticmethod
+    def _phase_evidence(
+        phase_prompt: str,
+        assignment: str,
+        phase_result: PhaseResult,
+    ) -> str:
+        """Return the observed text a correction may legitimately cite."""
+        item_text = "\n".join(
+            f"{getattr(item, 'description', '')} "
+            f"{getattr(item, 'file_path', '')}"
+            for item in phase_result.items
+        )
+        return "\n".join([
+            phase_prompt,
+            assignment or "",
+            phase_result.llm_reason or "",
+            phase_result.llm_summary or "",
+            item_text,
+        ])
+
     def _is_max_turns_exceeded(self, exc: LlmUnavailableError) -> bool:
         return isinstance(exc, MaxTurnsExceededError)
 
@@ -749,3 +716,4 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     def _publish(self, event: Any) -> None:
         """Publish an event to the bus."""
         self._command_bus.dispatch(event)
+

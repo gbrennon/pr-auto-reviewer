@@ -1,128 +1,4 @@
-"""Tests for MultiPhaseReviewOrchestratorService."""
-
-from __future__ import annotations
-
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
-import pytest
-import pytest as _pytest
-
-from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
-    MultiPhaseReviewOrchestratorService,
-)
-from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
-from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
-    AdvisorBlockedError,
-)
-from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
-from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
-    MaxTurnsExceededError,
-)
-from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
-from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
-    AggregateReviewFindingsCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
-    ParseReviewTurnCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
-    RunAgentConversationCommand,
-)
-from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
-from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
-from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
-from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
-from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.domain.value_objects.advisor_directive import (
-    AdvisorDirective,
-)
-from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
-    SubAgentGrade,
-)
-from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
-from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
-    InMemoryCommandBus,
-)
-from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
-    ReviewResponseParser,
-)
-
-
-def _plan():
-    """Build a ReviewPlan."""
-    phases: list[ReviewPhase] = []
-    phase_configs = [
-        ("advisor", "Advisor Review"),
-        ("engineer", "Engineer Review"),
-        ("architect", "Architect Review"),
-        ("security", "Security Review"),
-        ("performance", "Performance Analysis"),
-    ]
-    for phase_id, phase_name in phase_configs:
-        phases.append(
-            ReviewPhase(
-                phase_id=phase_id,
-                phase_name=phase_name,
-                system_prompt="",
-            )
-        )
-    return tuple(phases)
-
-
-def _code_review(
-    verdict=ReviewVerdict.APPROVED,
-    reason="test reason",
-    summary="test summary",
-    items=None,
-    suggestions=None,
-    praise=None,
-    model_used="test",
-) -> CodeReview:
-    """Build a CodeReview."""
-    return CodeReview(
-        verdict=verdict,
-        reason=reason,
-        summary=summary,
-        items=items or [],
-        suggestions=suggestions or [],
-        praise=praise or [],
-        model_used=model_used,
-    )
-
-
-def _phase_result(
-    verdict="approved",
-    reason="",
-    summary="",
-    items=None,
-    suggestions=None,
-    praise=None,
-) -> PhaseResult:
-    """Build a PhaseResult."""
-    return PhaseResult(
-        items=items or [],
-        llm_verdict=verdict,
-        llm_reason=reason,
-        llm_summary=summary,
-        llm_suggestions=suggestions or [],
-        llm_praise=praise or [],
-    )
-
-
-def _make_review_item(file_path, description) -> ReviewItem:
-    """Create a review item."""
-    return ReviewItem(
-        file_path=file_path,
-        description=description,
-        severity="minor",
-        category="style",
-    )
+from ._helpers import *
 
 
 class TestMultiPhaseReviewOrchestrator:
@@ -138,7 +14,7 @@ class TestMultiPhaseReviewOrchestrator:
             max_retries=2,
         )
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
@@ -196,17 +72,17 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
             items=[_make_review_item("src/main.py", "kept")],
-        )
+        ).review
 
         result = orchestrator._run_phases_full_retry(
             plan=plan,
@@ -233,7 +109,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -264,7 +140,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -402,14 +278,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -502,7 +378,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _code_review(
+        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -621,7 +497,7 @@ class TestMultiPhaseReviewOrchestrator:
 
         result = orchestrator._run_phases(
             plan, Path("/tmp"), ["src/main.py"], "test",
-        )
+        ).review
 
         assert [s.description for s in result.suggestions] == [
             "architect suggestion"
@@ -663,254 +539,9 @@ class TestMultiPhaseReviewOrchestrator:
 
         result = orchestrator._run_phases(
             plan, Path("/tmp"), ["src/main.py"], "test",
-        )
+        ).review
 
         assert result.verdict == ReviewVerdict.APPROVED
         assert result.items == []
         assert result.reason == "the code is wrong"
 
-
-class TestOrchestratorCommentedIsFailureMarker:
-    """A ``commented`` LLM verdict is a pipeline failure, never an outcome."""
-
-    @staticmethod
-    def _build_review_orchestrator():
-
-        bus = InMemoryCommandBus()
-        parser = ReviewResponseParser()
-
-        def _parse_turn(command: ParseReviewTurnCommand) -> TurnParseResult:
-            return TurnParserService(parser).execute(command)
-
-        bus.register(ParseReviewTurnCommand, _parse_turn)
-        return MultiPhaseReviewOrchestratorService(
-            command_bus=bus, tool_factory=lambda *a: None
-        ), bus
-
-    def test_legit_llm_verdict_survives_no_items_path(self) -> None:
-
-        orchestrator, bus = self._build_review_orchestrator()
-
-        def _run_phase(command: RunAgentConversationCommand) -> PhaseResult:
-            return PhaseResult(
-                items=[],
-                llm_verdict="approved",
-                llm_reason="No critical bugs identified.",
-                llm_suggestions=[
-                    {"file": "", "line": "", "description": "Add rate limiting."}
-                ],
-            )
-
-        bus.register(RunAgentConversationCommand, _run_phase)
-        plan = ReviewPlan(
-            methodology="review",
-            phases=(ReviewPhase(
-                phase_id="advisor", phase_name="Advisor", system_prompt="x"
-            ),),
-        )
-        review = orchestrator._run_phases_full_retry(
-            plan=plan,
-            repo_path=Path("."),
-            changed_files=[],
-            model="code-review:latest",
-            review_session="test-session",
-        )
-        assert review.verdict == ReviewVerdict.APPROVED
-        assert review.reason != ""
-        assert review.summary != ""
-        assert review.suggestions != []
-
-    def test_commented_verdict_raises_instead_of_defaulting(self) -> None:
-
-        orchestrator, bus = self._build_review_orchestrator()
-
-        def _run_phase(command: RunAgentConversationCommand) -> PhaseResult:
-            return PhaseResult(items=[], llm_verdict="commented")
-
-        bus.register(RunAgentConversationCommand, _run_phase)
-        plan = ReviewPlan(
-            methodology="review",
-            phases=(ReviewPhase(
-                phase_id="advisor", phase_name="Advisor", system_prompt="x"
-            ),),
-        )
-        with pytest.raises(ReviewVerdictError):
-            orchestrator._run_phases_full_retry(
-                plan=plan,
-                repo_path=Path("."),
-                changed_files=[],
-                model="code-review:latest",
-            review_session="test-session",
-        )
-
-    def test_rebuild_after_verification_explains_dropped_findings(self) -> None:
-
-        orchestrator = MultiPhaseReviewOrchestratorService(
-            command_bus=InMemoryCommandBus(), tool_factory=lambda *a: None
-        )
-        previous = CodeReview(
-            verdict=ReviewVerdict.CHANGES_REQUESTED,
-            reason="Found 1 critical (1 maintainability) and 2 major.",
-            summary="Found 3 issue(s) (3 blocking across 3 file(s)).",
-            items=[
-                ReviewItem(id="id-1",
-                    severity=ItemSeverity.CRITICAL,
-                    category=IssueCategory.MAINTAINABILITY,
-                    file_path="src/a.py",
-                    description="Missing validation.",
-                    current_code="def f():",
-                    suggested_fix="Add validation.",
-                ),
-                ReviewItem(id="id-2",
-                    severity=ItemSeverity.MAJOR,
-                    category=IssueCategory.MAINTAINABILITY,
-                    file_path="src/b.py",
-                    description="No error handling.",
-                    current_code="def g():",
-                    suggested_fix="Add handling.",
-                ),
-            ],
-            model_used="code-review:latest",
-        )
-        rebuilt = orchestrator._rebuild_after_verification(
-            [], "code-review:latest", previous=previous
-        )
-        assert rebuilt.items == []
-        assert "dropped" in rebuilt.reason
-        assert "did not survive" in rebuilt.summary
-        assert "2" in rebuilt.summary
-        assert "3" not in rebuilt.reason
-
-    def test_manager_briefs_first_phase_before_it_starts(self) -> None:
-        """The opening phase runs on a manager-planned task, not a static prompt."""
-
-        manager = MagicMock()
-        manager.brief.return_value = "Focus exclusively on install scripts."
-        bus = InMemoryCommandBus()
-        seen_prompts: list[str] = []
-
-        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
-            seen_prompts.append(command.system_prompt)
-            return PhaseResult(items=[], llm_verdict="approved")
-
-        bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestratorService(
-            command_bus=bus, tool_factory=lambda *a: None, manager=manager,
-        )
-        plan = ReviewPlan(
-            methodology="review",
-            phases=(ReviewPhase(
-                phase_id="engineer", phase_name="Bug Hunt — Diff",
-                system_prompt="EEP",
-            ),),
-        )
-        orchestrator._run_phases(
-            plan=plan, repo_path=Path("."), changed_files=[], model="m",
-        )
-
-        assert manager.brief.call_count == 1
-        briefed_phase = manager.brief.call_args[0][0]
-        assert briefed_phase.phase_id == "engineer"
-        assert seen_prompts
-        assert "Focus exclusively on install scripts." in seen_prompts[0]
-
-    def test_advisor_backed_non_blocking_grade_accepts_output(self) -> None:
-        """A wired advisor with a non-blocking grade accepts the phase unchanged.
-
-        Regression: the grade cap moved into ``PhaseAdvisorService.assess``; the
-        orchestrator must not reference its own (removed) copy.
-        """
-        advisor = MagicMock()
-        advisor.assess.return_value = AdvisorDirective(
-            grade=SubAgentGrade.OKOK,
-        )
-        bus = InMemoryCommandBus()
-
-        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
-            return PhaseResult(items=[], llm_verdict="approved")
-
-        bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestratorService(
-            command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
-        )
-        plan = ReviewPlan(
-            methodology="review",
-            phases=(ReviewPhase(
-                phase_id="engineer", phase_name="Bug Hunt — Diff",
-                system_prompt="EEP",
-            ),),
-        )
-
-        review = orchestrator._run_phases(
-            plan=plan, repo_path=Path("."), changed_files=[], model="m",
-        )
-
-        assert advisor.assess.call_count == 1
-        assert review.verdict is ReviewVerdict.APPROVED
-        assert review.model_used == "m"
-
-    def test_advisor_blocked_grade_restarts_phase_once(self) -> None:
-        """A blocking F grade discards output and re-runs the phase."""
-        advisor = MagicMock()
-        advisor.assess.return_value = AdvisorDirective(
-            grade=SubAgentGrade.DONT_DO_THIS, feedback="drifted off task",
-        )
-        bus = InMemoryCommandBus()
-        runs: list[str] = []
-
-        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
-            runs.append(command.system_prompt)
-            return PhaseResult(items=[], llm_verdict="approved")
-
-        bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestratorService(
-            command_bus=bus, tool_factory=lambda *a: None, advisor=advisor,
-        )
-        plan = ReviewPlan(
-            methodology="review",
-            phases=(ReviewPhase(
-                phase_id="engineer", phase_name="Bug Hunt — Diff",
-                system_prompt="EEP",
-            ),),
-        )
-
-        orchestrator._run_phases(
-            plan=plan, repo_path=Path("."), changed_files=[], model="m",
-        )
-
-        assert len(runs) == 2
-
-
-class TestPhaseRetryForwardsBaseSha:
-    """The PR merge-base reaches the exploration tool factory for each phase."""
-
-    def test_factory_receives_base_sha(self) -> None:
-        bus = InMemoryCommandBus()
-        seen: dict[str, object] = {}
-
-        def _factory(repo_path, changed_files, base_sha):
-            seen["changed_files"] = list(changed_files)
-            seen["base_sha"] = base_sha
-            return MagicMock()
-
-        def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
-            seen["phase_name"] = command.phase_name
-            return PhaseResult(items=[], llm_verdict="approved")
-
-        bus.register(RunAgentConversationCommand, _phase_stub)
-        orchestrator = MultiPhaseReviewOrchestratorService(
-            command_bus=bus, tool_factory=_factory,
-        )
-        result = orchestrator._run_phase_with_retry(
-            phase_name="Bug Hunt — Diff",
-            phase_prompt="EEP",
-            repo_path=Path("."),
-            changed_files=["src/a.py"],
-            base_sha="d896687cafc093f113ade5444f02df98fcfc9042",
-            review_session="test-session",
-        )
-
-        assert result.llm_verdict == "approved"
-        assert seen["base_sha"] == "d896687cafc093f113ade5444f02df98fcfc9042"
-        assert seen["changed_files"] == ["src/a.py"]
-        assert seen["phase_name"] == "Bug Hunt — Diff"
