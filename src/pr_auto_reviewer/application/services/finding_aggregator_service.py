@@ -1,9 +1,9 @@
-"""FindingAggregator — deduplicate and merge review items across phases."""
+"""FindingAggregatorService — deduplicate and merge review items across phases."""
 
 from __future__ import annotations
 
-from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_use_case import (
-    AggregateReviewFindingsUseCase,
+from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_port import (
+    AggregateReviewFindingsPort,
 )
 from pr_auto_reviewer.application.ports.outbound.reason_factory_port import (
     ReasonFactoryPort,
@@ -25,7 +25,7 @@ from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
 )
 
 
-class FindingAggregator(AggregateReviewFindingsUseCase):
+class FindingAggregatorService(AggregateReviewFindingsPort):
     """Deduplicate and merge review items across phases into a CodeReview.
 
     Pure domain logic — no I/O dependencies.

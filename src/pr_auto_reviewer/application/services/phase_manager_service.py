@@ -1,11 +1,11 @@
-"""PhaseManager — assigns a focused task for the upcoming phase."""
+"""PhaseManagerService — assigns a focused task for the upcoming phase."""
 
 from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import (
-    BriefNextPhaseUseCase,
+from pr_auto_reviewer.application.ports.inbound.brief_next_phase_port import (
+    BriefNextPhasePort,
 )
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
@@ -30,7 +30,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 logger = logging.getLogger(__name__)
 
 
-class PhaseManager(BriefNextPhaseUseCase):
+class PhaseManagerService(BriefNextPhasePort):
     """Refine the next phase's task between phases, as the manager role documents.
 
     The manager acts at the start of the review and between phases: it
@@ -55,7 +55,7 @@ class PhaseManager(BriefNextPhaseUseCase):
         next_phase: ReviewPhase,
         findings_summary: str,
         review_session: str,
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
         messages = self._build_messages(next_phase, findings_summary)
@@ -72,7 +72,7 @@ class PhaseManager(BriefNextPhaseUseCase):
         if not brief:
             return ""
         self._publish_exchange(
-            next_phase, pr_identifier, review_session, messages, raw,
+            next_phase, pr_identifier_service, review_session, messages, raw,
         )
         logger.info(
             "Manager briefed phase %s between phases", next_phase.phase_name,
@@ -82,7 +82,7 @@ class PhaseManager(BriefNextPhaseUseCase):
     def _publish_exchange(
         self,
         next_phase: ReviewPhase,
-        pr_identifier: str,
+        pr_identifier_service: str,
         review_session: str,
         messages: list[ConversationMessage],
         raw_reply: str,
@@ -97,7 +97,7 @@ class PhaseManager(BriefNextPhaseUseCase):
         self._command_bus.dispatch(AgentExchangeEvent(
             role=SubAgentRole.MANAGER,
             phase_name=next_phase.phase_name,
-            pr_identifier=pr_identifier,
+            pr_identifier_service=pr_identifier_service,
             review_session=review_session,
             messages=transcript,
         ))

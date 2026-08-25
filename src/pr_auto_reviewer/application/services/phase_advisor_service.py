@@ -1,4 +1,4 @@
-"""PhaseAdvisor — grades a finished peer phase on the S/A/B/C/D/F scale."""
+"""PhaseAdvisorService — grades a finished peer phase on the S/A/B/C/D/F scale."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import json
 import logging
 import re
 
-from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
-    AssessPhaseUseCase,
+from pr_auto_reviewer.application.ports.inbound.assess_phase_port import (
+    AssessPhasePort,
 )
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
@@ -45,7 +45,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 logger = logging.getLogger(__name__)
 
 
-class PhaseAdvisor(AssessPhaseUseCase):
+class PhaseAdvisorService(AssessPhasePort):
     """Grade a finished phase and each live turn the way the advisor role documents.
 
     The advisor does not review code itself: it watches what the peer
@@ -79,7 +79,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
         assignment: str,
         phase_result: PhaseResult,
         review_session: str,
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
     ) -> AdvisorDirective:
         """Return the advisor's directive for the finished *phase*."""
         peer = phase.role
@@ -97,7 +97,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
             self._parse_directive(raw), phase_result,
         )
         self._publish_exchange(
-            phase.phase_name, pr_identifier, review_session, messages, raw,
+            phase.phase_name, pr_identifier_service, review_session, messages, raw,
             directive,
         )
         if peer is not None and directive.blocks_output:
@@ -113,7 +113,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
         peer_content: str,
         phase_name: str,
         review_session: str,
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
     ) -> AdvisorDirective:
         """Grade one raw peer turn while its conversation is still running."""
         messages = self._build_turn_messages(peer_content, phase_name)
@@ -128,7 +128,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
         directive = self._parse_directive(raw)
         self._publish_exchange(
-            phase_name, pr_identifier, review_session, messages, raw,
+            phase_name, pr_identifier_service, review_session, messages, raw,
             directive,
         )
         return directive
@@ -148,7 +148,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
     def _publish_exchange(
         self,
         phase_name: str,
-        pr_identifier: str,
+        pr_identifier_service: str,
         review_session: str,
         messages: list[ConversationMessage],
         raw_reply: str,
@@ -164,7 +164,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
         self._command_bus.dispatch(AgentExchangeEvent(
             role=SubAgentRole.ADVISOR,
             phase_name=phase_name,
-            pr_identifier=pr_identifier,
+            pr_identifier_service=pr_identifier_service,
             review_session=review_session,
             messages=transcript,
             metadata={
@@ -209,7 +209,7 @@ class PhaseAdvisor(AssessPhaseUseCase):
                 phase_verdict=phase_result.llm_verdict or "none",
                 phase_reason=phase_result.llm_reason or "",
                 findings=findings,
-                tool_evidence=PhaseAdvisor._format_tool_evidence(phase_result),
+                tool_evidence=PhaseAdvisorService._format_tool_evidence(phase_result),
             ),
         ]
 

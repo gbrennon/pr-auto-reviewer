@@ -6,8 +6,8 @@ import json
 import logging
 from typing import Any, ClassVar
 
-from pr_auto_reviewer.application.ports.inbound.parse_review_turn_use_case import (
-    ParseReviewTurnUseCase,
+from pr_auto_reviewer.application.ports.inbound.parse_review_turn_port import (
+    ParseReviewTurnPort,
 )
 from pr_auto_reviewer.application.ports.outbound.response_parser_port import (
     ResponseParserPort,
@@ -27,7 +27,7 @@ from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseRes
 logger = logging.getLogger(__name__)
 
 
-class TurnParserService(ParseReviewTurnUseCase):
+class TurnParserService(ParseReviewTurnPort):
     """Parse a raw LLM response into a structured TurnParseResult.
 
     Extracts item dicts via ``ResponseParserPort.parse_items()`` and

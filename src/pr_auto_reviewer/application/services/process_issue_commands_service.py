@@ -16,20 +16,20 @@ from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions import PullRequestNotFoundError
 from ...domain.services.issue_command_parser import IssueCommandParser
 from ...domain.services.review_item_parser import ReviewItemParser
-from ..ports.inbound.process_issue_commands_use_case import ProcessIssueCommandsUseCase
+from ..ports.inbound.process_issue_commands_port import ProcessIssueCommandsPort
 from ..ports.outbound.comment_publisher_port import CommentPublisherPort
 from ..ports.outbound.comment_reader_port import CommentReaderPort
 from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.outbound.pull_request_repository import PullRequestRepository
+from ..ports.outbound.pull_request_repository_port import PullRequestRepositoryPort
 from ..ports.outbound.review_reader_port import ReviewReaderPort
 from ..serializers.issue_body_builder import IssueBodyBuilder
 
 
-class ProcessIssueCommandsService(ProcessIssueCommandsUseCase):
+class ProcessIssueCommandsService(ProcessIssueCommandsPort):
 
     def __init__(
         self,
-        pr_repository: PullRequestRepository,
+        pr_repository: PullRequestRepositoryPort,
         review_reader: ReviewReaderPort,
         comment_reader: CommentReaderPort,
         comment_publisher: CommentPublisherPort,

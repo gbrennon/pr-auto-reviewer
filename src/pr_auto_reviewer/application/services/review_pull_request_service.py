@@ -25,17 +25,17 @@ from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_verdict import ReviewVerdict
-from ..ports.inbound.review_pull_request_use_case import ReviewPullRequestUseCase
+from ..ports.inbound.review_pull_request_port import ReviewPullRequestPort
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
 from ..ports.outbound.llm_review_port import LlmReviewPort
-from ..ports.outbound.pull_request_repository import PullRequestRepository
+from ..ports.outbound.pull_request_repository_port import PullRequestRepositoryPort
 from ..ports.outbound.review_context_factory_port import ReviewContextFactoryPort
 from ..ports.outbound.review_publisher_port import ReviewPublisherPort
 from ..ports.outbound.token_verifier_port import TokenVerifierPort
 
 logger = logging.getLogger(__name__)
 
-class ReviewPullRequestService(ReviewPullRequestUseCase):
+class ReviewPullRequestService(ReviewPullRequestPort):
     """Orchestrates: load PR → check if review needed → fetch diff →
     build context + compose prompt via ReviewContextFactoryPort →
     LLM review → publish → persist.
@@ -43,7 +43,7 @@ class ReviewPullRequestService(ReviewPullRequestUseCase):
 
     def __init__(
         self,
-        pr_repository: PullRequestRepository,
+        pr_repository: PullRequestRepositoryPort,
         changeset_fetcher: ChangesetFetcherPort,
         review_context_factory: ReviewContextFactoryPort,
         llm_review: LlmReviewPort,

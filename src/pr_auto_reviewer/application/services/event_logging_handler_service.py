@@ -1,4 +1,4 @@
-"""EventLoggingHandler — logs all domain events dispatched through the command bus."""
+"""EventLoggingHandlerService — logs all domain events dispatched through the command bus."""
 
 import logging
 from typing import Any
@@ -25,7 +25,7 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 logger = logging.getLogger(__name__)
 
 
-class EventLoggingHandler:
+class EventLoggingHandlerService:
     """Handles all domain events by logging them at INFO level.
 
     One handler class, registered per event type on the command bus.
@@ -41,7 +41,7 @@ class EventLoggingHandler:
         if self._exchange_logger is not None:
             self._exchange_logger.log_conversation(
                 phase_name=event.phase_name,
-                pr_identifier=event.pr_identifier,
+                pr_identifier_service=event.pr_identifier_service,
                 messages=event.messages,
                 metadata={
                     **event.metadata,

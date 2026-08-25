@@ -9,8 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.application.ports.inbound.run_agent_conversation_use_case import (
-    RunAgentConversationUseCase,
+from pr_auto_reviewer.application.ports.inbound.run_agent_conversation_port import (
+    RunAgentConversationPort,
 )
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
@@ -18,8 +18,8 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.application.services.pr_identifier import (
-    PRIdentifier,
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
 )
 from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
     AdvisorBlockedError,
@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 
 
 
-class AgentConversationService(RunAgentConversationUseCase):
+class AgentConversationService(RunAgentConversationPort):
     """Run a multi-turn agentic conversation with tool access.
 
     Orchestrates the loop: send messages → parse response → execute
@@ -128,7 +128,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
-        return PRIdentifier.derive(repo_path)
+        return PRIdentifierService.derive(repo_path)
 
 
     def _find_mentioned_file(
@@ -282,7 +282,7 @@ class AgentConversationService(RunAgentConversationUseCase):
             if self._turn_observer is not None and parsed.kind is not TurnKind.VERDICT:
                 directive = self._turn_observer.observe(
                     content, phase_name, review_session,
-                    pr_identifier=self._derive_pr_identifier(repo_path),
+                    pr_identifier_service=self._derive_pr_identifier(repo_path),
                 )
                 if directive.blocks_output:
                     self._consecutive_blocks += 1
@@ -497,7 +497,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         )
         if self._conversation_logger is None:
             return
-        pr_identifier = self._derive_pr_identifier(repo_path)
+        pr_identifier_service = self._derive_pr_identifier(repo_path)
         skipped = (
             len(getattr(phase_result, "skip_reasons", []))
             if phase_result else 0
@@ -517,7 +517,7 @@ class AgentConversationService(RunAgentConversationUseCase):
         try:
             self._conversation_logger.log_conversation(
                 phase_name=phase_name or "unknown",
-                pr_identifier=pr_identifier,
+                pr_identifier_service=pr_identifier_service,
                 messages=messages,
                 metadata=metadata,
                 review_session=review_session,

@@ -1,4 +1,4 @@
-"""MultiPhaseReviewOrchestrator — run a multi-phase review plan with retry and feedback."""
+"""MultiPhaseReviewOrchestratorService — run a multi-phase review plan with retry and feedback."""
 
 from __future__ import annotations
 import json
@@ -7,20 +7,20 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from pr_auto_reviewer.application.ports.inbound.assess_phase_use_case import (
-    AssessPhaseUseCase,
+from pr_auto_reviewer.application.ports.inbound.assess_phase_port import (
+    AssessPhasePort,
 )
-from pr_auto_reviewer.application.ports.inbound.brief_next_phase_use_case import (
-    BriefNextPhaseUseCase,
+from pr_auto_reviewer.application.ports.inbound.brief_next_phase_port import (
+    BriefNextPhasePort,
 )
-from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
-    RunMultiPhaseReviewUseCase,
+from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_port import (
+    RunMultiPhaseReviewPort,
 )
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.application.services.pr_identifier import (
-    PRIdentifier,
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.advisor_blocked_error import (
@@ -81,7 +81,7 @@ logger = logging.getLogger(__name__)
 
 _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
-class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
+class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     """Orchestrate a multi-phase review plan with retry and feedback loops.
 
     Runs phases in sequence, injecting previous findings into later
@@ -98,8 +98,8 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         max_retries: int = 5,
         max_conversations: int | None = None,
         max_feedback_rounds: int = 2,
-        advisor: AssessPhaseUseCase | None = None,
-        manager: BriefNextPhaseUseCase | None = None,
+        advisor: AssessPhasePort | None = None,
+        manager: BriefNextPhasePort | None = None,
     ) -> None:
         self._command_bus = command_bus
         self._tool_factory = tool_factory
@@ -156,7 +156,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     plan, repo_path, changed_files, model, attempt_items,
                     base_sha=base_sha,
                     existing_item_ids=existing_item_ids,
-                    pr_identifier=f"{repo_name}/{pr_id_str}",
+                    pr_identifier_service=f"{repo_name}/{pr_id_str}",
                     review_session=review_session,
                 )
                 if result.items:
@@ -236,7 +236,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 plan, repo_path, changed_files, model, result,
                 base_sha=base_sha,
                 review_session=review_session,
-                pr_identifier=f"{repo_name}/{pr_id_str}",
+                pr_identifier_service=f"{repo_name}/{pr_id_str}",
                 existing_item_ids=existing_item_ids,
             )
 
@@ -250,7 +250,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         model: str,
         previous_result: CodeReview,
         review_session: str,
-        pr_identifier: str,
+        pr_identifier_service: str,
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> CodeReview:
@@ -274,7 +274,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                     initial_feedback=context,
                     base_sha=base_sha,
                     existing_item_ids=existing_item_ids,
-                    pr_identifier=pr_identifier,
+                    pr_identifier_service=pr_identifier_service,
                     review_session=review_session,
                 )
             except LlmUnavailableError:
@@ -334,7 +334,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         accumulated_items: list[ReviewItem] | None = None,
         initial_feedback: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
     ) -> CodeReview:
@@ -349,7 +349,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             next_manager_brief = self._manager.brief(
                 phase_sequence[0],
                 "(Review start — no findings recorded yet.)",
-                pr_identifier=pr_identifier,
+                pr_identifier_service=pr_identifier_service,
                 review_session=review_session,
             )
 
@@ -389,7 +389,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
                 phase=phase,
                 phase_prompt=phase_prompt,
                 assignment=assignment,
-                pr_identifier=pr_identifier,
+                pr_identifier_service=pr_identifier_service,
                 review_session=review_session,
                 base_sha=base_sha,
                 phase_result=phase_result,
@@ -449,7 +449,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             ):
                 next_manager_brief = self._manager.brief(
                     phase_sequence[idx + 1], previous_findings,
-                    pr_identifier=pr_identifier,
+                    pr_identifier_service=pr_identifier_service,
                     review_session=review_session,
                 )
 
@@ -687,7 +687,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         repo_path: Path,
         changed_files: list[str],
         existing_item_ids: frozenset[str],
-        pr_identifier: str = "",
+        pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
     ) -> PhaseResult:
@@ -702,7 +702,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
         if self._advisor is None:
             return phase_result
         directive: AdvisorDirective = self._advisor.assess(
-            phase, assignment, phase_result, pr_identifier=pr_identifier,
+            phase, assignment, phase_result, pr_identifier_service=pr_identifier_service,
             review_session=review_session,
         )
         if not directive.blocks_output:
@@ -712,7 +712,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
             improved_task = self._manager.brief(
                 phase,
                 directive.feedback or "phase drifted off its task",
-                pr_identifier=pr_identifier,
+                pr_identifier_service=pr_identifier_service,
                 review_session=review_session,
             )
         corrected_prompt = self._correction_renderer.render_content(
@@ -740,7 +740,7 @@ class MultiPhaseReviewOrchestrator(RunMultiPhaseReviewUseCase):
 
     def _extract_repo_and_pr(self, repo_path: Path) -> tuple[str, str]:
         """Extract (repo_name, pr_id) from repo_path."""
-        identifier = PRIdentifier.derive(repo_path)
+        identifier = PRIdentifierService.derive(repo_path)
         if "#" not in identifier:
             return identifier, ""
         repo_name, pr_number = identifier.rsplit("#", 1)

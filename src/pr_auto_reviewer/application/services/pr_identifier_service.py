@@ -8,7 +8,7 @@ from pathlib import Path
 _REPO_PR_PATTERN = re.compile(r"/repos/([^/]+)_([^/]+)_(\d+)$")
 
 
-class PRIdentifier:
+class PRIdentifierService:
     """Normalize clone directories into the platform PR identity."""
 
     @staticmethod

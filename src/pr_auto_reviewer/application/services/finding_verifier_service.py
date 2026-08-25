@@ -1,4 +1,4 @@
-"""FindingVerifier — verify blocking findings against source code via agentic conversation."""
+"""FindingVerifierService — verify blocking findings against source code via agentic conversation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pr_auto_reviewer.application.ports.inbound.verify_findings_use_case import (
-    VerifyFindingsUseCase,
+from pr_auto_reviewer.application.ports.inbound.verify_findings_port import (
+    VerifyFindingsPort,
 )
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
@@ -18,8 +18,8 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
-from pr_auto_reviewer.application.services.pr_identifier import (
-    PRIdentifier,
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
 )
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
@@ -57,7 +57,7 @@ _FINDING_RESULT_LINE = re.compile(
 )
 
 
-class FindingVerifier(VerifyFindingsUseCase):
+class FindingVerifierService(VerifyFindingsPort):
     """Verify CRITICAL/MAJOR findings against actual source code.
 
     Runs a separate multi-turn agentic conversation where the LLM reads
@@ -506,7 +506,7 @@ class FindingVerifier(VerifyFindingsUseCase):
         self._command_bus.dispatch(AgentExchangeEvent(
             role=SubAgentRole.VERIFIER,
             phase_name="Verify Findings",
-            pr_identifier=PRIdentifier.derive(repo_path),
+            pr_identifier_service=PRIdentifierService.derive(repo_path),
             review_session=review_session,
             messages=transcript,
         ))
