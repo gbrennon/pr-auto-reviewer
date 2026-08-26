@@ -138,7 +138,7 @@ DEBUG=1 uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
 ### Check State
 
 ```bash
-cat ~/.config/pr-auto-reviewer/state.json | python3 -m json.tool
+cat ~/.local/state/pr-auto-reviewer/state.json | python3 -m json.tool
 ```
 
 ### Token Verification
