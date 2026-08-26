@@ -1,6 +1,10 @@
 from ._helpers import *
 
 
+_REVIEW_SERVICE_LOGGER = (
+    "pr_auto_reviewer.application.services.review_pull_request_service"
+)
+
 class TestReviewPullRequestService:
     def test_new_pr_full_flow(
         self, mock_pr_repository, mock_changeset_fetcher,
@@ -216,7 +220,7 @@ class TestReviewPullRequestService:
             ReviewVerdict.CHANGES_REQUESTED
         )
 
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger=_REVIEW_SERVICE_LOGGER)
         ReviewPullRequestService(
             mock_pr_repository,
             mock_changeset_fetcher,
@@ -243,7 +247,7 @@ class TestReviewPullRequestService:
         mock_changeset_fetcher.fetch.return_value = diff
         mock_llm_review.review_prompt.return_value = _review()
 
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.INFO, logger=_REVIEW_SERVICE_LOGGER)
         ReviewPullRequestService(
             mock_pr_repository,
             mock_changeset_fetcher,
@@ -266,7 +270,7 @@ class TestReviewPullRequestService:
         existing = existing.add_review(_review(), cmd.head_sha)
         mock_pr_repository.find.return_value = existing
 
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger=_REVIEW_SERVICE_LOGGER)
         ReviewPullRequestService(
             mock_pr_repository,
             mock_changeset_fetcher,
