@@ -197,7 +197,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 previous_result, round_num + 1
             )
             try:
-                result = self._run_phases(
+                outcome = self._run_phases(
                     plan,
                     repo_path,
                     changed_files,
@@ -207,7 +207,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     existing_item_ids=existing_item_ids,
                     pr_identifier_service=pr_identifier_service,
                     review_session=review_session,
-                ).review
+                )
+                result = outcome.review
             except LlmUnavailableError:
                 logger.warning(
                     "Feedback round %d: LLM unavailable, returning best",
@@ -219,6 +220,13 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     "Feedback round %d produced %d items",
                     round_num + 1,
                     len(result.items),
+                )
+                return result
+            if outcome.dropped_findings:
+                logger.info(
+                    "Feedback round %d refuted all %d findings; returning result",
+                    round_num + 1,
+                    outcome.dropped_findings,
                 )
                 return result
             previous_result = result
