@@ -152,9 +152,11 @@ _METHODOLOGY = (
     "read the superclass to verify the method is not inherited. If a class\n"
     "body is simply 'pass', it inherits all behavior from its parent —\n"
     "verify before reporting anything missing.\n"
-    "Never emit a final verdict until you have inspected at least one changed\n"
-    "file with the exploration tools; a verdict with zero tool calls is\n"
-    "rejected and you will be asked to explore.\n"
+    "Never emit a final verdict until you have inspected the changed files\n"
+    "with the exploration tools (read_file, search_codebase, list_directory, run_git).\n"
+    "For multi-file changes, inspect the core modified components and tests across\n"
+    "the pull request rather than stopping after a single file.\n"
+    "A verdict rendered without inspecting changed files will be rejected.\n"
 )
 
 
