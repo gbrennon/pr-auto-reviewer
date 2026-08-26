@@ -25,7 +25,7 @@
      v
  5  ReviewPullRequestService.execute()
      ├─ 5a. PullRequestRepository.find(pr_id)
-     │      → Load from ~/.config/pr-auto-reviewer/state.json
+     │      → Load from ~/.local/state/pr-auto-reviewer/state.json
      ├─ 5b. force=true → skip needs_review check
      ├─ 5c. TokenVerifierPort.verify(pr_id)  [preflight]
      ├─ 5d. ChangesetFetcherPort.fetch(pr_id, sha)
@@ -328,7 +328,7 @@
 │ ┌──────────────────────────────────────────────────────────┐   │
 │ │ pr_repository.find(pr_id)                                │   │
 │ │ JsonFilePullRequestRepository.find()                     │   │
-│ │   Read ~/.config/pr-auto-reviewer/state.json             │   │
+│ │   Read ~/.local/state/pr-auto-reviewer/state.json        │   │
 │ │   → PullRequest or None                                  │   │
 │ │ If None → PullRequest(id, title, head_sha)               │   │
 │ └──────────────────────────────────────────────────────────┘   │
@@ -344,7 +344,7 @@
 │ │   PreflightVerifier:                                     │   │
 │ │     1. GET /user (auth check)                            │   │
 │ │     2. POST /pulls/{n}/requested_reviewers (write check) │   │
-│ │   Cached in ~/.config/pr-auto-reviewer/verified-tokens.json│   │
+│ │   Cached in ~/.cache/pr-auto-reviewer/verified-tokens.json │   │
 │ └──────────────────────────────────────────────────────────┘   │
 │                    │                                            │
 │ 4.3.4 FETCH DIFF VIA LOCAL GIT CLONE                           │
@@ -586,7 +586,7 @@
 │ │                                                          │   │
 │ │ pr_repository.save(pr)                                   │   │
 │ │ JsonFilePullRequestRepository.save()                     │   │
-│ │   Atomic write to ~/.config/pr-auto-reviewer/state.json  │   │
+│ │   Atomic save ~/.local/state/pr-auto-reviewer/state.json │   │
 │ └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -940,7 +940,7 @@ AgentConversationService._run()
 
 ### Transcripts
 
-Every LLM exchange — peer conversations, advisor gradings, manager briefs, verifier runs — is persisted under `~/.config/pr-auto-reviewer/conversations/<repo>_<pr>/`.
+Every LLM exchange — peer conversations, advisor gradings, manager briefs, verifier runs — is persisted under `~/.local/state/pr-auto-reviewer/conversations/<repo>_<pr>/`.
 
 ### Local Git Clone for Diffs
 
