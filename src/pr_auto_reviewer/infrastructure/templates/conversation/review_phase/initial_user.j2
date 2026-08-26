@@ -3,9 +3,9 @@
 
 Repository path: {{ repo_path }}
 
-Use get_changed_files to see which files were modified, then use read_file
-to inspect relevant files. You have access to read_file, search_codebase,
-list_directory, run_git, and get_changed_files tools.
+Inspect the changed files listed above using exploration tools (read_file,
+search_codebase, list_directory, run_git). For multi-file reviews, inspect the
+core implementation files and their corresponding tests before concluding.
 
 {{ tool_call_schema() }}
 {{ verdict_schema() }}
