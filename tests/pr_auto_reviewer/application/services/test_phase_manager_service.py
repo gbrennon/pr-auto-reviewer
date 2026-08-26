@@ -85,3 +85,24 @@ class TestPhaseManager:
         assert "Architecture Review" in user_content
         assert "found bugs in src/a.py" in user_content
         assert "found leak in src/b.py" in user_content
+
+    def test_brief_passes_untruncated_phase_instructions(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = "focused task"
+        manager = PhaseManagerService(chat_port=chat)
+        long_instructions = "Scope details " * 40 + "END_OF_INSTRUCTIONS"
+
+        manager.brief(
+            ReviewPhase(
+                phase_id="diff_phase",
+                phase_name="Bug Hunt — Diff",
+                system_prompt=long_instructions,
+                role=ArchitectAgent(),
+            ),
+            "",
+            review_session="test-session",
+        )
+
+        messages = chat.send.call_args.args[0]
+        user_content = messages[-1].content
+        assert "END_OF_INSTRUCTIONS" in user_content
