@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import logging
 from typing import Any
 
@@ -154,3 +155,13 @@ class TestGitPlatformHttpClient:
         client = GitPlatformHttpClient("https://x", "t")
         with pytest.raises(requests_lib.exceptions.HTTPError):
             client.post("/test", {"k": "v"})
+
+    def test_default_verified_cache_path_when_not_provided_then_uses_app_paths_cache_dir(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """Verify default verified cache path resolves to AppPaths.cache_dir() / 'verified-tokens.json'."""
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+        client = GitPlatformHttpClient("https://codeberg.org/api/v1", "t")
+
+        assert client._verified_cache_path == tmp_path / "pr-auto-reviewer" / "verified-tokens.json"
