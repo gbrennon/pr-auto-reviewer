@@ -41,7 +41,7 @@ object containing these keys:
   ]
 }
 ```
-Only include findings you can confirm from the files you actually read.
+If there are no actionable issues, suggestions, or praise, emit empty arrays: "items": [], "suggestions": [], "praise": []. Never include placeholder paths (e.g. path/to/file, src/main.py). Only include findings you can confirm from the files you actually read.
 {% endmacro %}
 
 {% macro advisor_turn_grade_schema() %}Respond with a single JSON object:
