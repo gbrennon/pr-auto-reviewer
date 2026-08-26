@@ -15,7 +15,7 @@ is used instead of ``Bearer`` and no ``Accept`` header is needed.
 
 Verified ``(org, role)`` pairs are cached in memory for the current
 process.  When *persist* is ``True`` they are also written to
-``~/.config/pr-auto-reviewer/verified-tokens.json`` so subsequent
+``~/.cache/pr-auto-reviewer/verified-tokens.json`` so subsequent
 invocations skip verification entirely.
 """
 
@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
@@ -33,6 +32,7 @@ from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +65,7 @@ class TokenVerifier(TokenVerifierPort):
         self._store_path = (
             _store_path
             if _store_path is not None
-            else Path(
-                os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
-            )
+            else AppPaths.cache_dir() / "verified-tokens.json"
         )
         self._verified: set[tuple[str, str]] = self._load() if persist else set()
 
