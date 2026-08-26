@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
     CommentReaderPort,
@@ -26,11 +26,11 @@ class FakeGithubCommentReader(CommentReaderPort):
             PrComment(
                 id=CommentId("1"),
                 body="Test comment 1",
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             ),
             PrComment(
                 id=CommentId("2"),
                 body="Test comment 2",
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             ),
         ]

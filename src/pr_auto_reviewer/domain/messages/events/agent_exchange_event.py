@@ -21,7 +21,7 @@ class AgentExchangeEvent:
 
     role: SubAgentRole
     phase_name: str
-    pr_identifier: str
+    pr_identifier_service: str
     review_session: str
     messages: list[ConversationMessage]
     metadata: dict[str, str] = field(default_factory=dict)

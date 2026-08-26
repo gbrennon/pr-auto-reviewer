@@ -9,15 +9,15 @@ import traceback
 
 import requests
 
-from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
-    ProcessIssueCommandsUseCase,
+from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
+    ProcessIssueCommandsPort,
 )
-from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
-    ReviewPullRequestUseCase,
+from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
+    ReviewPullRequestPort,
 )
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
-from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
 )
 from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
@@ -53,12 +53,12 @@ class CliRunner:
 
     def __init__(
         self,
-        review_service: ReviewPullRequestUseCase,
-        process_commands_service: ProcessIssueCommandsUseCase,
+        review_service: ReviewPullRequestPort,
+        process_commands_service: ProcessIssueCommandsPort,
         review_reader: ReviewReaderPort,
         pr_lister: PrListerPort,
         review_item_parser: ReviewItemParser,
-        pr_repository: PullRequestRepository | None = None,
+        pr_repository: PullRequestRepositoryPort | None = None,
         notifier: NotifierPort | None = None,
         token_verifier: TokenVerifierPort | None = None,
         output_mode: str = "forgejo",

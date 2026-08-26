@@ -34,6 +34,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers.review_pha
     UnparseableResponseMessageRenderer,
 )
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers.verifier import (
+    ExploreBeforeResultsRenderer,
     VerifyEmptyResponseRenderer,
     VerifyInitialUserRenderer,
     VerifyUnparseableResponseRenderer,
@@ -48,6 +49,7 @@ __all__ = [
     "AdvisorTurnGradeSystemRenderer",
     "AdvisorTurnGradeUserRenderer",
     "EmptyResponseMessageRenderer",
+    "ExploreBeforeResultsRenderer",
     "ExploreBeforeVerdictMessageRenderer",
     "FeedbackContextRenderer",
     "ForceVerdictMessageRenderer",

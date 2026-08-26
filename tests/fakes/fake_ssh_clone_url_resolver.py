@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.infrastructure.clone_url_resolvers.ssh_clone_url_resolver import (
-    SshCloneUrlResolver,
-    CloneUrlResolverPort,
-)
-
 
 class FakeSshCloneUrlResolver:
     """Fake SshCloneUrlResolver that returns pre-configured URLs."""

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
-from tests.fakes.fake_ollama_streaming_llm_adapter import FakeOllamaStreamingLlmAdapter
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
+from tests.fakes.fake_ollama_streaming_llm_adapter import FakeOllamaStreamingLlmAdapter
 
 
 class TestFakeOllamaStreamingLlmAdapter:
@@ -21,7 +19,9 @@ class TestFakeOllamaStreamingLlmAdapter:
 
     def test_fake_review_prompt(self) -> None:
         """Fake review_prompt returns CodeReview without calling Ollama."""
-        from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
+        from pr_auto_reviewer.domain.fragments.entities.composed_prompt import (
+            ComposedPrompt,
+        )
 
         fake = FakeOllamaStreamingLlmAdapter()
         prompt = ComposedPrompt(
@@ -36,8 +36,6 @@ class TestFakeOllamaStreamingLlmAdapter:
     def test_fake_review(self) -> None:
         """Fake review returns CodeReview without calling Ollama."""
         fake = FakeOllamaStreamingLlmAdapter()
-        from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
-        from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
 
         diff = PullRequestDiff(
             pr_id=PullRequestId(repository="owner/repo", number=1),

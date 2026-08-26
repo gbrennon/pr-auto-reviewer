@@ -6,8 +6,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_use_case import (
-    RunMultiPhaseReviewUseCase,
+from pr_auto_reviewer.application.ports.inbound.run_multi_phase_review_port import (
+    RunMultiPhaseReviewPort,
 )
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import (
     LlmReviewPort,
@@ -31,13 +31,13 @@ class OllamaAgentAdapter(LlmReviewPort):
     """Thin adapter wiring the agentic review pipeline to ``LlmReviewPort``.
 
     Extracts repository context from the ``ComposedPrompt`` and delegates
-    entirely to ``RunMultiPhaseReviewUseCase``.
+    entirely to ``RunMultiPhaseReviewPort``.
     """
 
     def __init__(
         self,
         chat_client: OllamaChatClient,
-        orchestrator: RunMultiPhaseReviewUseCase,
+        orchestrator: RunMultiPhaseReviewPort,
         plan: ReviewPlan,
     ) -> None:
         self._chat_client = chat_client

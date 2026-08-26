@@ -11,7 +11,10 @@ class IssueBodyBuilder:
     def build(
         self, pr_id: PullRequestId, item: ReviewItem
     ) -> tuple[str, str]:
-        title = f"[{item.severity.upper()}] {item.category}: {item.description[:80]}"
+        title = (
+            f"[{item.severity.upper()}] {item.category}: "
+            f"{IssueBodyBuilder._truncate_on_boundary(item.description, 80)}"
+        )
 
         location = (
             f"`{item.file_path}`" if item.file_path else "_(no specific file)_"
@@ -39,3 +42,26 @@ class IssueBodyBuilder:
         body = "\n".join(body_parts)
 
         return title, body
+
+    @staticmethod
+    def _truncate_on_boundary(text: str, limit: int) -> str:
+        """Clip *text* to *limit* chars at a sentence or word edge.
+
+        A hard mid-word cut produced published titles ending in
+        fragments like "…eliminates r".  The cut lands on the last
+        sentence end within the limit, else on the last word
+        boundary, with an ellipsis marker when anything was removed.
+        """
+        if len(text) <= limit:
+            return text
+        window = text[:limit]
+        sentence_end = max(
+            window.rfind(marker)
+            for marker in (". ", "! ", "? ")
+        )
+        if sentence_end > limit // 2:
+            return window[:sentence_end + 1].rstrip()
+        word_end = window.rfind(" ")
+        if word_end > limit // 2:
+            return window[:word_end].rstrip() + "…"
+        return window.rstrip() + "…"

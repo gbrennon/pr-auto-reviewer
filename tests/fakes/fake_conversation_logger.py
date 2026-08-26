@@ -20,14 +20,14 @@ class FakeMarkdownConversationLogger(ConversationLoggerPort):
     def log_conversation(
         self,
         phase_name: str,
-        pr_identifier: str,
+        pr_identifier_service: str,
         messages: list[Any],
         metadata: dict[str, Any],
     ) -> Path:
         """Track call without writing to disk."""
-        self.log_conversation_calls.append((phase_name, pr_identifier, messages, metadata))
+        self.log_conversation_calls.append((phase_name, pr_identifier_service, messages, metadata))
         # Return a fake path
-        safe_pr = pr_identifier.replace("/", "_").replace("#", "_")
+        safe_pr = pr_identifier_service.replace("/", "_").replace("#", "_")
         phase_dir = self._base_dir / safe_pr
         phase_dir.mkdir(parents=True, exist_ok=True)
         return phase_dir / f"fake_{phase_name}_{len(self.log_conversation_calls)}.md"

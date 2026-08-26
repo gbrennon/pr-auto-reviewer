@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.application.ports.outbound.review_publisher_port import (
-    ReviewPublisherPort,
-)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 
 
 class FakeForgejoReviewPublisher:

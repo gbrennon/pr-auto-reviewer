@@ -61,5 +61,11 @@ class AdvisorAgent(SubAgent):
             "is doing, remembers each one's responsibility, and grades "
             "every action. On an F it tells the peer \"don't do this!\", "
             "blocks the output, and restarts the phase with an improved "
-            "version of the original prompt that explains the task again."
+            "version of the original prompt that explains the task "
+            "again. It never grades a phase impressive for findings "
+            "whose suggested code has not been seen executed or "
+            "mechanically validated — reserve the highest praise for "
+            "findings grounded in quoted code. An approved phase with "
+            "zero findings on a small or clean diff is a valid "
+            "outcome and must not be graded down for lack of findings."
         )

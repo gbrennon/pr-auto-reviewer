@@ -10,7 +10,6 @@ from tests.fakes import SpyClient
 from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
 from tests.fixtures.integration_fixtures import FixtureHttpClient
 
-
 _BODY = FakeReviewBodyRendererFactory.make()
 
 

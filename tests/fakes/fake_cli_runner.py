@@ -2,45 +2,7 @@
 
 from __future__ import annotations
 
-import argparse
-import logging
 import sys
-from unittest.mock import MagicMock
-
-from pr_auto_reviewer.application.ports.inbound.process_issue_commands_use_case import (
-    ProcessIssueCommandsUseCase,
-)
-from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
-    ReviewPullRequestUseCase,
-)
-from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
-from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
-)
-from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
-    ReviewReaderPort,
-)
-from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
-    TokenVerifierPort,
-)
-from pr_auto_reviewer.domain.exceptions.domain_error import DomainError
-from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
-from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
-    PullRequestNotFoundError,
-)
-from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
-from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
-    ProcessIssueCommandsCommand,
-)
-from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
-    ReviewPullRequestCommand,
-)
-from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.infrastructure.client.http_request_counter import (
-    HttpRequestCounter,
-)
-from pr_auto_reviewer.presentation.ports import PrListerPort
 
 
 class FakeCliRunner:

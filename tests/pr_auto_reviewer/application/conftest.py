@@ -11,7 +11,7 @@ import pytest
 
 @pytest.fixture
 def mock_pr_repository() -> MagicMock:
-    """Mock PullRequestRepository."""
+    """Mock PullRequestRepositoryPort."""
     return MagicMock()
 
 

@@ -32,8 +32,8 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import (
 from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
     PromptRendererPort,
 )
-from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
 )
 from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
     RepositoryContextPort,
@@ -82,7 +82,7 @@ class Container:
 
     def __init__(self, config: Config | None = None) -> None:
         self._config = config or load_config()
-        self._pr_repository: PullRequestRepository = NullPullRequestRepository()
+        self._pr_repository: PullRequestRepositoryPort = NullPullRequestRepository()
         self._wire()
 
     @property
@@ -98,7 +98,7 @@ class Container:
         return self._reviewer_client
 
     @property
-    def pr_repository(self) -> PullRequestRepository:
+    def pr_repository(self) -> PullRequestRepositoryPort:
         return self._pr_repository
 
     @property

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.value_objects.issue_command import IssueCommand
 

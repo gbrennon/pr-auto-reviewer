@@ -8,7 +8,6 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
 )
 from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
 
-
 _BODY = FakeReviewBodyRendererFactory.make()
 
 

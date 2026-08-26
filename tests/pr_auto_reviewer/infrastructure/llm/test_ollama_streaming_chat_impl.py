@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-import asyncio
 
 from tests.fakes.fake_ollama_streaming_chat_impl import FakeOllamaStreamingChatImpl
 
@@ -42,6 +41,6 @@ class TestFakeOllamaStreamingChatImpl:
         async for turn in fake.start_review("my/repo", 42, "some diff"):
             turns.append(turn)
         assert len(fake.start_review_calls) == 1
-        repo, pr_number, diff = fake.start_review_calls[0]
+        repo, pr_number, _diff = fake.start_review_calls[0]
         assert repo == "my/repo"
         assert pr_number == 42

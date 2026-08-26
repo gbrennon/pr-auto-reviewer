@@ -1,6 +1,5 @@
 """Fake LLM reviewer for tests."""
 
-from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff

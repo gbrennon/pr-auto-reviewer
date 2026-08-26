@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 
-from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
 )
 from pr_auto_reviewer.domain.entities.pull_request import PullRequest
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 
 logger = logging.getLogger(__name__)
 
-class NullPullRequestRepository(PullRequestRepository):
+class NullPullRequestRepository(PullRequestRepositoryPort):
     """Discards all state.  find() always returns None, save() is a no-op.
 
     Used when output_mode is "terminal" so that review state is never

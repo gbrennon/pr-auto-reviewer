@@ -14,7 +14,7 @@ Find behavioral and runtime bugs that span multiple files or require deeper expl
 
 ## TOOLS
 
-You may use `read_file`, `search_codebase`, `list_directory`, `run_git`, and `get_changed_files` to explore the full repository.
+You may use `read_file`, `search_codebase`, `list_directory`, `run_git`, `get_changed_files`, and `run_snippet` to explore the full repository.
 
 `run_git` accepts read-only subcommands: `log`, `diff`, `show`, `blame`, `branch`, `status`, `ls-files`, `rev-parse`, `rev-list`. Example: `run_git log --oneline -10`.
 

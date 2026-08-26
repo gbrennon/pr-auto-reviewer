@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tests.fakes.fake_github_repo_lister import FakeGithubRepoLister
-from pr_auto_reviewer.presentation.ports import RepoInfo
 
 
 class TestFakeGithubRepoLister:

@@ -10,6 +10,7 @@ class ConversationDecision(StrEnum):
 
     ACCEPT_VERDICT = "accept_verdict"
     DEMAND_EXPLORATION = "demand_exploration"
+    REFUSED_EXPLORATION = "refused_exploration"
     REPROMPT_EMPTY = "reprompt_empty"
     REPROMPT_UNPARSEABLE = "reprompt_unparseable"
     EXCEEDED_EMPTY = "exceeded_empty"

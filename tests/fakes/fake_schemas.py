@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -30,7 +30,7 @@ class FakeReviewItemSchema:
         }
 
     @classmethod
-    def from_parser_dict(cls, data: dict[str, object]) -> "FakeReviewItemSchema":
+    def from_parser_dict(cls, data: dict[str, object]) -> FakeReviewItemSchema:
         """Construct from a parser-produced dict."""
         return cls(
             file=str(data.get("file", "")),

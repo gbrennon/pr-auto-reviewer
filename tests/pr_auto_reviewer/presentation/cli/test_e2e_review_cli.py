@@ -17,8 +17,8 @@ from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
 )
 from pr_auto_reviewer.application.ports.outbound.llm_review_port import LlmReviewPort
-from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
 )
 from pr_auto_reviewer.application.ports.outbound.review_context_factory_port import (
     ReviewContextFactoryPort,
@@ -42,7 +42,6 @@ from pr_auto_reviewer.infrastructure.review_publishers.terminal_publisher import
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
-
 
 _BODY = FakeReviewBodyRendererFactory.make()
 
@@ -87,8 +86,8 @@ class FakePrLister(PrListerPort):
         return None
 
 
-class FakePullRequestRepository(PullRequestRepository):
-    """PullRequestRepository fake with no persisted history."""
+class FakePullRequestRepository(PullRequestRepositoryPort):
+    """PullRequestRepositoryPort fake with no persisted history."""
 
     def __init__(self) -> None:
         self.saved: list = []

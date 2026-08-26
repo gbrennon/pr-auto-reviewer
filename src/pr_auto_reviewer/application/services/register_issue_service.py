@@ -14,7 +14,7 @@ from ...domain.exceptions.review_item_not_found_error import ReviewItemNotFoundE
 from ...domain.services.review_item_parser import ReviewItemParser
 from ..ports.inbound.register_issue_port import RegisterIssuePort
 from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.outbound.pull_request_repository import PullRequestRepository
+from ..ports.outbound.pull_request_repository_port import PullRequestRepositoryPort
 from ..ports.outbound.review_reader_port import ReviewReaderPort
 from ..serializers.issue_body_builder import IssueBodyBuilder
 
@@ -30,7 +30,7 @@ class RegisterIssueService(RegisterIssuePort):
 
     def __init__(
         self,
-        pr_repository: PullRequestRepository,
+        pr_repository: PullRequestRepositoryPort,
         review_reader: ReviewReaderPort,
         review_item_parser: ReviewItemParser,
         issue_tracker: IssueTrackerPort,

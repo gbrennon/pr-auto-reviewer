@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
 import asyncio
 
 from tests.fakes.fake_ollama_streaming_chat_abc import (
-    FakeOllamaStreamingChatABC,
     FakeOllamaReviewStream,
+    FakeOllamaStreamingChatABC,
 )
 
 
@@ -35,7 +34,7 @@ class TestFakeOllamaStreamingChatABC:
     def test_fake_parse_streaming_response(self) -> None:
         """Fake parse_streaming_response handles JSON."""
         fake = FakeOllamaStreamingChatABC()
-        items, metadata = fake.parse_streaming_response(
+        _items, metadata = fake.parse_streaming_response(
             ['{"verdict": "approved"}'], "test-model"
         )
         assert metadata["verdict"] == "approved"
