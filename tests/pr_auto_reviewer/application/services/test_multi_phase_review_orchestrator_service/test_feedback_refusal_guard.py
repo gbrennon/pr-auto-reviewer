@@ -91,3 +91,35 @@ class TestFeedbackRefusalGuard:
         final_context = orchestrator._build_feedback_context(review, 2)
         assert "valid outcome" in final_context
 
+
+    def test_feedback_loop_returns_early_when_round_drops_all_findings(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        plan = SimpleNamespace(
+            phases=_plan(), methodology="sub-agent-multi-phase",
+        )
+        orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
+        initial_empty = _code_review(verdict=ReviewVerdict.APPROVED)
+
+        calls = []
+        def _mock_run_phases(*args, **kwargs):
+            calls.append(len(calls) + 1)
+            return _outcome(
+                dropped_findings=2,
+                verdict=ReviewVerdict.CHANGES_REQUESTED,
+                reason="Refuted findings",
+            )
+
+        orchestrator._run_phases = _mock_run_phases
+        result = orchestrator._run_feedback_loop(
+            plan=plan,
+            repo_path=Path("/tmp"),
+            changed_files=["src/main.py"],
+            model="test",
+            previous_result=initial_empty,
+            review_session="test-session",
+            pr_identifier_service="owner/repo/1",
+        )
+
+        assert len(calls) == 1
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED.value
