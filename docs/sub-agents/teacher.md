@@ -30,7 +30,7 @@ example — so the sub-agents internalize *why* rather than just *what*.
    task, not after it.
 3. **Keeps a class notebook.** Every exchange — peer turns, advisor
    gradings, manager briefs and re-plans, verifier runs — is persisted
-   as a transcript under `~/.config/pr-auto-reviewer/conversations/`.
+   as a transcript under `~/.local/state/pr-auto-reviewer/conversations/`.
    The notebook is what lets a later review build on the lessons of
    earlier ones.
 
