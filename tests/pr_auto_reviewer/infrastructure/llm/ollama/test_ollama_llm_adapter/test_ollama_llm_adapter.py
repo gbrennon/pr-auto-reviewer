@@ -1,6 +1,10 @@
 from ._helpers import *
 
 
+_OLLAMA_ADAPTER_LOGGER = (
+    "pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter"
+)
+
 class TestOllamaLlmAdapter:
     """Tests for OllamaLlmAdapter."""
 
@@ -52,7 +56,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post)
 
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger=_OLLAMA_ADAPTER_LOGGER)
         adapter.review(sample_diff, sample_context)
 
         request_logs = [
@@ -71,7 +75,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post)
 
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger=_OLLAMA_ADAPTER_LOGGER)
         adapter.review(sample_diff, sample_context)
 
         summary_logs = [
@@ -95,7 +99,7 @@ class TestOllamaLlmAdapter:
         import requests as _requests
         monkeypatch.setattr(_requests, "post", ollama_fake_post)
 
-        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.INFO, logger=_OLLAMA_ADAPTER_LOGGER)
         adapter.review(sample_diff, sample_context)
 
         summary_logs = [
