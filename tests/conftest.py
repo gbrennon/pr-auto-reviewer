@@ -62,7 +62,7 @@ class _Call:
         raise IndexError(index)
 
 class _StubReviewService:
-    """Stub ReviewPullRequestUseCase that records executed commands.
+    """Stub ReviewPullRequestPort that records executed commands.
 
     Provides MagicMock-compatible tracking attributes for migration ease.
     """
@@ -92,7 +92,7 @@ class _StubReviewService:
 
 @pytest.fixture
 def stub_review_service() -> _StubReviewService:
-    """Stub ReviewPullRequestUseCase service."""
+    """Stub ReviewPullRequestPort service."""
     return _StubReviewService()
 
 

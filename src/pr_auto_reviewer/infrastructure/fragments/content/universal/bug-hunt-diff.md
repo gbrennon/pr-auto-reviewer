@@ -14,7 +14,7 @@ Find logic errors, off-by-one mistakes, null/None checks, type mismatches, resou
 
 ## TOOLS
 
-You have access to `read_file`, `search_codebase`, `list_directory`, `run_git`, and `get_changed_files`.
+You have access to `read_file`, `search_codebase`, `list_directory`, `run_git`, `get_changed_files`, and `run_snippet`.
 
 Use `get_changed_files` to list every file this PR changed. Use `run_git diff`
 (or `run_git diff -- <path>`) to see the raw diff of a changed file against the

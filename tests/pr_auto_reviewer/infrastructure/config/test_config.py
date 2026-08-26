@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
+
 
 class TestLoadConfig:
 
@@ -270,3 +274,32 @@ class TestLoadConfig:
     def _enter_dev_mode(self, tmp_path: Path) -> None:
         """Create .env so load_config detects development mode."""
         (tmp_path / ".env").touch()
+
+    def test_llm_call_budget_and_advisor_granularity(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("LLM_CALL_BUDGET", "42")
+        monkeypatch.setenv("ADVISOR_GRANULARITY", "turn")
+        cfg = load_config()
+        assert cfg.llm_call_budget == 42
+        assert cfg.advisor_granularity is AdvisorGranularity.TURN
+
+    def test_advisor_granularity_defaults_to_phase(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build({}, env_name="test")
+        assert cfg.llm_call_budget == 300
+        assert cfg.advisor_granularity is AdvisorGranularity.PHASE
+
+    def test_invalid_advisor_granularity_is_rejected(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        with pytest.raises(ValueError):
+            ConfigBuilder().build(
+                {}, env_name="test", advisor_granularity="every-other-turn"
+            )

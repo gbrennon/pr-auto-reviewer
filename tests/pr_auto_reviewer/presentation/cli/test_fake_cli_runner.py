@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tests.fakes.fake_cli_runner import FakeCliRunner, FakeCliRunnerWithResult
 
 

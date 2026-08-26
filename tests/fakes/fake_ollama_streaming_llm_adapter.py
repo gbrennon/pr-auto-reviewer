@@ -26,8 +26,12 @@ class FakeOllamaStreamingLlmAdapter(LlmReviewPort):
         """Send prompt to fake Ollama and return fake CodeReview."""
         self.review_prompt_calls.append((prompt, "code-review:latest"))
         from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-        from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
-        from pr_auto_reviewer.domain.value_objects.repository_context import RepositoryContext
+        from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
+            PullRequestDiff,
+        )
+        from pr_auto_reviewer.domain.value_objects.repository_context import (
+            RepositoryContext,
+        )
 
         diff = PullRequestDiff(
             pr_id=PullRequestId(repository="test/repo", number=1),

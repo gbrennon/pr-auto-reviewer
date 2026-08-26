@@ -18,12 +18,12 @@ class TestConversationGuardrails:
         assert guardrails.max_turns == 10
         assert guardrails.max_empty_responses == 3
         assert guardrails.max_unparseable_responses == 3
-        assert guardrails.exploration_required is True
+        assert guardrails.max_tool_calls == 8
+        assert guardrails.max_demands == 2
+        assert guardrails.demands_issued == 0
         assert guardrails.turn == 0
         assert guardrails.consecutive_empty == 0
         assert guardrails.consecutive_unparseable == 0
-        assert guardrails.tool_calls == 0
-        assert guardrails.exploration_demanded is False
 
     def test_has_turns_remaining_is_true_before_budget_exhausted(self) -> None:
         assert ConversationGuardrails(turn=0).has_turns_remaining() is True
@@ -83,24 +83,23 @@ class TestConversationGuardrails:
             exploration_required=False
         ).judge_verdict()
         assert decision is ConversationDecision.ACCEPT_VERDICT
-        assert state.exploration_demanded is False
+        assert state.demands_issued == 0
 
-    def test_accepts_when_tools_were_used(self) -> None:
-        decision, state = ConversationGuardrails(tool_calls=3).judge_verdict()
-        assert decision is ConversationDecision.ACCEPT_VERDICT
-        assert state.exploration_demanded is False
-
-    def test_accepts_when_exploration_already_demanded(self) -> None:
-        decision, state = ConversationGuardrails(
-            exploration_demanded=True
-        ).judge_verdict()
-        assert decision is ConversationDecision.ACCEPT_VERDICT
-        assert state.exploration_demanded is True
-
-    def test_demands_exploration_once_then_accepts(self) -> None:
-        guardrails = ConversationGuardrails()
+    def test_demands_exploration_up_to_max_then_refuses(self) -> None:
+        guardrails = ConversationGuardrails(max_demands=2)
         decision, guardrails = guardrails.judge_verdict()
         assert decision is ConversationDecision.DEMAND_EXPLORATION
-        assert guardrails.exploration_demanded is True
-        decision, _ = guardrails.judge_verdict()
+        assert guardrails.demands_issued == 1
+        decision, guardrails = guardrails.judge_verdict()
+        assert decision is ConversationDecision.DEMAND_EXPLORATION
+        assert guardrails.demands_issued == 2
+        decision, guardrails = guardrails.judge_verdict()
+        assert decision is ConversationDecision.REFUSED_EXPLORATION
+        assert guardrails.demands_issued == 2
+
+    def test_accepts_when_tool_calls_after_demand(self) -> None:
+        guardrails = ConversationGuardrails(demands_issued=1, tool_calls=1)
+
+        decision, _state = guardrails.judge_verdict()
+
         assert decision is ConversationDecision.ACCEPT_VERDICT

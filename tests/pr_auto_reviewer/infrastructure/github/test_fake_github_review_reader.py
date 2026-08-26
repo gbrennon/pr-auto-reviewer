@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import pytest
-
-from tests.fakes.fake_github_review_reader import FakeGithubReviewReader
-from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from tests.fakes.fake_github_review_reader import FakeGithubReviewReader
 
 
 class TestFakeGithubReviewReader:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tests.fakes.fake_https_clone_url_resolver import FakeHttpsCloneUrlResolver
 
 

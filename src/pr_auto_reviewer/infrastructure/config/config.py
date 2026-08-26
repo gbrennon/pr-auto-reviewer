@@ -8,6 +8,9 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.config.config_builder import ConfigBuilder
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.environment_detector import (
@@ -25,7 +28,7 @@ _COMMAND_LINE_KEYS = {
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
     "USE_COMPACT_TEMPLATE", "USE_STRICT_FRAGMENT_SELECTION",
     "OLLAMA_TIMEOUT",
-    "LLM_MAX_RETRIES",
+    "LLM_MAX_RETRIES", "LLM_CALL_BUDGET", "ADVISOR_GRANULARITY",
     "GITHUB_API_URL", "GITHUB_REVIEW_MODE",
     "FORGEJO_API_URL", "FORGEJO_HOST",
     "RUN_ONCE", "REPOS_FILTER", "FORCE_PR",
@@ -99,6 +102,10 @@ class ConfigLoader:
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
+        llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
+        advisor_granularity = AdvisorGranularity.parse(
+            values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
+        )
         return self._builder.build(
             values,
             env_name="production",
@@ -106,6 +113,8 @@ class ConfigLoader:
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            llm_call_budget=llm_call_budget,
+            advisor_granularity=advisor_granularity,
         )
 
     def _load_development(
@@ -132,6 +141,10 @@ class ConfigLoader:
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
+        llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
+        advisor_granularity = AdvisorGranularity.parse(
+            values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
+        )
         return self._builder.build(
             values,
             env_name=env,
@@ -139,6 +152,8 @@ class ConfigLoader:
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            llm_call_budget=llm_call_budget,
+            advisor_granularity=advisor_granularity,
         )
 
 

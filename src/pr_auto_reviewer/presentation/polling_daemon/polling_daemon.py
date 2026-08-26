@@ -6,8 +6,8 @@ import logging
 import signal
 import time
 
-from pr_auto_reviewer.application.ports.inbound.review_pull_request_use_case import (
-    ReviewPullRequestUseCase,
+from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
+    ReviewPullRequestPort,
 )
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
@@ -40,7 +40,7 @@ class PollingDaemon:
         config: PollingDaemonConfig,
         repo_lister: RepoListerPort,
         pr_lister: PrListerPort,
-        review_service: ReviewPullRequestUseCase,
+        review_service: ReviewPullRequestPort,
         notifier: NotifierPort | None = None,
         update_tracker: RepoUpdateTracker | None = None,
     ) -> None:

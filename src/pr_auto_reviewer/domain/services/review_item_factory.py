@@ -144,25 +144,24 @@ class ReviewItemFactory:
     def generate_id(cls, existing_ids: frozenset[str] = frozenset()) -> str:
         """Generate a unique ID for a review item.
 
-        Uses 4 hex characters from uuid7 + 2 hex counter
-        for unique, short IDs without repo prefix.
+        Uses the 4 *lowest* hex digits of a uuid7 plus a 2-digit
+        process counter.  The low bits are freshly random on every
+        call; the high bits encode the unix-millisecond timestamp and
+        stay constant within minute-scale windows, which made IDs
+        repeat across runs (every review produced ``1a03xx``).
         """
-        if not hasattr(cls, '_id_counter'):
+        if not hasattr(cls, "_id_counter"):
             cls._id_counter = 0
-        cls._id_counter += 1
-        u = _uuid.uuid7()
-        uuid_part = format(u.int, "04x")[:4]
-        counter_part = format(cls._id_counter, "02x")
-        candidate = f"{uuid_part}{counter_part}"
-        
-        # Ensure uniqueness against existing IDs
-        while candidate in existing_ids:
+
+        def _candidate() -> str:
             cls._id_counter += 1
-            u = _uuid.uuid7()
-            uuid_part = format(u.int, "04x")[:4]
+            random_part = format(_uuid.uuid7().int & 0xFFFF, "04x")
             counter_part = format(cls._id_counter, "02x")
-            candidate = f"{uuid_part}{counter_part}"
-        
+            return f"{random_part}{counter_part}"
+
+        candidate = _candidate()
+        while candidate in existing_ids:
+            candidate = _candidate()
         return candidate
 
     @classmethod
@@ -344,6 +343,7 @@ class ReviewItemFactory:
             current_code = str(item_dict.get("current_code", ""))
             suggested_fix = str(item_dict.get("suggested_fix", ""))
             line_str = str(item_dict.get("line", ""))
+            anchor_unverified = False
 
             if repo_root is not None and not file_path:
                 grounded = cls._ground_description(
@@ -405,9 +405,10 @@ class ReviewItemFactory:
                         skip_reasons.append(reason)
                         continue
                     elif current_code:
+                        anchor_unverified = True
                         logger.warning(
-                            "Keeping finding with unverified code"
-                            " anchor at %s:%s",
+                            "Downgrading finding with unverified code"
+                            " anchor to info at %s:%s",
                             file_path,
                             line_str,
                         )
@@ -458,15 +459,22 @@ class ReviewItemFactory:
             if current_code and not suggested_fix:
                 suggested_fix = current_code
 
+            severity = ItemSeverity.from_value(
+                str(item_dict.get("severity", "info"))
+            )
+            description = str(item_dict.get("description", ""))
+            cls._warn_on_intensity_mismatch(severity, description)
+            if anchor_unverified:
+                severity = ItemSeverity.INFO
+                description = f"{description} [anchor_unverified]"
+
             review_item = ReviewItem(
-                severity=ItemSeverity.from_value(
-                    str(item_dict.get("severity", "info"))
-                ),
+                severity=severity,
                 category=IssueCategory.from_value(
                     str(item_dict.get("category", "maintainability"))
                 ),
                 file_path=file_path,
-                description=str(item_dict.get("description", "")),
+                description=description,
                 line=line_str,
                 id=cls.generate_id(existing_ids),
                 current_code=current_code,
@@ -482,3 +490,26 @@ class ReviewItemFactory:
                 ", ".join(skip_reasons),
             )
         return review_items, skip_reasons
+
+    @staticmethod
+    def _warn_on_intensity_mismatch(
+        severity: ItemSeverity, description: str,
+    ) -> None:
+        """Warn when the description's intensity contradicts *severity*.
+
+        Observed live (1a030c): a description calling something a
+        "critical flaw" published under ``minor/maintainability``.
+        The mismatch is a fabrication signal, so it is logged loudly.
+        """
+        description_lower = description.lower()
+        intense = any(
+            word in description_lower
+            for word in ("critical", "severe", "crash", "dangerous")
+        )
+        if intense and severity in (ItemSeverity.INFO, ItemSeverity.MINOR):
+            logger.warning(
+                "Severity/intensity mismatch: description claims "
+                "critical impact but severity is %s — %s",
+                severity.value,
+                description[:80],
+            )

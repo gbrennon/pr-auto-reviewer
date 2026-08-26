@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.forgejo_api_url_normalizer import (
     ForgejoApiUrlNormalizer,
@@ -93,7 +96,10 @@ class ConfigBuilder:
         llm_max_turns: int = 10,
         advisor_max_blocks: int = 2,
         review_max_conversations: int = 48,
+        llm_call_budget: int = 300,
+        advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
     ) -> Config:
+        granularity = AdvisorGranularity.parse(advisor_granularity)
         platform_mode_raw = (
             self._get(source, "PLATFORM_MODE")
             or self._get(source, "FORGEJO_MODE")
@@ -178,6 +184,8 @@ class ConfigBuilder:
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            llm_call_budget=llm_call_budget,
+            advisor_granularity=granularity,
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,

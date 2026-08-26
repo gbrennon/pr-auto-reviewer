@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from tests.fakes.fake_repo_update_tracker import FakeRepoUpdateTracker
 
 

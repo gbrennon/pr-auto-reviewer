@@ -1,6 +1,6 @@
 """JsonFilePullRequestRepository — persistence adapter for PullRequest aggregate.
 
-Implements PullRequestRepository. Replaces the STATE_FILE bash script approach
+Implements PullRequestRepositoryPort. Replaces the STATE_FILE bash script approach
 with atomic writes and structured deserialization.
 """
 
@@ -12,8 +12,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from ...application.ports.outbound.pull_request_repository import (
-    PullRequestRepository,
+from ...application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
 )
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -75,7 +75,7 @@ def _deserialize_review(raw: dict) -> CodeReview:
         items=items,
     )
 
-class JsonFilePullRequestRepository(PullRequestRepository):
+class JsonFilePullRequestRepository(PullRequestRepositoryPort):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
 
     Atomic writes: writes to a .tmp sibling file, then os.replace() to avoid

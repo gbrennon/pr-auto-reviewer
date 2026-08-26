@@ -21,12 +21,13 @@ class ConversationGuardrails:
     max_unparseable_responses: int = 3
     exploration_required: bool = True
     max_tool_calls: int = 8
+    max_demands: int = 2
 
+    demands_issued: int = 0
     turn: int = 0
     consecutive_empty: int = 0
     consecutive_unparseable: int = 0
     tool_calls: int = 0
-    exploration_demanded: bool = False
 
     def has_turns_remaining(self) -> bool:
         """Return whether the conversation may issue another turn."""
@@ -80,20 +81,24 @@ class ConversationGuardrails:
         more tool calls.
         """
         return self.tool_calls >= self.max_tool_calls
-
     def judge_verdict(
         self,
     ) -> tuple[ConversationDecision, ConversationGuardrails]:
         """Decide whether to accept a verdict or demand exploration first.
 
-        Accepts the verdict when the model already explored the repository or
-        when exploration was already demanded once. Otherwise demands
-        exploration exactly once, guaranteeing the loop can never spin forever
-        on a model that will not emit tool calls.
+        Accepts the verdict when the model already explored the repository
+        (``tool_calls > 0``) or when ``exploration_required`` is False.
+        Otherwise demands exploration up to ``max_demands`` times. If the
+        model refuses every demand (re-emits a verdict without any tool
+        call), the phase is aborted.
         """
         if not self.exploration_required:
             return ConversationDecision.ACCEPT_VERDICT, self
-        if self.tool_calls > 0 or self.exploration_demanded:
+        if self.tool_calls > 0:
             return ConversationDecision.ACCEPT_VERDICT, self
-        next_state = replace(self, exploration_demanded=True)
+        if self.demands_issued >= self.max_demands:
+            return ConversationDecision.REFUSED_EXPLORATION, self
+        next_state = replace(
+            self, demands_issued=self.demands_issued + 1,
+        )
         return ConversationDecision.DEMAND_EXPLORATION, next_state

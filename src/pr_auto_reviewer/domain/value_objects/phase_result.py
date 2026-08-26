@@ -22,4 +22,7 @@ class PhaseResult:
     llm_summary: str = ""
     llm_suggestions: list[dict[str, str]] = field(default_factory=list)
     llm_praise: list[dict[str, str]] = field(default_factory=list)
+    turn_count: int = 0
+    read_file_calls: int = 0
+    run_snippet_calls: int = 0
     skip_reasons: list[str] = field(default_factory=list)

@@ -16,6 +16,7 @@ from pr_auto_reviewer.presentation.composition_root import (
     ApplicationComponents,
     CompositionRoot,
 )
+from tests.fakes.fake_notifier import FakeNotifier
 
 
 class TestCompositionRoot:
@@ -53,6 +54,24 @@ class TestCompositionRoot:
 
     def test_container_is_exposed(self, _root):
         assert _root.container is not None
+
+    def test_components_notifier_uses_injected_override(self, monkeypatch, _fake_config):
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container.load_config",
+            lambda: _fake_config,
+        )
+        fake_notifier = FakeNotifier()
+
+        root = CompositionRoot(notifier=fake_notifier)
+
+        assert root.components.notifier is fake_notifier
+
+    def test_components_notifier_falls_back_to_container_notifier(self, _root):
+        assert _root.components.notifier is not None
 
     @pytest.fixture
     def _fake_config(self) -> Config:

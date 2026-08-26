@@ -12,20 +12,24 @@ from typing import TYPE_CHECKING, Any
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
-from pr_auto_reviewer.application.services.event_logging_handler import (
-    EventLoggingHandler,
+from pr_auto_reviewer.application.services.event_logging_handler_service import (
+    EventLoggingHandlerService,
 )
-from pr_auto_reviewer.application.services.finding_aggregator import (
-    FindingAggregator,
+from pr_auto_reviewer.application.services.finding_aggregator_service import (
+    FindingAggregatorService,
 )
-from pr_auto_reviewer.application.services.finding_verifier import (
-    FindingVerifier,
+from pr_auto_reviewer.application.services.finding_verifier_service import (
+    FindingVerifierService,
 )
-from pr_auto_reviewer.application.services.multi_phase_review_orchestrator import (
-    MultiPhaseReviewOrchestrator,
+from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
+    MultiPhaseReviewOrchestratorService,
 )
-from pr_auto_reviewer.application.services.phase_advisor import PhaseAdvisor
-from pr_auto_reviewer.application.services.phase_manager import PhaseManager
+from pr_auto_reviewer.application.services.phase_advisor_service import (
+    PhaseAdvisorService,
+)
+from pr_auto_reviewer.application.services.phase_manager_service import (
+    PhaseManagerService,
+)
 from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
@@ -68,6 +72,9 @@ from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
 )
 from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
@@ -193,8 +200,8 @@ if TYPE_CHECKING:
     from pr_auto_reviewer.application.ports.outbound.prompt_renderer_port import (
         PromptRendererPort,
     )
-    from pr_auto_reviewer.application.ports.outbound.pull_request_repository import (
-        PullRequestRepository,
+    from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+        PullRequestRepositoryPort,
     )
     from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
         RepositoryContextPort,
@@ -208,7 +215,7 @@ if TYPE_CHECKING:
 class CoreServices:
     """All core (non-platform-specific) services."""
 
-    pr_repository: PullRequestRepository
+    pr_repository: PullRequestRepositoryPort
     llm_review: LlmReviewPort
     command_bus: CommandBusPort
     conversation_logger: MarkdownConversationLogger
@@ -218,6 +225,7 @@ class CoreServices:
     fragment_renderer: PromptRendererPort
     fragment_max_tokens: int | None
     review_context_factory: ReviewContextFactoryPort
+    conversation_service: AgentConversationService
 
 
 
@@ -243,26 +251,32 @@ def wire_core_services(
         host=config.llm_host,
         timeout=config.ollama_timeout,
         max_retries=config.llm_max_retries,
+        max_llm_calls=config.llm_call_budget,
     )
     command_bus = InMemoryCommandBus()
     conversation_logger = MarkdownConversationLogger(
         base_dir=Path(config_dir) / "conversations"
     )
     turn_parser = TurnParserService(ReviewResponseParser())
-    advisor = PhaseAdvisor(chat_port=chat_client, command_bus=command_bus)
+    advisor = PhaseAdvisorService(chat_port=chat_client, command_bus=command_bus)
+    turn_observer = (
+        advisor
+        if config.advisor_granularity is AdvisorGranularity.TURN
+        else None
+    )
     conversation_service = AgentConversationService(
         chat_port=chat_client,
         command_bus=command_bus,
         conversation_logger=conversation_logger,
         max_turns=config.llm_max_turns,
-        turn_observer=advisor,
+        turn_observer=turn_observer,
         max_advisor_blocks=config.advisor_max_blocks,
     )
     verify_prompt_path = _PHASE_PROMPT_DIR / "verify-findings.md"
     verify_prompt = ReviewResponseParser.strip_frontmatter(
         verify_prompt_path.read_text()
     )
-    verifier = FindingVerifier(
+    verifier = FindingVerifierService(
         chat_port=chat_client,
         verify_prompt=verify_prompt,
         tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
@@ -271,15 +285,15 @@ def wire_core_services(
         command_bus=command_bus,
         max_turns=config.llm_max_turns,
     )
-    aggregator = FindingAggregator(ReasonFactory())
-    orchestrator = MultiPhaseReviewOrchestrator(
+    aggregator = FindingAggregatorService(ReasonFactory())
+    orchestrator = MultiPhaseReviewOrchestratorService(
         command_bus=command_bus,
         tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(
             repo_path, changed_files=changed_files, base_sha=base_sha
         ),
         max_conversations=config.review_max_conversations,
         advisor=advisor,
-        manager=PhaseManager(chat_port=chat_client, command_bus=command_bus),
+        manager=PhaseManagerService(chat_port=chat_client, command_bus=command_bus),
     )
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
@@ -290,7 +304,7 @@ def wire_core_services(
     )
     command_bus.register(VerifyFindingsCommand, verifier.execute)
     command_bus.register(ParseReviewTurnCommand, turn_parser.execute)
-    event_logger = EventLoggingHandler(exchange_logger=conversation_logger)
+    event_logger = EventLoggingHandlerService(exchange_logger=conversation_logger)
     command_bus.register(AgentExchangeEvent, event_logger.handle_agent_exchange)
     command_bus.register(
         ReviewTurnParsedEvent, event_logger.handle_review_turn_parsed
@@ -351,4 +365,5 @@ def wire_core_services(
         fragment_renderer=fragment_renderer,
         fragment_max_tokens=fragment_max_tokens,
         review_context_factory=review_context_factory,
+        conversation_service=conversation_service,
     )

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.presentation.ports import PrListerPort
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
-from pr_auto_reviewer.presentation.ports import OpenPullRequest
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 
 
 class FakeGithubPrLister(PrListerPort):

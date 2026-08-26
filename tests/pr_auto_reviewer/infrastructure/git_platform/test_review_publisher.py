@@ -1,10 +1,10 @@
 """Tests for GitReviewPublisherAdapter using fixture data."""
 
-import pytest
-import requests
 from pathlib import Path
 
-from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+import pytest
+import requests
+
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
@@ -14,7 +14,9 @@ from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
-from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import ReviewBodyRenderer
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
+)
 
 GitReviewPublisherAdapter = GithubReviewPublisher
 format_review_body = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates")).render

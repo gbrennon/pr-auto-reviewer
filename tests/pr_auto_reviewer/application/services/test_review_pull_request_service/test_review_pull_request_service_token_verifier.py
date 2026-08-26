@@ -1,0 +1,146 @@
+from ._helpers import *
+
+
+class TestReviewPullRequestServiceTokenVerifier:
+    def test_execute_with_token_verifier(
+        self, mock_token_verifier: MagicMock,
+        mock_pr_repository: MagicMock,
+        mock_changeset_fetcher: MagicMock,
+        mock_review_context_factory: MagicMock,
+        mock_llm_review: MagicMock,
+        mock_review_publisher: MagicMock,
+    ):
+        cmd = _cmd()
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_llm_review.review_prompt.return_value = _review(ReviewVerdict.APPROVED)
+
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            token_verifier=mock_token_verifier,
+        )
+
+        service.execute(cmd)
+
+        mock_token_verifier.verify.assert_called_with(cmd.pr_id)
+
+    def test_single_turn_review_when_no_command_bus(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """Test review flow when no command_bus is available (single-turn review)."""
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=None,  # No command bus → single-turn review
+        ).execute(cmd)
+
+        mock_changeset_fetcher.fetch.assert_called_once()
+        mock_review_context_factory.build.assert_called_once()
+        mock_llm_review.review_prompt.assert_called_once()
+        mock_review_publisher.publish.assert_called_once()
+        mock_pr_repository.save.assert_called_once()
+        assert mock_pr_repository.save.call_args.args[0].head_sha == cmd.head_sha
+
+    def test_multi_phase_without_plan_falls_back_to_single_turn(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """A command bus with no injected plan must not run empty-prompt phases."""
+        from unittest.mock import MagicMock
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            diff_content=(
+                "diff --git a/src/a.py b/src/a.py\n"
+                "+++ b/src/a.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            ),
+            clone_path="/repos/owner_repo_42",
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        command_bus = MagicMock()
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+        ).execute(cmd)
+
+        mock_llm_review.review_prompt.assert_called_once()
+        command_bus.dispatch.assert_not_called()
+
+    def test_multi_phase_dispatch_carries_base_sha(
+            self, mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        """The PR merge-base is forwarded into the RunMultiPhaseReviewCommand."""
+        from unittest.mock import MagicMock
+
+        from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+            RunMultiPhaseReviewCommand,
+        )
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            base_sha=CommitSha(value="d896687cafc093f113ade5444f02df98fcfc9042"),
+            diff_content=(
+                "diff --git a/src/a.py b/src/a.py\n"
+                "+++ b/src/a.py\n"
+                "@@ -0,0 +1 @@\n"
+                "+x = 1\n"
+            ),
+            clone_path="/repos/owner_repo_42",
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        command_bus = MagicMock()
+        command_bus.dispatch.return_value = _review(ReviewVerdict.APPROVED)
+        plan = ReviewPlan(methodology="sub-agent-multi-phase", phases=[])
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=plan,
+        ).execute(cmd)
+
+        dispatch_args, _ = command_bus.dispatch.call_args
+        dispatched = dispatch_args[0]
+        assert isinstance(dispatched, RunMultiPhaseReviewCommand)
+        assert dispatched.base_sha == "d896687cafc093f113ade5444f02df98fcfc9042"
+        assert dispatched.repo_path == "/repos/owner_repo_42"
+

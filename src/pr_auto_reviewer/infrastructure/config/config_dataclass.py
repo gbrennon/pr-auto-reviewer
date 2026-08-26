@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
+    AdvisorGranularity,
+)
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
 )
@@ -37,6 +40,8 @@ class Config:
     llm_max_turns: int = 10
     advisor_max_blocks: int = 2
     review_max_conversations: int = 48
+    llm_call_budget: int = 300
+    advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE
     poll_interval: int = 60
     run_once: bool = False
     repos_filter: str = ""

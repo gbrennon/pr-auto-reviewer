@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolver import (
-    HttpsCloneUrlResolver,
-    CloneUrlResolverPort,
-)
-
 
 class FakeHttpsCloneUrlResolver:
     """Fake HttpsCloneUrlResolver that returns pre-configured URLs."""

@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from tests.fakes.fake_github_issue_tracker import FakeGithubIssueTracker
 from pr_auto_reviewer.domain.entities.issue import Issue
-from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from tests.fakes.fake_github_issue_tracker import FakeGithubIssueTracker
 
 
 class TestFakeGithubIssueTracker:
