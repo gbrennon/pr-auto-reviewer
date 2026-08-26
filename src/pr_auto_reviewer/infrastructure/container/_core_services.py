@@ -75,6 +75,9 @@ from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.app_paths import (
+    AppPaths,
+)
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
@@ -239,12 +242,12 @@ def wire_core_services(
     """Build and wire all core (non-platform) services."""
 
     if _config_dir is not None:
-        config_dir = str(_config_dir)
+        artifact_root = Path(_config_dir)
     else:
-        config_dir = os.path.expanduser("~/.config/pr-auto-reviewer")
-    os.makedirs(config_dir, exist_ok=True)
+        artifact_root = AppPaths.state_dir()
+    os.makedirs(artifact_root, exist_ok=True)
     pr_repository = JsonFilePullRequestRepository(
-        os.path.join(config_dir, "state.json")
+        artifact_root / "state.json"
     )
     chat_client = OllamaChatClient(
         model=config.llm_model or "code-review:latest",
@@ -255,7 +258,7 @@ def wire_core_services(
     )
     command_bus = InMemoryCommandBus()
     conversation_logger = MarkdownConversationLogger(
-        base_dir=Path(config_dir) / "conversations"
+        base_dir=artifact_root / "conversations"
     )
     turn_parser = TurnParserService(ReviewResponseParser())
     advisor = PhaseAdvisorService(chat_port=chat_client, command_bus=command_bus)
