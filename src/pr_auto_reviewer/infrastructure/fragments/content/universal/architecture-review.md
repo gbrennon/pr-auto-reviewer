@@ -83,6 +83,8 @@ explicitly stated. Follow these rules:
    improvement spans the whole repository, use an empty `file` and describe
    the architectural direction.
 
-You MUST inspect the changed files with `read_file` before concluding. If you
-find nothing after inspection, return a verdict of `approved` with an empty
-`items` array and a reason describing what you inspected.
+You MUST inspect the changed files with `read_file` before concluding. For
+multi-file pull requests, inspect the modified components across the codebase to
+verify layer boundaries and decoupling. If you find nothing after inspection,
+return a verdict of `approved` with an empty `items` array and a reason
+describing what you inspected.
