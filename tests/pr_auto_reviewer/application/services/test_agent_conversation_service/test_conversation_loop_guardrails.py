@@ -1,6 +1,10 @@
 from ._helpers import *
 
 
+_CONVERSATION_LOGGER = (
+    "pr_auto_reviewer.application.services.agent_conversation_service"
+)
+
 class TestConversationLoopGuardrails:
     """Guardrail behaviour of the AgentConversationService loop."""
 
@@ -191,7 +195,7 @@ class TestConversationLoopGuardrails:
         messages = [
             ConversationMessage(role="user", content="test") for _ in range(2)
         ]
-        with caplog.at_level("DEBUG"):
+        with caplog.at_level("DEBUG", logger=_CONVERSATION_LOGGER):
             service._log_conversation_debug(
                 "test_phase", messages, 2, phase_result,
             )
@@ -209,9 +213,10 @@ class TestConversationLoopGuardrails:
         messages = [
             ConversationMessage(role="user", content="test") for _ in range(2)
         ]
-        service._log_conversation_debug(
-            "test-phase", messages, 1, phase_result,
-        )
+        with caplog.at_level("INFO", logger=_CONVERSATION_LOGGER):
+            service._log_conversation_debug(
+                "test-phase", messages, 1, phase_result,
+            )
         assert not any("Conversation:" in r.message for r in caplog.records)
 
     def test_run_empty_response_then_verd(
