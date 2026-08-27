@@ -36,8 +36,8 @@ class ReviewPublisherProcessor:
     ) -> ProcessedReview:
         non_blocking = [i for i in review.items if not i.is_blocking]
         comment_review = CodeReview(
-            verdict=ReviewVerdict.COMMENTED,
-            reason=self._reason_factory.make(non_blocking),
+            verdict=review.verdict,
+            reason=review.reason or self._reason_factory.make(non_blocking),
             summary=review.summary,
             items=non_blocking,
             suggestions=review.suggestions,
@@ -58,7 +58,7 @@ class ReviewPublisherProcessor:
         all_items = list(review.items)
         body_review = CodeReview(
             verdict=review.verdict,
-            reason=self._reason_factory.make(all_items),
+            reason=review.reason or self._reason_factory.make(all_items),
             summary=review.summary,
             items=all_items,
             suggestions=review.suggestions,
