@@ -1,6 +1,5 @@
 from ._helpers import *
 
-
 _OLLAMA_ADAPTER_LOGGER = (
     "pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter"
 )
