@@ -1172,7 +1172,7 @@ class ReviewResponseParser:
                     line="",
                     id="",
                     current_code="",
-                    suggested_fix=str(p.get("description", "")) if isinstance(p, dict) else p,
+                    suggested_fix="",
                 )
                 for p in data.get("praise", [])
                 if isinstance(p, (str, dict))
