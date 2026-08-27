@@ -1,5 +1,6 @@
-from ._helpers import *
+from typing import ClassVar
 
+from ._helpers import *
 
 class TestMultilangPromptContents:
     """Verify that FakeReviewContextFactory.build() received the correct
