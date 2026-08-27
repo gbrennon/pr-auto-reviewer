@@ -84,7 +84,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 )
                 result = outcome.review
                 dropped_findings = outcome.dropped_findings
-                if result.items:
+                if outcome.has_items:
                     return result
                 best_attempt_items = result.items
                 break
@@ -197,7 +197,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 previous_result, round_num + 1
             )
             try:
-                result = self._run_phases(
+                outcome = self._run_phases(
                     plan,
                     repo_path,
                     changed_files,
@@ -207,18 +207,26 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     existing_item_ids=existing_item_ids,
                     pr_identifier_service=pr_identifier_service,
                     review_session=review_session,
-                ).review
+                )
+                result = outcome.review
             except LlmUnavailableError:
                 logger.warning(
                     "Feedback round %d: LLM unavailable, returning best",
                     round_num + 1,
                 )
                 return best
-            if result.items:
+            if outcome.has_items:
                 logger.info(
                     "Feedback round %d produced %d items",
                     round_num + 1,
                     len(result.items),
+                )
+                return result
+            if outcome.is_clean_refutation:
+                logger.info(
+                    "Feedback round %d refuted all %d findings; returning result",
+                    round_num + 1,
+                    outcome.dropped_findings,
                 )
                 return result
             previous_result = result
@@ -420,7 +428,12 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         current_code=s.get("current_code", ""),
                         suggested_fix=s.get("suggested_fix", ""),
                     ))
-                for p in last_phase_result.llm_praise:
+                praise_entries: list[dict[str, str]] = []
+                for pr in phase_results.values():
+                    for p in pr.llm_praise:
+                        if p not in praise_entries:
+                            praise_entries.append(p)
+                for p in praise_entries:
                     praise_list.append(ReviewItem(
                         severity=ItemSeverity.INFO,
                         category=IssueCategory.GENERAL,
@@ -429,7 +442,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         line="",
                         id="",
                         current_code="",
-                        suggested_fix=p.get("description", ""),
+                        suggested_fix="",
                     ))
 
             skipped = [
@@ -530,7 +543,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         verdict = SubReviewGuardrails().verdict_for(review_items)
 
         dropped = previous_items - len(review_items)
-        if dropped and previous is not None:
+        if dropped and not review_items:
             reason = (
                 f"{dropped} finding(s) dropped because they did not survive "
                 "verification against source code."
@@ -539,6 +552,27 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 f"{dropped} of {previous_items} findings did not survive "
                 "verification against source code."
             )
+        elif dropped and review_items:
+            blocking = [item for item in review_items if item.is_blocking]
+            target = blocking[0] if blocking else review_items[0]
+            desc = target.description.strip()
+            sev = str(target.severity).lower()
+            file_path = target.file_path.strip()
+            file_str = f" in {file_path}" if file_path else ""
+            reason = f"Identified {sev} issue{file_str}: {desc}" if desc else "Findings verified against source code."
+            files = sorted({item.file_path for item in review_items if item.file_path})
+            cat_list = sorted({str(item.category) for item in review_items if item.category})
+            cat_str = f" ({', '.join(cat_list)})" if cat_list else ""
+            if blocking:
+                summary = (
+                    f"Verified {len(review_items)} finding(s){cat_str} with {len(blocking)} blocking issue(s) "
+                    f"({dropped} dropped during verification)."
+                )
+            else:
+                summary = (
+                    f"Verified {len(review_items)} non-blocking finding(s){cat_str} "
+                    f"({dropped} dropped during verification)."
+                )
         else:
             summary = (
                 previous.summary

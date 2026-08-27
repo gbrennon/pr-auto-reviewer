@@ -23,10 +23,8 @@ diff for a non-trivial change.
 
 ## METHODOLOGY
 
-1. Call `get_changed_files` once to obtain the authoritative list of changed
-   files — do not rely on `git status` or working-tree commands, because the
-   review clone is checked out at the PR head with a clean working tree
-2. For each changed file, use `read_file` to see the full file with surrounding context
+1. Inspect the changed files listed in the initial message using `read_file` to see the full file with surrounding context
+2. For multi-file pull requests, inspect each modified source module and its corresponding tests — do not stop after inspecting only one file
 3. Trace callers and callees that are also in the diff
 4. Check that new code handles None, empty inputs, and edge cases
 5. Verify that error paths return or raise, not silently continue
@@ -61,6 +59,7 @@ When your review is complete, respond with a single JSON object:
 }
 ```
 
-You MUST inspect the changed files with `read_file` before concluding. If you
-find nothing after inspection, return a verdict of `approved` with an empty
+You MUST inspect the changed files with `read_file` before concluding. For
+multi-file changes, inspect all core modified files and tests. If you find
+nothing after inspection, return a verdict of `approved` with an empty
 `items` array and a reason describing what you inspected.

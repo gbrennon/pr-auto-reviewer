@@ -69,6 +69,40 @@ class TestReviewPublisherProcessor:
         assert processed.body
         assert "number" not in processed.body
 
+    def test_comment_path_preserves_review_verdict_and_constructs_valid_codereview(
+        self,
+    ) -> None:
+        class FakeCommentMapper:
+            """Test double mapping any verdict to COMMENT."""
+
+            def map(self, verdict: ReviewVerdict) -> str:
+                return "COMMENT"
+
+        processor = ReviewPublisherProcessor(_BODY, FakeCommentMapper())
+        items = [_item(ItemSeverity.INFO, IssueCategory.STYLE)]
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="All checks passed.",
+            summary="Clean review.",
+            items=items,
+            model_used="test-model",
+        )
+        processed = processor.process(_PR_ID, review)
+        assert processed.is_comment_only is True
+        assert processed.verdict_event == "COMMENT"
+        assert processed.blocking_items == []
+
+    def test_process_preserves_custom_model_reason(self) -> None:
+        custom_reason = "Specific critical vulnerability in validator module."
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason=custom_reason,
+            summary="Summary text",
+            items=[_item(ItemSeverity.CRITICAL, IssueCategory.BUG)],
+            model_used="test-model",
+        )
+        processed = _processor().process(_PR_ID, review)
+        assert custom_reason in processed.body
 
 def _item(severity: ItemSeverity, category: IssueCategory) -> ReviewItem:
     return ReviewItem(

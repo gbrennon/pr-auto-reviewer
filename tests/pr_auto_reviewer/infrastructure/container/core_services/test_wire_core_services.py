@@ -244,3 +244,29 @@ class TestWireCoreServices:
         assert str(state_path).startswith(str(tmp_path))
         assert str(state_path).endswith("state.json")
 
+    def test_conversation_logger_transcripts_are_in_config_dir(
+        self,
+        forgejo_config: Config,
+        repo_context,
+        tmp_path,
+    ) -> None:
+        result = wire_core_services(forgejo_config, repo_context, _config_dir=tmp_path)
+
+        assert result.conversation_logger._base_dir == tmp_path / "conversations"
+
+
+    def test_default_artifact_root_when_config_dir_omitted_then_uses_app_paths_state_dir(
+        self,
+        forgejo_config: Config,
+        repo_context,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        """Verify artifact root defaults to AppPaths.state_dir() when _config_dir is None."""
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+
+        result = wire_core_services(forgejo_config, repo_context)
+
+        expected_state_dir = tmp_path / "pr-auto-reviewer"
+        assert result.pr_repository._file_path == expected_state_dir / "state.json"
+        assert result.conversation_logger._base_dir == expected_state_dir / "conversations"

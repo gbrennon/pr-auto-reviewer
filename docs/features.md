@@ -96,7 +96,7 @@ This document outlines what is currently implemented and what is planned.
 ### Security & Token Management
 
 - **Preflight Token Verification** — Verifies both owner and reviewer tokens have required scopes before each review
-- **Token Verification Caching** — Caches verified tokens to `~/.config/pr-auto-reviewer/verified-tokens.json`
+- **Token Verification Caching** — Caches verified tokens to `~/.cache/pr-auto-reviewer/verified-tokens.json`
 - **Rate Limit Tracking** — Tracks `x-ratelimit-*` headers, persists to disk, backs off before exhaustion
 - **Auth Header Format** — `Bearer` for GitHub, `token` for Forgejo/Codeberg
 - **Separate Owner/Reviewer Tokens** — Different tokens for reading vs writing

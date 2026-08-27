@@ -14,6 +14,7 @@ from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import
     TranscriptMetadata,
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.transcript_routing import PEER_PHASE_ROUTES
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class MarkdownConversationLogger(ConversationLoggerPort):
 
     def __init__(self, base_dir: Path | str | None = None) -> None:
         if base_dir is None:
-            base_dir = Path.home() / ".cache" / "pr-auto-reviewer" / "conversations"
+            base_dir = AppPaths.state_dir() / "conversations"
         self._base_dir = Path(base_dir)
 
     def _topic_for(self, phase_name: str, metadata: dict[str, Any]) -> str:

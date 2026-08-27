@@ -24,6 +24,9 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers.review_pha
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers.review_phase.unparseable_response_message_renderer import (
     UnparseableResponseMessageRenderer,
 )
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers.review_phase.suggestions_praise_message_renderer import (
+    SuggestionsPraiseMessageRenderer,
+)
 
 __all__ = [
     "AdvisorBlockMessageRenderer",
@@ -33,5 +36,6 @@ __all__ = [
     "ForceVerdictMessageRenderer",
     "InitialUserMessageRenderer",
     "RepeatedToolCallMessageRenderer",
+    "SuggestionsPraiseMessageRenderer",
     "UnparseableResponseMessageRenderer",
 ]

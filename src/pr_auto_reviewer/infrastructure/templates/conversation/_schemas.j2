@@ -41,7 +41,7 @@ object containing these keys:
   ]
 }
 ```
-Only include findings you can confirm from the files you actually read.
+If there are no actionable issues, suggestions, or praise, emit empty arrays: "items": [], "suggestions": [], "praise": []. Never include placeholder paths (e.g. path/to/file, src/main.py). Only include findings you can confirm from the files you actually read.
 {% endmacro %}
 
 {% macro advisor_turn_grade_schema() %}Respond with a single JSON object:
@@ -64,4 +64,29 @@ Only include findings you can confirm from the files you actually read.
 {% endmacro %}
 
 {% macro verifier_schema() %}For a tool request, respond with a single JSON object containing `action` and `args` keys. When verification is complete, respond with a single JSON object containing a `results` array, one entry per finding with a `finding_index` and a boolean `verified` flag.
+{% endmacro %}
+
+{% macro suggestions_praise_schema() %}Provide architectural improvement suggestions and praise for this pull request based on your exploration:
+
+- **suggestions**: Non-blocking improvements to architectural style and design — such as reducing code size, improving class composition, extracting abstractions, simplifying control flow, or decoupling modules. (Do NOT report bugs or duplicates of issues).
+- **praise**: Highlight specifically where this pull request excelled — good patterns, clean abstractions, solid error handling, effective testing, or elegant design.
+
+Respond with a single JSON object containing `suggestions` and `praise` keys:
+```json
+{
+  "suggestions": [
+    {
+      "file": "path/to/file",
+      "description": "Concrete architectural improvement (e.g. composition, reducing code size, decoupling)"
+    }
+  ],
+  "praise": [
+    {
+      "file": "path/to/file",
+      "description": "Specific praise highlighting what was done well"
+    }
+  ]
+}
+```
+If there are no suggestions or praise, emit empty arrays: "suggestions": [], "praise": []. Never include placeholder paths.
 {% endmacro %}

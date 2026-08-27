@@ -30,11 +30,12 @@ __PREVIOUS_FINDINGS__
 
 ## METHODOLOGY
 
-1. Call `get_changed_files` to know what this PR changed, then trace their callers across the full codebase
-2. Search for all importers of modified symbols
-3. Check that shared interfaces/contracts are honored by all implementations
-4. Inspect test files for coverage gaps on changed behavior
-5. Verify configuration and wiring paths for new or modified code
+1. Inspect the changed files across the repository using `read_file` and `search_codebase`, tracing their callers and importers across modules
+2. For multi-file pull requests, inspect the modified implementation modules, their configuration/wiring, and their tests
+3. Search for all importers of modified symbols
+4. Check that shared interfaces/contracts are honored by all implementations
+5. Inspect test files for coverage gaps on changed behavior
+6. Verify configuration and wiring paths for new or modified code
 
 ## OUTPUT FORMAT
 
@@ -66,6 +67,7 @@ When your review is complete, respond with a single JSON object:
 }
 ```
 
-You MUST inspect the changed files with `read_file` before concluding. If you
-find nothing after inspection, return a verdict of `approved` with an empty
-`items` array and a reason describing what you inspected.
+You MUST inspect the changed files with `read_file` before concluding. For
+multi-file changes, explore across the modified subsystems rather than a single
+file. If you find nothing after inspection, return a verdict of `approved` with
+an empty `items` array and a reason describing what you inspected.
