@@ -84,13 +84,28 @@ TOTAL: 2,269 passed in 16.49s (94% coverage)
 exit=0
 ```
 
-### 4.2 Live Review Smoke Test
-A live review was executed against PR #157 (`feat/conversation-improvement`) with `REVIEW_OUTPUT=terminal`:
-- **Phase 1 (Bug Hunt — Diff)**: Explored modified files on Turn 1; cleanly approved with 0 false positives and 0 placeholder paths.
-- **Phase 2 (Bug Hunt — Branch)**: Explored `git_platform_http_client.py` and `config.py`; approved with praise for XDG base directory conformance.
-- **Phase 3 (Architecture Review)**: Executed `run_git diff --name-only` across all 25 files; when the advisor flagged a hallucinated Java inquiry with an F-grade, the Manager briefed an improved prompt, Phase 3 restarted, inspected actual files, and concluded with a clean approved verdict.
-- **Publisher**: Emitted human-readable terminal review with grounded praise and suggestions.
+### 4.2 Multi-Round Live Verification (5 Consecutive Live Review Runs)
 
+As requested, 5 consecutive live review verification rounds were executed against PR #157 using the local Ollama LLM (`code-review:latest`), auditing conversation transcript files from the XDG state directory (`~/.local/state/pr-auto-reviewer/conversations/gbrennon_pr-auto-reviewer_157/<session_id>/`):
+
+| Round | Session Timestamp | Process Exit Code | Conversation Files Audited | Verified Behaviors & Outcomes |
+|---|---|---|---|---|
+| **Round 1** | `20260826_233625` | `0` | `00-planning.md`<br>`01-bug-hunt-diff.md`<br>`02-bug-hunt-branch.md`<br>`03-architecture-review.md`<br>`05-verifier.md` | • Untruncated manager prompts in `00-planning.md`.<br>• Multi-file exploration (`git_platform_http_client.py`, `config.py`).<br>• Synthetic filter dropped 9 unverified candidates in `05-verifier.md`.<br>• Published `approved` verdict with 0 false positives. |
+| **Round 2** | `20260826_234835` | `0` | `00-planning.md`<br>`01-bug-hunt-diff.md`<br>`02-bug-hunt-branch.md`<br>`03-architecture-review.md`<br>`05-verifier.md` | • Repeated tool calls reprompted to inspect `app_paths.py`.<br>• Clean approval on diff and branch phases.<br>• Verifier dropped synthetic items; clean `approved` published. |
+| **Round 3** | `20260827_000024` | `0` | `00-planning.md`<br>`01-bug-hunt-diff.md`<br>`02-bug-hunt-branch.md`<br>`03-architecture-review.md`<br>`05-verifier.md` | • Anti-hallucination explore-before-verdict caught zero-exploration attempt and forced phase restart.<br>• Resumed exploration on `config.py` and concluded cleanly. |
+| **Round 4** | `20260827_001217` | `0` | `00-planning.md`<br>`01-bug-hunt-diff.md`<br>`02-bug-hunt-branch.md`<br>`03-architecture-review.md`<br>`05-verifier.md` | • Untruncated planning prompts preserved across all turns.<br>• Multi-file inspection on `app_paths.py` and `git_platform_http_client.py`.<br>• Clean exit code 0 and review published. |
+| **Round 5** | `20260827_002404` | `0` | `00-planning.md`<br>`01-bug-hunt-diff.md`<br>`02-bug-hunt-branch.md`<br>`03-architecture-review.md`<br>`05-verifier.md` | • Full 3-phase review sequence executed.<br>• Advisor and manager re-prompt loop properly propagated improved instructions.<br>• Clean exit code 0 and review published. |
+
+### 4.3 Conversation Storage Structure & Verification
+Per `AppPaths.state_dir()` (`src/pr_auto_reviewer/infrastructure/config/app_paths.py`) and `MarkdownConversationLogger` (`src/pr_auto_reviewer/infrastructure/conversation_logger.py`):
+- Base Directory: `$XDG_STATE_HOME/pr-auto-reviewer/conversations/` (default: `~/.local/state/pr-auto-reviewer/conversations/`)
+- PR Scoped Path: `<owner>_<repo>_<pr_number>/<session_timestamp>/`
+- Topics per Run:
+  1. `00-planning.md` — Manager planning and between-phase assignment briefs.
+  2. `01-bug-hunt-diff.md` — Phase 1 (Bug Hunt — Diff) exploration turns and verdicts.
+  3. `02-bug-hunt-branch.md` — Phase 2 (Bug Hunt — Branch) exploration turns and verdicts.
+  4. `03-architecture-review.md` — Phase 3 (Architecture Review) exploration turns and verdicts.
+  5. `05-verifier.md` — Finding Verifier execution and synthetic filter logs.
 ---
 
 ## 5. Conclusion
