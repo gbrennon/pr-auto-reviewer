@@ -232,4 +232,138 @@ class TestFindingAggregator:
         assert len(review.praise) == 1
         assert review.praise[0].description == "last phase praise"
         assert review.summary == "From last phase"
+
+    def test_phase_result_llm_reason_takes_precedence_over_factory(
+        self, mock_reason_factory,
+    ) -> None:
+        items = [_review_item("Off-by-one in loop")]
+        phase_result = PhaseResult(items=items, llm_reason="Deep model explanation")
+        mock_reason_factory.make.return_value = "Generic count reason"
+        aggregator = FindingAggregatorService(mock_reason_factory)
+
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(items=items, phase_result=phase_result, model_used="test model")
+        )
+
+        assert review.reason == "Deep model explanation"
         assert review.verdict == ReviewVerdict.APPROVED
+
+    def test_deduplicate_overlapping_code_snippets_keeps_higher_severity(
+        self, mock_reason_factory,
+    ) -> None:
+        item1 = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.CRITICAL,
+            category=IssueCategory.BUG,
+            file_path="src/validator.py",
+            line="42",
+            description="Intentional None attribute access bug",
+            current_code="        # BUG comment\n        _ = self_level.nonexistent_attribute",
+            suggested_fix="        if self_level is None:\n            raise ArchitectureError()",
+        )
+        item2 = ReviewItem(
+            id="item-2",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.MAINTAINABILITY,
+            file_path="src/validator.py",
+            line="42-61",
+            description="Unintentional exception raised by accessing nonexistent_attribute",
+            current_code="_ = self_level.nonexistent_attribute",
+            suggested_fix="if self_level is None:\n    raise ArchitectureError()",
+        )
+        aggregator = FindingAggregatorService(mock_reason_factory)
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(items=[item1, item2], model_used="test model")
+        )
+
+        assert len(review.items) == 1
+        assert review.items[0].severity == ItemSeverity.CRITICAL
+        assert review.items[0].category == IssueCategory.BUG
+        assert review.items[0].line == "42"
+
+    def test_deduplicate_overlapping_lines_keeps_higher_severity(
+        self, mock_reason_factory,
+    ) -> None:
+        item1 = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="src/validator.py",
+            line="10-15",
+            description="Style issue on lines 10-15",
+        )
+        item2 = ReviewItem(
+            id="item-2",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.STYLE,
+            file_path="src/validator.py",
+            line="12",
+            description="Major style violation on line 12",
+        )
+        aggregator = FindingAggregatorService(mock_reason_factory)
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(items=[item1, item2], model_used="test model")
+        )
+
+        assert len(review.items) == 1
+        assert review.items[0].severity == ItemSeverity.MAJOR
+
+    def test_praise_items_have_empty_suggested_fix(
+        self, mock_reason_factory,
+    ) -> None:
+        mock_reason_factory.make.return_value = "Stub reason"
+        phase_result = PhaseResult(
+            items=[],
+            llm_verdict="approved",
+            llm_praise=[
+                {
+                    "file": "src/validator.py",
+                    "description": "Clear error messages and explicit validation.",
+                }
+            ],
+        )
+        aggregator = FindingAggregatorService(mock_reason_factory)
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(items=[], phase_result=phase_result, model_used="test model")
+        )
+
+        assert len(review.praise) == 1
+        assert review.praise[0].description == "Clear error messages and explicit validation."
+        assert review.praise[0].suggested_fix == ""
+
+    def test_multi_phase_summary_synthesizes_all_blocking_and_categories(
+        self, mock_reason_factory,
+    ) -> None:
+        item1 = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.CRITICAL,
+            category=IssueCategory.BUG,
+            file_path="src/validator.py",
+            description="Critical bug in validator",
+        )
+        item2 = ReviewItem(
+            id="item-2",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.MAINTAINABILITY,
+            file_path="src/helper.py",
+            description="Minor maintainability in helper",
+        )
+        last_phase = PhaseResult(
+            items=[item2],
+            llm_summary="Identified 1 non-blocking finding(s) (maintainability) across 1 file(s).",
+            llm_reason="Minor maintainability issue.",
+        )
+        aggregator = FindingAggregatorService(mock_reason_factory)
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(
+                items=[item1, item2],
+                phase_result=last_phase,
+                model_used="test model",
+            )
+        )
+
+        assert len(review.items) == 2
+        assert "1 blocking across 2 file(s)" in review.summary
+        assert "Files: src/helper.py, src/validator.py" in review.summary
+        assert "Identified critical issue" in review.reason
+        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
