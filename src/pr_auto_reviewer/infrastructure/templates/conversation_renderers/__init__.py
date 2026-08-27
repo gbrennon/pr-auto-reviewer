@@ -31,6 +31,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers.review_pha
     ForceVerdictMessageRenderer,
     InitialUserMessageRenderer,
     RepeatedToolCallMessageRenderer,
+    SuggestionsPraiseMessageRenderer,
     UnparseableResponseMessageRenderer,
 )
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers.verifier import (
@@ -58,6 +59,7 @@ __all__ = [
     "ManagerBriefUserRenderer",
     "PhasePromptRenderer",
     "RepeatedToolCallMessageRenderer",
+    "SuggestionsPraiseMessageRenderer",
     "UnparseableResponseMessageRenderer",
     "VerifyEmptyResponseRenderer",
     "VerifyInitialUserRenderer",
