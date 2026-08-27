@@ -29,7 +29,7 @@ from tests.fakes import (
     FakeReviewPublisher,
 )
 
-FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
+FIXTURES = next(p for p in Path(__file__).resolve().parents if p.name == "tests") / "fixtures"
 
 
 def _load(relative: str) -> str:
