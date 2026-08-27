@@ -1,6 +1,5 @@
 from ._helpers import *
 
-
 _CONVERSATION_LOGGER = (
     "pr_auto_reviewer.application.services.agent_conversation_service"
 )
@@ -27,7 +26,7 @@ class TestConversationLoopGuardrails:
         result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
-        assert mock_chat_port.send.call_count == 3
+        assert mock_chat_port.send.call_count == 4
         second_messages = mock_chat_port.send.call_args_list[1][0][0]
         demand_seen = any(
             EXPLORATION_DEMAND in message.content
@@ -80,7 +79,7 @@ class TestConversationLoopGuardrails:
         result = service.execute(_command(tool_execution))
 
         assert result.llm_verdict == "approved"
-        assert mock_chat_port.send.call_count == 2
+        assert mock_chat_port.send.call_count == 3
         sent_messages = [
             message
             for call in mock_chat_port.send.call_args_list
@@ -237,7 +236,7 @@ class TestConversationLoopGuardrails:
         result = service.execute(_command(_StubToolExecution()))
 
         assert result.llm_verdict == "approved"
-        assert mock_chat_port.send.call_count == 3
+        assert mock_chat_port.send.call_count == 4
 
     def test_run_unparseable_response_then_verd(
         self, mock_chat_port, mock_command_bus,
@@ -256,9 +255,8 @@ class TestConversationLoopGuardrails:
             max_turns=10,
         )
         result = service.execute(_command(_StubToolExecution()))
-
         assert result.llm_verdict == "approved"
-        assert mock_chat_port.send.call_count == 3
+        assert mock_chat_port.send.call_count == 4
     def test_run_tool_call_then_verd(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
@@ -399,7 +397,7 @@ class TestConversationLoopGuardrails:
             kind=TurnKind.TOOL_CALL, tool_call=repeated,
         )
         mock_chat_port.send.side_effect = [
-            "first", "second", "third", "verdict",
+            "first", "second", "third",
         ]
         mock_command_bus.dispatch.side_effect = [
             repeated_parse,
@@ -467,4 +465,120 @@ class TestConversationLoopGuardrails:
             for message in final_messages
         )
         assert nudge_count == 1
+
+    def test_praise_and_suggestions_preserved_when_explore_before_verdict_reprompts(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """Praise and suggestions from an early verdict turn survive after forced exploration."""
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="ok", data={"content": "file content"},
+        )
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=6,
+        )
+        early_verdict = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            metadata={
+                "verdict": "approved",
+                "praise": [{"file": "src/a.py", "description": "Good structure"}],
+                "suggestions": [{"file": "src/a.py", "description": "Add docstrings"}],
+            },
+        )
+        tool_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL,
+            tool_call=ToolCall(
+                tool_name="read_file",
+                arguments={"file": "src/a.py"},
+            ),
+        )
+        final_verdict = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            metadata={
+                "verdict": "approved",
+                "praise": [],
+                "suggestions": [],
+            },
+        )
+        mock_chat_port.send.side_effect = [
+            "verdict-early", "tool-call", "verdict-final",
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            early_verdict, None,
+            tool_parse, None,
+            final_verdict, None, None,
+        ]
+
+        result = service.execute(_command(tool_execution))
+
+        assert result.llm_verdict == "approved"
+        assert len(result.llm_praise) == 1
+        assert result.llm_praise[0]["description"] == "Good structure"
+        assert len(result.llm_suggestions) == 1
+        assert result.llm_suggestions[0]["description"] == "Add docstrings"
+
+    def test_dedicated_suggestions_and_praise_turn_populates_phase_result(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """Dedicated turn following an accepted verdict populates suggestions and praise."""
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        service = AgentConversationService(
+            chat_port=mock_chat_port,
+            command_bus=mock_command_bus,
+            max_turns=6,
+        )
+        tool_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL,
+            tool_call=ToolCall(
+                tool_name="read_file",
+                arguments={"file": "src/a.py"},
+            ),
+        )
+        verdict_parse = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            raw_items=[],
+            metadata={
+                "verdict": "approved",
+                "reason": "Clean code",
+                "summary": "Looks good",
+                "praise": [],
+                "suggestions": [],
+            },
+        )
+        suggestions_praise_parse = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            raw_items=[],
+            metadata={
+                "praise": [{"file": "src/a.py", "description": "Excellent error handling"}],
+                "suggestions": [{"file": "src/a.py", "description": "Reduce method complexity by composing validator class"}],
+            },
+        )
+        mock_chat_port.send.side_effect = [
+            "tool-call", "verdict", "suggestions-and-praise",
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            tool_parse, None,
+            verdict_parse, None,
+            suggestions_praise_parse,
+            None,
+        ]
+
+        result = service.execute(_command(tool_execution))
+
+        assert result.llm_verdict == "approved"
+        assert len(result.llm_praise) == 1
+        assert result.llm_praise[0]["description"] == "Excellent error handling"
+        assert len(result.llm_suggestions) == 1
+        assert "composing validator class" in result.llm_suggestions[0]["description"]
+        # Verify prompt for suggestions & praise was sent
+        sent_prompts = [
+            msg.content
+            for call in mock_chat_port.send.call_args_list
+            for msg in call[0][0]
+        ]
+        assert any("architectural style" in prompt for prompt in sent_prompts)
 
