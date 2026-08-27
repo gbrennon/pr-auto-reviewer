@@ -66,6 +66,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
     ForceVerdictMessageRenderer,
     InitialUserMessageRenderer,
     RepeatedToolCallMessageRenderer,
+    SuggestionsPraiseMessageRenderer,
     UnparseableResponseMessageRenderer,
 )
 
@@ -112,7 +113,7 @@ class AgentConversationService(RunAgentConversationPort):
         self._repeated_tool_message = RepeatedToolCallMessageRenderer()
         self._force_verdict_message = ForceVerdictMessageRenderer()
         self._explore_message = ExploreBeforeVerdictMessageRenderer()
-
+        self._suggestions_praise_message = SuggestionsPraiseMessageRenderer()
     def execute(
         self, command: RunAgentConversationCommand
     ) -> PhaseResult:
@@ -247,6 +248,8 @@ class AgentConversationService(RunAgentConversationPort):
 
         guardrails = replace(self._guardrails)
         seen_tool_calls: set[tuple[str, str]] = set()
+        accumulated_praise: list[dict[str, Any]] = []
+        accumulated_suggestions: list[dict[str, Any]] = []
         self._consecutive_blocks = 0
         verdict_nudged = False
         read_file_count = 0
@@ -279,10 +282,16 @@ class AgentConversationService(RunAgentConversationPort):
             self._publish(ReviewTurnParsedEvent(
                 turn_number=guardrails.turn, result=parsed
             ))
+            if parsed.metadata:
+                if parsed.metadata.get("praise"):
+                    accumulated_praise = list(parsed.metadata["praise"])
+                if parsed.metadata.get("suggestions"):
+                    accumulated_suggestions = list(parsed.metadata["suggestions"])
             if self._turn_observer is not None and parsed.kind is not TurnKind.VERDICT:
                 directive = self._turn_observer.observe(
                     content, phase_name, review_session,
                     pr_identifier_service=self._derive_pr_identifier(repo_path),
+                    changed_files=changed_files,
                 )
                 if directive.blocks_output:
                     self._consecutive_blocks += 1
@@ -385,12 +394,38 @@ class AgentConversationService(RunAgentConversationPort):
                 decision, guardrails = guardrails.judge_verdict()
                 if decision is ConversationDecision.ACCEPT_VERDICT:
                     logger.debug("Got verdict at turn %d", guardrails.turn)
+                    if guardrails.has_turns_remaining():
+                        messages.append(self._suggestions_praise_message.render())
+                        guardrails = guardrails.advance_turn()
+                        try:
+                            sp_content = self._chat_port.send(messages)
+                        except (StopIteration, Exception) as e:
+                            logger.debug("Suggestions/praise turn skipped: %s", e)
+                            sp_content = None
+                        if sp_content:
+                            messages.append(ConversationMessage(
+                                role="assistant", content=sp_content
+                            ))
+                            sp_parsed = self._command_bus.dispatch(
+                                ParseReviewTurnCommand(content=sp_content)
+                            )
+                            if sp_parsed is not None and getattr(sp_parsed, "metadata", None):
+                                new_praise = sp_parsed.metadata.get("praise") or []
+                                for p in new_praise:
+                                    if p not in accumulated_praise:
+                                        accumulated_praise.append(p)
+                                new_suggestions = sp_parsed.metadata.get("suggestions") or []
+                                for s in new_suggestions:
+                                    if s not in accumulated_suggestions:
+                                        accumulated_suggestions.append(s)
                     phase_result = self._build_phase_result(
                         parsed, repo_path, changed_files,
                         turn_count=guardrails.turn,
                         read_file_calls=read_file_count,
                         run_snippet_calls=run_snippet_count,
                         existing_ids=existing_item_ids,
+                        accumulated_praise=accumulated_praise,
+                        accumulated_suggestions=accumulated_suggestions,
                     )
                     self._log_conversation(
                         phase_name, messages, guardrails.turn, phase_result,
@@ -445,6 +480,8 @@ class AgentConversationService(RunAgentConversationPort):
         turn_count: int = 0, read_file_calls: int = 0,
         run_snippet_calls: int = 0,
         existing_ids: frozenset[str] = frozenset(),
+        accumulated_praise: list[dict[str, Any]] | None = None,
+        accumulated_suggestions: list[dict[str, Any]] | None = None,
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
         raw_items = parsed.raw_items or []
@@ -453,7 +490,12 @@ class AgentConversationService(RunAgentConversationPort):
         review_items, skip_reasons = ReviewItemFactory().create(
             raw_items, repo_path, changed_files, existing_ids=existing_ids
         )
-        suggestions = list(metadata.get("suggestions", []))
+        raw_suggestions = (
+            metadata.get("suggestions")
+            or accumulated_suggestions
+            or []
+        )
+        suggestions = list(raw_suggestions)
         for s in suggestions:
             if not str(s.get("file", "")).strip():
                 s["file"] = self._find_mentioned_file(
@@ -462,8 +504,13 @@ class AgentConversationService(RunAgentConversationPort):
         suggestions = self._ground_cited_paths(
             suggestions, "suggestion", repo_path, changed_files,
         )
+        raw_praise = (
+            metadata.get("praise")
+            or accumulated_praise
+            or []
+        )
         praise = self._ground_cited_paths(
-            list(metadata.get("praise", [])), "praise",
+            list(raw_praise), "praise",
             repo_path, changed_files,
         )
         return PhaseResult(
