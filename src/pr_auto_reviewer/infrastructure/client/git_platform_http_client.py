@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +17,7 @@ from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
 from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import (
     RateLimitTracker,
 )
+from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 
 if TYPE_CHECKING:
     from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
@@ -42,8 +42,8 @@ class GitPlatformHttpClient:
         self._role = client_label
         self._token_resolver = token_resolver
         self._preflight_verifier = preflight_verifier
-        self._verified_cache_path = _verified_cache_path or Path(
-            os.path.expanduser("~/.config/pr-auto-reviewer/verified-tokens.json")
+        self._verified_cache_path = (
+            _verified_cache_path or AppPaths.cache_dir() / "verified-tokens.json"
         )
         self._verified_orgs: set[tuple[str, str]] = self._load_verified_cache()
         self._rate_tracker = RateLimitTracker(TokenSlug(token), platform_mode, client_label or "default")

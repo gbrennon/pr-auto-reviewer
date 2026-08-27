@@ -117,7 +117,7 @@ REVIEW_OUTPUT=terminal uv run python -m pr_auto_reviewer review -r owner/repo -p
 curl http://localhost:11434/api/tags
 
 # View state file
-cat ~/.config/pr-auto-reviewer/state.json | python3 -m json.tool
+cat ~/.local/state/pr-auto-reviewer/state.json | python3 -m json.tool
 
 # Check logs (if running as service)
 journalctl --user -u pr-auto-reviewer.service -f

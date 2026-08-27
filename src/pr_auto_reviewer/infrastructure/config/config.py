@@ -11,6 +11,9 @@ from dotenv import dotenv_values
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.app_paths import (
+    AppPaths,
+)
 from pr_auto_reviewer.infrastructure.config.config_builder import ConfigBuilder
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.environment_detector import (
@@ -50,11 +53,11 @@ class ConfigLoader:
     """Loads configuration with correct precedence for each environment.
 
     **Production** (installed via ``make install``):
-        Reads *only* from ``~/.config/pr-auto-reviewer/config``.
+        Reads *only* from ``<XDG_CONFIG_HOME>/pr-auto-reviewer/config``.
         Token values come exclusively from that file.
 
     **Development** (repo with ``.env`` file):
-        ``.env`` overrides ``~/.config/pr-auto-reviewer/config``.
+        ``.env`` overrides ``<XDG_CONFIG_HOME>/pr-auto-reviewer/config``.
         Token values always come from ``.env`` (or user config if not set).
 
     In **both** environments, command-line env vars from ``make`` or
@@ -75,9 +78,7 @@ class ConfigLoader:
         repo_root = RepoRoot.path()
         env = self._detector.detect()
 
-        user_config_path = os.path.expanduser(
-            "~/.config/pr-auto-reviewer/config"
-        )
+        user_config_path = str(AppPaths.config_dir() / "config")
         repo_env_path = repo_root / ".env"
 
         if env == "production":

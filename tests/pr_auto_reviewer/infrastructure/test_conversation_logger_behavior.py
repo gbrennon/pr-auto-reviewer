@@ -160,10 +160,12 @@ class TestMarkdownConversationLogger:
 
         assert "(truncated)" in path.read_text()
 
-    def test_log_default_dir_when_no_base_then_under_home_cache(self) -> None:
+    def test_log_default_dir_when_no_base_then_under_state_home(self) -> None:
         logger = MarkdownConversationLogger()
 
-        assert logger._base_dir.as_posix().endswith(".cache/pr-auto-reviewer/conversations")
+        assert logger._base_dir.as_posix().endswith(
+            ".local/state/pr-auto-reviewer/conversations"
+        )
 
     def test_log_writes_under_review_session_subdir(self, tmp_path) -> None:
         logger = MarkdownConversationLogger(tmp_path)

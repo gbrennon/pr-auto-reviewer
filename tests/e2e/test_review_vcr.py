@@ -21,7 +21,7 @@ def _cassette_name(scenario: ReviewScenario) -> str:
 @pytest.fixture
 def vcr_config(scenario: ReviewScenario):
     return {
-        "cassette_library_dir": "tests/e2e/cassettes/test_review_vcr",
+        "cassette_library_dir": "tests/e2e/cassettes/review_vcr",
         "match_on": ["method", "scheme", "host", "port", "path", "query"],
         "cassette_name": _cassette_name(scenario),
     }
@@ -64,7 +64,39 @@ class TestReviewFlowVCR:
         return FakeNotifier()
 
     @pytest.fixture
-    def components(self, scenario, monkeypatch, notifier: FakeNotifier):
+    def components(
+        self, scenario, monkeypatch, notifier: FakeNotifier, tmp_path: Path,
+    ):
+        """Bootstrap against temporary artifact homes.
+
+        A minimal synthetic config keeps machine settings (such as
+        ``DEBUG``, which flips process-wide logging) from leaking into
+        the test run. Cassettes carry no preflight ``GET /user``
+        recordings, so both token roles start pre-verified, mirroring
+        the cached state present when they were captured.
+        """
+        xdg_cache = tmp_path / "xdg-cache"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(xdg_cache))
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg-state"))
+        xdg_config = tmp_path / "xdg-config"
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+        config_file = xdg_config / "pr-auto-reviewer" / "config"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text("\n".join([
+            f"PLATFORM_MODE={scenario['platform']}",
+            "GITHUB_API_URL=https://api.github.com",
+            "GITHUB_OWNER_TOKEN=e2e-owner-token",
+            "GITHUB_REVIEWER_TOKEN=e2e-reviewer-token",
+            "GITHUB_REVIEWER_USERNAME=e2e-reviewer",
+            "OLLAMA_HOST=http://localhost:11434",
+            "OLLAMA_MODEL=code-review:latest",
+        ]) + "\n")
+        token_store = xdg_cache / "pr-auto-reviewer" / "verified-tokens.json"
+        token_store.parent.mkdir(parents=True, exist_ok=True)
+        token_store.write_text(json.dumps([
+            [scenario["owner"], "owner"],
+            [scenario["owner"], "reviewer"],
+        ]))
         monkeypatch.setenv("REVIEW_OUTPUT", scenario["review_output"])
         return bootstrap(notifier=notifier)
 

@@ -15,7 +15,8 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
     InitialUserMessageRenderer,
     PhasePromptRenderer,
     RepeatedToolCallMessageRenderer,
+    SuggestionsPraiseMessageRenderer,
     VerifyInitialUserRenderer,
 )
 
-__all__ = ['AdvisorBlockMessageRenderer', 'AdvisorTurnGradeUserRenderer', 'EmptyResponseMessageRenderer', 'ExploreBeforeVerdictMessageRenderer', 'FeedbackContextRenderer', 'ForceVerdictMessageRenderer', 'InitialUserMessageRenderer', 'PhasePromptRenderer', 'RepeatedToolCallMessageRenderer', 'VerifyInitialUserRenderer', 'annotations', 'jinja2', 'pytest']
+__all__ = ['AdvisorBlockMessageRenderer', 'AdvisorTurnGradeUserRenderer', 'EmptyResponseMessageRenderer', 'ExploreBeforeVerdictMessageRenderer', 'FeedbackContextRenderer', 'ForceVerdictMessageRenderer', 'InitialUserMessageRenderer', 'PhasePromptRenderer', 'RepeatedToolCallMessageRenderer', 'SuggestionsPraiseMessageRenderer', 'VerifyInitialUserRenderer', 'annotations', 'jinja2', 'pytest']

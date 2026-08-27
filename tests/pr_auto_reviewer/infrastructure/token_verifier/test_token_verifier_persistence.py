@@ -68,3 +68,15 @@ class TestTokenVerifierPersistence:
 
         assert len(owner._preflight_verifier.calls) == 1
 
+    def test_default_store_path_when_not_provided_then_uses_app_paths_cache_dir(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        """Verify default store path resolves to AppPaths.cache_dir() / 'verified-tokens.json'."""
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+        owner = TestTokenVerifierDelegatesToClients._client("owner")
+        reviewer = TestTokenVerifierDelegatesToClients._client("reviewer")
+
+        verifier = TokenVerifier(owner, reviewer, persist=False)
+
+        assert verifier._store_path == tmp_path / "pr-auto-reviewer" / "verified-tokens.json"
+

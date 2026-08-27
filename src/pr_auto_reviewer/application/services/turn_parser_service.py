@@ -126,45 +126,74 @@ class TurnParserService(ParseReviewTurnPort):
             logger.debug("Unparseable content (first 2000 chars): %s", content[:2000])
             return TurnParseResult(kind=TurnKind.UNPARSEABLE)
 
-        if isinstance(parsed, dict) and "action" in parsed:
-            raw_args = parsed.get("args", "")
+        target = (
+            parsed.get("data")
+            if (isinstance(parsed, dict) and isinstance(parsed.get("data"), dict))
+            else parsed
+        )
+
+        if isinstance(target, dict) and "action" in target:
+            raw_args = target.get("args", "")
             if isinstance(raw_args, list):
                 args_str = " ".join(str(a) for a in raw_args)
             elif isinstance(raw_args, dict):
                 args_str = self._extract_dict_args(
-                    str(parsed["action"]), raw_args
+                    str(target["action"]), raw_args
                 )
             else:
                 args_str = str(raw_args)
             return TurnParseResult(
                 kind=TurnKind.TOOL_CALL,
                 tool_call=ToolCall(
-                    tool_name=str(parsed["action"]),
+                    tool_name=str(target["action"]),
                     arguments={"args": args_str},
                 ),
             )
 
-        if isinstance(parsed, dict) and "verdict" in parsed:
+        if isinstance(target, dict) and any(
+            k in target
+            for k in (
+                "verdict",
+                "items",
+                "issues",
+                "findings",
+                "suggestions",
+                "recommendations",
+                "improvements",
+                "recommended",
+                "praise",
+                "strengths",
+                "positives",
+            )
+        ):
             items_data = (
-                parsed.get("items")
-                or parsed.get("issues")
-                or parsed.get("findings")
+                target.get("items")
+                or target.get("issues")
+                or target.get("findings")
                 or []
             )
-            metadata = {
-                "verdict": self._verdict_str(parsed.get("verdict", "")),
-                "reason": str(
-                    parsed.get("reason") or parsed.get("summary", "")
-                ),
-                "summary": str(parsed.get("summary", "")),
-                "suggestions": self._suggestions_from(parsed),
-                "praise": self._praise_from(parsed),
-            }
             raw_items: list[dict[str, Any]] = []
             if isinstance(items_data, list):
                 for entry in items_data:
                     if isinstance(entry, dict):
                         raw_items.append(self._parser.normalize_item_dict(entry))
+            verdict_val = target.get("verdict", "")
+            if not verdict_val:
+                verdict_val = self._verdict_for_items(raw_items).value
+            metadata = {
+                "verdict": self._verdict_str(verdict_val),
+                "reason": str(
+                    target.get("reason")
+                    or target.get("summary", "")
+                    or self._reason_for_items(raw_items)
+                ),
+                "summary": str(
+                    target.get("summary", "")
+                    or self._summary_for_items(raw_items)
+                ),
+                "suggestions": self._suggestions_from(target),
+                "praise": self._praise_from(target),
+            }
             return TurnParseResult(
                 kind=TurnKind.VERDICT,
                 raw_items=raw_items,
@@ -200,15 +229,42 @@ class TurnParserService(ParseReviewTurnPort):
                 )
             except json.JSONDecodeError:
                 return self._extract_verdict_from_markdown(content, raw_items)
-        if isinstance(parsed, dict) and "verdict" in parsed:
+        target = (
+            parsed.get("data")
+            if (isinstance(parsed, dict) and isinstance(parsed.get("data"), dict))
+            else parsed
+        )
+        if isinstance(target, dict) and any(
+            k in target
+            for k in (
+                "verdict",
+                "suggestions",
+                "recommendations",
+                "improvements",
+                "recommended",
+                "praise",
+                "strengths",
+                "positives",
+                "reason",
+                "summary",
+            )
+        ):
+            verdict_val = target.get("verdict", "")
+            if not verdict_val:
+                verdict_val = self._verdict_for_items(raw_items).value
             return {
-                "verdict": self._verdict_str(parsed.get("verdict", "")),
+                "verdict": self._verdict_str(verdict_val),
                 "reason": str(
-                    parsed.get("reason") or parsed.get("summary", "")
+                    target.get("reason")
+                    or target.get("summary", "")
+                    or self._reason_for_items(raw_items)
                 ),
-                "summary": str(parsed.get("summary", "")),
-                "suggestions": self._suggestions_from(parsed),
-                "praise": self._praise_from(parsed),
+                "summary": str(
+                    target.get("summary", "")
+                    or self._summary_for_items(raw_items)
+                ),
+                "suggestions": self._suggestions_from(target),
+                "praise": self._praise_from(target),
             }
         return self._extract_verdict_from_markdown(content, raw_items)
 
@@ -246,18 +302,56 @@ class TurnParserService(ParseReviewTurnPort):
         return ReviewVerdict.APPROVED
 
     def _reason_for_items(self, raw_items: list[dict[str, Any]]) -> str:
-        """Return a reason line grounded in the first finding, or empty."""
-        for item in raw_items:
-            description = str(item.get("description") or "").strip()
-            if description:
-                return description
-        return ""
+        """Return a descriptive reason grounded in the findings."""
+        if not raw_items:
+            return "No issues found."
+        blocking = [
+            item for item in raw_items
+            if str(item.get("severity", "")).lower() in {"critical", "major"}
+        ]
+        target_items = blocking if blocking else raw_items
+        first = target_items[0]
+        desc = str(first.get("description") or "").strip()
+        sev = str(first.get("severity") or "issue").lower()
+        file_path = str(first.get("file") or first.get("file_path") or "").strip()
+        file_str = f" in {file_path}" if file_path else ""
+        if desc:
+            return f"Identified {sev} issue{file_str}: {desc}"
+        return f"Identified {len(raw_items)} potential issue(s)."
 
     def _summary_for_items(self, raw_items: list[dict[str, Any]]) -> str:
-        """Return a short summary naming how many findings were reported."""
+        """Return a detailed summary naming the findings, files, and impact."""
         if not raw_items:
             return ""
-        return f"Reported {len(raw_items)} finding(s) from prose response."
+        files = sorted({
+            str(item.get("file") or item.get("file_path") or "")
+            for item in raw_items
+            if item.get("file") or item.get("file_path")
+        })
+        blocking = [
+            item for item in raw_items
+            if str(item.get("severity", "")).lower() in {"critical", "major"}
+        ]
+        categories = sorted({
+            str(item.get("category", ""))
+            for item in raw_items
+            if item.get("category")
+        })
+        cat_str = f" ({', '.join(categories)})" if categories else ""
+        if blocking:
+            descs = [
+                str(b.get("description") or "").strip()
+                for b in blocking
+                if b.get("description")
+            ]
+            details = f": {'; '.join(descs[:2])}" if descs else ""
+            file_str = f" in {', '.join(files[:3])}" if files else ""
+            return (
+                f"Identified {len(raw_items)} finding(s){cat_str} with "
+                f"{len(blocking)} blocking issue(s){file_str}{details}."
+            )
+        file_str = f" across {len(files)} file(s)" if files else ""
+        return f"Identified {len(raw_items)} non-blocking finding(s){cat_str}{file_str}."
 
     def _parse_json(self, content: str) -> Any:
         """Attempt to parse *content* as JSON, with markdown extraction fallback."""

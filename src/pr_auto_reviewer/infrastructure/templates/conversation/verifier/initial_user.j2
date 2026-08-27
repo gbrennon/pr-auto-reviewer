@@ -1,6 +1,10 @@
 {% from "_schemas.j2" import tool_call_schema, verifier_schema %}Repository path: {{ repo_path }}
 
-Verify each finding above against the ACTUAL source code. Use read_file to inspect files, search_codebase to locate symbols, and list_directory to explore the repository. You have access to read_file, search_codebase, list_directory, run_git, get_changed_files, and run_snippet tools.
+Verify each finding above against the ACTUAL source code:
+1. Use read_file to inspect the cited file and surrounding context.
+2. Confirm whether the quoted code snippet actually exists in the file.
+3. Check whether the reported issue is a genuine defect or a false positive (e.g. already handled by superclasses, mixins, or callers).
+4. You have access to read_file, search_codebase, list_directory, run_git, and run_snippet tools.
 
 {{ tool_call_schema() }}
 {{ verifier_schema() }}

@@ -24,6 +24,7 @@ class PhaseTurnObserverPort(Protocol):
         phase_name: str,
         review_session: str,
         pr_identifier_service: str = "",
+        changed_files: list[str] | None = None,
     ) -> AdvisorDirective:
         """Grade one peer turn and return the directive for it."""
         ...

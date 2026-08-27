@@ -105,7 +105,7 @@ class PhaseManagerService(BriefNextPhasePort):
         return "\n".join([
             findings_summary,
             role_text,
-            next_phase.system_prompt[:400],
+            next_phase.system_prompt,
         ])
 
     def _publish_exchange(
@@ -148,7 +148,7 @@ class PhaseManagerService(BriefNextPhasePort):
             self._brief_user.render(
                 role_text=role_text,
                 phase_name=next_phase.phase_name,
-                phase_instructions=next_phase.system_prompt[:400],
+                phase_instructions=next_phase.system_prompt,
                 findings_summary=findings_summary or "(none)",
             ),
         ]

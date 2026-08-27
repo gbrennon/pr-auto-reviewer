@@ -281,3 +281,54 @@ class TestTurnParserService:
         praise = result.metadata.get("praise", [])
         assert len(praise) == 2
 
+    def test_pure_suggestions_and_praise_json_parsed(self) -> None:
+        content = (
+            '{"suggestions": [{"file": "a.py", "description": "Reduce class size"}], '
+            '"praise": [{"file": "b.py", "description": "Clean composition"}]}'
+        )
+        parser = make_parser()
+        service = TurnParserService(parser)
+        command = ParseReviewTurnCommand(content=content)
+        result = service.execute(command)
+
+        assert result.kind is TurnKind.VERDICT
+        assert len(result.metadata.get("suggestions", [])) == 1
+        assert result.metadata["suggestions"][0]["description"] == "Reduce class size"
+        assert len(result.metadata.get("praise", [])) == 1
+        assert result.metadata["praise"][0]["description"] == "Clean composition"
+
+    def test_wrapped_data_suggestions_and_praise_parsed(self) -> None:
+        content = (
+            '{"status": "ok", "data": {'
+            '"suggestions": [{"file": "validator.py", "description": "Extract helper"}], '
+            '"praise": [{"file": "validator.py", "description": "Solid type hints"}]}}'
+        )
+        parser = make_parser()
+        service = TurnParserService(parser)
+        command = ParseReviewTurnCommand(content=content)
+        result = service.execute(command)
+
+        assert result.kind is TurnKind.VERDICT
+        assert len(result.metadata.get("suggestions", [])) == 1
+        assert result.metadata["suggestions"][0]["description"] == "Extract helper"
+        assert len(result.metadata.get("praise", [])) == 1
+        assert result.metadata["praise"][0]["description"] == "Solid type hints"
+
+    def test_wrapped_data_items_and_verdict_parsed(self) -> None:
+        content = (
+            '{"status": "ok", "data": {'
+            '"items": [{"file": "x.py", "line": "10", "severity": "critical", "description": "Null deref"}], '
+            '"verdict": "changes_requested", '
+            '"reason": "Null dereference found", '
+            '"suggestions": [], "praise": []}}'
+        )
+        parser = make_parser(items=[{"file": "x.py", "line": "10", "severity": "critical", "description": "Null deref"}])
+        service = TurnParserService(parser)
+        command = ParseReviewTurnCommand(content=content)
+        result = service.execute(command)
+
+        assert result.kind is TurnKind.VERDICT
+        assert len(result.raw_items) == 1
+        assert result.metadata["verdict"] == "changes_requested"
+        assert result.metadata["reason"] == "Null dereference found"
+

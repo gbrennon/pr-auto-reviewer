@@ -141,7 +141,7 @@ Before any review the app verifies both tokens independently:
 1. `GET /user` with `Authorization: Bearer {t}` → **200** confirms the token exists and is not expired
 2. `POST …/requested_reviewers` with `{"reviewers":[]}` → **201** confirms write access
 
-Both checks are side-effect-free — the empty reviewers list triggers no notification. Verified `(org, role)` pairs are cached to `~/.config/pr-auto-reviewer/verified-tokens.json` so preflight runs only once per token per repo.
+Both checks are side-effect-free — the empty reviewers list triggers no notification. Verified `(org, role)` pairs are cached to `~/.cache/pr-auto-reviewer/verified-tokens.json` so preflight runs only once per token per repo.
 
 | HTTP status | Meaning |
 |-------------|---------|

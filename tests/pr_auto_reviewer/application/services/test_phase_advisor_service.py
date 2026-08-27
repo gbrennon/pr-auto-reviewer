@@ -89,6 +89,23 @@ class TestPhaseAdvisor:
         assert event.metadata["grade"] == "whatever"
         assert event.metadata["feedback"] == "drifted"
 
+    def test_observe_passes_changed_files_in_user_prompt(self) -> None:
+        chat = MagicMock()
+        chat.send.return_value = '{"grade": "okok", "feedback": ""}'
+        advisor = PhaseAdvisorService(chat_port=chat)
+
+        advisor.observe(
+            peer_content='{"action": "read_file", "args": "Cargo.toml"}',
+            phase_name="Bug Hunt — Diff",
+            review_session="test-session",
+            changed_files=["Cargo.toml", "CHANGELOG.md"],
+        )
+
+        messages = chat.send.call_args.args[0]
+        user_msg = messages[-1]
+        assert "Cargo.toml" in user_msg.content
+        assert "CHANGELOG.md" in user_msg.content
+
     def test_assess_parses_grade_from_fenced_json(self) -> None:
         chat = MagicMock()
         chat.send.return_value = (

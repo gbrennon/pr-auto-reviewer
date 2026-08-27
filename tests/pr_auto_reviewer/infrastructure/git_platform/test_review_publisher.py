@@ -21,6 +21,10 @@ from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
 GitReviewPublisherAdapter = GithubReviewPublisher
 format_review_body = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates")).render
 _BODY = ReviewBodyRenderer(template_dir=Path("src/pr_auto_reviewer/infrastructure/templates"))
+_PUBLISHING_LOGGER = (
+    "pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service"
+)
+
 
 class TestGitReviewPublisherAdapter:
     """Tests for GitReviewPublisherAdapter using captured fixture data."""
@@ -303,7 +307,7 @@ index def456..ghi789 100644
         adapter = GitReviewPublisherAdapter(
             _BODY, patched_private_client, patched_private_client,
         )
-        caplog.set_level("DEBUG")
+        caplog.set_level("DEBUG", logger=_PUBLISHING_LOGGER)
         adapter._publishing.publish_comment(
             PullRequestId(repository="o/r", number=1), "test body",
         )

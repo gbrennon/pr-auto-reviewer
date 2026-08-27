@@ -41,7 +41,7 @@ These rules are enforced by the workflow code, not by convention:
    their own turn-count constants.
 5. **Every LLM exchange leaves a transcript.** Peer conversations,
    advisor gradings, manager briefings, and verification runs are all
-   persisted as markdown under `~/.config/pr-auto-reviewer/
+   persisted as markdown under `~/.local/state/pr-auto-reviewer/
    conversations/<repo>_<pr>/`. A crashed conversation is logged too —
    partial output is audit evidence.
 6. **The docs teach.** Sub-agent pages and prompts are written in a
