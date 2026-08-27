@@ -21,7 +21,7 @@ def _cassette_name(scenario: ReviewScenario) -> str:
 @pytest.fixture
 def vcr_config(scenario: ReviewScenario):
     return {
-        "cassette_library_dir": "tests/e2e/cassettes/test_review_vcr",
+        "cassette_library_dir": "tests/e2e/cassettes/review_vcr",
         "match_on": ["method", "scheme", "host", "port", "path", "query"],
         "cassette_name": _cassette_name(scenario),
     }
