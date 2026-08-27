@@ -84,7 +84,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 )
                 result = outcome.review
                 dropped_findings = outcome.dropped_findings
-                if result.items:
+                if outcome.has_items:
                     return result
                 best_attempt_items = result.items
                 break
@@ -215,14 +215,14 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     round_num + 1,
                 )
                 return best
-            if result.items:
+            if outcome.has_items:
                 logger.info(
                     "Feedback round %d produced %d items",
                     round_num + 1,
                     len(result.items),
                 )
                 return result
-            if outcome.dropped_findings:
+            if outcome.is_clean_refutation:
                 logger.info(
                     "Feedback round %d refuted all %d findings; returning result",
                     round_num + 1,
