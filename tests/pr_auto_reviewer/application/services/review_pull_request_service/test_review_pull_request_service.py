@@ -1,6 +1,5 @@
 from ._helpers import *
 
-
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
 )
