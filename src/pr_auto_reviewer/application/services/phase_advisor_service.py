@@ -114,9 +114,12 @@ class PhaseAdvisorService(AssessPhasePort):
         phase_name: str,
         review_session: str,
         pr_identifier_service: str = "",
+        changed_files: list[str] | None = None,
     ) -> AdvisorDirective:
         """Grade one raw peer turn while its conversation is still running."""
-        messages = self._build_turn_messages(peer_content, phase_name)
+        messages = self._build_turn_messages(
+            peer_content, phase_name, changed_files=changed_files
+        )
         try:
             raw = self._chat_port.send(messages)
         except Exception:
@@ -134,7 +137,10 @@ class PhaseAdvisorService(AssessPhasePort):
         return directive
 
     def _build_turn_messages(
-        self, peer_content: str, phase_name: str,
+        self,
+        peer_content: str,
+        phase_name: str,
+        changed_files: list[str] | None = None,
     ) -> list[ConversationMessage]:
         """Compose the per-turn focus-grading prompt."""
         return [
@@ -142,6 +148,7 @@ class PhaseAdvisorService(AssessPhasePort):
             self._turn_user.render(
                 phase_name=phase_name,
                 peer_content=peer_content[:4000],
+                changed_files=changed_files or [],
             ),
         ]
 
