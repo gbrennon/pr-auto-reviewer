@@ -177,6 +177,10 @@ class Container:
     def review_plan(self) -> ReviewPlan:
         return self._review_plan
 
+    @property
+    def local_repository(self) -> LocalGitRepository:
+        return self._local_repository
+
     
     def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
@@ -185,7 +189,8 @@ class Container:
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        self._local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        local_repository = self._local_repository
         adapters = wire_platform_adapters(
             self._config, clients, is_terminal, local_repository=local_repository
         )

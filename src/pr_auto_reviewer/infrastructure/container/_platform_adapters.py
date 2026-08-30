@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.clone_url_resolvers.https_clone_url_resolver import (
     HttpsCloneUrlResolver,
 )
@@ -157,7 +158,7 @@ def wire_platform_adapters(
                 "but was not configured."
             )
 
-        resolver_cls = HttpsCloneUrlResolver if config.clone_protocol == "https" else SshCloneUrlResolver
+        resolver_cls = HttpsCloneUrlResolver if config.clone_protocol == CloneProtocol.HTTPS else SshCloneUrlResolver
         changeset_fetcher: ChangesetFetcherPort = CompositeChangesetFetcher(
             LocalChangesetFetcher(local_repository, resolver_cls("github")),
             LocalChangesetFetcher(local_repository, resolver_cls("codeberg")),
@@ -239,7 +240,7 @@ def wire_platform_adapters(
     platform_mode = "github" if config.platform_mode == GitProvider.GITHUB else "codeberg"
     url_resolver = (
         HttpsCloneUrlResolver(platform_mode)
-        if config.clone_protocol == "https"
+        if config.clone_protocol == CloneProtocol.HTTPS
         else SshCloneUrlResolver(platform_mode)
     )
     changeset_fetcher: ChangesetFetcherPort = LocalChangesetFetcher(local_repository, url_resolver)
