@@ -9,9 +9,14 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
+    RepositoryFetchError,
+)
+from pr_auto_reviewer.domain.value_objects.git_credentials import GitCredentials
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.local_repository.local_git_repository import (
     LocalGitRepository,
@@ -164,6 +169,87 @@ class TestLocalGitRepository:
 
         with pytest.raises(RuntimeError, match="git .* failed"):
             sut._run_git(repo_path, "log", "--nonexistent-flag")
+
+    def test_https_credentials_set_up_askpass_env(self, tmp_path: Path) -> None:
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            credentials=GitCredentials(protocol="https", username="alice", secret="tok"),
+        )
+
+        env = sut._auth_env()
+
+        assert env["GIT_TERMINAL_PROMPT"] == "0"
+        assert env["GIT_CREDENTIAL_USERNAME"] == "alice"
+        assert env["GIT_CREDENTIAL_PASSWORD"] == "tok"
+        askpass = Path(env["GIT_ASKPASS"])
+        assert askpass.exists()
+        content = askpass.read_text()
+        assert "GIT_CREDENTIAL_USERNAME" in content
+        assert "GIT_CREDENTIAL_PASSWORD" in content
+
+    def test_ssh_credentials_embed_username_in_ssh_command(self, tmp_path: Path) -> None:
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            credentials=GitCredentials(protocol="ssh", username="deploy", secret=""),
+        )
+
+        env = sut._auth_env()
+
+        assert "-l deploy" in env["GIT_SSH_COMMAND"]
+
+    def test_no_credentials_yields_plain_env_without_auth_vars(self, tmp_path: Path) -> None:
+        sut = LocalGitRepository(tmp_path / "clones")
+
+        env = sut._auth_env()
+
+        assert "GIT_ASKPASS" not in env
+        assert "GIT_CREDENTIAL_USERNAME" not in env
+        assert "GIT_SSH_COMMAND" in env
+        assert "-l " not in env["GIT_SSH_COMMAND"]
+
+    def test_setting_credentials_after_construction_changes_env(self, tmp_path: Path) -> None:
+        sut = LocalGitRepository(tmp_path / "clones")
+
+        sut.credentials = GitCredentials(protocol="https", username="eve", secret="pw")
+
+        env = sut._auth_env()
+        assert env["GIT_CREDENTIAL_USERNAME"] == "eve"
+        assert env["GIT_CREDENTIAL_PASSWORD"] == "pw"
+
+    def test_clone_update_fetch_failure_raises_repository_fetch_error(
+        self, tmp_path: Path
+    ) -> None:
+        repo_path = self._init_repo(tmp_path, "source")
+        sut = LocalGitRepository(tmp_path / "clones")
+        sut.clone(PullRequestId("owner/repo", 42), str(repo_path))
+
+        def fail_fetch(*args, **kwargs):
+            raise RuntimeError("git fetch --all --prune failed: "
+                               "git@codeberg.org: Permission denied (publickey).")
+
+        with patch.object(sut, "_run_git", side_effect=fail_fetch), pytest.raises(
+            RepositoryFetchError, match="Permission denied"
+        ):
+            sut.clone(PullRequestId("owner/repo", 42), str(repo_path))
+
+    def test_clone_full_clone_failure_raises_repository_fetch_error(
+        self, tmp_path: Path
+    ) -> None:
+        repo_path = self._init_repo(tmp_path, "source")
+        sut = LocalGitRepository(tmp_path / "clones")
+
+        def fail_clone(*args, **kwargs):
+            raise subprocess.CalledProcessError(
+                returncode=128,
+                cmd=["git", "clone", "ssh://git@host/repo.git"],
+                stderr="ssh: connect to host port 22: Connection refused",
+            )
+
+        with patch.object(sut, "_ssh_env", return_value={}), patch(
+            "pr_auto_reviewer.infrastructure.local_repository.local_git_repository.subprocess.run",
+            side_effect=fail_clone,
+        ), pytest.raises(RepositoryFetchError, match="Connection refused"):
+            sut.clone(PullRequestId("owner/repo", 42), str(repo_path))
 
     def test_list_tree_returns_file_list(self, tmp_path: Path) -> None:
         """list_tree returns the list of tracked files at a ref."""

@@ -10,6 +10,7 @@ from .llm_unavailable_error import LlmUnavailableError
 from .preflight_verification_error import PreflightVerificationError
 from .pull_request_not_found_error import PullRequestNotFoundError
 from .repository_corrupted_error import RepositoryCorruptedError
+from .repository_fetch_error import RepositoryFetchError
 from .review_item_not_found_error import ReviewItemNotFoundError
 from .review_publish_error import ReviewPublishError
 from .review_verdict_error import ReviewVerdictError
@@ -27,6 +28,7 @@ __all__ = [
     "PreflightVerificationError",
     "PullRequestNotFoundError",
     "RepositoryCorruptedError",
+    "RepositoryFetchError",
     "ReviewItemNotFoundError",
     "ReviewPublishError",
     "ReviewVerdictError",

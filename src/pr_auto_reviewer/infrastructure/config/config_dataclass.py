@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
@@ -18,6 +19,7 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 class Config:
     env: str
     platform_mode: GitProvider = GitProvider.FORGEJO
+    clone_protocol: CloneProtocol = CloneProtocol.HTTPS
 
     github_api_url: str = "https://api.github.com"
     forgejo_api_url: str = "https://codeberg.org/api/v1"
@@ -57,4 +59,3 @@ class Config:
     use_compact_template: bool = False
     use_strict_fragment_selection: bool = False
     local_clone_base_dir: str = str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
-    clone_protocol: str = "https"

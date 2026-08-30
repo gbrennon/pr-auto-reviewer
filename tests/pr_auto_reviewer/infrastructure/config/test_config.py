@@ -49,6 +49,32 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.platform_mode.value == "both"
 
+    def test_clone_protocol_defaults_to_https(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        cfg = load_config()
+        assert cfg.clone_protocol is CloneProtocol.HTTPS
+
+    def test_clone_protocol_from_env(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("CLONE_PROTOCOL", "ssh")
+        cfg = load_config()
+        assert cfg.clone_protocol is CloneProtocol.SSH
+
+    def test_clone_protocol_normalizes_case_and_aliases(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("CLONE_PROTOCOL", "git")
+        cfg = load_config()
+        assert cfg.clone_protocol is CloneProtocol.SSH
+
     def test_forgejo_mode_env_var_fallback(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
