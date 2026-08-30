@@ -1,5 +1,17 @@
+import logging
+
+from pr_auto_reviewer.application.ports.outbound.git_credential_provider_port import (
+    GitCredentialProviderPort,
+)
+from pr_auto_reviewer.infrastructure.git_credentials import (
+    InteractiveGitCredentialPrompter,
+)
+from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+
 from ._shared import *
 from .application_components import ApplicationComponents
+
+logger = logging.getLogger(__name__)
 
 
 class CompositionRoot:
@@ -14,11 +26,13 @@ class CompositionRoot:
         config_path: str | None = None,
         *,
         notifier: NotifierPort | None = None,
+        credential_provider: GitCredentialProviderPort | None = None,
     ) -> None:
         _ = config_path
         config = load_config()
         self._setup_logging(config.debug)
         self._notifier_override = notifier
+        self._credential_provider = credential_provider
         self._container = Container(config)
         self._components = self._wire_components()
 
@@ -61,7 +75,29 @@ class CompositionRoot:
             update_tracker=RepoUpdateTracker(),
         )
 
+        self._authenticate_for_git_host(config)
         daemon.start()
+
+    def _git_host(self, config) -> str:
+        if config.platform_mode == GitProvider.GITHUB:
+            return "github.com"
+        return "codeberg.org"
+
+    def _authenticate_for_git_host(self, config) -> None:
+        provider = self._credential_provider
+        if provider is None:
+            provider = InteractiveGitCredentialPrompter()
+        protocol = config.clone_protocol.value
+        host = self._git_host(config)
+        credentials = provider.prompt(protocol, host)
+        if credentials is None:
+            logger.warning(
+                "No git credentials provided for %s over %s; "
+                "clones may fail with authentication errors.",
+                host, protocol,
+            )
+            return
+        self._container.local_repository.credentials = credentials
 
     def _wire_components(self) -> ApplicationComponents:
         c = self._container
