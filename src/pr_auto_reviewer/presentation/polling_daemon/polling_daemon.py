@@ -12,6 +12,9 @@ from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import 
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
+from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
+    RepositoryFetchError,
+)
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
@@ -115,6 +118,11 @@ class PollingDaemon:
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
         except EmptyDiffError:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
+        except RepositoryFetchError as e:
+            logger.warning(
+                "Could not fetch repository for PR #%d in %s: %s; will retry next cycle",
+                pr.pr_id.number, pr.pr_id.repository, e,
+            )
         except LlmUnavailableError as e:
             logger.error("LLM unavailable, will retry next cycle")
             if self._notifier:
