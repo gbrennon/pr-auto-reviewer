@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
@@ -154,7 +155,7 @@ class ConfigBuilder:
             self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
         )
         local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
-        clone_protocol = self._get(source, "CLONE_PROTOCOL") or "https"
+        clone_protocol = CloneProtocol.parse(self._get(source, "CLONE_PROTOCOL") or "https")
 
         org_token_overrides = self._parse_org_token_overrides(source)
         ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")

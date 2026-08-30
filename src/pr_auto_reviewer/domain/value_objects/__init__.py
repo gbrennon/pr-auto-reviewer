@@ -1,4 +1,5 @@
 from .advisor_directive import AdvisorDirective
+from .clone_protocol import CloneProtocol
 from .code_review import CodeReview
 from .comment_id import CommentId
 from .commit_sha import CommitSha
@@ -6,6 +7,7 @@ from .conversation import Conversation
 from .conversation_decision import ConversationDecision
 from .conversation_guardrails import ConversationGuardrails
 from .conversation_message import ConversationMessage
+from .git_credentials import GitCredentials
 from .issue_category import IssueCategory
 from .issue_command import IssueCommand
 from .item_severity import ItemSeverity
@@ -27,6 +29,7 @@ from .turn_parse_result import TurnParseResult
 
 __all__ = [
     "AdvisorDirective",
+    "CloneProtocol",
     "CodeReview",
     "CommentId",
     "CommitSha",
@@ -34,6 +37,7 @@ __all__ = [
     "ConversationDecision",
     "ConversationGuardrails",
     "ConversationMessage",
+    "GitCredentials",
     "IssueCategory",
     "IssueCommand",
     "ItemSeverity",
