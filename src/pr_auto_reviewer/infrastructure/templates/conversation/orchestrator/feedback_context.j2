@@ -1,13 +1,24 @@
-## Review Feedback — Attempt #{{ round_number }} Returned No Findings
+## Review Re-Examination — Attempt #{{ round_number }} Returned No Surviving Findings
 
-Your previous review of this pull request produced **zero** actionable findings. {{ escalation }}
+Your previous review of this pull request produced no findings that held up
+against the actual source. {{ escalation }}
 
 Previous verdict: **{{ previous_verdict }}** — {{ previous_explanation }}
+
+{% if attempts %}
+### Attempt History
+
+{% for entry in attempts %}
+- Attempt {{ entry.attempt }}: **{{ entry.reported }}** reported, **{{ entry.dropped }}** dropped during verification, **{{ entry.survived }}** survived. Verdict: {{ entry.verdict }} — {{ entry.explanation }}
+{% endfor %}
+{% endif %}
 
 Look for genuine issues: bugs, logic errors, security problems,
 performance concerns, API misuse, race conditions, missing edge cases,
 and architectural problems. Only report issues you can confirm by
 reading the affected files.
 
-If after careful re-examination you truly find no issues,
-explain why the change is correct.
+If after careful re-examination you truly find no issues, explain
+specifically why the change is correct — do not return a blank approval:
+state what the change does, how it behaves, and why nothing actionable
+remains.

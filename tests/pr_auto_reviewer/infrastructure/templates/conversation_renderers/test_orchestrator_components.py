@@ -35,9 +35,29 @@ class TestOrchestratorComponents:
             escalation="dig deeper.",
             previous_verdict="changes_requested",
             previous_explanation="nothing found",
+            attempts=[],
         )
 
-        assert "Attempt #2 Returned No Findings" in content
+        assert "Attempt #2 Returned No Surviving Findings" in content
         assert "**changes_requested**" in content
         assert "nothing found" in content
+
+    def test_feedback_context_grounds_re_attempt_in_prior_results(self) -> None:
+        content = FeedbackContextRenderer().render_content(
+            round_number=2,
+            escalation="re-derive a genuine verdict.",
+            previous_verdict="approved",
+            previous_explanation="no actionable findings",
+            attempts=[{
+                "attempt": 1,
+                "reported": 3,
+                "dropped": 3,
+                "survived": 0,
+                "verdict": "approved",
+                "explanation": "3 reported, 3 dropped",
+            }],
+        )
+
+        assert "**3** dropped during verification" in content
+        assert "Attempt 1: **3** reported" in content
 

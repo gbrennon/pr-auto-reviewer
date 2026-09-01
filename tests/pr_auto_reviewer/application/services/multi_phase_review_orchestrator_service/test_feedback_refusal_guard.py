@@ -2,16 +2,17 @@ from ._helpers import *
 
 
 class TestFeedbackRefusalGuard:
-    """A correct refutation publishes as-is; only genuine emptiness loops."""
+    """An inconclusive review re-runs; only a genuine verdict completes."""
 
     @staticmethod
-    def _orchestrator(mock_command_bus, mock_tool_factory):
+    def _orchestrator(mock_command_bus, mock_tool_factory, **kwargs):
         return MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
+            **kwargs,
         )
 
-    def test_refuted_findings_publish_without_feedback_rounds(
+    def test_refuted_findings_re_enter_the_feedback_loop(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         plan = SimpleNamespace(
@@ -20,18 +21,19 @@ class TestFeedbackRefusalGuard:
         orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
         refuted = _outcome(
             dropped_findings=3,
-            verdict=ReviewVerdict.CHANGES_REQUESTED,
-            reason="The model reported 3 finding(s) that did not "
-            "survive verification against the source code.",
+            verdict=ReviewVerdict.APPROVED,
+            reason="The reported issues did not survive verification.",
+            summary="The change is assessed as correct.",
         )
         orchestrator._run_phases = lambda *args, **kwargs: refuted
 
-        def _forbidden_loop(*args, **kwargs):
-            raise AssertionError(
-                "feedback loop must not run after refutation"
-            )
-
-        orchestrator._run_feedback_loop = _forbidden_loop
+        recovered = _code_review(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[_make_review_item("src/main.py", "found later")],
+        )
+        orchestrator._run_feedback_loop = (
+            lambda *args, **kwargs: recovered
+        )
 
         result = orchestrator._run_phases_full_retry(
             plan=plan,
@@ -41,10 +43,10 @@ class TestFeedbackRefusalGuard:
             review_session="test-session",
         )
 
-        assert result.items == []
+        assert len(result.items) == 1
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED.value
 
-    def test_genuinely_empty_result_still_enters_feedback_loop(
+    def test_genuinely_empty_result_also_enters_feedback_loop(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         plan = SimpleNamespace(
@@ -81,18 +83,17 @@ class TestFeedbackRefusalGuard:
         )
         review = _code_review(verdict=ReviewVerdict.APPROVED)
 
-        for round_number in (1, 2, 3):
+        for attempt_number in (1, 2, 3):
             context = orchestrator._build_feedback_context(
-                review, round_number
+                review, attempt_number, []
             )
             assert "unusual for a real code change" not in context
             assert "assume the diff contains" not in context
 
-        final_context = orchestrator._build_feedback_context(review, 2)
+        final_context = orchestrator._build_feedback_context(review, 2, [])
         assert "valid outcome" in final_context
 
-
-    def test_feedback_loop_returns_early_when_round_drops_all_findings(
+    def test_inconclusive_refutation_keeps_trying_then_raises_by_default(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         plan = SimpleNamespace(
@@ -100,17 +101,52 @@ class TestFeedbackRefusalGuard:
         )
         orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
         initial_empty = _code_review(verdict=ReviewVerdict.APPROVED)
+        calls: list[int] = []
 
-        calls = []
-        def _mock_run_phases(*args, **kwargs):
+        def _always_refuted(*args, **kwargs):
             calls.append(len(calls) + 1)
             return _outcome(
                 dropped_findings=2,
-                verdict=ReviewVerdict.CHANGES_REQUESTED,
-                reason="Refuted findings",
+                verdict=ReviewVerdict.APPROVED,
+                reason="Findings refuted against source.",
             )
 
-        orchestrator._run_phases = _mock_run_phases
+        orchestrator._run_phases = _always_refuted
+        with _pytest.raises(ReviewVerdictError):
+            orchestrator._run_feedback_loop(
+                plan=plan,
+                repo_path=Path("/tmp"),
+                changed_files=["src/main.py"],
+                model="test",
+                previous_result=initial_empty,
+                review_session="test-session",
+                pr_identifier_service="owner/repo/1",
+            )
+
+        assert len(calls) == orchestrator._max_tries
+
+    def test_inconclusive_refutation_publishes_as_is_when_flag_enabled(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        plan = SimpleNamespace(
+            phases=_plan(), methodology="sub-agent-multi-phase",
+        )
+        orchestrator = self._orchestrator(
+            mock_command_bus, mock_tool_factory,
+            publish_inconclusive_review=True,
+        )
+        initial_empty = _code_review(verdict=ReviewVerdict.APPROVED)
+        calls: list[int] = []
+
+        def _always_refuted(*args, **kwargs):
+            calls.append(len(calls) + 1)
+            return _outcome(
+                dropped_findings=2,
+                verdict=ReviewVerdict.APPROVED,
+                reason="Findings refuted against source.",
+            )
+
+        orchestrator._run_phases = _always_refuted
         result = orchestrator._run_feedback_loop(
             plan=plan,
             repo_path=Path("/tmp"),
@@ -121,5 +157,5 @@ class TestFeedbackRefusalGuard:
             pr_identifier_service="owner/repo/1",
         )
 
-        assert len(calls) == 1
-        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED.value
+        assert len(calls) == orchestrator._max_tries
+        assert result.verdict == ReviewVerdict.APPROVED.value
