@@ -95,6 +95,18 @@ are safe for testing without touching the PR.
 
 Codeberg always uses formal reviews (`event: "APPROVED"`, `official: true`).
 
+## Inconclusive Reviews
+
+When a review ends with a *default* outcome — every reported finding is
+refuted by source-code verification, leaving an empty approval — the app
+does not publish a hollow review. It re-runs with a prompt grounded in
+the prior attempts, up to a configurable cap.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REVIEW_MAX_TRIES` | `2` | Max re-run attempts before accepting an inconclusive outcome |
+| `PUBLISH_INCONCLUSIVE_REVIEW` | `false` | When `true`, publish the best inconclusive result as-is instead of failing (`1`, `true`, or `yes`) |
+
 ## LLM Configuration
 
 | Variable | Default | Description |
