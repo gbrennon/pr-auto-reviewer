@@ -114,6 +114,7 @@ class AgentConversationService(RunAgentConversationPort):
         self._force_verdict_message = ForceVerdictMessageRenderer()
         self._explore_message = ExploreBeforeVerdictMessageRenderer()
         self._suggestions_praise_message = SuggestionsPraiseMessageRenderer()
+
     def execute(
         self, command: RunAgentConversationCommand
     ) -> PhaseResult:
@@ -188,8 +189,7 @@ class AgentConversationService(RunAgentConversationPort):
             grounded.append(entry)
         return grounded
 
-    @staticmethod
-    def _resolves_inside_repo(cited: str, repo_path: Path) -> bool:
+    def _resolves_inside_repo(self, cited: str, repo_path: Path) -> bool:
         """Return whether *cited* resolves to an existing repo-internal path."""
         resolved = (repo_path / cited).resolve()
         return (
@@ -254,6 +254,7 @@ class AgentConversationService(RunAgentConversationPort):
         verdict_nudged = False
         read_file_count = 0
         run_snippet_count = 0
+
         while guardrails.has_turns_remaining():
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
@@ -455,6 +456,7 @@ class AgentConversationService(RunAgentConversationPort):
                 )
                 messages.append(self._explore_message.render())
                 continue
+
         self._log_conversation(
             phase_name, messages, self._guardrails.max_turns, None,
             repo_path=repo_path, review_session=review_session,
@@ -544,11 +546,13 @@ class AgentConversationService(RunAgentConversationPort):
         )
         if self._conversation_logger is None:
             return
+
         pr_identifier_service = self._derive_pr_identifier(repo_path)
         skipped = (
             len(getattr(phase_result, "skip_reasons", []))
             if phase_result else 0
         )
+
         metadata: dict[str, Any] = {
             "model": "code-review:latest",
             "turns": turns,
@@ -561,6 +565,7 @@ class AgentConversationService(RunAgentConversationPort):
             ),
             "skipped": skipped,
         }
+
         try:
             self._conversation_logger.log_conversation(
                 phase_name=phase_name or "unknown",
