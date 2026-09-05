@@ -35,6 +35,7 @@ class Config:
 
     org_token_overrides: OrgTokenOverrides = field(default_factory=OrgTokenOverrides)
 
+    llm_backend: str = "ollama"
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
     ollama_timeout: int = 120
