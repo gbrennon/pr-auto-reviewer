@@ -232,3 +232,35 @@ class DiffAnalyzer:
         return "\n".join(lines[:max_lines]) + (
             f"\n... ({len(lines) - max_lines} more entries omitted)\n"
         )
+
+    def extract_file_listing(self, composed_content: str) -> list[str]:
+        """Extract changed file paths from the rendered prompt diff section."""
+        paths: set[str] = set()
+        seen_section = False
+        for line in composed_content.split("\n"):
+            if line.startswith("## Diff"):
+                seen_section = True
+                continue
+            if not seen_section:
+                continue
+            self._collect_diff_line_path(line, paths)
+        return sorted(paths)
+
+    def _clean_diff_path(self, line: str) -> str:
+        """Extract and clean a file path from a diff header line."""
+        if " " not in line:
+            return ""
+        raw = line.split(" ", 1)[1]
+        if not raw or raw == "/dev/null":
+            return ""
+        if raw.startswith(("a/", "b/")):
+            return raw[2:]
+        return raw
+
+    def _collect_diff_line_path(self, line: str, paths: set[str]) -> None:
+        """Collect file path from a diff line if it is a diff header."""
+        if not line.startswith(("--- a/", "+++ b/")):
+            return
+        cleaned = self._clean_diff_path(line)
+        if cleaned:
+            paths.add(cleaned)
