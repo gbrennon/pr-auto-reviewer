@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
+    AgentChatPort,
+)
 from pr_auto_reviewer.application.services.agent_conversation_service import (
     AgentConversationService,
 )
@@ -93,11 +96,17 @@ from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository i
 from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
+from pr_auto_reviewer.infrastructure.llm.backend_detector import (
+    BackendDetector,
+)
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_agent_adapter import (
-    OllamaAgentAdapter,
+from pr_auto_reviewer.infrastructure.llm.llama_cpp.llama_cpp_chat_client import (
+    LlamaCppChatClient,
+)
+from pr_auto_reviewer.infrastructure.llm.llm_agent_adapter import (
+    LlmAgentAdapter,
 )
 from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
     OllamaChatClient,
@@ -234,6 +243,38 @@ class CoreServices:
 
 
 
+class _ChatClientFactory:
+    """Instantiate the appropriate AgentChatPort based on backend configuration."""
+
+    @staticmethod
+    def create(config: Config) -> AgentChatPort:
+        """Create an Ollama or llama.cpp chat client based on config."""
+        backend = (config.llm_backend or "ollama").lower()
+        if backend == "auto":
+            detector = BackendDetector(
+                ollama_host=config.llm_host,
+                llama_cpp_host=config.llm_host,
+                timeout=2.0,
+            )
+            backend = detector.detect()
+
+        if backend == "llama_cpp":
+            return LlamaCppChatClient(
+                model=config.llm_model or "default",
+                host=config.llm_host,
+                timeout=config.ollama_timeout,
+                max_retries=config.llm_max_retries,
+                max_llm_calls=config.llm_call_budget,
+            )
+        return OllamaChatClient(
+            model=config.llm_model or "code-review:latest",
+            host=config.llm_host,
+            timeout=config.ollama_timeout,
+            max_retries=config.llm_max_retries,
+            max_llm_calls=config.llm_call_budget,
+        )
+
+
 
 def wire_core_services(
     config: Config,
@@ -251,13 +292,7 @@ def wire_core_services(
     pr_repository = JsonFilePullRequestRepository(
         artifact_root / "state.json"
     )
-    chat_client = OllamaChatClient(
-        model=config.llm_model or "code-review:latest",
-        host=config.llm_host,
-        timeout=config.ollama_timeout,
-        max_retries=config.llm_max_retries,
-        max_llm_calls=config.llm_call_budget,
-    )
+    chat_client = _ChatClientFactory.create(config)
     command_bus = InMemoryCommandBus()
     conversation_logger = MarkdownConversationLogger(
         base_dir=artifact_root / "conversations"
@@ -326,7 +361,7 @@ def wire_core_services(
         FindingsAggregatedEvent, event_logger.handle_findings_aggregated
     )
     plan = _build_review_plan()
-    llm_review: LlmReviewPort = OllamaAgentAdapter(
+    llm_review: LlmReviewPort = LlmAgentAdapter(
         chat_client=chat_client,
         orchestrator=orchestrator,
         plan=plan,
