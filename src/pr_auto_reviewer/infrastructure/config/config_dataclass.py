@@ -35,6 +35,7 @@ class Config:
 
     org_token_overrides: OrgTokenOverrides = field(default_factory=OrgTokenOverrides)
 
+    llm_backend: str = "ollama"
     llm_host: str = "http://localhost:11434"
     llm_model: str | None = None
     ollama_timeout: int = 120
@@ -42,6 +43,8 @@ class Config:
     llm_max_turns: int = 10
     advisor_max_blocks: int = 2
     review_max_conversations: int = 48
+    review_max_tries: int = 2
+    publish_inconclusive_review: bool = False
     llm_call_budget: int = 300
     advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE
     poll_interval: int = 60

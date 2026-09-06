@@ -77,7 +77,7 @@ class TestMultiPhaseReviewOrchestrator:
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", previous_dropped_findings=0: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
@@ -175,7 +175,7 @@ class TestMultiPhaseReviewOrchestrator:
             summary="No issues found",
         )
 
-        context = orchestrator._build_feedback_context(result, 1)
+        context = orchestrator._build_feedback_context(result, 1, [])
         assert "Attempt #1" in context
         assert "No issues found" in context
 
@@ -206,7 +206,7 @@ class TestMultiPhaseReviewOrchestrator:
             phase_result, MagicMock(), phase_result, MagicMock(),
         ]
         feedback = orchestrator._build_feedback_context(
-            _code_review(verdict=ReviewVerdict.CHANGES_REQUESTED), 1
+            _code_review(verdict=ReviewVerdict.CHANGES_REQUESTED), 1, []
         )
 
         orchestrator._run_phases(

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _COMMAND_LINE_KEYS = {
     "PLATFORM_MODE", "FORGEJO_MODE",
     "REVIEW_OUTPUT", "DEBUG", "PROMPT_MODE",
+    "LLM_BACKEND", "LLM_MODE",
     "LLM_HOST", "LLM_MODEL", "OLLAMA_HOST", "OLLAMA_MODEL",
     "POLL_INTERVAL", "MAX_PROMPT_TOKENS",
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
@@ -36,6 +37,7 @@ _COMMAND_LINE_KEYS = {
     "FORGEJO_API_URL", "FORGEJO_HOST",
     "RUN_ONCE", "REPOS_FILTER", "FORCE_PR",
     "CLONE_PROTOCOL",
+    "REVIEW_MAX_TRIES", "PUBLISH_INCONCLUSIVE_REVIEW",
 }
 
 _CONFIG_KEYS = list(_COMMAND_LINE_KEYS) + [
@@ -103,6 +105,11 @@ class ConfigLoader:
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
+        review_max_tries = int(values.pop("REVIEW_MAX_TRIES", 2))
+        publish_inconclusive_review = (
+            values.pop("PUBLISH_INCONCLUSIVE_REVIEW", "").strip().lower()
+            in ("1", "true", "yes")
+        )
         llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
@@ -114,6 +121,8 @@ class ConfigLoader:
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            review_max_tries=review_max_tries,
+            publish_inconclusive_review=publish_inconclusive_review,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )
@@ -142,6 +151,11 @@ class ConfigLoader:
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
+        review_max_tries = int(values.pop("REVIEW_MAX_TRIES", 2))
+        publish_inconclusive_review = (
+            values.pop("PUBLISH_INCONCLUSIVE_REVIEW", "").strip().lower()
+            in ("1", "true", "yes")
+        )
         llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
@@ -153,6 +167,8 @@ class ConfigLoader:
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            review_max_tries=review_max_tries,
+            publish_inconclusive_review=publish_inconclusive_review,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )

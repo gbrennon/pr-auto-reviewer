@@ -316,24 +316,86 @@ class FindingVerifierService(VerifyFindingsPort):
 
     def _parse_verify_turn(
         self, content: str
-    ) -> list[dict[str, Any]] | dict[str, str] | None:
+    ) -> list[dict[str, Any]] | dict[str, Any] | None:
         """Parse a verification conversation turn into results or a tool-call dict."""
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError:
-            return self._parse_verify_prose(content)
+        extracted = self._extract_outermost_json(content)
+        if extracted is not None:
+            try:
+                data = json.loads(extracted)
+                if isinstance(data, dict):
+                    if "results" in data and isinstance(data["results"], list):
+                        return data["results"]
+                    if "action" in data and isinstance(data["action"], str):
+                        return data
+                elif isinstance(data, list) and all(
+                    isinstance(item, dict) for item in data
+                ):
+                    return data
+            except json.JSONDecodeError:
+                pass
 
-        if not isinstance(data, dict):
-            return None
+        return self._parse_verify_prose(content)
 
-        if "results" in data and isinstance(data["results"], list):
-            return data["results"]
-
-        if "action" in data and isinstance(data["action"], str):
-            return data
-
+    @classmethod
+    def _extract_outermost_json(cls, text: str) -> str | None:
+        """Extract balanced JSON object or array from text or markdown code block."""
+        fence_match = re.search(
+            r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE,
+        )
+        candidates = [fence_match.group(1).strip()] if fence_match else []
+        candidates.append(text)
+        for candidate in candidates:
+            parsed = cls._find_balanced_json(candidate)
+            if parsed is not None:
+                return parsed
         return None
 
+    @staticmethod
+    def _find_balanced_json(candidate: str) -> str | None:
+        """Find the outermost valid JSON construct in candidate string."""
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+        start_obj = candidate.find("{")
+        start_arr = candidate.find("[")
+        starts = [s for s in (start_obj, start_arr) if s != -1]
+        if not starts:
+            return None
+        start = min(starts)
+        open_ch = candidate[start]
+        close_ch = "}" if open_ch == "{" else "]"
+
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(candidate)):
+            ch = candidate[i]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == open_ch:
+                depth += 1
+            elif ch == close_ch:
+                depth -= 1
+                if depth == 0:
+                    sub = candidate[start : i + 1]
+                    try:
+                        json.loads(sub)
+                        return sub
+                    except json.JSONDecodeError:
+                        break
+        return None
     def _parse_verify_prose(
         self, content: str
     ) -> list[dict[str, Any]] | None:

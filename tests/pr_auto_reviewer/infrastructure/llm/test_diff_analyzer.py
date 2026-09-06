@@ -84,3 +84,25 @@ def test_trim_repo_structure_to_lines():
     trimmed = da.trim_repo_structure_to_lines(structure, max_lines=50)
     assert "omitted" in trimmed
     assert trimmed.count("\n") <= 51
+
+def test_extract_file_listing_with_valid_diff_section() -> None:
+    da = DiffAnalyzer()
+    content = (
+        "## Overview\nSome overview\n\n"
+        "## Diff\n"
+        "--- a/src/first.py\n"
+        "+++ b/src/first.py\n"
+        "--- /dev/null\n"
+        "+++ b/src/second.py\n"
+        "--- a/docs/index.md\n"
+        "+++ /dev/null\n"
+    )
+    assert da.extract_file_listing(content) == [
+        "docs/index.md",
+        "src/first.py",
+        "src/second.py",
+    ]
+
+def test_extract_file_listing_without_diff_section_returns_empty() -> None:
+    da = DiffAnalyzer()
+    assert da.extract_file_listing("Plain content without diff header") == []

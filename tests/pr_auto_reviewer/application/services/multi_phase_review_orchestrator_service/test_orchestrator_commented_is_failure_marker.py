@@ -107,10 +107,9 @@ class TestOrchestratorCommentedIsFailureMarker:
             [], "code-review:latest", previous=previous
         )
         assert rebuilt.items == []
-        assert "dropped" in rebuilt.reason
-        assert "did not survive" in rebuilt.summary
-        assert "2" in rebuilt.summary
-        assert "3" not in rebuilt.reason
+        assert "did not survive verification" in rebuilt.reason
+        assert "Missing validation" in rebuilt.reason
+        assert "assessed as correct" in rebuilt.summary
 
     def test_manager_briefs_first_phase_before_it_starts(self) -> None:
         """The opening phase runs on a manager-planned task, not a static prompt."""

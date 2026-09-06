@@ -26,6 +26,28 @@ class TestRunVerificationConversation:
             "read_file", "src/a.py"
         )
 
+
+    def test_markdown_fenced_tool_call_then_markdown_results(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        mock_chat_port.send.side_effect = [
+            '```json\n{"action": "read_file", "args": "src/a.py"}\n```',
+            '```json\n{"results": [{"finding_index": 0, "verified": true}]}\n```',
+        ]
+        tool_service = mock_tool_factory.return_value
+        tool_service.execute.return_value = {"status": "success", "data": {}}
+        verifier = FindingVerifierService(
+            mock_chat_port, "verify {findings}", mock_tool_factory
+        )
+
+        results = verifier._run_verification_conversation(
+            "prompt", Path("."), ["src/a.py"]
+        )
+
+        assert results == [{"finding_index": 0, "verified": True}]
+        tool_service.execute.assert_called_once_with(
+            "read_file", "src/a.py"
+        )
     def test_empty_response_reprompts_then_succeeds(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:

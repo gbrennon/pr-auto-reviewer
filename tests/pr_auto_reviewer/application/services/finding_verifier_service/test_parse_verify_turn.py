@@ -44,3 +44,63 @@ class TestParseVerifyTurn:
             mock_chat_port, mock_tool_factory
         )._parse_verify_turn("narrative prose") is None
 
+    def test_parses_action_dict_inside_markdown_code_fence(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        content = '```json\n{"action": "read_file", "args": "foo.py"}\n```'
+        assert self._verifier(
+            mock_chat_port, mock_tool_factory
+        )._parse_verify_turn(content) == {
+            "action": "read_file",
+            "args": "foo.py",
+        }
+
+    def test_parses_action_dict_with_surrounding_prose(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        content = (
+            'I will inspect the file:\n'
+            '```json\n{"action": "read_file", "args": "foo.py"}\n```\n'
+            'Awaiting output.'
+        )
+        assert self._verifier(
+            mock_chat_port, mock_tool_factory
+        )._parse_verify_turn(content) == {
+            "action": "read_file",
+            "args": "foo.py",
+        }
+
+    def test_parses_results_list_inside_markdown_code_fence(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        content = (
+            '```json\n'
+            '{"results": [{"finding_index": 0, "verified": true}]}\n'
+            '```'
+        )
+        assert self._verifier(
+            mock_chat_port, mock_tool_factory
+        )._parse_verify_turn(content) == [
+            {"finding_index": 0, "verified": True}
+        ]
+
+    def test_parses_raw_json_array_of_results(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        content = '[{"finding_index": 0, "verified": true}]'
+        assert self._verifier(
+            mock_chat_port, mock_tool_factory
+        )._parse_verify_turn(content) == [
+            {"finding_index": 0, "verified": True}
+        ]
+
+    def test_parses_raw_json_array_inside_markdown_code_fence(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        content = '```json\n[{"finding_index": 0, "verified": true}]\n```'
+        assert self._verifier(
+            mock_chat_port, mock_tool_factory
+        )._parse_verify_turn(content) == [
+            {"finding_index": 0, "verified": True}
+        ]
+

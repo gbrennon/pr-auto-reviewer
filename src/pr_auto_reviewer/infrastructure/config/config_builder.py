@@ -35,6 +35,141 @@ class ConfigBuilder:
     def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
         return source.get(key, default).strip()
 
+    @staticmethod
+    def _normalize_host(host: str) -> str:
+        """Ensure host URL has an HTTP scheme and no trailing slash."""
+        cleaned = host.strip().rstrip("/")
+        if not cleaned.startswith(("http://", "https://")):
+            return f"http://{cleaned}"
+        return cleaned
+
+    def build(
+        self,
+        source: dict[str, str],
+        env_name: str,
+        llm_max_retries: int = 5,
+        llm_max_turns: int = 10,
+        advisor_max_blocks: int = 2,
+        review_max_conversations: int = 48,
+        review_max_tries: int = 2,
+        publish_inconclusive_review: bool = False,
+        llm_call_budget: int = 300,
+        advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
+    ) -> Config:
+        granularity = AdvisorGranularity.parse(advisor_granularity)
+        platform_mode_raw = (
+            self._get(source, "PLATFORM_MODE")
+            or self._get(source, "FORGEJO_MODE")
+            or "forgejo"
+        )
+        platform_mode = GitProvider.parse(platform_mode_raw)
+
+        github_api_url = self._get(source, "GITHUB_API_URL") or "https://api.github.com"
+        forgejo_api_url = (
+            self._get(source, "FORGEJO_API_URL")
+            or self._get(source, "FORGEJO_HOST")
+            or "https://codeberg.org"
+        )
+        forgejo_api_url = ForgejoApiUrlNormalizer.normalize(forgejo_api_url)
+
+        github_owner_token = self._get(source, "GITHUB_OWNER_TOKEN")
+        github_reviewer_token = self._get(source, "GITHUB_REVIEWER_TOKEN")
+        github_reviewer_username = self._get(source, "GITHUB_REVIEWER_USERNAME")
+        github_review_mode = self._get(source, "GITHUB_REVIEW_MODE") or "formal"
+
+        forgejo_owner_token = self._get(source, "FORGEJO_OWNER_TOKEN")
+        forgejo_reviewer_token = self._get(source, "FORGEJO_REVIEWER_TOKEN")
+        forgejo_reviewer_username = self._get(source, "FORGEJO_REVIEWER_USERNAME")
+
+        llm_backend = (
+            self._get(source, "LLM_BACKEND")
+            or self._get(source, "LLM_MODE")
+            or "ollama"
+        ).lower()
+
+        raw_host = (
+            self._get(source, "LLM_HOST")
+            or self._get(source, "OLLAMA_HOST")
+            or "http://localhost:11434"
+        )
+        llm_host = self._normalize_host(raw_host)
+        llm_model = (
+            self._get(source, "LLM_MODEL") or self._get(source, "OLLAMA_MODEL")
+        ) or None
+
+        output_mode = self._get(source, "REVIEW_OUTPUT")
+        output_path: str | None = None
+        if output_mode.startswith("file:"):
+            output_path = output_mode.removeprefix("file:") or None
+            output_mode = "terminal"
+        elif not output_mode:
+            output_mode = "forgejo"
+
+        poll_interval = int(source.get("POLL_INTERVAL") or "60")
+        debug = self._get(source, "DEBUG") in ("1", "true", "yes")
+        max_prompt_tokens = int(source.get("MAX_PROMPT_TOKENS") or "9999")
+        max_file_chars = int(source.get("MAX_FILE_CHARS") or "3000")
+        max_files = int(source.get("MAX_FILES") or "10")
+        max_structure_lines = int(source.get("MAX_STRUCTURE_LINES") or "100")
+        use_compact_template = (
+            self._get(source, "USE_COMPACT_TEMPLATE").lower() == "true"
+        )
+        use_strict_fragment_selection = (
+            self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
+        )
+        local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
+        clone_protocol = CloneProtocol.parse(self._get(source, "CLONE_PROTOCOL") or "https")
+
+        org_token_overrides = self._parse_org_token_overrides(source)
+        ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
+        run_once = source.get("RUN_ONCE", "").lower() in ("true", "1", "yes")
+        repos_filter = self._get(source, "REPOS_FILTER")
+
+        force_pr_raw = source.get("FORCE_PR", "").strip()
+        force_pr: int | None = int(force_pr_raw) if force_pr_raw else None
+
+        return Config(
+            env=env_name,
+            platform_mode=platform_mode,
+            github_api_url=github_api_url,
+            forgejo_api_url=forgejo_api_url,
+            github_owner_token=github_owner_token,
+            github_reviewer_token=github_reviewer_token,
+            github_reviewer_username=github_reviewer_username,
+            github_review_mode=github_review_mode,
+            forgejo_owner_token=forgejo_owner_token,
+            forgejo_reviewer_token=forgejo_reviewer_token,
+            forgejo_reviewer_username=forgejo_reviewer_username,
+            org_token_overrides=org_token_overrides,
+            llm_backend=llm_backend,
+            llm_host=llm_host,
+            llm_model=llm_model,
+            ollama_timeout=ollama_timeout,
+            llm_max_retries=llm_max_retries,
+            llm_max_turns=llm_max_turns,
+            advisor_max_blocks=advisor_max_blocks,
+            review_max_conversations=review_max_conversations,
+            review_max_tries=review_max_tries,
+            publish_inconclusive_review=publish_inconclusive_review,
+            llm_call_budget=llm_call_budget,
+            advisor_granularity=granularity,
+            poll_interval=poll_interval,
+            run_once=run_once,
+            repos_filter=repos_filter,
+            force_pr=force_pr,
+            debug=debug,
+            output_mode=output_mode,
+            output_path=output_path,
+            max_prompt_tokens=max_prompt_tokens,
+            max_file_chars=max_file_chars,
+            max_files=max_files,
+            max_structure_lines=max_structure_lines,
+            use_compact_template=use_compact_template,
+            use_strict_fragment_selection=use_strict_fragment_selection,
+            local_clone_base_dir=local_clone_base_dir,
+            clone_protocol=clone_protocol,
+        )
+
     def _parse_org_token_overrides(self, source: dict[str, str]) -> OrgTokenOverrides:
         github: dict[str, OrgTokenEntry] = {}
         forgejo: dict[str, OrgTokenEntry] = {}
@@ -88,118 +223,3 @@ class ConfigBuilder:
                         )
 
         return OrgTokenOverrides(github=github, forgejo=forgejo)
-
-    def build(
-        self,
-        source: dict[str, str],
-        env_name: str,
-        llm_max_retries: int = 5,
-        llm_max_turns: int = 10,
-        advisor_max_blocks: int = 2,
-        review_max_conversations: int = 48,
-        llm_call_budget: int = 300,
-        advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
-    ) -> Config:
-        granularity = AdvisorGranularity.parse(advisor_granularity)
-        platform_mode_raw = (
-            self._get(source, "PLATFORM_MODE")
-            or self._get(source, "FORGEJO_MODE")
-            or "forgejo"
-        )
-        platform_mode = GitProvider.parse(platform_mode_raw)
-
-        github_api_url = self._get(source, "GITHUB_API_URL") or "https://api.github.com"
-        forgejo_api_url = (
-            self._get(source, "FORGEJO_API_URL")
-            or self._get(source, "FORGEJO_HOST")
-            or "https://codeberg.org"
-        )
-        forgejo_api_url = ForgejoApiUrlNormalizer.normalize(forgejo_api_url)
-
-        github_owner_token = self._get(source, "GITHUB_OWNER_TOKEN")
-        github_reviewer_token = self._get(source, "GITHUB_REVIEWER_TOKEN")
-        github_reviewer_username = self._get(source, "GITHUB_REVIEWER_USERNAME")
-        github_review_mode = self._get(source, "GITHUB_REVIEW_MODE") or "formal"
-
-        forgejo_owner_token = self._get(source, "FORGEJO_OWNER_TOKEN")
-        forgejo_reviewer_token = self._get(source, "FORGEJO_REVIEWER_TOKEN")
-        forgejo_reviewer_username = self._get(source, "FORGEJO_REVIEWER_USERNAME")
-
-        llm_host = (
-            self._get(source, "LLM_HOST")
-            or self._get(source, "OLLAMA_HOST")
-            or "http://localhost:11434"
-        )
-        llm_model = (
-            self._get(source, "LLM_MODEL") or self._get(source, "OLLAMA_MODEL")
-        ) or None
-
-        output_mode = self._get(source, "REVIEW_OUTPUT")
-        output_path: str | None = None
-        if output_mode.startswith("file:"):
-            output_path = output_mode.removeprefix("file:") or None
-            output_mode = "terminal"
-        elif not output_mode:
-            output_mode = "forgejo"
-
-        poll_interval = int(source.get("POLL_INTERVAL") or "60")
-        debug = self._get(source, "DEBUG") in ("1", "true", "yes")
-        max_prompt_tokens = int(source.get("MAX_PROMPT_TOKENS") or "9999")
-        max_file_chars = int(source.get("MAX_FILE_CHARS") or "3000")
-        max_files = int(source.get("MAX_FILES") or "10")
-        max_structure_lines = int(source.get("MAX_STRUCTURE_LINES") or "100")
-        use_compact_template = (
-            self._get(source, "USE_COMPACT_TEMPLATE").lower() == "true"
-        )
-        use_strict_fragment_selection = (
-            self._get(source, "USE_STRICT_FRAGMENT_SELECTION").lower() == "true"
-        )
-        local_clone_base_dir = self._get(source, "LOCAL_CLONE_BASE_DIR") or str(Path("~/.cache/pr-auto-reviewer/repos").expanduser())
-        clone_protocol = CloneProtocol.parse(self._get(source, "CLONE_PROTOCOL") or "https")
-
-        org_token_overrides = self._parse_org_token_overrides(source)
-        ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
-        run_once = source.get("RUN_ONCE", "").lower() in ("true", "1", "yes")
-        repos_filter = self._get(source, "REPOS_FILTER")
-
-        force_pr_raw = source.get("FORCE_PR", "").strip()
-        force_pr: int | None = int(force_pr_raw) if force_pr_raw else None
-
-        return Config(
-            env=env_name,
-            platform_mode=platform_mode,
-            github_api_url=github_api_url,
-            forgejo_api_url=forgejo_api_url,
-            github_owner_token=github_owner_token,
-            github_reviewer_token=github_reviewer_token,
-            github_reviewer_username=github_reviewer_username,
-            github_review_mode=github_review_mode,
-            forgejo_owner_token=forgejo_owner_token,
-            forgejo_reviewer_token=forgejo_reviewer_token,
-            forgejo_reviewer_username=forgejo_reviewer_username,
-            org_token_overrides=org_token_overrides,
-            llm_host=llm_host,
-            llm_model=llm_model,
-            ollama_timeout=ollama_timeout,
-            llm_max_retries=llm_max_retries,
-            llm_max_turns=llm_max_turns,
-            advisor_max_blocks=advisor_max_blocks,
-            review_max_conversations=review_max_conversations,
-            llm_call_budget=llm_call_budget,
-            advisor_granularity=granularity,
-            poll_interval=poll_interval,
-            run_once=run_once,
-            repos_filter=repos_filter,
-            force_pr=force_pr,
-            debug=debug,
-            output_mode=output_mode,
-            output_path=output_path,
-            max_prompt_tokens=max_prompt_tokens,
-            max_file_chars=max_file_chars,
-            max_files=max_files,
-            max_structure_lines=max_structure_lines,
-            use_compact_template=use_compact_template,
-            use_strict_fragment_selection=use_strict_fragment_selection,
-            local_clone_base_dir=local_clone_base_dir,
-            clone_protocol=clone_protocol,
-        )

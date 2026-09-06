@@ -19,6 +19,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         max_retries: int = 5,
         max_conversations: int | None = None,
         max_feedback_rounds: int = 2,
+        max_tries: int = 2,
+        publish_inconclusive_review: bool = False,
         advisor: AssessPhasePort | None = None,
         manager: BriefNextPhasePort | None = None,
     ) -> None:
@@ -28,6 +30,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self._max_conversations = max_conversations
         self._max_retries = max_retries
         self._max_feedback_rounds = max_feedback_rounds
+        self._max_tries = max_tries
+        self._publish_inconclusive_review = publish_inconclusive_review
         self._advisor = advisor
         self._manager = manager
         self._phase_prompt_renderer = PhasePromptRenderer()
@@ -156,19 +160,14 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     "COMMENTED review."
                 ) from last_failure
 
-        if not result.items and dropped_findings:
-            logger.info(
-                "Verification refuted all %d findings; publishing the "
-                "refusal as-is without feedback rounds",
-                dropped_findings,
-            )
-        elif not result.items:
+        if not result.items:
             result = self._run_feedback_loop(
                 plan, repo_path, changed_files, model, result,
                 base_sha=base_sha,
                 review_session=review_session,
                 pr_identifier_service=f"{repo_name}/{pr_id_str}",
                 existing_item_ids=existing_item_ids,
+                previous_dropped_findings=dropped_findings,
             )
 
         return result
@@ -184,17 +183,37 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         pr_identifier_service: str,
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        previous_dropped_findings: int = 0,
     ) -> CodeReview:
-        """Re-run phases with the prior review output as feedback context."""
+        """Re-run the review with a progressively-improving prompt until resolved.
+
+        A review resolves when a run yields actionable items, or reaches a
+        genuine clean approval (no findings reported, none dropped). An
+        attempt whose reported findings were all dropped to zero — a
+        refutation — is inconclusive and keeps re-running with a prompt
+        grounded in the prior attempts' results and simplified over time.
+        After ``_max_tries`` inconclusive attempts the terminal behavior is
+        governed by ``publish_inconclusive_review``: raise
+        ``ReviewVerdictError`` by default, or publish the best result as-is
+        when enabled.
+        """
         best = previous_result
-        for round_num in range(self._max_feedback_rounds):
+        evidence: list[dict[str, Any]] = []
+        if previous_dropped_findings:
+            evidence.append(self._attempt_evidence(
+                attempt=0,
+                reported=previous_dropped_findings + len(previous_result.items),
+                dropped=previous_dropped_findings,
+                result=previous_result,
+            ))
+        for attempt in range(self._max_tries):
             logger.info(
-                "Feedback round %d/%d: re-running with prior review context",
-                round_num + 1,
-                self._max_feedback_rounds,
+                "Re-run attempt %d/%d: improving prompt with prior results",
+                attempt + 1,
+                self._max_tries,
             )
             context = self._build_feedback_context(
-                previous_result, round_num + 1
+                previous_result, attempt + 1, evidence
             )
             try:
                 outcome = self._run_phases(
@@ -211,59 +230,131 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 result = outcome.review
             except LlmUnavailableError:
                 logger.warning(
-                    "Feedback round %d: LLM unavailable, returning best",
-                    round_num + 1,
+                    "Re-run attempt %d: LLM unavailable; %s",
+                    attempt + 1,
+                    self._inconclusive_disposition(),
                 )
-                return best
+                return self._resolve_inconclusive(best)
             if outcome.has_items:
                 logger.info(
-                    "Feedback round %d produced %d items",
-                    round_num + 1,
+                    "Re-run attempt %d produced %d items",
+                    attempt + 1,
                     len(result.items),
                 )
                 return result
-            if outcome.is_clean_refutation:
+            if not outcome.is_clean_refutation:
                 logger.info(
-                    "Feedback round %d refuted all %d findings; returning result",
-                    round_num + 1,
-                    outcome.dropped_findings,
+                    "Re-run attempt %d reached a genuine clean approval",
+                    attempt + 1,
                 )
                 return result
+            evidence.append(self._attempt_evidence(
+                attempt=attempt + 1,
+                reported=outcome.dropped_findings + len(result.items),
+                dropped=outcome.dropped_findings,
+                result=result,
+            ))
             previous_result = result
             if len(result.summary or result.reason) > len(
                 best.summary or best.reason
             ):
                 best = result
         logger.warning(
-            "All %d feedback rounds exhausted; returning best result",
-            self._max_feedback_rounds,
+            "All %d re-run attempts inconclusive; %s",
+            self._max_tries,
+            self._inconclusive_disposition(),
         )
-        return best
+        return self._resolve_inconclusive(best)
+
+    @staticmethod
+    def _attempt_evidence(
+        attempt: int,
+        reported: int,
+        dropped: int,
+        result: CodeReview,
+    ) -> dict[str, Any]:
+        """Record one re-run attempt's outcome for grounding the next prompt."""
+        return {
+            "attempt": attempt,
+            "reported": reported,
+            "dropped": dropped,
+            "survived": len(result.items),
+            "verdict": result.verdict.value,
+            "explanation": (
+                result.summary or result.reason
+                or "no explanation provided"
+            ),
+        }
+
+    def _inconclusive_disposition(self) -> str:
+        """Return a loggable description of the terminal inconclusive behavior."""
+        if self._publish_inconclusive_review:
+            return "publishing the inconclusive result as-is"
+        return "refusing to publish a hollow review"
+
+    def _resolve_inconclusive(self, best: CodeReview) -> CodeReview:
+        """Return the terminal result for an inconclusive review.
+
+        Raises ``ReviewVerdictError`` unless ``publish_inconclusive_review``
+        is enabled, in which case the best attempt is published as-is.
+        """
+        if self._publish_inconclusive_review:
+            logger.warning(
+                "Review inconclusive after %d tries; publishing as-is "
+                "(PUBLISH_INCONCLUSIVE_REVIEW)", self._max_tries,
+            )
+            return best
+        logger.error(
+            "Review inconclusive after %d tries; refusing to publish a "
+            "hollow review", self._max_tries,
+        )
+        raise ReviewVerdictError(
+            f"All {self._max_tries} re-run attempts ended without a "
+            "genuine verdict; refusing to publish a hollow review. Set "
+            "PUBLISH_INCONCLUSIVE_REVIEW to publish the inconclusive "
+            "result as-is."
+        )
 
     def _build_feedback_context(
-        self, result: CodeReview, round_number: int
+        self,
+        result: CodeReview,
+        attempt_number: int,
+        evidence: list[dict[str, Any]],
     ) -> str:
-        """Build a feedback prompt from a zero-item review result."""
-        continuation = (
-            "Re-examine the diff carefully and confirm any issue by "
-            "reading the affected files before reporting it."
-            if round_number == 1
-            else (
-                f"This is re-examination attempt {round_number}. Prior "
-                "attempts found nothing actionable; finding nothing "
-                "again is a valid outcome — explain why the change is "
-                "correct."
-            )
-        )
+        """Build a re-run prompt grounded in prior attempts' results."""
         return self._feedback_renderer.render_content(
-            round_number=round_number,
-            escalation=continuation,
+            round_number=attempt_number,
+            escalation=self._escalation_for(attempt_number, evidence),
             previous_verdict=result.verdict.value,
             previous_explanation=(
                 result.summary or result.reason or "no explanation provided"
             ),
+            attempts=evidence,
         )
 
+    def _escalation_for(
+        self, attempt_number: int, evidence: list[dict[str, Any]]
+    ) -> str:
+        """Render the attempt-specific guidance for the re-run prompt."""
+        if attempt_number == 1:
+            return (
+                "Re-examine the diff carefully and confirm any issue by "
+                "reading the affected files before reporting it. Only "
+                "report issues you can confirm against the source."
+            )
+        attempted = ", ".join(
+            f"attempt {entry['attempt']} reported {entry['reported']} "
+            f"finding(s) but none survived source verification"
+            for entry in evidence
+            if entry.get("attempt", 1) > 0
+        )
+        return (
+            f"This is re-examination attempt {attempt_number}. Prior "
+            f"{attempted}. Re-derive a genuine verdict from the actual "
+            "source: approve only if nothing actionable remains, "
+            "otherwise flag what you can confirm. Finding nothing again "
+            "is a valid outcome — explain why the change is correct."
+        )
 
     def _run_phases(
         self,
@@ -544,13 +635,22 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
 
         dropped = previous_items - len(review_items)
         if dropped and not review_items:
+            reported_findings = (
+                list(previous.items) if previous is not None else []
+            )
+            described = self._describe_dropped_findings(reported_findings)
             reason = (
-                f"{dropped} finding(s) dropped because they did not survive "
-                "verification against source code."
+                "The reported issues did not survive verification against "
+                "the actual source: reading the affected files showed they "
+                f"do not correspond to a real defect — {described}. No "
+                "actionable change is required."
             )
             summary = (
-                f"{dropped} of {previous_items} findings did not survive "
-                "verification against source code."
+                "The review examined the diff and cross-checked each "
+                "reported concern against the source as written. "
+                f"{described} These were refuted during source-code "
+                "verification, so the change is assessed as correct with "
+                "no actionable findings."
             )
         elif dropped and review_items:
             blocking = [item for item in review_items if item.is_blocking]
@@ -560,7 +660,6 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             file_path = target.file_path.strip()
             file_str = f" in {file_path}" if file_path else ""
             reason = f"Identified {sev} issue{file_str}: {desc}" if desc else "Findings verified against source code."
-            files = sorted({item.file_path for item in review_items if item.file_path})
             cat_list = sorted({str(item.category) for item in review_items if item.category})
             cat_str = f" ({', '.join(cat_list)})" if cat_list else ""
             if blocking:
@@ -599,6 +698,20 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             praise=list(praise),
             model_used=model,
         )
+
+    @staticmethod
+    def _describe_dropped_findings(findings: list[ReviewItem]) -> str:
+        """Describe which reported findings were refuted, for a real summary."""
+        if not findings:
+            return "no findings were substantiated"
+        parts: list[str] = []
+        for item in findings[:3]:
+            location = f" in {item.file_path}" if item.file_path else ""
+            description = item.description.strip()
+            parts.append(f"\"{description}\"{location}")
+        joined = "; ".join(parts)
+        extra = f" (and {len(findings) - 3} more)" if len(findings) > 3 else ""
+        return f"specifically, {joined}{extra}"
 
     def _run_phase_with_retry(
         self,
