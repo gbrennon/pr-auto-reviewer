@@ -3,6 +3,15 @@ import logging
 from pr_auto_reviewer.application.ports.outbound.git_credential_provider_port import (
     GitCredentialProviderPort,
 )
+from pr_auto_reviewer.application.services.issue_content_preparer_service import (
+    IssueContentPreparerService,
+)
+from pr_auto_reviewer.application.services.register_issue_service import (
+    RegisterIssueService,
+)
+from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
+    RegisterIssueCommand,
+)
 from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
 )
@@ -123,15 +132,25 @@ class CompositionRoot:
         issue_command_parser = IssueCommandParser()
         issue_body_builder = IssueBodyBuilder()
 
+        issue_content_preparer = IssueContentPreparerService(
+            chat_port=c.chat_client,
+            issue_body_builder=issue_body_builder,
+        )
+        register_issue_service = RegisterIssueService(
+            pr_repository=c.pr_repository,
+            issue_content_preparer=issue_content_preparer,
+            issue_tracker=c.issue_tracker,
+        )
+        c.command_bus.register(
+            RegisterIssueCommand, register_issue_service.execute
+        )
+
         process_commands_service = ProcessIssueCommandsService(
             pr_repository=c.pr_repository,
-            review_reader=c.review_reader,
             comment_reader=c.comment_reader,
             comment_publisher=c.comment_publisher,
-            issue_tracker=c.issue_tracker,
-            review_item_parser=review_item_parser,
             issue_command_parser=issue_command_parser,
-            issue_body_builder=issue_body_builder,
+            command_bus=c.command_bus,
         )
 
         cli_runner = CliRunner(
