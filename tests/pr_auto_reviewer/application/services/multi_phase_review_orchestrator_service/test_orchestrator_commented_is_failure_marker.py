@@ -258,3 +258,64 @@ class TestOrchestratorCommentedIsFailureMarker:
         assert "AppInbound" not in runs[1]
         assert "PortLevel" in runs[1]
 
+
+    def test_blocking_finding_from_earlier_phase_controls_final_verdict(
+        self,
+    ) -> None:
+        blocking_item = ReviewItem(
+            severity=ItemSeverity.CRITICAL,
+            category=IssueCategory.BUG,
+            file_path="src/main.py",
+            description="Broken validation",
+        )
+        phase_results = iter([
+            PhaseResult(items=[blocking_item], llm_verdict="changes_requested"),
+            PhaseResult(items=[], llm_verdict="approved"),
+        ])
+        bus = InMemoryCommandBus()
+        bus.register(
+            RunAgentConversationCommand,
+            lambda command: next(phase_results),
+        )
+        bus.register(
+            AggregateReviewFindingsCommand,
+            lambda command: CodeReview(
+                verdict=ReviewVerdict.APPROVED,
+                reason="No issues found.",
+                summary="No issues found.",
+                items=list(command.items),
+                model_used="test",
+            ),
+        )
+        bus.register(
+            VerifyFindingsCommand,
+            lambda command: list(command.items),
+        )
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=bus,
+            tool_factory=lambda *args: None,
+        )
+        plan = ReviewPlan(
+            methodology="review",
+            phases=(
+                ReviewPhase(
+                    phase_id="engineer",
+                    phase_name="Engineer",
+                    system_prompt="engineer",
+                ),
+                ReviewPhase(
+                    phase_id="architect",
+                    phase_name="Architect",
+                    system_prompt="architect",
+                ),
+            ),
+        )
+
+        result = orchestrator._run_phases(
+            plan=plan,
+            repo_path=Path("."),
+            changed_files=[],
+            model="test",
+        ).review
+
+        assert result.verdict is ReviewVerdict.CHANGES_REQUESTED

@@ -36,8 +36,7 @@ _COMMAND_LINE_KEYS = {
     "GITHUB_API_URL", "GITHUB_REVIEW_MODE",
     "FORGEJO_API_URL", "FORGEJO_HOST",
     "RUN_ONCE", "REPOS_FILTER", "FORCE_PR",
-    "CLONE_PROTOCOL",
-    "REVIEW_MAX_TRIES", "PUBLISH_INCONCLUSIVE_REVIEW",
+    "CLONE_PROTOCOL", "REVIEW_MAX_TRIES",
 }
 
 _CONFIG_KEYS = list(_COMMAND_LINE_KEYS) + [
@@ -106,10 +105,6 @@ class ConfigLoader:
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
         review_max_tries = int(values.pop("REVIEW_MAX_TRIES", 2))
-        publish_inconclusive_review = (
-            values.pop("PUBLISH_INCONCLUSIVE_REVIEW", "").strip().lower()
-            in ("1", "true", "yes")
-        )
         llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
@@ -122,7 +117,6 @@ class ConfigLoader:
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
             review_max_tries=review_max_tries,
-            publish_inconclusive_review=publish_inconclusive_review,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )
@@ -152,10 +146,6 @@ class ConfigLoader:
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
         )
         review_max_tries = int(values.pop("REVIEW_MAX_TRIES", 2))
-        publish_inconclusive_review = (
-            values.pop("PUBLISH_INCONCLUSIVE_REVIEW", "").strip().lower()
-            in ("1", "true", "yes")
-        )
         llm_call_budget = int(values.pop("LLM_CALL_BUDGET", 300))
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
@@ -168,7 +158,6 @@ class ConfigLoader:
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
             review_max_tries=review_max_tries,
-            publish_inconclusive_review=publish_inconclusive_review,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )

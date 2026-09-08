@@ -52,7 +52,6 @@ class ConfigBuilder:
         advisor_max_blocks: int = 2,
         review_max_conversations: int = 48,
         review_max_tries: int = 2,
-        publish_inconclusive_review: bool = False,
         llm_call_budget: int = 300,
         advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
     ) -> Config:
@@ -150,7 +149,6 @@ class ConfigBuilder:
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
             review_max_tries=review_max_tries,
-            publish_inconclusive_review=publish_inconclusive_review,
             llm_call_budget=llm_call_budget,
             advisor_granularity=granularity,
             poll_interval=poll_interval,

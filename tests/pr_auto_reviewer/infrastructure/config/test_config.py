@@ -181,34 +181,6 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.review_max_tries == 2
 
-    def test_publish_inconclusive_review_true_from_env(
-        self, monkeypatch, tmp_path: Path,
-    ):
-        from pr_auto_reviewer.infrastructure.config.config import load_config
-
-        self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("PUBLISH_INCONCLUSIVE_REVIEW", "true")
-        cfg = load_config()
-        assert cfg.publish_inconclusive_review is True
-
-    def test_publish_inconclusive_review_defaults_to_false(
-        self, monkeypatch, tmp_path: Path,
-    ):
-        from pr_auto_reviewer.infrastructure.config.config import load_config
-
-        self._enter_dev_mode(tmp_path)
-        cfg = load_config()
-        assert cfg.publish_inconclusive_review is False
-
-    def test_publish_inconclusive_review_accepts_numeric_true(
-        self, monkeypatch, tmp_path: Path,
-    ):
-        from pr_auto_reviewer.infrastructure.config.config import load_config
-
-        self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("PUBLISH_INCONCLUSIVE_REVIEW", "1")
-        cfg = load_config()
-        assert cfg.publish_inconclusive_review is True
 
     def test_github_settings(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
