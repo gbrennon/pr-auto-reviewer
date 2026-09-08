@@ -1,3 +1,5 @@
+import re
+
 from ._helpers import *
 
 
@@ -180,6 +182,19 @@ class TestReviewResponseParser:
         raw = json.dumps(data)
         result = ReviewResponseParser().parse(raw, "m")
         assert len(result.items) == 1
+
+    def test_parse_json_suggestion_uses_six_character_hex_id(self):
+        data = {
+            "issues": [],
+            "suggestions": [
+                {"file": "b.py", "line": "2", "description": "improvement"},
+            ],
+            "summary": "ok",
+        }
+
+        result = ReviewResponseParser().parse(json.dumps(data), "m")
+
+        assert re.fullmatch(r"[0-9a-f]{6}", result.suggestions[0].id)
 
     def test_parse_when_nested_json_embedded_in_text_then_extracts_and_parses(self):
         raw = 'Some preamble text.\\n{"issues":[],"summary":"nested ok","verdict":"approved"}\\nMore text after.'

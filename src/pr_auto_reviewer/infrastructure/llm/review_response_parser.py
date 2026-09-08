@@ -28,8 +28,8 @@ class ReviewResponseParser:
     """Parse the raw LLM text into a CodeReview domain object."""
 
     _STOP_TOKENS = ("<|im_end|>", "<｜end▁of▁thinking｜>")
-    @staticmethod
-    def _new_suggestion_id() -> str:
+    @classmethod
+    def _new_suggestion_id(cls) -> str:
         """Return a six-character lowercase hexadecimal suggestion ID."""
         return _uuid.uuid4().hex[:6]
 
