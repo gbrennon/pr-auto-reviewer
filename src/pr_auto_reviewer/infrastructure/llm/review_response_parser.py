@@ -28,6 +28,10 @@ class ReviewResponseParser:
     """Parse the raw LLM text into a CodeReview domain object."""
 
     _STOP_TOKENS = ("<|im_end|>", "<｜end▁of▁thinking｜>")
+    @staticmethod
+    def _new_suggestion_id() -> str:
+        """Return a six-character lowercase hexadecimal suggestion ID."""
+        return _uuid.uuid4().hex[:6]
 
     _STRUCTURED_ITEM = re.compile(
         r"^###\s+\[(\w+)\]\s+\[(\w+)\]\s+([^\s—:]+)(?::(\d+))?\s*—\s*(.+)$",
@@ -162,7 +166,7 @@ class ReviewResponseParser:
                 file_path=str(s.get("file", "")),
                 description=str(s.get("description", "")),
                 line=str(s.get("line", "")),
-                id=s.get("id", ""),
+                id=self._new_suggestion_id(),
                 current_code=s.get("current_code", ""),
                 suggested_fix=s.get("suggested_code", ""),
             )
@@ -1156,7 +1160,7 @@ class ReviewResponseParser:
                     file_path=str(s.get("file", "") if isinstance(s, dict) else ""),
                     description=str(s.get("description", "") if isinstance(s, dict) else s),
                     line=str(s.get("line", "") if isinstance(s, dict) else ""),
-                    id=s.get("id", s.get("_id", "")) if isinstance(s, dict) else "",
+                    id=self._new_suggestion_id(),
                     current_code=str(s.get("current_code", "")) if isinstance(s, dict) else "",
                     suggested_fix=str(s.get("suggested_code", "")) if isinstance(s, dict) else "",
                 )
