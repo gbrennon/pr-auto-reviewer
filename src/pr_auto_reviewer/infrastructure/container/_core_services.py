@@ -196,6 +196,9 @@ def _build_review_plan() -> ReviewPlan:
     )
 
 if TYPE_CHECKING:
+    from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
+        AgentChatPort,
+    )
     from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
         CommandBusPort,
     )
@@ -240,6 +243,7 @@ class CoreServices:
     fragment_max_tokens: int | None
     review_context_factory: ReviewContextFactoryPort
     conversation_service: AgentConversationService
+    chat_client: AgentChatPort
 
 
 
@@ -408,4 +412,5 @@ def wire_core_services(
         fragment_max_tokens=fragment_max_tokens,
         review_context_factory=review_context_factory,
         conversation_service=conversation_service,
+        chat_client=chat_client,
     )

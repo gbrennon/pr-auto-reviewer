@@ -1,4 +1,5 @@
 from .inbound import (
+    PrepareIssueContentPort,
     ProcessIssueCommandsPort,
     RegisterIssuePort,
     ReviewPullRequestPort,
@@ -30,6 +31,7 @@ __all__ = [
     "IssueTrackerPort",
     "LlmReviewPort",
     "NotifierPort",
+    "PrepareIssueContentPort",
     "ProcessIssueCommandsPort",
     "PromptRendererPort",
     "PullRequestRepositoryPort",

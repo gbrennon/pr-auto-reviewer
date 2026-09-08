@@ -14,6 +14,10 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers.advisor im
     AdvisorTurnGradeSystemRenderer,
     AdvisorTurnGradeUserRenderer,
 )
+from pr_auto_reviewer.infrastructure.templates.conversation_renderers.issue_content import (
+    IssueContentSystemRenderer,
+    IssueContentUserRenderer,
+)
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers.manager import (
     ManagerBriefSystemRenderer,
     ManagerBriefUserRenderer,
@@ -55,6 +59,8 @@ __all__ = [
     "FeedbackContextRenderer",
     "ForceVerdictMessageRenderer",
     "InitialUserMessageRenderer",
+    "IssueContentSystemRenderer",
+    "IssueContentUserRenderer",
     "ManagerBriefSystemRenderer",
     "ManagerBriefUserRenderer",
     "PhasePromptRenderer",

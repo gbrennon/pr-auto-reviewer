@@ -82,6 +82,9 @@ class TestJsonFilePullRequestRepository:
         category: str = "security",
         file_path: str = "src/auth.py",
         description: str = "Missing input validation",
+        line: str = "",
+        current_code: str = "",
+        suggested_fix: str = "",
     ) -> ReviewItem:
         return ReviewItem(
             id=item_id,
@@ -89,6 +92,9 @@ class TestJsonFilePullRequestRepository:
             category=category,
             file_path=file_path,
             description=description,
+            line=line,
+            current_code=current_code,
+            suggested_fix=suggested_fix,
         )
 
     def test_find_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
@@ -121,7 +127,13 @@ class TestJsonFilePullRequestRepository:
             summary="LGTM",
             model_used="llama3",
             items=[
-                self._item(item_id="id-1", severity=ItemSeverity.CRITICAL),
+                self._item(
+                    item_id="id-1",
+                    severity=ItemSeverity.CRITICAL,
+                    line="42",
+                    current_code="value = source.value",
+                    suggested_fix="value = source.get_value()",
+                ),
                 self._item(
                     item_id="id-2",
                     severity=ItemSeverity.MINOR,
@@ -282,3 +294,79 @@ class TestJsonFilePullRequestRepository:
 
         raw = json.loads((tmp_path / "state.json").read_text())
         assert raw == {"reviewed": {}}
+
+    def test_serializes_and_deserializes_suggestions(self, tmp_path: Path) -> None:
+        repo = self._repo(tmp_path)
+        item = ReviewItem(
+            severity=ItemSeverity.CRITICAL,
+            category="bug",
+            file_path="src/a.py",
+            description="Bug found",
+            id="item-1",
+        )
+        suggestion = ReviewItem(
+            severity=ItemSeverity.INFO,
+            category="design",
+            file_path="src/b.py",
+            description="Design suggestion",
+            id="sugg-1",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found issues",
+            summary="Summary",
+            model_used="model",
+            items=[item],
+            suggestions=[suggestion],
+        )
+        pr = self._pr(reviews=(review,))
+        repo.save(pr)
+
+        loaded = repo.find(pr.id)
+        assert loaded is not None
+        assert len(loaded.reviews) == 1
+        loaded_review = loaded.reviews[0]
+        assert len(loaded_review.items) == 1
+        assert loaded_review.items[0].id == "item-1"
+        assert len(loaded_review.suggestions) == 1
+        assert loaded_review.suggestions[0].id == "sugg-1"
+        assert loaded_review.suggestions[0].description == "Design suggestion"
+
+    def test_deserializes_review_without_suggestions_key(self, tmp_path: Path) -> None:
+        state_file = tmp_path / "state.json"
+        old_raw = {
+            "reviewed": {
+                "owner/repo/42": {
+                    "title": "Old PR",
+                    "head_sha": "abc1234",
+                    "is_draft": False,
+                    "reviews": [
+                        {
+                            "verdict": "approved",
+                            "summary": "Looks good",
+                            "model_used": "test-model",
+                            "reason": "All passed",
+                            "items": [
+                                {
+                                    "id": "i1",
+                                    "severity": "info",
+                                    "category": "general",
+                                    "file_path": None,
+                                    "description": "Notice",
+                                }
+                            ],
+                        }
+                    ],
+                    "unresolved_blocking_ids": [],
+                    "last_reviewed_at": None,
+                    "processed_comment_ids": [],
+                }
+            }
+        }
+        state_file.write_text(json.dumps(old_raw))
+        repo = self._repo(tmp_path)
+        loaded = repo.find(PullRequestId(repository="owner/repo", number=42))
+        assert loaded is not None
+        assert len(loaded.reviews) == 1
+        assert loaded.reviews[0].suggestions == []
+        assert len(loaded.reviews[0].items) == 1

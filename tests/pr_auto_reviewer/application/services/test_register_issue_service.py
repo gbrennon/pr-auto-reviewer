@@ -1,218 +1,158 @@
-"""Application-layer tests for RegisterIssueService using injected mocks."""
+"""Application-layer tests for RegisterIssueService."""
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
-from pr_auto_reviewer.application.serializers.issue_body_builder import (
-    IssueBodyBuilder,
+from pr_auto_reviewer.application.services.register_issue_service import (
+    RegisterIssueService,
 )
-from pr_auto_reviewer.application.services import RegisterIssueService
-from pr_auto_reviewer.domain import (
-    CommitSha,
-    ItemSeverity,
-    PullRequest,
-    PullRequestId,
+from pr_auto_reviewer.domain.entities.issue import Issue
+from pr_auto_reviewer.domain.entities.pull_request import PullRequest
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions import (
     PullRequestNotFoundError,
-    ReviewItem,
     ReviewItemNotFoundError,
 )
 from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
-from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
+from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
+from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
+from pr_auto_reviewer.domain.value_objects.issue_content import IssueContent
+from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 
 class TestRegisterIssueService:
 
-    def test_registers_issue_by_id(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        mock_pr_repository.find.return_value = _pr
-        mock_review_reader.get_latest_review.return_value = (
-            "1. [bug] [MAJOR] x.py\n\nbroken"
+    def test_registers_issue_by_item_id(
+        self,
+        _pr_id: PullRequestId,
+        _sha: CommitSha,
+        _item: ReviewItem,
+        _review: CodeReview,
+    ) -> None:
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            _review, _sha
         )
-        parser = ReviewItemParser()
-        builder = IssueBodyBuilder()
+        mock_pr_repository = MagicMock()
+        mock_pr_repository.find.return_value = pr
 
-        # Parse the review to get the actual generated ID
-        items = parser.parse(mock_review_reader.get_latest_review.return_value)
-        generated_id = items[0].id
-
-        svc = RegisterIssueService(
-            mock_pr_repository, mock_review_reader, parser,
-            mock_issue_tracker, builder,
-        )
-        svc.execute(
-            RegisterIssueCommand(
-                pr_id=_pr_id,
-                head_sha=_sha,
-                issue_id=generated_id,
-                command_text=f"issue {generated_id}",
-            )
+        mock_content_preparer = MagicMock()
+        mock_content_preparer.execute.return_value = IssueContent(
+            title="Prepared Title", body="Prepared Body"
         )
 
-        mock_issue_tracker.create.assert_called_once()
-        _, kwargs = mock_issue_tracker.create.call_args
-        assert kwargs["repository"] == "owner/repo"
-        assert "MAJOR" in kwargs["title"]
-        assert "broken" in kwargs["body"]
-
-    def test_registers_issue_by_number_fallback(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        mock_pr_repository.find.return_value = _pr
-        mock_review_reader.get_latest_review.return_value = (
-            "1. [style] [MINOR] y.py\n\nnit"
+        expected_issue = Issue(
+            id=101,
+            repository="owner/repo",
+            title="Prepared Title",
+            body="Prepared Body",
+            source_pr_id=_pr_id,
+            source_item_id=_item.id,
         )
-        parser = ReviewItemParser()
-        builder = IssueBodyBuilder()
+        mock_issue_tracker = MagicMock()
+        mock_issue_tracker.create.return_value = expected_issue
 
-        # Parse the review to get the actual generated ID
-        items = parser.parse(mock_review_reader.get_latest_review.return_value)
-        generated_id = items[0].id
-
-        svc = RegisterIssueService(
-            mock_pr_repository, mock_review_reader, parser,
-            mock_issue_tracker, builder,
-        )
-        svc.execute(
-            RegisterIssueCommand(
-                pr_id=_pr_id,
-                head_sha=_sha,
-                issue_id=generated_id,
-                command_text=f"issue {generated_id}",
-            )
+        service = RegisterIssueService(
+            pr_repository=mock_pr_repository,
+            issue_content_preparer=mock_content_preparer,
+            issue_tracker=mock_issue_tracker,
         )
 
-        mock_issue_tracker.create.assert_called_once()
+        result = service.execute(
+            RegisterIssueCommand(pr_id=_pr_id, issue_id=_item.id)
+        )
+
+        assert result is expected_issue
+        mock_issue_tracker.create.assert_called_once_with(
+            repository="owner/repo",
+            title="Prepared Title",
+            body="Prepared Body",
+            source_item_id=_item.id,
+        )
 
     def test_raises_when_pr_not_found(
-        self, _pr_id, _sha, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
+        self, _pr_id: PullRequestId
+    ) -> None:
+        mock_pr_repository = MagicMock()
         mock_pr_repository.find.return_value = None
-        svc = RegisterIssueService(
-            mock_pr_repository,
-            mock_review_reader,
-            ReviewItemParser(),
-            mock_issue_tracker,
-            IssueBodyBuilder(),
-        )
-        with pytest.raises(PullRequestNotFoundError):
-            svc.execute(
-                RegisterIssueCommand(
-                    pr_id=_pr_id,
-                    head_sha=_sha,
-                    issue_id="x",
-                    command_text="x",
-                )
-            )
+        mock_content_preparer = MagicMock()
+        mock_issue_tracker = MagicMock()
 
-    def test_raises_when_no_review(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        mock_pr_repository.find.return_value = _pr
-        mock_review_reader.get_latest_review.return_value = None
-        svc = RegisterIssueService(
-            mock_pr_repository,
-            mock_review_reader,
-            ReviewItemParser(),
-            mock_issue_tracker,
-            IssueBodyBuilder(),
+        service = RegisterIssueService(
+            pr_repository=mock_pr_repository,
+            issue_content_preparer=mock_content_preparer,
+            issue_tracker=mock_issue_tracker,
         )
-        with pytest.raises(ReviewItemNotFoundError):
-            svc.execute(
-                RegisterIssueCommand(
-                    pr_id=_pr_id,
-                    head_sha=_sha,
-                    issue_id="x",
-                    command_text="x",
-                )
+
+        with pytest.raises(PullRequestNotFoundError):
+            service.execute(
+                RegisterIssueCommand(pr_id=_pr_id, issue_id="item-1")
             )
 
     def test_raises_when_item_not_found(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        mock_pr_repository.find.return_value = _pr
-        mock_review_reader.get_latest_review.return_value = (
-            "1. [bug] [MAJOR] x.py\n\nbroken"
+        self,
+        _pr_id: PullRequestId,
+        _sha: CommitSha,
+        _review: CodeReview,
+    ) -> None:
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            _review, _sha
         )
-        svc = RegisterIssueService(
-            mock_pr_repository,
-            mock_review_reader,
-            ReviewItemParser(),
-            mock_issue_tracker,
-            IssueBodyBuilder(),
+        mock_pr_repository = MagicMock()
+        mock_pr_repository.find.return_value = pr
+        mock_content_preparer = MagicMock()
+        mock_issue_tracker = MagicMock()
+
+        service = RegisterIssueService(
+            pr_repository=mock_pr_repository,
+            issue_content_preparer=mock_content_preparer,
+            issue_tracker=mock_issue_tracker,
         )
+
         with pytest.raises(ReviewItemNotFoundError):
-            svc.execute(
-                RegisterIssueCommand(
-                    pr_id=_pr_id,
-                    head_sha=_sha,
-                    issue_id="nonexistent",
-                    command_text="issue nonexistent",
-                )
+            service.execute(
+                RegisterIssueCommand(pr_id=_pr_id, issue_id="nonexistent-id")
             )
 
-    def test_raises_when_empty_review_items(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        """When review body parses to zero items, raises ReviewItemNotFoundError."""
-        mock_pr_repository.find.return_value = _pr
-        mock_review_reader.get_latest_review.return_value = "No structured items"
-        svc = RegisterIssueService(
-            mock_pr_repository,
-            mock_review_reader,
-            ReviewItemParser(),
-            mock_issue_tracker,
-            IssueBodyBuilder(),
-        )
-        with pytest.raises(ReviewItemNotFoundError, match="no review items found"):
-            svc.execute(
-                RegisterIssueCommand(
-                    pr_id=_pr_id,
-                    head_sha=_sha,
-                    issue_id="x",
-                    command_text="x",
-                )
-            )
+    def test_find_item_by_id_directly(self, _item: ReviewItem) -> None:
+        result = RegisterIssueService._find_item([_item], _item.id)
+        assert result is _item
 
-    def test_find_item_by_id_directly(
-        self, _pr_id, _sha, _pr, mock_pr_repository, mock_review_reader,
-        mock_issue_tracker,
-    ):
-        """_find_item returns the item when issue_id matches item.id."""
-        mock_pr_repository.find.return_value = _pr
-        svc = RegisterIssueService(
-            mock_pr_repository,
-            mock_review_reader,
-            ReviewItemParser(),
-            mock_issue_tracker,
-            IssueBodyBuilder(),
-        )
-        item = ReviewItem(
-            severity=ItemSeverity.MAJOR,
-            category="bug",
-            file_path="x.py",
-            description="broken",
-            id="custom-id",
-        )
-        result = svc._find_item([item], "custom-id")
-        assert result is item
+    def test_find_item_raises_when_absent(self, _item: ReviewItem) -> None:
+        with pytest.raises(ReviewItemNotFoundError):
+            RegisterIssueService._find_item([_item], "absent-id")
+
     @pytest.fixture
-    def _pr_id(self):
+    def _pr_id(self) -> PullRequestId:
         return PullRequestId(repository="owner/repo", number=42)
 
     @pytest.fixture
-    def _sha(self):
-        return CommitSha(value="abc123")
+    def _sha(self) -> CommitSha:
+        return CommitSha(value="abc1234")
 
     @pytest.fixture
-    def _pr(self, _pr_id, _sha):
-        return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha)
+    def _item(self) -> ReviewItem:
+        return ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="src/main.py",
+            description="Null check missing",
+        )
+
+    @pytest.fixture
+    def _review(self, _item: ReviewItem) -> CodeReview:
+        return CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found bugs",
+            summary="Review completed",
+            model_used="test-model",
+            items=[_item],
+        )

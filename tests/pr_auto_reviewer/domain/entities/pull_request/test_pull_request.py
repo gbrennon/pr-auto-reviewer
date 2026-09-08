@@ -299,3 +299,44 @@ class TestPullRequest:
         result = pr.with_resolved_blocking()
         assert result is pr
 
+    def test_latest_review_items_empty_when_no_reviews(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+        assert pr.latest_review_items() == ()
+
+    def test_latest_review_items_combines_items_and_suggestions(self) -> None:
+        item = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.CRITICAL,
+            category="bug",
+            file_path="src/a.py",
+            description="Bug description",
+        )
+        suggestion = ReviewItem(
+            id="sugg-1",
+            severity=ItemSeverity.INFO,
+            category="design",
+            file_path="src/b.py",
+            description="Design suggestion",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            summary="Summary",
+            reason="Reason",
+            model_used="model",
+            items=[item],
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        ).add_review(review, CommitSha(value="abc"))
+        items = pr.latest_review_items()
+        assert len(items) == 2
+        assert items[0] == item
+        assert items[1] == suggestion
+

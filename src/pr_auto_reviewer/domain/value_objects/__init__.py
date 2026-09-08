@@ -10,6 +10,7 @@ from .conversation_message import ConversationMessage
 from .git_credentials import GitCredentials
 from .issue_category import IssueCategory
 from .issue_command import IssueCommand
+from .issue_content import IssueContent
 from .item_severity import ItemSeverity
 from .phase_result import PhaseResult
 from .pr_comment import PrComment
@@ -40,6 +41,7 @@ __all__ = [
     "GitCredentials",
     "IssueCategory",
     "IssueCommand",
+    "IssueContent",
     "ItemSeverity",
     "PhaseResult",
     "PrComment",

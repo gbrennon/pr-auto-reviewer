@@ -1,5 +1,6 @@
 from .aggregate_review_findings_port import AggregateReviewFindingsPort
 from .parse_review_turn_port import ParseReviewTurnPort
+from .prepare_issue_content_port import PrepareIssueContentPort
 from .process_issue_commands_port import ProcessIssueCommandsPort
 from .register_issue_port import RegisterIssuePort
 from .review_pull_request_port import ReviewPullRequestPort
@@ -10,6 +11,7 @@ from .verify_findings_port import VerifyFindingsPort
 __all__ = [
     "AggregateReviewFindingsPort",
     "ParseReviewTurnPort",
+    "PrepareIssueContentPort",
     "ProcessIssueCommandsPort",
     "RegisterIssuePort",
     "ReviewPullRequestPort",

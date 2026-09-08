@@ -68,3 +68,4 @@ or the CLI: `pr-auto-reviewer start|stop|status|logs|restart`.
 | [Architecture](docs/structure.md) | Codebase structure |
 | [Review Flow](docs/review-flow-architecture.md) | Detailed flow |
 | [Token Setup](docs/tokens/README.md) | Token types, permissions, verification |
+| [PR Comment Commands](docs/command-guide.md) | Guide to commands commented on PRs |

@@ -3,49 +3,57 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
+from pr_auto_reviewer.application.ports.inbound.prepare_issue_content_port import (
+    PrepareIssueContentPort,
+)
+from pr_auto_reviewer.application.ports.inbound.register_issue_port import (
+    RegisterIssuePort,
+)
+from pr_auto_reviewer.application.ports.outbound.issue_tracker_port import (
+    IssueTrackerPort,
+)
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
+)
+from pr_auto_reviewer.domain.entities.issue import Issue
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.exceptions.pull_request_not_found_error import (
+    PullRequestNotFoundError,
+)
+from pr_auto_reviewer.domain.exceptions.review_item_not_found_error import (
+    ReviewItemNotFoundError,
+)
+from pr_auto_reviewer.domain.messages.commands.prepare_issue_content_command import (
+    PrepareIssueContentCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
 
-from ...domain.entities.review_item import ReviewItem
-from ...domain.exceptions.pull_request_not_found_error import PullRequestNotFoundError
-from ...domain.exceptions.review_item_not_found_error import ReviewItemNotFoundError
-from ...domain.services.review_item_parser import ReviewItemParser
-from ..ports.inbound.register_issue_port import RegisterIssuePort
-from ..ports.outbound.issue_tracker_port import IssueTrackerPort
-from ..ports.outbound.pull_request_repository_port import PullRequestRepositoryPort
-from ..ports.outbound.review_reader_port import ReviewReaderPort
-from ..serializers.issue_body_builder import IssueBodyBuilder
-
 logger = logging.getLogger(__name__)
 
-class RegisterIssueService(RegisterIssuePort):
-    """Registers a single review item as a tracker issue on the remote platform.
 
-    Triggered by a PR comment containing ``issue <short-id>``.
-    The caller (adapter) is responsible for extracting the *issue_id* and
-    building the ``RegisterIssueCommand`` from the comment.
-    """
+class RegisterIssueService(RegisterIssuePort):
+    """Registers a single review item as a tracker issue on the remote platform."""
 
     def __init__(
         self,
         pr_repository: PullRequestRepositoryPort,
-        review_reader: ReviewReaderPort,
-        review_item_parser: ReviewItemParser,
+        issue_content_preparer: PrepareIssueContentPort,
         issue_tracker: IssueTrackerPort,
-        issue_body_builder: IssueBodyBuilder,
     ) -> None:
         self._pr_repository = pr_repository
-        self._review_reader = review_reader
-        self._review_item_parser = review_item_parser
+        self._issue_content_preparer = issue_content_preparer
         self._issue_tracker = issue_tracker
-        self._issue_body_builder = issue_body_builder
 
-    def execute(self, command: RegisterIssueCommand) -> None:
+    def execute(self, command: RegisterIssueCommand) -> Issue:
+        """Register the review item identified by command as an issue and return it."""
         logger.info(
-            "Registering issue '%s' for PR %s (command: %r)",
-            command.issue_id, command.pr_id, command.command_text,
+            "Registering issue '%s' for PR %s",
+            command.issue_id,
+            command.pr_id,
         )
 
         pr = self._pr_repository.find(command.pr_id)
@@ -54,35 +62,29 @@ class RegisterIssueService(RegisterIssuePort):
                 f"PullRequest {command.pr_id} not found"
             )
 
-        raw_body = self._review_reader.get_latest_review(pr.id)
-        if not raw_body:
-            raise ReviewItemNotFoundError(
-                f"no review found for {command.pr_id}"
-            )
-
-        items = self._review_item_parser.parse(raw_body)
-        if not items:
-            raise ReviewItemNotFoundError(
-                f"no review items found for {command.pr_id}"
-            )
-
+        items = pr.latest_review_items()
         item = self._find_item(items, command.issue_id)
+        content = self._issue_content_preparer.execute(
+            PrepareIssueContentCommand(pr_id=pr.id, item=item)
+        )
 
-        title, body = self._issue_body_builder.build(pr.id, item)
-        self._issue_tracker.create(
-            repository=pr.id.repository, title=title, body=body, source_item_id=item.id,
+        created_issue = self._issue_tracker.create(
+            repository=pr.id.repository,
+            title=content.title,
+            body=content.body,
+            source_item_id=item.id,
         )
 
         logger.info(
-            "Issue '%s' registered for PR %s", command.issue_id, command.pr_id,
+            "Issue '%s' registered for PR %s as issue #%s",
+            command.issue_id,
+            command.pr_id,
+            created_issue.id,
         )
+        return created_issue
 
-    def _find_item(self, items: list[ReviewItem], issue_id: str) -> ReviewItem:
-        """Return the ReviewItem whose ``id`` matches *issue_id*.
-
-        Raises:
-            ReviewItemNotFoundError: when no item matches.
-        """
+    @staticmethod
+    def _find_item(items: Sequence[ReviewItem], issue_id: str) -> ReviewItem:
         for item in items:
             if item.id == issue_id:
                 return item
