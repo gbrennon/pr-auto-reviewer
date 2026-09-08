@@ -5,16 +5,20 @@ class TestContentLevelDedup:
     """Byte-equivalent findings cannot republish under fresh IDs."""
 
     @staticmethod
-    def _item(file_path, code, item_id=""):
+    def _item(
+        file_path: str,
+        code: str,
+        item_id: str = "",
+        description: str = "duplicated finding text",
+    ) -> ReviewItem:
         return ReviewItem(
             severity=ItemSeverity.MINOR,
             category=IssueCategory.MAINTAINABILITY,
             file_path=file_path,
-            description="duplicated finding text",
+            description=description,
             id=item_id,
             current_code=code,
         )
-
     @staticmethod
     def _persisted_pr(items):
         pr = MagicMock()
@@ -59,6 +63,39 @@ class TestContentLevelDedup:
         )
         recycled = self._item(
             "src/mod.py", "y = unsafe(x)",
+        )
+        review = _review(ReviewVerdict.APPROVED, items=[recycled])
+
+        result = service._drop_persisted_duplicates(
+            review, self._persisted_pr([published]),
+        )
+
+        assert result.items == []
+
+    def test_distinct_finding_with_empty_code_on_same_file_survives(self) -> None:
+        service = self._build_service()
+        published = self._item(
+            "src/mod.py", "", description="Missing class docstring",
+        )
+        fresh = self._item(
+            "src/mod.py", "", description="Unused import os",
+        )
+        review = _review(ReviewVerdict.APPROVED, items=[fresh])
+
+        result = service._drop_persisted_duplicates(
+            review, self._persisted_pr([published]),
+        )
+
+        assert len(result.items) == 1
+        assert result.items[0].description == "Unused import os"
+
+    def test_duplicate_finding_with_empty_code_is_dropped(self) -> None:
+        service = self._build_service()
+        published = self._item(
+            "src/mod.py", "", item_id="p1", description="Missing class docstring",
+        )
+        recycled = self._item(
+            "src/mod.py", "", item_id="p2", description="Missing class docstring",
         )
         review = _review(ReviewVerdict.APPROVED, items=[recycled])
 

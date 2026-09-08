@@ -63,6 +63,21 @@ class TestReviewResponseParser:
         result = ReviewResponseParser().parse(raw, "m")
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
 
+    def test_parse_json_with_regex_escape_in_code_fields(self):
+        raw = (
+            '{"issues": [{"file": "x.py", "line": "1", '
+            '"severity": "minor", "type": "quality", '
+            '"description": "regex", '
+            '"current_code": "re.match(r\'\\d+\', value)", '
+            '"suggested_fix": "re.fullmatch(r\'\\d+\', value)"}], '
+            '"summary": "regex"}'
+        )
+
+        result = ReviewResponseParser().parse(raw, "m")
+
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
+        assert result.items[0].current_code == "re.match(r'\\d+', value)"
+
     def test_parse_json_without_issues_returns_approved(self):
         data = {"issues": [], "summary": "ok"}
         raw = json.dumps(data)

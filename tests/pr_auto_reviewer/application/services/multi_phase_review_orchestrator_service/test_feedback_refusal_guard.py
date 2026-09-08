@@ -125,7 +125,7 @@ class TestFeedbackRefusalGuard:
 
         assert len(calls) == orchestrator._max_tries
 
-    def test_inconclusive_refutation_publishes_as_is_when_flag_enabled(
+    def test_inconclusive_refutation_raises_after_legacy_override_removal(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         plan = SimpleNamespace(
@@ -133,7 +133,6 @@ class TestFeedbackRefusalGuard:
         )
         orchestrator = self._orchestrator(
             mock_command_bus, mock_tool_factory,
-            publish_inconclusive_review=True,
         )
         initial_empty = _code_review(verdict=ReviewVerdict.APPROVED)
         calls: list[int] = []
@@ -147,15 +146,15 @@ class TestFeedbackRefusalGuard:
             )
 
         orchestrator._run_phases = _always_refuted
-        result = orchestrator._run_feedback_loop(
-            plan=plan,
-            repo_path=Path("/tmp"),
-            changed_files=["src/main.py"],
-            model="test",
-            previous_result=initial_empty,
-            review_session="test-session",
-            pr_identifier_service="owner/repo/1",
-        )
+        with _pytest.raises(ReviewVerdictError):
+            orchestrator._run_feedback_loop(
+                plan=plan,
+                repo_path=Path("/tmp"),
+                changed_files=["src/main.py"],
+                model="test",
+                previous_result=initial_empty,
+                review_session="test-session",
+                pr_identifier_service="owner/repo/1",
+            )
 
         assert len(calls) == orchestrator._max_tries
-        assert result.verdict == ReviewVerdict.APPROVED.value

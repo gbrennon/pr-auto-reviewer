@@ -337,7 +337,6 @@ def wire_core_services(
         ),
         max_conversations=config.review_max_conversations,
         max_tries=config.review_max_tries,
-        publish_inconclusive_review=config.publish_inconclusive_review,
         advisor=advisor,
         manager=PhaseManagerService(chat_port=chat_client, command_bus=command_bus),
     )

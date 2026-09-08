@@ -1029,17 +1029,23 @@ class ReviewResponseParser:
 
     @staticmethod
     def sanitize_json_literals(text: str) -> str:
-        """Escape raw control characters inside JSON string literals."""
+        """Escape raw control characters and invalid escapes inside JSON string literals."""
         out: list[str] = []
         in_string = False
         escaped = False
-        for ch in text:
+        valid_escapes = {'"', "\\", "/", "b", "f", "n", "r", "t", "u"}
+        for index, ch in enumerate(text):
             if escaped:
                 out.append(ch)
                 escaped = False
                 continue
             if ch == "\\":
-                out.append(ch)
+                if in_string and (
+                    index + 1 == len(text) or text[index + 1] not in valid_escapes
+                ):
+                    out.append("\\\\")
+                else:
+                    out.append(ch)
                 escaped = True
                 continue
             if ch == '"':
