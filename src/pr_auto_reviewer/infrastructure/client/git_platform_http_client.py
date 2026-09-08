@@ -35,7 +35,17 @@ class GitPlatformHttpClient:
 
     """
 
-    def __init__(self, base_url: str, token: str, platform_mode: str = "forgejo", client_label: str = "", *, token_resolver: TokenResolver | None = None, preflight_verifier: PreflightVerifier | None = None, _verified_cache_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        platform_mode: str = "forgejo",
+        client_label: str = "",
+        *,
+        token_resolver: TokenResolver | None = None,
+        preflight_verifier: PreflightVerifier | None = None,
+        _verified_cache_path: Path | None = None
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._platform_mode = platform_mode
