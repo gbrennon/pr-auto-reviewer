@@ -41,6 +41,9 @@ def _serialize_item(item: ReviewItem) -> dict:
         "category": item.category.value,
         "file_path": item.file_path,
         "description": item.description,
+        "line": item.line,
+        "current_code": item.current_code,
+        "suggested_fix": item.suggested_fix,
     }
 
 
@@ -51,6 +54,9 @@ def _deserialize_item(raw_item: dict) -> ReviewItem:
         file_path=raw_item.get("file_path"),
         description=raw_item.get("description", ""),
         id=raw_item.get("id", ""),
+        line=raw_item.get("line", ""),
+        current_code=raw_item.get("current_code", ""),
+        suggested_fix=raw_item.get("suggested_fix", ""),
     )
 
 
