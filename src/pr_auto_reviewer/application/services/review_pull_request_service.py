@@ -272,19 +272,20 @@ class ReviewPullRequestService(ReviewPullRequestPort):
 
     def _drop_persisted_duplicates(
         self,
-        review: CodeReview | None,
+        review: CodeReview,
         existing_pr: PullRequest | None,
-    ) -> CodeReview | None:
+    ) -> CodeReview:
         """Drop findings byte-equivalent to an already-published one.
 
         Recycled fabrications reappear across runs under freshly
         generated IDs (observed: ``1a0305`` republished as
         ``1a0306``).  ID-level uniqueness cannot catch them, so a
-        normalized ``(file_path, current_code)`` signature from the
-        persisted reviews blocks republication.  Distinct findings on
-        the same file are unaffected.
+        normalized ``(file_path, current_code)`` signature — falling
+        back to description when code is absent — from the persisted
+        reviews blocks republication.  Distinct findings on the same
+        file are unaffected.
         """
-        if existing_pr is None or review is None or not review.items:
+        if existing_pr is None or not review.items:
             return review
         published_signatures = {
             self._content_signature(item)
@@ -332,10 +333,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     @staticmethod
     def _content_signature(item: ReviewItem) -> tuple[str, str]:
         """Return the whitespace-normalized content signature of *item*."""
-        return (
-            item.file_path or "",
-            " ".join((item.current_code or "").split()),
-        )
+        code = " ".join(item.current_code.split())
+        path = str(item.file_path) if item.file_path else ""
+        if code:
+            return (path, code)
+        desc = " ".join(item.description.split())
+        return (path, desc)
 
     def _run_single_turn_review(self, prompt) -> CodeReview:
         """Run single-turn LLM review.

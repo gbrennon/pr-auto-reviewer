@@ -44,7 +44,6 @@ class Config:
     advisor_max_blocks: int = 2
     review_max_conversations: int = 48
     review_max_tries: int = 2
-    publish_inconclusive_review: bool = False
     llm_call_budget: int = 300
     advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE
     poll_interval: int = 60

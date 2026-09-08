@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ._shared import *
 from .phase_run_outcome import _PhaseRunOutcome
 
@@ -16,25 +18,23 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self,
         command_bus: CommandBusPort,
         tool_factory: Callable[[Path, list[str], str], Any],
+        max_conversations: int = 48,
         max_retries: int = 5,
-        max_conversations: int | None = None,
-        max_feedback_rounds: int = 2,
         max_tries: int = 2,
-        publish_inconclusive_review: bool = False,
+        max_feedback_rounds: int = 2,
         advisor: AssessPhasePort | None = None,
         manager: BriefNextPhasePort | None = None,
     ) -> None:
         self._command_bus = command_bus
         self._tool_factory = tool_factory
-        self._conversations_started = 0
         self._max_conversations = max_conversations
         self._max_retries = max_retries
-        self._max_feedback_rounds = max_feedback_rounds
         self._max_tries = max_tries
-        self._publish_inconclusive_review = publish_inconclusive_review
+        self._max_feedback_rounds = max_feedback_rounds
         self._advisor = advisor
         self._manager = manager
         self._phase_prompt_renderer = PhasePromptRenderer()
+        self._conversations_started = 0
         self._correction_renderer = AdvisorCorrectionRenderer()
         self._feedback_renderer = FeedbackContextRenderer()
         self._identifier_filter = IdentifierGroundingFilterService()
@@ -187,25 +187,11 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     ) -> CodeReview:
         """Re-run the review with a progressively-improving prompt until resolved.
 
-        A review resolves when a run yields actionable items, or reaches a
-        genuine clean approval (no findings reported, none dropped). An
-        attempt whose reported findings were all dropped to zero — a
-        refutation — is inconclusive and keeps re-running with a prompt
-        grounded in the prior attempts' results and simplified over time.
-        After ``_max_tries`` inconclusive attempts the terminal behavior is
-        governed by ``publish_inconclusive_review``: raise
-        ``ReviewVerdictError`` by default, or publish the best result as-is
-        when enabled.
+        After ``_max_tries`` inconclusive attempts the review is refused
+        rather than publishing an unverified verdict.
         """
-        best = previous_result
         evidence: list[dict[str, Any]] = []
-        if previous_dropped_findings:
-            evidence.append(self._attempt_evidence(
-                attempt=0,
-                reported=previous_dropped_findings + len(previous_result.items),
-                dropped=previous_dropped_findings,
-                result=previous_result,
-            ))
+        best = previous_result
         for attempt in range(self._max_tries):
             logger.info(
                 "Re-run attempt %d/%d: improving prompt with prior results",
@@ -287,32 +273,19 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         }
 
     def _inconclusive_disposition(self) -> str:
-        """Return a loggable description of the terminal inconclusive behavior."""
-        if self._publish_inconclusive_review:
-            return "publishing the inconclusive result as-is"
+        """Return the terminal description for an inconclusive review."""
         return "refusing to publish a hollow review"
 
     def _resolve_inconclusive(self, best: CodeReview) -> CodeReview:
-        """Return the terminal result for an inconclusive review.
-
-        Raises ``ReviewVerdictError`` unless ``publish_inconclusive_review``
-        is enabled, in which case the best attempt is published as-is.
-        """
-        if self._publish_inconclusive_review:
-            logger.warning(
-                "Review inconclusive after %d tries; publishing as-is "
-                "(PUBLISH_INCONCLUSIVE_REVIEW)", self._max_tries,
-            )
-            return best
+        """Refuse to publish an inconclusive review."""
         logger.error(
-            "Review inconclusive after %d tries; refusing to publish a "
-            "hollow review", self._max_tries,
+            "Review inconclusive after %d tries; no genuine verdict; "
+            "refusing to publish a hollow review",
+            self._max_tries,
         )
         raise ReviewVerdictError(
-            f"All {self._max_tries} re-run attempts ended without a "
-            "genuine verdict; refusing to publish a hollow review. Set "
-            "PUBLISH_INCONCLUSIVE_REVIEW to publish the inconclusive "
-            "result as-is."
+            "Review remained inconclusive after "
+            f"{self._max_tries} attempts; no genuine verdict is available."
         )
 
     def _build_feedback_context(
@@ -613,6 +586,14 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 code_review = self._rebuild_after_verification(
                     verified_items, model, previous=code_review,
                 )
+        if (
+            code_review.verdict is ReviewVerdict.APPROVED
+            and any(item.is_blocking for item in code_review.items)
+        ):
+            code_review = replace(
+                code_review,
+                verdict=ReviewVerdict.CHANGES_REQUESTED,
+            )
         self._publish(FindingsAggregatedEvent(code_review=code_review))
         return _PhaseRunOutcome(
             review=code_review,
