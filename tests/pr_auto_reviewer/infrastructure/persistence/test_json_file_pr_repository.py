@@ -82,6 +82,9 @@ class TestJsonFilePullRequestRepository:
         category: str = "security",
         file_path: str = "src/auth.py",
         description: str = "Missing input validation",
+        line: str = "",
+        current_code: str = "",
+        suggested_fix: str = "",
     ) -> ReviewItem:
         return ReviewItem(
             id=item_id,
@@ -89,6 +92,9 @@ class TestJsonFilePullRequestRepository:
             category=category,
             file_path=file_path,
             description=description,
+            line=line,
+            current_code=current_code,
+            suggested_fix=suggested_fix,
         )
 
     def test_find_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
@@ -121,7 +127,13 @@ class TestJsonFilePullRequestRepository:
             summary="LGTM",
             model_used="llama3",
             items=[
-                self._item(item_id="id-1", severity=ItemSeverity.CRITICAL),
+                self._item(
+                    item_id="id-1",
+                    severity=ItemSeverity.CRITICAL,
+                    line="42",
+                    current_code="value = source.value",
+                    suggested_fix="value = source.get_value()",
+                ),
                 self._item(
                     item_id="id-2",
                     severity=ItemSeverity.MINOR,
