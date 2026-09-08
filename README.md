@@ -58,14 +58,14 @@ or the CLI: `pr-auto-reviewer start|stop|status|logs|restart`.
 
 | Doc | Topic |
 |-----|-------|
-| [How to Run](docs/HOWTO-single-review.md) | Single PR review walkthrough |
-| [Configuration](docs/configuration.md) | All env vars |
-| [Requirements](docs/requirements.md) | Prerequisites & tokens |
+| [How to Run](docs/operations/HOWTO-single-review.md) | Single PR review walkthrough |
+| [Configuration](docs/configuration/configuration.md) | All env vars |
+| [Requirements](docs/contributing/requirements.md) | Prerequisites & tokens |
 | [Makefile](Makefile) | Available commands (`make help`) |
-| [Troubleshooting](docs/troubleshooting.md) | Common problems |
-| [Testing](docs/HOWTO-test.md) | Running tests |
-| [Features](docs/features.md) | What's implemented |
-| [Architecture](docs/structure.md) | Codebase structure |
-| [Review Flow](docs/review-flow-architecture.md) | Detailed flow |
+| [Troubleshooting](docs/operations/troubleshooting.md) | Common problems |
+| [Testing](docs/contributing/HOWTO-test.md) | Running tests |
+| [Features](docs/features/features.md) | What's implemented |
+| [Architecture](docs/architecture/structure.md) | Codebase structure |
+| [Review Flow](docs/review-flow/review-flow-architecture.md) | Detailed flow |
 | [Token Setup](docs/tokens/README.md) | Token types, permissions, verification |
-| [PR Comment Commands](docs/command-guide.md) | Guide to commands commented on PRs |
+| [PR Comment Commands](docs/reference/command-guide.md) | Guide to commands commented on PRs |
