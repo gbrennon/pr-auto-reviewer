@@ -34,45 +34,62 @@ def _make_key(pr_id: PullRequestId) -> str:
     return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
 
 
-def _deserialize_review(raw: dict) -> CodeReview:
-    """Build a CodeReview from persisted state, deriving missing fields.
+def _serialize_item(item: ReviewItem) -> dict:
+    return {
+        "id": item.id,
+        "severity": item.severity.value,
+        "category": item.category.value,
+        "file_path": item.file_path,
+        "description": item.description,
+        "line": item.line,
+        "current_code": item.current_code,
+        "suggested_fix": item.suggested_fix,
+    }
 
-    Older persisted records predate the non-default review contract and
-    may lack ``reason``, ``summary``, ``model_used``, or carry the old
-    ``commented`` placeholder verdict. A stored review is still a real
-    result, so we derive those fields from what exists instead of
-    failing on load.
-    """
-    items = [
-        ReviewItem(
-            severity=ItemSeverity.from_value(i.get("severity")),
-            category=IssueCategory.from_value(i.get("category")),
-            file_path=i.get("file_path"),
-            description=i.get("description", ""),
-            id=i.get("id", ""),
-        )
-        for i in raw.get("items", [])
-    ]
-    stored_verdict = str(raw.get("verdict", "")).strip().lower()
-    verdict = ReviewVerdict(stored_verdict)
-    if verdict is ReviewVerdict.COMMENTED:
-        # Old placeholder: resolve from what the review actually holds.
-        verdict = (
-            ReviewVerdict.CHANGES_REQUESTED
-            if items
-            else ReviewVerdict.APPROVED
-        )
-    summary = raw.get("summary", "") or (
-        f"Found {len(items)} issue(s) in persisted review."
+
+def _deserialize_item(raw_item: dict) -> ReviewItem:
+    return ReviewItem(
+        severity=ItemSeverity.from_value(raw_item.get("severity")),
+        category=IssueCategory.from_value(raw_item.get("category")),
+        file_path=raw_item.get("file_path"),
+        description=raw_item.get("description", ""),
+        id=raw_item.get("id", ""),
+        line=raw_item.get("line", ""),
+        current_code=raw_item.get("current_code", ""),
+        suggested_fix=raw_item.get("suggested_fix", ""),
     )
+
+
+def _resolve_stored_verdict(
+    raw_verdict: str, items: list[ReviewItem]
+) -> ReviewVerdict:
+    verdict = ReviewVerdict(raw_verdict.strip().lower())
+    if verdict is ReviewVerdict.COMMENTED:
+        return ReviewVerdict.CHANGES_REQUESTED if items else ReviewVerdict.APPROVED
+    return verdict
+
+
+def _resolve_stored_strings(
+    raw: dict, items: list[ReviewItem]
+) -> tuple[str, str, str]:
+    summary = raw.get("summary", "") or f"Found {len(items)} issue(s) in persisted review."
     reason = raw.get("reason", "") or summary
     model_used = raw.get("model_used", "") or "unknown"
+    return summary, reason, model_used
+
+
+def _deserialize_review(raw: dict) -> CodeReview:
+    items = [_deserialize_item(i) for i in raw.get("items", [])]
+    suggestions = [_deserialize_item(s) for s in raw.get("suggestions", [])]
+    verdict = _resolve_stored_verdict(str(raw.get("verdict", "")), items)
+    summary, reason, model_used = _resolve_stored_strings(raw, items)
     return CodeReview(
         verdict=verdict,
         reason=reason,
         summary=summary,
         model_used=model_used,
         items=items,
+        suggestions=suggestions,
     )
 
 class JsonFilePullRequestRepository(PullRequestRepositoryPort):
@@ -182,15 +199,9 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
                     "verdict": r.verdict.value,
                     "summary": r.summary,
                     "model_used": r.model_used,
-                    "items": [
-                        {
-                            "id": i.id,
-                            "severity": i.severity.value,
-                            "category": i.category.value,
-                            "file_path": i.file_path,
-                            "description": i.description,
-                        }
-                        for i in r.items
+                    "items": [_serialize_item(i) for i in r.items],
+                    "suggestions": [
+                        _serialize_item(s) for s in r.suggestions
                     ],
                 }
                 for r in pr.reviews

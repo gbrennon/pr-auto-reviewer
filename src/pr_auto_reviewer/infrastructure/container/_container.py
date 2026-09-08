@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
+    AgentChatPort,
+)
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
 )
@@ -138,6 +141,10 @@ class Container:
         return self._issue_tracker
 
     @property
+    def chat_client(self) -> AgentChatPort:
+        return self._chat_client
+
+    @property
     def command_bus(self) -> CommandBusPort:
         return self._command_bus
 
@@ -217,3 +224,4 @@ class Container:
         self._fragment_max_tokens = core.fragment_max_tokens
         self._review_context_factory = core.review_context_factory
         self._review_plan = core.review_plan
+        self._chat_client = core.chat_client

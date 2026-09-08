@@ -8,6 +8,7 @@ from ..value_objects.code_review import CodeReview
 from ..value_objects.comment_id import CommentId
 from ..value_objects.commit_sha import CommitSha
 from ..value_objects.pull_request_id import PullRequestId
+from .review_item import ReviewItem
 
 
 @dataclass(frozen=True)
@@ -86,3 +87,10 @@ class PullRequest:
             self,
             unresolved_blocking_ids=self.unresolved_blocking_ids - frozenset(item_ids),
         )
+
+    def latest_review_items(self) -> tuple[ReviewItem, ...]:
+        """Return items + suggestions of the most recent review, empty if none."""
+        if not self.reviews:
+            return ()
+        latest = self.reviews[-1]
+        return tuple(latest.items) + tuple(latest.suggestions)

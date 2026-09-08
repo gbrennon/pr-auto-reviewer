@@ -61,7 +61,7 @@ LLM_MODEL=code-review:latest
 
 | Command | Description |
 |---------|-------------|
-| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments |
+| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments (see [docs/command-guide.md](command-guide.md)) |
 | `list-items --repo owner/repo --pr N [-v]` | List parsed review items from latest review |
 | `clean` | Reset all reviewed-PR tracking state |
 | `bootstrap` | Initialize config and verify tokens |
