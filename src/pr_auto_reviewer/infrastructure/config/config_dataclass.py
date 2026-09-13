@@ -49,6 +49,7 @@ class Config:
     poll_interval: int = 60
     run_once: bool = False
     repos_filter: str = ""
+    repos_allow_list: tuple[str, ...] = ()
     force_pr: int | None = None
     debug: bool = False
     output_mode: str = "forgejo"

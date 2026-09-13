@@ -105,6 +105,9 @@ class ConfigBuilder:
         llm_timeout = int(source.get("LLM_TIMEOUT") or "120")
         run_once = source.get("RUN_ONCE", "").lower() in ("true", "1", "yes")
         repos_filter = self._get(source, "REPOS_FILTER")
+        repos_allow_list = self._parse_repos_allow_list(
+            self._get(source, "REPOS_ALLOW_LIST")
+        )
 
         force_pr_raw = source.get("FORCE_PR", "").strip()
         force_pr: int | None = int(force_pr_raw) if force_pr_raw else None
@@ -136,6 +139,7 @@ class ConfigBuilder:
             poll_interval=poll_interval,
             run_once=run_once,
             repos_filter=repos_filter,
+            repos_allow_list=repos_allow_list,
             force_pr=force_pr,
             debug=debug,
             output_mode=output_mode,
@@ -159,6 +163,14 @@ class ConfigBuilder:
         if not cleaned.startswith(("http://", "https://")):
             return f"http://{cleaned}"
         return cleaned
+
+    def _parse_repos_allow_list(self, raw_value: str) -> tuple[str, ...]:
+        """Split a comma- or newline-separated repo list into clean entries."""
+        return tuple(
+            entry.strip()
+            for entry in raw_value.replace("\n", ",").split(",")
+            if entry.strip()
+        )
 
     def _parse_org_token_overrides(self, source: dict[str, str]) -> OrgTokenOverrides:
         github: dict[str, OrgTokenEntry] = {}

@@ -125,9 +125,15 @@ inconclusive, the review fails instead of publishing an unverified verdict.
 | `POLL_INTERVAL` | `60` | Seconds between PR checks in watch mode |
 | `RUN_ONCE` | `false` | Run one check cycle and exit |
 | `REPOS_FILTER` | — | Single `owner/repo` to watch (empty = all repos, same as `-r` flag) |
+| `REPOS_ALLOW_LIST` | — | Comma- or newline-separated exact repositories allowed in polling mode |
 | `FORCE_PR` | — | PR number to re-review regardless of state |
 | `DEBUG` | `false` | Enable debug logging (`1`, `true`, or `yes`) |
 | `ENV` | `development` | Set to `production` to load from user config |
+
+`REPOS_ALLOW_LIST` accepts comma- or newline-separated `owner/repo` entries.
+Entries may include a platform prefix such as `github:owner/repo` or
+`forgejo:owner/repo`; matching is case-insensitive and exact. The allow list
+applies to polling mode and does not restrict the one-off `review` command.
 
 ## Prompt Tuning
 

@@ -307,6 +307,7 @@ class TestLoadConfig:
             "LLM_MAX_RETRIES",
             "RUN_ONCE",
             "REPOS_FILTER",
+            "REPOS_ALLOW_LIST",
             "FORCE_PR",
         ]:
             monkeypatch.delenv(var, raising=False)
@@ -343,3 +344,39 @@ class TestLoadConfig:
             ConfigBuilder().build(
                 {}, env_name="test", advisor_granularity="every-other-turn"
             )
+
+    def test_repos_allow_list_parsed_from_comma_separated_source(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build(
+            {"REPOS_ALLOW_LIST": "owner/a, owner/b"}, env_name="test"
+        )
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_repos_allow_list_defaults_to_empty_tuple(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build({}, env_name="test")
+        assert cfg.repos_allow_list == ()
+
+    def test_repos_allow_list_newline_form_matches_comma_form(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build(
+            {"REPOS_ALLOW_LIST": "owner/a\nowner/b"}, env_name="test"
+        )
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_repos_allow_list_from_env_in_dev_mode(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("REPOS_ALLOW_LIST", "owner/a")
+        cfg = load_config()
+        assert cfg.repos_allow_list == ("owner/a",)

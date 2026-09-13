@@ -6,6 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
+    ReviewPullRequestPort,
+)
+from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
+    ReviewPullRequestCommand,
+)
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.polling_daemon import (
@@ -38,6 +44,28 @@ class MockPrLister(PrListerPort):
         for p in self._prs:
             if p.pr_id.number == pr_number:
                 return p
+        return None
+
+
+class RecordingReviewService(ReviewPullRequestPort):
+    def __init__(self) -> None:
+        self.executed_commands: list[ReviewPullRequestCommand] = []
+
+    def execute(self, command: ReviewPullRequestCommand) -> None:
+        self.executed_commands.append(command)
+
+class PerRepoPrLister(PrListerPort):
+    def list_open(self, repository: str) -> list[OpenPullRequest]:
+        return [
+            OpenPullRequest(
+                pr_id=PullRequestId(repository=repository, number=1),
+                head_sha=CommitSha("abc1234"),
+                title="Fix bug",
+                is_draft=False,
+            )
+        ]
+
+    def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         return None
 
 class TestPollingDaemon:
@@ -231,6 +259,61 @@ class TestPollingDaemon:
         ]
         assert len(force_calls) == 0
 
+    def test_review_request_reaches_service_when_repo_push_timestamp_is_unchanged(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        pushed_at = "2026-09-11T00:00:00Z"
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        repo_lister = MockRepoLister(
+            [RepoInfo("owner/repo1", pushed_at=pushed_at)]
+        )
+        requested_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            review_requested=True,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([requested_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_called_once()
+        dispatched = mock_review_service.execute.call_args.args[0]
+        assert dispatched.review_requested is True
+
+    def test_unchanged_repo_skips_open_pr_without_review_request(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        pushed_at = "2026-09-11T00:00:00Z"
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        repo_lister = MockRepoLister(
+            [RepoInfo("owner/repo1", pushed_at=pushed_at)]
+        )
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([open_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_not_called()
+
     def test_handles_empty_diff_error(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
@@ -392,3 +475,81 @@ class TestPollingDaemon:
             if "PollingDaemon stopped after 1 cycle(s)" in str(c)
         ]
         assert len(stopped_calls) == 1
+
+    def test_reviews_only_allowed_repositories(self) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        repo_lister = MockRepoLister(
+            [RepoInfo("owner/allowed"), RepoInfo("owner/other")]
+        )
+        review_service = RecordingReviewService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=PerRepoPrLister(),
+            review_service=review_service,
+        )
+
+        daemon.start()
+
+        reviewed_repositories = [
+            command.pr_id.repository
+            for command in review_service.executed_commands
+        ]
+        assert reviewed_repositories == ["owner/allowed"]
+
+    def test_empty_allow_list_reviews_every_repository(self) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=(),
+        )
+        repo_lister = MockRepoLister(
+            [RepoInfo("owner/allowed"), RepoInfo("owner/other")]
+        )
+        review_service = RecordingReviewService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=PerRepoPrLister(),
+            review_service=review_service,
+        )
+
+        daemon.start()
+
+        reviewed_repositories = sorted(
+            command.pr_id.repository
+            for command in review_service.executed_commands
+        )
+        assert reviewed_repositories == ["owner/allowed", "owner/other"]
+
+    def test_reviews_only_matching_platform_when_prefixed(self) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("github:owner/app",),
+        )
+        repo_lister = MockRepoLister(
+            [RepoInfo("github:owner/app"), RepoInfo("forgejo:owner/app")]
+        )
+        review_service = RecordingReviewService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=PerRepoPrLister(),
+            review_service=review_service,
+        )
+
+        daemon.start()
+
+        reviewed_repositories = [
+            command.pr_id.repository
+            for command in review_service.executed_commands
+        ]
+        assert reviewed_repositories == ["github:owner/app"]
