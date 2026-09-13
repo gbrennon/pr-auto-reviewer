@@ -1,5 +1,9 @@
 from dataclasses import replace
 
+from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
+    AgentChatPort,
+)
+
 from ._shared import *
 from .phase_run_outcome import _PhaseRunOutcome
 
@@ -24,6 +28,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         max_feedback_rounds: int = 2,
         advisor: AssessPhasePort | None = None,
         manager: BriefNextPhasePort | None = None,
+        chat_client: AgentChatPort | None = None,
     ) -> None:
         self._command_bus = command_bus
         self._tool_factory = tool_factory
@@ -33,6 +38,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self._max_feedback_rounds = max_feedback_rounds
         self._advisor = advisor
         self._manager = manager
+        self._chat_client = chat_client
         self._phase_prompt_renderer = PhasePromptRenderer()
         self._conversations_started = 0
         self._correction_renderer = AdvisorCorrectionRenderer()
@@ -43,6 +49,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         self, command: RunMultiPhaseReviewCommand
     ) -> CodeReview:
         """Execute the full review plan against *command.repo_path*."""
+        if self._chat_client is not None:
+            self._chat_client.reset_budget()
         return self._run_phases_full_retry(
             plan=command.plan,
             repo_path=command.repo_path,

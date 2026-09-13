@@ -339,6 +339,7 @@ def wire_core_services(
         max_tries=config.review_max_tries,
         advisor=advisor,
         manager=PhaseManagerService(chat_port=chat_client, command_bus=command_bus),
+        chat_client=chat_client,
     )
     command_bus.register(
         RunAgentConversationCommand, conversation_service.execute
