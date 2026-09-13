@@ -27,6 +27,7 @@ class CompositePrLister(PrListerPort):
                 description=pr.description,
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
@@ -53,6 +54,7 @@ class CompositePrLister(PrListerPort):
                 description=pr.description,
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
@@ -76,6 +78,7 @@ class CompositePrLister(PrListerPort):
                 description=pr.description,
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )

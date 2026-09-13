@@ -171,6 +171,9 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             is_draft=raw.get("is_draft", False),
             reviews=reviews,
             processed_comment_ids=processed_ids,
+            last_review_request_event_id=raw.get(
+                "last_review_request_event_id"
+            ),
             last_command_checked_at=raw.get("last_command_checked_at"),
         )
 
@@ -212,5 +215,6 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "processed_comment_ids": sorted(
                 str(c) for c in pr.processed_comment_ids
             ),
+            "last_review_request_event_id": pr.last_review_request_event_id,
             "last_command_checked_at": pr.last_command_checked_at,
         }

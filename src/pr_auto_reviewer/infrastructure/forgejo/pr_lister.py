@@ -73,7 +73,7 @@ class ForgejoPrLister(PrListerPort):
                 parsed
                 for pr in self._pull_request_rows(payload)
                 if (parsed := self._parse_open_pull_request(
-                    repository, pr
+                    repository, pr, include_review_event=False
                 )) is not None
             ]
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
@@ -103,6 +103,9 @@ class ForgejoPrLister(PrListerPort):
                 self._nested_value(pr.get("base"), "ref")
             )
             review_requested = bool(pr.get("requested_reviewers"))
+            review_request_event_id = self._latest_review_request_event_id(
+                repository, number
+            )
             result = OpenPullRequest(
                 pr_id=PullRequestId(repository=repository, number=number),
                 head_sha=CommitSha(sha),
@@ -110,6 +113,7 @@ class ForgejoPrLister(PrListerPort):
                 description=description,
                 is_draft=self._bool_value(pr.get("draft")),
                 review_requested=review_requested,
+                review_request_event_id=review_request_event_id,
                 updated_at=self._string_value(pr.get("updated_at")),
                 target_branch=target_branch,
             )
@@ -135,12 +139,18 @@ class ForgejoPrLister(PrListerPort):
         self,
         repository: str,
         pr: dict[str, object],
+        include_review_event: bool = True,
     ) -> OpenPullRequest | None:
         draft = self._bool_value(pr.get("draft"))
         number = pr.get("number")
         sha = self._string_value(self._nested_value(pr.get("head"), "sha"))
         if draft or not isinstance(number, int) or not sha:
             return None
+        review_request_event_id = (
+            self._latest_review_request_event_id(repository, number)
+            if include_review_event
+            else None
+        )
         return OpenPullRequest(
             pr_id=PullRequestId(repository=repository, number=number),
             head_sha=CommitSha(sha),
@@ -148,6 +158,7 @@ class ForgejoPrLister(PrListerPort):
             description=self._string_value(pr.get("body")),
             is_draft=draft,
             review_requested=bool(pr.get("requested_reviewers")),
+            review_request_event_id=review_request_event_id,
             updated_at=self._string_value(pr.get("updated_at")),
             target_branch=self._string_value(
                 self._nested_value(self._nested_value(pr.get("base"), "ref"), "value")
@@ -168,3 +179,28 @@ class ForgejoPrLister(PrListerPort):
     @staticmethod
     def _bool_value(value: object) -> bool:
         return value if isinstance(value, bool) else False
+
+    def _latest_review_request_event_id(
+        self, repository: str, pr_number: int
+    ) -> int | None:
+        """Return the latest Codeberg review-request timeline event ID."""
+        try:
+            events: object = self._client.get(
+                f"/repos/{repository}/issues/{pr_number}/timeline",
+                repo=repository,
+                limit=100,
+            )
+            if isinstance(events, dict):
+                events = events.get("data", [])
+            if not isinstance(events, list):
+                return None
+            request_ids = [
+                event_id
+                for row in events
+                if isinstance(row, dict)
+                and row.get("type") == "review_request"
+                and isinstance(event_id := row.get("id"), int)
+            ]
+            return max(request_ids, default=None)
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            return None

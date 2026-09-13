@@ -15,3 +15,4 @@ class ReviewPullRequestCommand:
     review_requested: bool = False
     force: bool = False
     target_branch: str = ""
+    review_request_event_id: int | None = None

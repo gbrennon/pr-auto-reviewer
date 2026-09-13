@@ -32,6 +32,7 @@ class PullRequest:
     is_draft: bool = False
     processed_comment_ids: frozenset[CommentId] = frozenset()
     reviews: tuple[CodeReview, ...] = ()
+    last_review_request_event_id: int | None = None
     last_command_checked_at: str | None = None
 
     def needs_review(self, sha: CommitSha) -> bool:
@@ -40,6 +41,14 @@ class PullRequest:
             return True
         return sha != self.head_sha
 
+    def record_review_request_event(self, event_id: int) -> PullRequest:
+        """Record the latest Codeberg review-request timeline event."""
+        if (
+            self.last_review_request_event_id is not None
+            and event_id <= self.last_review_request_event_id
+        ):
+            return self
+        return replace(self, last_review_request_event_id=event_id)
     def add_review(
         self, review: CodeReview, sha: CommitSha,
     ) -> PullRequest:

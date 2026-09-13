@@ -134,6 +134,7 @@ class PollingDaemon:
             description=pr.description,
             force=force,
             review_requested=pr.review_requested,
+            review_request_event_id=pr.review_request_event_id,
             target_branch=pr.target_branch,
         )
 
