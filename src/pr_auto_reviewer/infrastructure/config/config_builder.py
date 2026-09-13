@@ -31,18 +31,6 @@ class ConfigBuilder:
         env_name: Value for ``Config.env``.
     """
 
-    @classmethod
-    def _get(cls, source: dict[str, str], key: str, default: str = "") -> str:
-        return source.get(key, default).strip()
-
-    @staticmethod
-    def _normalize_host(host: str) -> str:
-        """Ensure host URL has an HTTP scheme and no trailing slash."""
-        cleaned = host.strip().rstrip("/")
-        if not cleaned.startswith(("http://", "https://")):
-            return f"http://{cleaned}"
-        return cleaned
-
     def build(
         self,
         source: dict[str, str],
@@ -86,15 +74,9 @@ class ConfigBuilder:
             or "ollama"
         ).lower()
 
-        raw_host = (
-            self._get(source, "LLM_HOST")
-            or self._get(source, "OLLAMA_HOST")
-            or "http://localhost:11434"
-        )
+        raw_host = self._get(source, "LLM_HOST") or "http://localhost:11434"
         llm_host = self._normalize_host(raw_host)
-        llm_model = (
-            self._get(source, "LLM_MODEL") or self._get(source, "OLLAMA_MODEL")
-        ) or None
+        llm_model = self._get(source, "LLM_MODEL") or None
 
         output_mode = self._get(source, "REVIEW_OUTPUT")
         output_path: str | None = None
@@ -120,7 +102,7 @@ class ConfigBuilder:
         clone_protocol = CloneProtocol.parse(self._get(source, "CLONE_PROTOCOL") or "https")
 
         org_token_overrides = self._parse_org_token_overrides(source)
-        ollama_timeout = int(source.get("OLLAMA_TIMEOUT") or "120")
+        llm_timeout = int(source.get("LLM_TIMEOUT") or "120")
         run_once = source.get("RUN_ONCE", "").lower() in ("true", "1", "yes")
         repos_filter = self._get(source, "REPOS_FILTER")
 
@@ -143,7 +125,7 @@ class ConfigBuilder:
             llm_backend=llm_backend,
             llm_host=llm_host,
             llm_model=llm_model,
-            ollama_timeout=ollama_timeout,
+            llm_timeout=llm_timeout,
             llm_max_retries=llm_max_retries,
             llm_max_turns=llm_max_turns,
             advisor_max_blocks=advisor_max_blocks,
@@ -167,6 +149,16 @@ class ConfigBuilder:
             local_clone_base_dir=local_clone_base_dir,
             clone_protocol=clone_protocol,
         )
+
+    def _get(self, source: dict[str, str], key: str, default: str = "") -> str:
+        return source.get(key, default).strip()
+
+    def _normalize_host(self, host: str) -> str:
+        """Ensure host URL has an HTTP scheme and no trailing slash."""
+        cleaned = host.strip().rstrip("/")
+        if not cleaned.startswith(("http://", "https://")):
+            return f"http://{cleaned}"
+        return cleaned
 
     def _parse_org_token_overrides(self, source: dict[str, str]) -> OrgTokenOverrides:
         github: dict[str, OrgTokenEntry] = {}

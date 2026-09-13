@@ -94,7 +94,7 @@ class TestWireCoreServices:
 
         assert result.llm_review._chat_client._model == "code-review:latest"
 
-    def test_llm_review_uses_config_ollama_timeout(
+    def test_llm_review_uses_config_llm_timeout(
         self,
         repo_context,
     ) -> None:
@@ -102,7 +102,7 @@ class TestWireCoreServices:
             env="test",
             platform_mode=GitProvider.FORGEJO,
             forgejo_owner_token="fj-own",
-            ollama_timeout=300,
+            llm_timeout=300,
         )
 
         result = wire_core_services(config, repo_context)

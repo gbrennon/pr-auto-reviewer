@@ -266,14 +266,14 @@ class _ChatClientFactory:
             return LlamaCppChatClient(
                 model=config.llm_model or "default",
                 host=config.llm_host,
-                timeout=config.ollama_timeout,
+                timeout=config.llm_timeout,
                 max_retries=config.llm_max_retries,
                 max_llm_calls=config.llm_call_budget,
             )
         return OllamaChatClient(
             model=config.llm_model or "code-review:latest",
             host=config.llm_host,
-            timeout=config.ollama_timeout,
+            timeout=config.llm_timeout,
             max_retries=config.llm_max_retries,
             max_llm_calls=config.llm_call_budget,
         )

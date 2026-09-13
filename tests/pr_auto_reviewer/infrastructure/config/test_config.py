@@ -93,13 +93,13 @@ class TestLoadConfig:
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
-    def test_ollama_fallback_for_llm_host(self, monkeypatch, tmp_path: Path):
+    def test_llm_timeout_from_env(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("OLLAMA_HOST", "http://ollama:11434")
+        monkeypatch.setenv("LLM_TIMEOUT", "321")
         cfg = load_config()
-        assert cfg.llm_host == "http://ollama:11434"
+        assert cfg.llm_timeout == 321
 
     def test_llm_model_none_when_empty(self):
         from pr_auto_reviewer.infrastructure.config.config import load_config
@@ -292,9 +292,8 @@ class TestLoadConfig:
             "FORGEJO_REVIEWER_TOKEN",
             "FORGEJO_REVIEWER_USERNAME",
             "LLM_HOST",
-            "OLLAMA_HOST",
             "LLM_MODEL",
-            "OLLAMA_MODEL",
+            "LLM_TIMEOUT",
             "REVIEW_OUTPUT",
             "POLL_INTERVAL",
             "DEBUG",
@@ -305,7 +304,6 @@ class TestLoadConfig:
             "USE_STRICT_FRAGMENT_SELECTION",
             "MAX_STRUCTURE_LINES",
             "PROMPT_MODE",
-            "OLLAMA_TIMEOUT",
             "LLM_MAX_RETRIES",
             "RUN_ONCE",
             "REPOS_FILTER",
