@@ -88,8 +88,8 @@ class TestReviewFlowVCR:
             "GITHUB_OWNER_TOKEN=e2e-owner-token",
             "GITHUB_REVIEWER_TOKEN=e2e-reviewer-token",
             "GITHUB_REVIEWER_USERNAME=e2e-reviewer",
-            "OLLAMA_HOST=http://localhost:11434",
-            "OLLAMA_MODEL=code-review:latest",
+            "LLM_HOST=http://localhost:11434",
+            "LLM_MODEL=code-review:latest",
         ]) + "\n")
         token_store = xdg_cache / "pr-auto-reviewer" / "verified-tokens.json"
         token_store.parent.mkdir(parents=True, exist_ok=True)

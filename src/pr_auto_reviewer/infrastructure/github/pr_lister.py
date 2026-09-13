@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import requests
 
@@ -34,40 +35,80 @@ class GithubPrLister(PrListerPort):
                 per_page=100,
                 repo=repository,
             )
-
-            prs = data if isinstance(data, list) else data.get("data", [])
-
-            result = []
-            for pr in prs:
-                if pr.get("draft", False):
-                    continue
-
-                number = pr.get("number")
-                sha = pr.get("head", {}).get("sha")
-                target_branch = pr.get("base", {}).get("ref", "")
-                title = pr.get("title", "")
-                description = pr.get("body", "")
-                review_requested = bool(pr.get("requested_reviewers"))
-
-                if number and sha:
-                    result.append(
-                        OpenPullRequest(
-                            pr_id=PullRequestId(repository=repository, number=int(number)),
-                            head_sha=CommitSha(sha),
-                            title=title,
-                            description=description,
-                            is_draft=pr.get("draft", False),
-                            review_requested=review_requested,
-                            target_branch=target_branch,
-                        )
-                    )
-
+            result = [
+                pr
+                for raw_pr in self._payload_rows(data)
+                if (pr := self._parse_pull_request(repository, raw_pr)) is not None
+                and not pr.is_draft
+            ]
             logger.debug("Found %d open PRs in %s", len(result), repository)
             return result
-
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError) as exc:
             logger.warning("Failed to list PRs for %s: %s", repository, exc)
             return []
+
+    def list_recent(
+        self, repository: str, since: str
+    ) -> list[OpenPullRequest]:
+        """List open and recently closed PRs updated since ``since``."""
+        _, repository = split_repository_prefix(repository)
+        try:
+            data = self._client.get(
+                f"/repos/{repository}/pulls",
+                state="all",
+                since=since,
+                sort="updated",
+                direction="desc",
+                per_page=100,
+                repo=repository,
+            )
+            return [
+                pr
+                for raw_pr in self._payload_rows(data)
+                if (pr := self._parse_pull_request(repository, raw_pr)) is not None
+                and not pr.is_draft
+            ]
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            logger.warning("Failed to list recent PRs for %s", repository)
+            return []
+
+    @staticmethod
+    def _payload_rows(payload: object) -> list[dict[str, object]]:
+        if isinstance(payload, list):
+            return [cast(dict[str, object], row) for row in payload if isinstance(row, dict)]
+        if isinstance(payload, dict):
+            return GithubPrLister._payload_rows(payload.get("data", []))
+        return []
+
+    @staticmethod
+    def _parse_pull_request(
+        repository: str, pull_request: dict[str, object]
+    ) -> OpenPullRequest | None:
+        number = pull_request.get("number")
+        if not isinstance(number, int):
+            return None
+        head = pull_request.get("head")
+        base = pull_request.get("base")
+        if not isinstance(head, dict):
+            return None
+        base = base if isinstance(base, dict) else {}
+        sha = head.get("sha")
+        if not isinstance(sha, str) or not sha:
+            return None
+        title = pull_request.get("title")
+        description = pull_request.get("body")
+        updated_at = pull_request.get("updated_at")
+        target_branch = base.get("ref")
+        return OpenPullRequest(
+            pr_id=PullRequestId(repository=repository, number=number),
+            head_sha=CommitSha(sha),
+            title=title if isinstance(title, str) else "",
+            description=description if isinstance(description, str) else "",
+            is_draft=pull_request.get("draft") is True,
+            review_requested=bool(pull_request.get("requested_reviewers")),
+            updated_at=updated_at if isinstance(updated_at, str) else "",
+            target_branch=target_branch if isinstance(target_branch, str) else "",
+        )
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         _, repository = split_repository_prefix(repository)
@@ -93,8 +134,8 @@ class GithubPrLister(PrListerPort):
                 head_sha=CommitSha(sha),
                 title=title,
                 description=description,
-                is_draft=pr.get("draft", False),
                 review_requested=review_requested,
+                updated_at=pr.get("updated_at", ""),
                 target_branch=target_branch,
             )
 

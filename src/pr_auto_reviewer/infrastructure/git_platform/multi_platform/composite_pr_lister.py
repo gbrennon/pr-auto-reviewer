@@ -27,6 +27,35 @@ class CompositePrLister(PrListerPort):
                 description=pr.description,
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
+                updated_at=pr.updated_at,
+                target_branch=pr.target_branch,
+            )
+            for pr in prs
+        ]
+
+    def list_recent(
+        self, repository: str, since: str
+    ) -> list[OpenPullRequest]:
+        """List recent open and closed PRs for one platform."""
+        platform, repo = split_repository_prefix(repository)
+        lister = self._listers.get(platform)
+        if not lister:
+            return []
+        prs = lister.list_recent(repo, since)
+        return [
+            OpenPullRequest(
+                pr_id=PullRequestId(
+                    repository=f"{platform}:{pr.pr_id.repository}",
+                    number=pr.pr_id.number,
+                ),
+                head_sha=pr.head_sha,
+                title=pr.title,
+                description=pr.description,
+                is_draft=pr.is_draft,
+                review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
+                updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
             for pr in prs
@@ -49,6 +78,8 @@ class CompositePrLister(PrListerPort):
                 description=pr.description,
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
+                review_request_event_id=pr.review_request_event_id,
+                updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
         return pr

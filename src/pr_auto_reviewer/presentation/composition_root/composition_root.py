@@ -12,6 +12,9 @@ from pr_auto_reviewer.application.services.register_issue_service import (
 from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
+from pr_auto_reviewer.domain.services.repository_allow_list import (
+    RepositoryAllowList,
+)
 from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
 )
@@ -71,6 +74,7 @@ class CompositionRoot:
         daemon_config = PollingDaemonConfig(
             poll_interval_seconds=config.poll_interval,
             repos_filter=config.repos_filter or None,
+            repos_allow_list=config.repos_allow_list,
             run_once=config.run_once,
             force_pr=config.force_pr,
         )
@@ -82,6 +86,11 @@ class CompositionRoot:
             review_service=self._components.review_service,
             notifier=self._components.notifier,
             update_tracker=RepoUpdateTracker(),
+            repository_allow_list=RepositoryAllowList.from_entries(
+                config.repos_allow_list
+            ),
+            process_commands_service=self._components.process_commands_service,
+            pr_repository=self._container.pr_repository,
         )
 
         self._authenticate_for_git_host(config)

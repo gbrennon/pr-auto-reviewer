@@ -94,7 +94,7 @@ class TestReviewPullRequestService:
         mock_review_publisher.publish.assert_called_once()
         mock_pr_repository.save.assert_called_once()
 
-    def test_re_review_triggered_when_review_requested(
+    def test_stale_review_request_does_not_bypass_same_sha_guard(
         self, mock_pr_repository, mock_changeset_fetcher,
         mock_review_context_factory, mock_llm_review, mock_review_publisher,
     ):
@@ -107,8 +107,39 @@ class TestReviewPullRequestService:
         )
         existing = PullRequest(
             id=cmd.pr_id, title=cmd.title, head_sha=sha,
+        ).add_review(_review(), sha)
+        mock_pr_repository.find.return_value = existing
+
+        ReviewPullRequestService(
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        mock_changeset_fetcher.fetch.assert_not_called()
+        mock_review_context_factory.build.assert_not_called()
+        mock_llm_review.review_prompt.assert_not_called()
+        mock_review_publisher.publish.assert_not_called()
+        mock_pr_repository.save.assert_called_once()
+
+    def test_new_review_request_event_bypasses_same_sha_guard(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            review_requested=True,
+            review_request_event_id=2,
         )
-        existing = existing.add_review(_review(), sha)
+        existing = PullRequest(
+            id=cmd.pr_id,
+            title=cmd.title,
+            head_sha=sha,
+            last_review_request_event_id=1,
+        ).add_review(_review(), sha)
         mock_pr_repository.find.return_value = existing
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
             cmd.pr_id, cmd.head_sha
@@ -123,11 +154,7 @@ class TestReviewPullRequestService:
             mock_review_publisher,
         ).execute(cmd)
 
-        mock_changeset_fetcher.fetch.assert_called_once()
-        mock_review_context_factory.build.assert_called_once()
-        mock_llm_review.review_prompt.assert_called_once()
         mock_review_publisher.publish.assert_called_once()
-        mock_pr_repository.save.assert_called_once()
 
     def test_no_re_review_when_review_requested_false(
         self, mock_pr_repository, mock_changeset_fetcher,

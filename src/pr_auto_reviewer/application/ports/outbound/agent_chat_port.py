@@ -17,3 +17,11 @@ class AgentChatPort(Protocol):
     def send(self, messages: list[ConversationMessage]) -> str:
         """Send *messages* to the LLM and return the raw text response."""
         ...
+
+    def reset_budget(self) -> None:
+        """Reset the per-review LLM call budget so a new review starts fresh.
+
+        Callers invoke this at the start of each review. Implementations
+        without a budget treat it as a no-op.
+        """
+        ...
