@@ -5,17 +5,27 @@ from __future__ import annotations
 import logging
 import signal
 import time
+from datetime import UTC, datetime, timedelta
 
+from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
+    ProcessIssueCommandsPort,
+)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
     ReviewPullRequestPort,
 )
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
+)
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
     RepositoryFetchError,
 )
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
+    ProcessIssueCommandsCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
@@ -38,6 +48,7 @@ from pr_auto_reviewer.presentation.ports import (
 )
 
 logger = logging.getLogger(__name__)
+COMMAND_LOOKBACK_DAYS = 7
 
 
 class PollingDaemon:
@@ -51,6 +62,8 @@ class PollingDaemon:
         notifier: NotifierPort | None = None,
         update_tracker: RepoUpdateTracker | None = None,
         repository_allow_list: RepositoryAllowList | None = None,
+        process_commands_service: ProcessIssueCommandsPort | None = None,
+        pr_repository: PullRequestRepositoryPort | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
@@ -63,6 +76,8 @@ class PollingDaemon:
             if repository_allow_list is not None
             else RepositoryAllowList.from_entries(config.repos_allow_list)
         )
+        self._process_commands_service = process_commands_service
+        self._pr_repository = pr_repository
         self._force_pr = getattr(config, "force_pr", None)
         self._setup_signal_handlers()
 
@@ -191,8 +206,14 @@ class PollingDaemon:
             logger.warning("LLM unavailable — cancelling this cycle")
 
     def _process_repo(self, info: RepoInfo) -> None:
-        """Process review commands for one repository."""
+        """Process review and comment commands for one repository."""
+        recent_prs = self._pr_lister.list_recent(
+            info.full_name,
+            (datetime.now(UTC) - timedelta(days=COMMAND_LOOKBACK_DAYS)).isoformat(),
+        )
+        self._process_command_prs(recent_prs)
         open_prs = self._pr_lister.list_open(info.full_name)
+        self._process_command_prs(open_prs)
         open_prs = self._include_configured_force_pr(info.full_name, open_prs)
         repo_is_stale = self._repo_is_stale(info)
         self._mark_repo_seen(info)
@@ -213,6 +234,43 @@ class PollingDaemon:
                 logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
                 continue
             self._process_pr(pr)
+
+    def _process_command_prs(self, prs: list[OpenPullRequest]) -> None:
+        service = self._process_commands_service
+        repository = self._pr_repository
+        if service is None or repository is None:
+            return
+        unique_prs = {pr.pr_id: pr for pr in prs}.values()
+        for pr in unique_prs:
+            self._process_command_pr(pr, service, repository)
+
+    def _process_command_pr(
+        self,
+        pr: OpenPullRequest,
+        service: ProcessIssueCommandsPort,
+        repository: PullRequestRepositoryPort,
+    ) -> None:
+        stored = repository.find(pr.pr_id)
+        if stored is None or not pr.updated_at:
+            return
+        if stored.last_command_checked_at == pr.updated_at:
+            return
+        try:
+            service.execute(
+                ProcessIssueCommandsCommand(
+                    pr_id=pr.pr_id,
+                    head_sha=pr.head_sha,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to process commands for PR #%d in %s",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
+            return
+        refreshed = repository.find(pr.pr_id) or stored
+        repository.save(refreshed.record_command_check(pr.updated_at))
 
     def _include_configured_force_pr(
         self, repository: str, open_prs: list[OpenPullRequest]

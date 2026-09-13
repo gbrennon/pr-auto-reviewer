@@ -89,6 +89,8 @@ class CompositionRoot:
             repository_allow_list=RepositoryAllowList.from_entries(
                 config.repos_allow_list
             ),
+            process_commands_service=self._components.process_commands_service,
+            pr_repository=self._container.pr_repository,
         )
 
         self._authenticate_for_git_host(config)

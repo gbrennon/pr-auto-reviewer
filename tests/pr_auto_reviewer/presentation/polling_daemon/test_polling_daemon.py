@@ -6,8 +6,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
+    ProcessIssueCommandsPort,
+)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
     ReviewPullRequestPort,
+)
+from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
+    PullRequestRepositoryPort,
+)
+from pr_auto_reviewer.domain.entities.pull_request import PullRequest
+from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
+    ProcessIssueCommandsCommand,
 )
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
@@ -26,6 +36,38 @@ from pr_auto_reviewer.presentation.ports import (
 )
 
 
+class RecordingCommandService(ProcessIssueCommandsPort):
+    """Records command scans dispatched by the daemon."""
+
+    def __init__(self) -> None:
+        self.commands: list[ProcessIssueCommandsCommand] = []
+
+    def execute(self, command: ProcessIssueCommandsCommand) -> None:
+        self.commands.append(command)
+
+
+class PullRequestRepositoryFake(PullRequestRepositoryPort):
+    """Stores one pull request aggregate for daemon tests."""
+
+    def __init__(self, pull_request: PullRequest) -> None:
+        self.pull_request = pull_request
+
+    def find(self, pr_id: PullRequestId) -> PullRequest | None:
+        if pr_id == self.pull_request.id:
+            return self.pull_request
+        return None
+
+    def save(self, pr: PullRequest) -> None:
+        self.pull_request = pr
+
+    def reset(self) -> None:
+        self.pull_request = PullRequest(
+            id=self.pull_request.id,
+            title=self.pull_request.title,
+            head_sha=self.pull_request.head_sha,
+        )
+
+
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:
         self._repos = repos
@@ -34,11 +76,21 @@ class MockRepoLister(RepoListerPort):
         return self._repos
 
 class MockPrLister(PrListerPort):
-    def __init__(self, prs: list[OpenPullRequest]) -> None:
+    def __init__(
+        self,
+        prs: list[OpenPullRequest],
+        recent_prs: list[OpenPullRequest] | None = None,
+    ) -> None:
         self._prs = prs
+        self._recent_prs = recent_prs or []
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         return self._prs
+
+    def list_recent(
+        self, repository: str, since: str
+    ) -> list[OpenPullRequest]:
+        return self._recent_prs
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         for p in self._prs:
@@ -95,6 +147,75 @@ class TestPollingDaemon:
             pr_lister=pr_lister,
             review_service=mock_review_service,
         )
+
+    def test_processes_recent_closed_pr_commands(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        """Processes commands for a recently closed pull request."""
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        recent_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Closed fix",
+            updated_at="2026-09-11T01:00:00Z",
+        )
+        stored = PullRequest(
+            id=pr_id,
+            title=recent_pr.title,
+            head_sha=recent_pr.head_sha,
+        )
+        command_service = RecordingCommandService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1")]),
+            pr_lister=MockPrLister([], [recent_pr]),
+            review_service=mock_review_service,
+            process_commands_service=command_service,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        assert [command.pr_id for command in command_service.commands] == [pr_id]
+
+    def test_does_not_repeat_command_scan_until_pr_activity_changes(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        """Scans comments once for each pull request activity timestamp."""
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        recent_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Closed fix",
+            updated_at="2026-09-11T01:00:00Z",
+        )
+        repository = PullRequestRepositoryFake(
+            PullRequest(id=pr_id, title=recent_pr.title, head_sha=recent_pr.head_sha)
+        )
+        command_service = RecordingCommandService()
+        pr_lister = MockPrLister([], [recent_pr])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1")]),
+            pr_lister=pr_lister,
+            review_service=mock_review_service,
+            process_commands_service=command_service,
+            pr_repository=repository,
+        )
+
+        daemon._run_cycle()
+        daemon._run_cycle()
+        pr_lister._recent_prs = [
+            OpenPullRequest(
+                pr_id=pr_id,
+                head_sha=recent_pr.head_sha,
+                title=recent_pr.title,
+                updated_at="2026-09-11T02:00:00Z",
+            )
+        ]
+        daemon._run_cycle()
+
+        assert len(command_service.commands) == 2
 
     def test_creation(self, daemon: PollingDaemon) -> None:
         """Creates PollingDaemon with all dependencies."""

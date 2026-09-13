@@ -21,6 +21,12 @@ class PrListerPort(ABC):
             List of open pull requests.
         """
 
+
+    def list_recent(
+        self, repository: str, since: str
+    ) -> list[OpenPullRequest]:
+        """List open and recently closed PRs updated since ``since``."""
+        return []
     @abstractmethod
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         """Fetch a single PR by number, regardless of state (open/closed/merged).

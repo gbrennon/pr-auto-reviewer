@@ -32,12 +32,14 @@ class PullRequest:
     is_draft: bool = False
     processed_comment_ids: frozenset[CommentId] = frozenset()
     reviews: tuple[CodeReview, ...] = ()
+    last_command_checked_at: str | None = None
 
     def needs_review(self, sha: CommitSha) -> bool:
         """True when sha differs from the last reviewed commit."""
         if not self.reviews:
             return True
         return sha != self.head_sha
+
     def add_review(
         self, review: CodeReview, sha: CommitSha,
     ) -> PullRequest:
@@ -60,6 +62,10 @@ class PullRequest:
     def is_comment_processed(self, comment_id: CommentId) -> bool:
         """Idempotency guard for command processing."""
         return comment_id in self.processed_comment_ids
+
+    def record_command_check(self, activity_timestamp: str) -> PullRequest:
+        """Record the PR activity timestamp used for command processing."""
+        return replace(self, last_command_checked_at=activity_timestamp)
 
 
     def with_unresolved_blocking(self, *item_ids: str) -> PullRequest:

@@ -171,6 +171,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             is_draft=raw.get("is_draft", False),
             reviews=reviews,
             processed_comment_ids=processed_ids,
+            last_command_checked_at=raw.get("last_command_checked_at"),
         )
 
     def _save(self, data: dict) -> None:
@@ -211,4 +212,5 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "processed_comment_ids": sorted(
                 str(c) for c in pr.processed_comment_ids
             ),
+            "last_command_checked_at": pr.last_command_checked_at,
         }
