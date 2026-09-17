@@ -23,6 +23,9 @@ from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
     RepositoryFetchError,
 )
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
 )
@@ -159,6 +162,12 @@ class PollingDaemon:
             raise
         except ReviewPublishError as e:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
+        except ReviewVerdictError:
+            logger.warning(
+                "Review inconclusive for PR #%d in %s; will retry next cycle",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
         except Exception as _:
             logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:

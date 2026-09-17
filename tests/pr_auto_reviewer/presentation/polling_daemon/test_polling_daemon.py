@@ -549,6 +549,45 @@ class TestPollingDaemon:
         ]
         assert handled_numbers == [1, 2]
 
+    def test_handles_review_verdict_error_gracefully(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+            ReviewVerdictError,
+        )
+
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            is_draft=False,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        pr_lister = MockPrLister([open_pr])
+        mock_review_service.execute.side_effect = ReviewVerdictError(
+            "Review remained inconclusive after 5 attempts."
+        )
+
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=mock_review_service,
+        )
+
+        with patch("pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger") as mock_logger:
+            daemon.start()
+            inconclusive_warnings = [
+                c for c in mock_logger.warning.call_args_list
+                if "Review inconclusive for PR #%d" in str(c)
+            ]
+            assert len(inconclusive_warnings) == 1
+            unexpected_calls = [
+                c for c in mock_logger.exception.call_args_list
+                if "Unexpected error processing PR #1" in str(c)
+            ]
+            assert len(unexpected_calls) == 0
+
     def test_signal_handler_raises_keyboard_interrupt(self, daemon):
         daemon._setup_signal_handlers()
         with pytest.raises(KeyboardInterrupt):
