@@ -7,6 +7,7 @@ from .manager_agent import ManagerAgent
 from .pull_request import PullRequest
 from .review_item import ReviewItem
 from .reviewer_agent import ReviewerAgent
+from .session import Session
 from .sub_agent import SubAgent
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "PullRequest",
     "ReviewItem",
     "ReviewerAgent",
+    "Session",
     "SubAgent",
 ]
