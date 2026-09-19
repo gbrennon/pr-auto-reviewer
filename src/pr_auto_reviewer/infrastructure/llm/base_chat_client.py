@@ -86,6 +86,10 @@ class BaseChatClient(AgentChatPort, ABC):
                 )
         raise LlmUnavailableError("All chat requests exhausted")
 
+    def reset_budget(self) -> None:
+        """Reset the per-review call counter so a new review starts fresh."""
+        self._calls_started = 0
+
     def _assert_budget_available(self) -> None:
         """Raise when the configured LLM call budget is fully consumed."""
         if (

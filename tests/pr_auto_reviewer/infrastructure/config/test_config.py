@@ -93,13 +93,13 @@ class TestLoadConfig:
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
-    def test_ollama_fallback_for_llm_host(self, monkeypatch, tmp_path: Path):
+    def test_llm_timeout_from_env(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("OLLAMA_HOST", "http://ollama:11434")
+        monkeypatch.setenv("LLM_TIMEOUT", "321")
         cfg = load_config()
-        assert cfg.llm_host == "http://ollama:11434"
+        assert cfg.llm_timeout == 321
 
     def test_llm_model_none_when_empty(self):
         from pr_auto_reviewer.infrastructure.config.config import load_config
@@ -292,9 +292,8 @@ class TestLoadConfig:
             "FORGEJO_REVIEWER_TOKEN",
             "FORGEJO_REVIEWER_USERNAME",
             "LLM_HOST",
-            "OLLAMA_HOST",
             "LLM_MODEL",
-            "OLLAMA_MODEL",
+            "LLM_TIMEOUT",
             "REVIEW_OUTPUT",
             "POLL_INTERVAL",
             "DEBUG",
@@ -305,10 +304,10 @@ class TestLoadConfig:
             "USE_STRICT_FRAGMENT_SELECTION",
             "MAX_STRUCTURE_LINES",
             "PROMPT_MODE",
-            "OLLAMA_TIMEOUT",
             "LLM_MAX_RETRIES",
             "RUN_ONCE",
             "REPOS_FILTER",
+            "REPOS_ALLOW_LIST",
             "FORCE_PR",
         ]:
             monkeypatch.delenv(var, raising=False)
@@ -345,3 +344,39 @@ class TestLoadConfig:
             ConfigBuilder().build(
                 {}, env_name="test", advisor_granularity="every-other-turn"
             )
+
+    def test_repos_allow_list_parsed_from_comma_separated_source(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build(
+            {"REPOS_ALLOW_LIST": "owner/a, owner/b"}, env_name="test"
+        )
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_repos_allow_list_defaults_to_empty_tuple(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build({}, env_name="test")
+        assert cfg.repos_allow_list == ()
+
+    def test_repos_allow_list_newline_form_matches_comma_form(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder import (
+            ConfigBuilder,
+        )
+
+        cfg = ConfigBuilder().build(
+            {"REPOS_ALLOW_LIST": "owner/a\nowner/b"}, env_name="test"
+        )
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_repos_allow_list_from_env_in_dev_mode(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("REPOS_ALLOW_LIST", "owner/a")
+        cfg = load_config()
+        assert cfg.repos_allow_list == ("owner/a",)

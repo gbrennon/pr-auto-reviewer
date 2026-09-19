@@ -42,3 +42,23 @@ class TestOllamaChatClientBudget:
         for _ in range(3):
             assert client.send(message) == "ok"
 
+    def test_reset_budget_allows_sending_after_exhaustion(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Resetting the budget lets a new review send requests again."""
+        monkeypatch.setattr(
+            requests, "post", lambda *a, **k: self._ok_response()
+        )
+        client = OllamaChatClient(
+            model="code-review:latest", max_llm_calls=1
+        )
+        message = [ConversationMessage(role="user", content="hi")]
+
+        client.send(message)
+        with pytest.raises(ReviewBudgetExhaustedError):
+            client.send(message)
+
+        client.reset_budget()
+
+        assert client.send(message) == "ok"
+

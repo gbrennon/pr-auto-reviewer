@@ -11,6 +11,7 @@ Codeberg runs Forgejo — the API and token model are identical.
 | `GET` | `/user` | Owner + Reviewer | `read:user` — validates token is not expired |
 | `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner + Reviewer | `write:repository` — empty reviewers list probes write access |
 | `GET` | `/repos/{o}/{r}/pulls/{n}` | Owner | `read:repository` — fetches PR metadata |
+| `GET` | `/repos/{o}/{r}/issues/{n}/timeline` | Owner | `read:issue` — identifies review-request events |
 | `GET` | `/repos/{o}/{r}/pulls/{n}.diff` | Owner | `read:repository` — fetches the unified diff |
 | `GET` | `/repos/{o}/{r}/pulls/{n}/commits` | Owner | `read:repository` — fetches commit messages |
 | `GET` | `/repos/{o}/{r}/raw/{sha}/{path}` | Owner | `read:repository` — fetches file contents at a commit |

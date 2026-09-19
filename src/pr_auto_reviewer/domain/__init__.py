@@ -23,7 +23,11 @@ from .exceptions import (
     PullRequestNotFoundError,
     ReviewItemNotFoundError,
 )
-from .services import IssueCommandParser, ReviewItemFactory, ReviewItemParser
+from .services import (
+    IssueCommandParser,
+    ReviewItemFactory,
+    ReviewItemParser,
+)
 from .value_objects import (
     CodeReview,
     CommentId,

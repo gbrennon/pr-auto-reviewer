@@ -12,4 +12,5 @@ class PollingDaemonConfig:
     poll_interval_seconds: int
     repos_filter: str | None
     run_once: bool
+    repos_allow_list: tuple[str, ...] = ()
     force_pr: int | None = None

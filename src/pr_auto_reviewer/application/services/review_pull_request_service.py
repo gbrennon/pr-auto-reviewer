@@ -130,7 +130,9 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
 
         self._publish_review(command.pr_id, review, diff)
-        pr = self._record_review(pr, review, command.head_sha)
+        pr = self._record_review(
+            pr, review, command.head_sha, command.review_request_event_id
+        )
         self._persist(pr)
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -161,16 +163,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     def _needs_review(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> bool:
-        if command.force:
+        if command.force or pr.needs_review(command.head_sha):
             return True
-        if pr.needs_review(command.head_sha):
-            return True
-        if command.review_requested and pr.reviews:
-            logger.info("PR %s has been re-requested for review, reviewing again",
-                        command.pr_id)
-            return True
-        return False
-
+        return (
+            command.review_requested
+            and command.review_request_event_id is not None
+            and command.review_request_event_id
+            > (pr.last_review_request_event_id or 0)
+        )
     def _handle_already_reviewed(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> None:
@@ -179,6 +179,8 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             "PR %s already reviewed at SHA %s, skipping",
             command.pr_id, sha_str,
         )
+        if command.review_request_event_id is not None:
+            pr = pr.record_review_request_event(command.review_request_event_id)
         self._pr_repository.save(pr)
 
     def _fetch_diff(
@@ -519,7 +521,10 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._review_publisher.publish(pr_id, review, diff)
     def _record_review(
         self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
+        review_request_event_id: int | None = None,
     ) -> PullRequest:
+        if review_request_event_id is not None:
+            pr = pr.record_review_request_event(review_request_event_id)
         return pr.add_review(review, head_sha)
 
     def _persist(self, pr: PullRequest) -> None:

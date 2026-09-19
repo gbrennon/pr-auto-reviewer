@@ -55,12 +55,6 @@ LLM_HOST=http://llm:8080
 LLM_MODEL=gpt-4
 """
 
-    # .env with OLLAMA fallback
-    ollama_fallback: str = """PLATFORM_MODE=forgejo
-OLLAMA_HOST=http://ollama:11434
-OLLAMA_MODEL=code-review:latest
-"""
-
     # .env with FORGEJO_HOST fallback (no FORGEJO_API_URL)
     forgejo_host_fallback: str = """PLATFORM_MODE=forgejo
 FORGEJO_HOST=https://git.example.com

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import requests
 
@@ -18,6 +19,7 @@ from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 
 logger = logging.getLogger(__name__)
 
+
 class ForgejoPrLister(PrListerPort):
     """Lists open PRs and fetches individual PRs by number."""
 
@@ -29,48 +31,53 @@ class ForgejoPrLister(PrListerPort):
         _, repository = split_repository_prefix(repository)
         logger.info("Listing open PRs for %s", repository)
         try:
-            data = self._client.get(
+            payload: object = self._client.get(
                 f"/repos/{repository}/pulls",
                 state="open",
                 limit=100,
                 repo=repository,
             )
-
-            prs = data if isinstance(data, list) else data.get("data", [])
-
-            result = []
-            for pr in prs:
-                if pr.get("draft", False):
-                    continue
-
-                number = pr.get("number")
-                sha = pr.get("head", {}).get("sha")
-                target_branch = pr.get("base", {}).get("ref", "")
-                title = pr.get("title", "")
-                description = pr.get("body", "")
-                review_requested = bool(pr.get("requested_reviewers"))
-
-                if number and sha:
-                    result.append(
-                        OpenPullRequest(
-                            pr_id=PullRequestId(repository=repository, number=int(number)),
-                            head_sha=CommitSha(sha),
-                            title=title,
-                            description=description,
-                            is_draft=pr.get("draft", False),
-                            review_requested=review_requested,
-                            target_branch=target_branch,
-                        )
-                    )
-
-
+            prs = self._pull_request_rows(payload)
+            result = [
+                parsed
+                for pr in prs
+                if (parsed := self._parse_open_pull_request(repository, pr)) is not None
+            ]
             logger.debug("Found %d open PRs in %s", len(result), repository)
-            pr_summaries = [(p.pr_id.number, p.title[:40], p.head_sha.value[:7]) for p in result]
+            pr_summaries = [
+                (p.pr_id.number, p.title[:40], p.head_sha.value[:7])
+                for p in result
+            ]
             logger.info("ForgejoPrLister.list_open return: %s", pr_summaries)
             return result
-
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError) as exc:
             logger.warning("Failed to list PRs for %s: %s", repository, exc)
+            return []
+
+    def list_recent(
+        self, repository: str, since: str
+    ) -> list[OpenPullRequest]:
+        """List open and recently closed PRs updated since ``since``."""
+        _, repository = split_repository_prefix(repository)
+        try:
+            payload = self._client.get(
+                f"/repos/{repository}/pulls",
+                state="all",
+                since=since,
+                sort="updated",
+                direction="desc",
+                limit=50,
+                repo=repository,
+            )
+            return [
+                parsed
+                for pr in self._pull_request_rows(payload)
+                if (parsed := self._parse_open_pull_request(
+                    repository, pr, include_review_event=False
+                )) is not None
+            ]
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            logger.warning("Failed to list recent PRs for %s", repository)
             return []
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
@@ -78,34 +85,122 @@ class ForgejoPrLister(PrListerPort):
         _, repository = split_repository_prefix(repository)
         logger.info("Fetching PR %s #%d", repository, pr_number)
         try:
-            pr = self._client.get(
+            payload: object = self._client.get(
                 f"/repos/{repository}/pulls/{pr_number}",
                 repo=repository,
             )
-
+            pr = cast(dict[str, object], payload)
             number = pr.get("number")
-            sha = pr.get("head", {}).get("sha")
-            title = pr.get("title", "")
-            description = pr.get("body", "")
-            target_branch = pr.get("base", {}).get("ref", "")
-            review_requested = bool(pr.get("requested_reviewers"))
-            if not number or not sha:
+            sha = self._string_value(
+                self._nested_value(pr.get("head"), "sha")
+            )
+            if not isinstance(number, int) or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
                 return None
-
-            logger.debug("Fetched PR %s #%d: '%s'", repository, pr_number, title[:60])
+            title = self._string_value(pr.get("title"))
+            description = self._string_value(pr.get("body"))
+            target_branch = self._string_value(
+                self._nested_value(pr.get("base"), "ref")
+            )
+            review_requested = bool(pr.get("requested_reviewers"))
+            review_request_event_id = self._latest_review_request_event_id(
+                repository, number
+            )
             result = OpenPullRequest(
-                pr_id=PullRequestId(repository=repository, number=int(number)),
+                pr_id=PullRequestId(repository=repository, number=number),
                 head_sha=CommitSha(sha),
                 title=title,
                 description=description,
-                is_draft=pr.get("draft", False),
+                is_draft=self._bool_value(pr.get("draft")),
                 review_requested=review_requested,
+                review_request_event_id=review_request_event_id,
+                updated_at=self._string_value(pr.get("updated_at")),
                 target_branch=target_branch,
             )
-            logger.info("ForgejoPrLister.get_pr return: title='%s' sha=%s", title[:60], sha[:7])
+            logger.info(
+                "ForgejoPrLister.get_pr return: title='%s' sha=%s",
+                title[:60],
+                sha[:7],
+            )
             return result
-
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError) as exc:
             logger.warning("Failed to fetch PR %s #%d: %s", repository, pr_number, exc)
+            return None
+
+    @staticmethod
+    def _pull_request_rows(payload: object) -> list[dict[str, object]]:
+        if isinstance(payload, dict):
+            payload = payload.get("data", [])
+        if not isinstance(payload, list):
+            return []
+        return [cast(dict[str, object], row) for row in payload if isinstance(row, dict)]
+
+    def _parse_open_pull_request(
+        self,
+        repository: str,
+        pr: dict[str, object],
+        include_review_event: bool = True,
+    ) -> OpenPullRequest | None:
+        draft = self._bool_value(pr.get("draft"))
+        number = pr.get("number")
+        sha = self._string_value(self._nested_value(pr.get("head"), "sha"))
+        if draft or not isinstance(number, int) or not sha:
+            return None
+        review_request_event_id = (
+            self._latest_review_request_event_id(repository, number)
+            if include_review_event
+            else None
+        )
+        return OpenPullRequest(
+            pr_id=PullRequestId(repository=repository, number=number),
+            head_sha=CommitSha(sha),
+            title=self._string_value(pr.get("title")),
+            description=self._string_value(pr.get("body")),
+            is_draft=draft,
+            review_requested=bool(pr.get("requested_reviewers")),
+            review_request_event_id=review_request_event_id,
+            updated_at=self._string_value(pr.get("updated_at")),
+            target_branch=self._string_value(
+                self._nested_value(self._nested_value(pr.get("base"), "ref"), "value")
+            )
+            or self._string_value(self._nested_value(pr.get("base"), "ref")),
+        )
+
+    @staticmethod
+    def _nested_value(value: object, key: str) -> object:
+        if isinstance(value, dict):
+            return value.get(key)
+        return None
+
+    @staticmethod
+    def _string_value(value: object) -> str:
+        return value if isinstance(value, str) else ""
+
+    @staticmethod
+    def _bool_value(value: object) -> bool:
+        return value if isinstance(value, bool) else False
+
+    def _latest_review_request_event_id(
+        self, repository: str, pr_number: int
+    ) -> int | None:
+        """Return the latest Codeberg review-request timeline event ID."""
+        try:
+            events: object = self._client.get(
+                f"/repos/{repository}/issues/{pr_number}/timeline",
+                repo=repository,
+                limit=100,
+            )
+            if isinstance(events, dict):
+                events = events.get("data", [])
+            if not isinstance(events, list):
+                return None
+            request_ids = [
+                event_id
+                for row in events
+                if isinstance(row, dict)
+                and row.get("type") == "review_request"
+                and isinstance(event_id := row.get("id"), int)
+            ]
+            return max(request_ids, default=None)
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
             return None

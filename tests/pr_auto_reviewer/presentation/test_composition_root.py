@@ -4,6 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
+from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
+    ReviewPullRequestPort,
+)
 from pr_auto_reviewer.application.services.process_issue_commands_service import (
     ProcessIssueCommandsService,
 )
@@ -11,7 +14,9 @@ from pr_auto_reviewer.application.services.review_pull_request_service import (
     ReviewPullRequestService,
 )
 from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
+from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.git_credentials import GitCredentials
+from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
@@ -19,6 +24,7 @@ from pr_auto_reviewer.presentation.composition_root import (
     ApplicationComponents,
     CompositionRoot,
 )
+from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 from tests.fakes.fake_notifier import FakeNotifier
 
 
@@ -95,7 +101,10 @@ class TestCompositionRoot:
         )
         provider = FakeProvider()
 
-        root = CompositionRoot(credential_provider=provider)
+        root = CompositionRoot(
+            credential_provider=provider,
+            notifier=FakeNotifier(),
+        )
         with patch("pr_auto_reviewer.presentation.composition_root.composition_root.PollingDaemon.start"):
             root.run_daemon()
 
@@ -127,7 +136,10 @@ class TestCompositionRoot:
         )
         provider = FakeProvider()
 
-        root = CompositionRoot(credential_provider=provider)
+        root = CompositionRoot(
+            credential_provider=provider,
+            notifier=FakeNotifier(),
+        )
         with patch("pr_auto_reviewer.presentation.composition_root.composition_root.PollingDaemon.start"):
             root.run_daemon()
 
@@ -154,12 +166,112 @@ class TestCompositionRoot:
         )
         provider = NoneProvider()
 
-        root = CompositionRoot(credential_provider=provider)
+        root = CompositionRoot(
+            credential_provider=provider,
+            notifier=FakeNotifier(),
+        )
         with patch("pr_auto_reviewer.presentation.composition_root.composition_root.PollingDaemon.start"):
             root.run_daemon()
 
         assert provider.calls == [("https", "codeberg.org")]
         assert root.container.local_repository.credentials is None
+
+    def test_run_daemon_injects_configured_allow_list_into_daemon(
+        self, monkeypatch, _fake_config
+    ):
+        captured: dict = {}
+
+        class RecordingPollingDaemon:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def start(self):
+                pass
+
+        class NoneProvider:
+            def prompt(self, protocol, host):
+                return None
+
+        _fake_config.run_once = True
+        _fake_config.repos_allow_list = ("owner/only-this",)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.composition_root.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container._container.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.composition_root.PollingDaemon",
+            RecordingPollingDaemon,
+        )
+
+        root = CompositionRoot(
+            credential_provider=NoneProvider(),
+            notifier=FakeNotifier(),
+        )
+        root.run_daemon()
+
+        injected_allow_list = captured["repository_allow_list"]
+        assert injected_allow_list.allows("owner/only-this") is True
+        assert injected_allow_list.allows("owner/other") is False
+        assert captured["config"].repos_allow_list == ("owner/only-this",)
+
+    def test_cli_runner_reviews_repository_absent_from_allow_list(
+        self, monkeypatch, _fake_config
+    ):
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/not-allowed", number=1),
+            head_sha=CommitSha("abc1234"),
+            title="Fix bug",
+            is_draft=False,
+        )
+
+        class RecordingPrLister(PrListerPort):
+            def __init__(self):
+                self.queried_repos: list[str] = []
+
+            def list_open(self, repository):
+                self.queried_repos.append(repository)
+                return [open_pr]
+
+            def get_pr(self, repository, pr_number):
+                self.queried_repos.append(repository)
+                return open_pr
+
+        class RecordingReviewService(ReviewPullRequestPort):
+            def __init__(self):
+                self.commands: list = []
+
+            def execute(self, command):
+                self.commands.append(command)
+
+        _fake_config.output_mode = "terminal"
+        _fake_config.repos_allow_list = ("owner/only-this",)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.composition_root.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container._container.load_config",
+            lambda: _fake_config,
+        )
+
+        root = CompositionRoot(notifier=FakeNotifier())
+        cli_runner = root.components.cli_runner
+        recording_pr_lister = RecordingPrLister()
+        recording_review = RecordingReviewService()
+        cli_runner._pr_lister = recording_pr_lister
+        cli_runner._review_service = recording_review
+
+        result = cli_runner._run_review(
+            ["--repo", "owner/not-allowed", "--pr", "1"]
+        )
+
+        assert result == 0
+        assert recording_pr_lister.queried_repos == ["owner/not-allowed"]
+        assert len(recording_review.commands) == 1
 
     @pytest.fixture
     def _fake_config(self) -> Config:
@@ -185,4 +297,4 @@ class TestCompositionRoot:
             "pr_auto_reviewer.infrastructure.container._container.load_config",
             lambda: _fake_config,
         )
-        return CompositionRoot()
+        return CompositionRoot(notifier=FakeNotifier())
