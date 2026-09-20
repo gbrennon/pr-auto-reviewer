@@ -68,13 +68,9 @@ class ConfigBuilder:
         forgejo_reviewer_token = self._get(source, "FORGEJO_REVIEWER_TOKEN")
         forgejo_reviewer_username = self._get(source, "FORGEJO_REVIEWER_USERNAME")
 
-        llm_backend = (
-            self._get(source, "LLM_BACKEND")
-            or self._get(source, "LLM_MODE")
-            or "ollama"
-        ).lower()
+        llm_backend = self._get(source, "LLM_BACKEND").lower() or "ollama"
 
-        raw_host = self._get(source, "LLM_HOST") or "http://localhost:11434"
+        raw_host = self._get(source, "LLM_HOST")
         llm_host = self._normalize_host(raw_host)
         llm_model = self._get(source, "LLM_MODEL") or None
 
@@ -158,8 +154,10 @@ class ConfigBuilder:
         return source.get(key, default).strip()
 
     def _normalize_host(self, host: str) -> str:
-        """Ensure host URL has an HTTP scheme and no trailing slash."""
+        """Ensure a configured host has an HTTP scheme and no trailing slash."""
         cleaned = host.strip().rstrip("/")
+        if not cleaned:
+            return ""
         if not cleaned.startswith(("http://", "https://")):
             return f"http://{cleaned}"
         return cleaned
