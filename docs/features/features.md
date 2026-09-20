@@ -91,7 +91,7 @@ This document outlines what is currently implemented and what is planned.
 - **Response Parsing** — Robust JSON parsing with brace-matching and Markdown fallback
 - **Response Normalization** — Handles malformed LLM output, retries with correction prompts
 - **Max Retries** — Configurable via `LLM_MAX_RETRIES` (default 5)
-- **Timeout** — Configurable via `OLLAMA_TIMEOUT` (default 120s)
+- **Timeout** — Configurable via `LLM_TIMEOUT` (default 120s)
 
 ### Security & Token Management
 
