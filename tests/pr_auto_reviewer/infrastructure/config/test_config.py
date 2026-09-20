@@ -87,11 +87,31 @@ class TestLoadConfig:
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("LLM_BACKEND", "llama_cpp")
         monkeypatch.setenv("LLM_HOST", "http://llm:8080")
         monkeypatch.setenv("LLM_MODEL", "gpt-4")
         cfg = load_config()
+        assert cfg.llm_backend == "llama_cpp"
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
+
+    def test_legacy_llm_environment_variables_are_ignored(
+        self, monkeypatch, tmp_path: Path,
+    ):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("OLLAMA_HOST", "http://legacy:11434")
+        monkeypatch.setenv("OLLAMA_MODEL", "legacy-model")
+        monkeypatch.setenv("OLLAMA_TIMEOUT", "999")
+
+        cfg = load_config()
+
+        assert cfg.llm_backend == "ollama"
+        assert cfg.llm_host == ""
+        assert cfg.llm_model is None
+        assert cfg.llm_timeout == 120
+
 
     def test_llm_timeout_from_env(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
@@ -278,6 +298,9 @@ class TestLoadConfig:
             lambda path: {},
         )
         for var in [
+            "LLM_BACKEND",
+            "CLONE_PROTOCOL",
+            "REVIEW_MAX_TRIES",
             "ENV",
             "PLATFORM_MODE",
             "FORGEJO_MODE",
@@ -294,6 +317,9 @@ class TestLoadConfig:
             "LLM_HOST",
             "LLM_MODEL",
             "LLM_TIMEOUT",
+            "OLLAMA_HOST",
+            "OLLAMA_MODEL",
+            "OLLAMA_TIMEOUT",
             "REVIEW_OUTPUT",
             "POLL_INTERVAL",
             "DEBUG",
