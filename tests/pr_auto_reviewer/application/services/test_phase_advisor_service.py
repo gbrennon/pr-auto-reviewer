@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from pr_auto_reviewer.application.services.phase_advisor_service import (
     PhaseAdvisorService,
 )
 from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
@@ -152,6 +157,30 @@ class TestPhaseAdvisor:
 
         assert directive.grade is SubAgentGrade.OKOK
         assert directive.blocks_output is False
+
+
+    def test_assess_raises_llm_unavailable_error(self) -> None:
+        chat = MagicMock()
+        chat.send.side_effect = LlmUnavailableError("host unreachable")
+        advisor = PhaseAdvisorService(chat_port=chat)
+
+        with pytest.raises(LlmUnavailableError, match="host unreachable"):
+            advisor.assess(
+                _phase(), "assignment", PhaseResult(),
+                review_session="test-session",
+            )
+
+    def test_observe_raises_llm_unavailable_error(self) -> None:
+        chat = MagicMock()
+        chat.send.side_effect = LlmUnavailableError("host unreachable")
+        advisor = PhaseAdvisorService(chat_port=chat)
+
+        with pytest.raises(LlmUnavailableError, match="host unreachable"):
+            advisor.observe(
+                peer_content="peer output",
+                phase_name="Bug Hunt",
+                review_session="test-session",
+            )
 
     def test_assess_prompt_includes_peer_role_contract(self) -> None:
         chat = MagicMock()
