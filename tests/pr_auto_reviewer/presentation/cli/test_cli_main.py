@@ -1,6 +1,6 @@
 """End-to-end tests for CLI entry point (service commands)."""
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -24,13 +24,23 @@ class TestCliServiceCommands:
     ) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", command]),
+            patch.dict("os.environ", {"SSH_AUTH_SOCK": "/run/user/1000/agent.sock"}),
             patch("subprocess.run") as mock_run,
         ):
             main()
 
-        mock_run.assert_called_once_with(
-            ["systemctl", "--user", expected_action, SERVICE_NAME], check=False
+        expected_calls = []
+        if command in {"start", "restart"}:
+            expected_calls.append(
+                call(
+                    ["systemctl", "--user", "import-environment", "SSH_AUTH_SOCK"],
+                    check=False,
+                )
+            )
+        expected_calls.append(
+            call(["systemctl", "--user", expected_action, SERVICE_NAME], check=False)
         )
+        assert mock_run.call_args_list == expected_calls
 
     def test_logs_command_dispatches_journalctl(self) -> None:
         with (
