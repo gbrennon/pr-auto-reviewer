@@ -634,6 +634,6 @@ class TestReviewResponseParser:
         ReviewResponseParser().parse(raw, "m")
 
     def _load(self, name):
-        with open(f"{FIXTURES}/ollama_responses/{name}") as f:
+        with open(f"{FIXTURES}/response_fixtures/{name}") as f:
             return f.read()
 
