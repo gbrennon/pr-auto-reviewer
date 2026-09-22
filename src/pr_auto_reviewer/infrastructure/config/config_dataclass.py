@@ -35,7 +35,6 @@ class Config:
 
     org_token_overrides: OrgTokenOverrides = field(default_factory=OrgTokenOverrides)
 
-    llm_backend: str = "ollama"
     llm_host: str = ""
     llm_model: str | None = None
     llm_timeout: int = 120
