@@ -88,30 +88,21 @@ class TestLoadConfig:
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("LLM_BACKEND", "llama_cpp")
         monkeypatch.setenv("LLM_HOST", "http://llm:8080")
         monkeypatch.setenv("LLM_MODEL", "gpt-4")
         cfg = load_config()
-        assert cfg.llm_backend == "llama_cpp"
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
 
-    def test_legacy_llm_environment_variables_are_ignored(
-        self, monkeypatch, tmp_path: Path,
-    ):
+    def test_llm_defaults_are_used_when_unconfigured(self, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         self._enter_dev_mode(tmp_path)
-        monkeypatch.setenv("OLLAMA_HOST", "http://legacy:11434")
-        monkeypatch.setenv("OLLAMA_MODEL", "legacy-model")
-        monkeypatch.setenv("OLLAMA_TIMEOUT", "999")
-
         cfg = load_config()
 
-        assert cfg.llm_backend == "ollama"
-        assert cfg.llm_host == ""
-        assert cfg.llm_model is None
+        assert cfg.llm_host == "http://localhost:11434"
+        assert cfg.llm_model == "code-review:latest"
         assert cfg.llm_timeout == 120
 
 
@@ -123,11 +114,11 @@ class TestLoadConfig:
         cfg = load_config()
         assert cfg.llm_timeout == 321
 
-    def test_llm_model_none_when_empty(self):
+    def test_llm_model_uses_configured_default_when_empty(self):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
         cfg = load_config()
-        assert cfg.llm_model is None
+        assert cfg.llm_model == "code-review:latest"
 
     def test_output_mode_file_with_path(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
@@ -300,7 +291,6 @@ class TestLoadConfig:
             lambda path: {},
         )
         for var in [
-            "LLM_BACKEND",
             "CLONE_PROTOCOL",
             "REVIEW_MAX_TRIES",
             "ENV",
@@ -355,48 +345,48 @@ class TestLoadConfig:
         assert cfg.advisor_granularity is AdvisorGranularity.TURN
 
     def test_advisor_granularity_defaults_to_phase(self):
-        from pr_auto_reviewer.infrastructure.config.config_builder import (
-            ConfigBuilder,
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
         )
 
-        cfg = ConfigBuilder().build({}, env_name="test")
+        cfg = ConfigBuilderComposition().compose().build({}, env_name="test")
         assert cfg.llm_call_budget == 300
         assert cfg.advisor_granularity is AdvisorGranularity.PHASE
 
     def test_invalid_advisor_granularity_is_rejected(self):
-        from pr_auto_reviewer.infrastructure.config.config_builder import (
-            ConfigBuilder,
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
         )
 
         with pytest.raises(ValueError):
-            ConfigBuilder().build(
+            ConfigBuilderComposition().compose().build(
                 {}, env_name="test", advisor_granularity="every-other-turn"
             )
 
     def test_repos_allow_list_parsed_from_comma_separated_source(self):
-        from pr_auto_reviewer.infrastructure.config.config_builder import (
-            ConfigBuilder,
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
         )
 
-        cfg = ConfigBuilder().build(
+        cfg = ConfigBuilderComposition().compose().build(
             {"REPOS_ALLOW_LIST": "owner/a, owner/b"}, env_name="test"
         )
         assert cfg.repos_allow_list == ("owner/a", "owner/b")
 
     def test_repos_allow_list_defaults_to_empty_tuple(self):
-        from pr_auto_reviewer.infrastructure.config.config_builder import (
-            ConfigBuilder,
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
         )
 
-        cfg = ConfigBuilder().build({}, env_name="test")
+        cfg = ConfigBuilderComposition().compose().build({}, env_name="test")
         assert cfg.repos_allow_list == ()
 
     def test_repos_allow_list_newline_form_matches_comma_form(self):
-        from pr_auto_reviewer.infrastructure.config.config_builder import (
-            ConfigBuilder,
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
         )
 
-        cfg = ConfigBuilder().build(
+        cfg = ConfigBuilderComposition().compose().build(
             {"REPOS_ALLOW_LIST": "owner/a\nowner/b"}, env_name="test"
         )
         assert cfg.repos_allow_list == ("owner/a", "owner/b")
