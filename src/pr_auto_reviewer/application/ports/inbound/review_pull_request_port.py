@@ -8,5 +8,5 @@ from pr_auto_reviewer.domain.messages.commands.review_pull_request_command impor
 
 
 class ReviewPullRequestPort(Protocol):
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         ...
