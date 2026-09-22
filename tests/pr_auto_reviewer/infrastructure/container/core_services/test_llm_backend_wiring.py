@@ -10,14 +10,11 @@ import pytest
 from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
     RepositoryContextPort,
 )
-from pr_auto_reviewer.infrastructure.llm.llama_cpp.llama_cpp_chat_client import (
-    LlamaCppChatClient,
-)
 from pr_auto_reviewer.infrastructure.llm.llm_agent_adapter import (
     LlmAgentAdapter,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
-    OllamaChatClient,
+from pr_auto_reviewer.infrastructure.llm.openai_compatible_chat_client import (
+    OpenAiCompatibleChatClient,
 )
 
 from ._helpers import *
@@ -31,7 +28,7 @@ class TestLlmBackendWiring:
         services = wire_core_services(cfg, repo_context, _config_dir=tmp_path)
 
         assert isinstance(
-            services.conversation_service._chat_port, LlamaCppChatClient
+            services.conversation_service._chat_port, OpenAiCompatibleChatClient
         )
         assert isinstance(services.llm_review, LlmAgentAdapter)
 
@@ -42,7 +39,7 @@ class TestLlmBackendWiring:
         services = wire_core_services(cfg, repo_context, _config_dir=tmp_path)
 
         assert isinstance(
-            services.conversation_service._chat_port, OllamaChatClient
+            services.conversation_service._chat_port, OpenAiCompatibleChatClient
         )
         assert isinstance(services.llm_review, LlmAgentAdapter)
 
