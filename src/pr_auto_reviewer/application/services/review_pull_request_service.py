@@ -65,14 +65,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._conversation_logger = conversation_logger
         self._plan = plan
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         self._log_start(command)
 
         pr = self._load_or_create_pull_request(command)
 
         if not self._needs_review(command, pr):
             self._handle_already_reviewed(command, pr)
-            return
+            return False
 
         if self._token_verifier:
             self._token_verifier.verify(command.pr_id)
@@ -143,6 +143,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 len(review.items),
                 (review.summary or "")[:80],
             )
+        return True
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
