@@ -8,9 +8,47 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
 )
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.presentation.polling_daemon import (
+    PollingDaemon,
+    PollingDaemonConfig,
+)
+from pr_auto_reviewer.presentation.ports import (
+    OpenPullRequest,
+    PrListerPort,
+    RepoInfo,
+    RepoListerPort,
+)
 from pr_auto_reviewer.presentation.composition_root import bootstrap
 from tests.e2e.scenarios import ReviewScenario, _get_normalized_scenarios
 from tests.fakes.fake_notifier import FakeNotifier
+
+
+class ScenarioRepoLister(RepoListerPort):
+    def __init__(self, repository: str) -> None:
+        self._repository = repository
+
+    def list_repos(self) -> list[RepoInfo]:
+        return [RepoInfo(self._repository)]
+
+
+class ScenarioPrLister(PrListerPort):
+    def __init__(self, delegate: PrListerPort, pr_number: int) -> None:
+        self._delegate = delegate
+        self._pr_number = pr_number
+
+    def list_recent(
+        self, repository: str, since: str,
+    ) -> list[OpenPullRequest]:
+        return []
+
+    def list_open(self, repository: str) -> list[OpenPullRequest]:
+        pull_request = self._delegate.get_pr(repository, self._pr_number)
+        return [pull_request] if pull_request is not None else []
+
+    def get_pr(
+        self, repository: str, pr_number: int,
+    ) -> OpenPullRequest | None:
+        return self._delegate.get_pr(repository, pr_number)
 
 
 def _cassette_name(scenario: ReviewScenario) -> str:
@@ -88,6 +126,7 @@ class TestReviewFlowVCR:
             "GITHUB_OWNER_TOKEN=e2e-owner-token",
             "GITHUB_REVIEWER_TOKEN=e2e-reviewer-token",
             "GITHUB_REVIEWER_USERNAME=e2e-reviewer",
+            "LLM_BACKEND=ollama",
             "LLM_HOST=http://localhost:11434",
             "LLM_MODEL=code-review:latest",
         ]) + "\n")
@@ -97,6 +136,9 @@ class TestReviewFlowVCR:
             [scenario["owner"], "owner"],
             [scenario["owner"], "reviewer"],
         ]))
+        monkeypatch.setenv("LLM_BACKEND", "ollama")
+        monkeypatch.setenv("LLM_HOST", "http://localhost:11434")
+        monkeypatch.setenv("LLM_MODEL", "code-review:latest")
         monkeypatch.setenv("REVIEW_OUTPUT", scenario["review_output"])
         return bootstrap(notifier=notifier)
 
@@ -147,3 +189,39 @@ class TestReviewFlowVCR:
             f"duplicate ids in published review: {item_ids}"
         )
         assert all(item_ids), "published review contains empty item ids"
+
+    @pytest.mark.parametrize(
+        "scenario",
+        _get_normalized_scenarios(),
+        ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
+    )
+    def test_daemon_review_flow_notifies_success(
+        self, components, scenario: ReviewScenario, notifier: FakeNotifier,
+    ) -> None:
+        repository = (
+            f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
+        )
+        daemon = PollingDaemon(
+            config=PollingDaemonConfig(
+                poll_interval_seconds=1,
+                repos_filter=repository,
+                repos_allow_list=(),
+                run_once=True,
+                force_pr=scenario["pr_id"],
+            ),
+            repo_lister=ScenarioRepoLister(repository),
+            pr_lister=ScenarioPrLister(components.pr_lister, scenario["pr_id"]),
+            review_service=components.review_service,
+            notifier=notifier,
+        )
+
+        daemon.start()
+
+        assert notifier.errors == []
+        assert len(notifier.successes) == 1
+        notification_context, notification_detail = notifier.successes[0]
+        assert notification_context.startswith(
+            f"Review complete for {repository} ("
+        )
+        assert notification_context.endswith(")")
+        assert notification_detail == f"PR #{scenario['pr_id']}"
