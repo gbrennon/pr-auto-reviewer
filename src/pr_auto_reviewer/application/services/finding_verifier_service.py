@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -93,9 +94,12 @@ class FindingVerifierService(VerifyFindingsPort):
         fail-closed rule applies to blocking items only; non-blocking
         survivors pass through unverified rather than unpublished.
         """
-        survivors = self._filter_synthetic_findings(
+        current_survivors = self._filter_synthetic_findings(
             list(command.items), command.repo_path,
         )
+        prior_items = list(command.prior_items)
+        survivors = current_survivors + prior_items
+        prior_offset = len(current_survivors)
         if not survivors:
             logger.debug(
                 "No findings survived the synthetic filter; "
@@ -118,7 +122,7 @@ class FindingVerifierService(VerifyFindingsPort):
             return []
 
         findings_text = self._format_findings_for_verification(
-            survivors, command.repo_path
+            survivors, command.repo_path, prior_offset=prior_offset
         )
         prompt = self._verify_prompt.replace("{findings}", findings_text)
 
@@ -138,12 +142,22 @@ class FindingVerifierService(VerifyFindingsPort):
                 "findings as unverified",
                 sum(1 for i in survivors if i.is_blocking),
             )
-            return [i for i in survivors if not i.is_blocking]
+            return [
+                replace(item, status="open")
+                for item in current_survivors
+                if not item.is_blocking
+            ] + [replace(item, status="open") for item in prior_items]
 
         verified_indices: set[int] = set()
+        resolved_prior_indices: set[int] = set()
         for r in results:
             idx = r.get("finding_index")
             verified = r.get("verified", False)
+            status = r.get("status")
+            if isinstance(idx, int) and idx >= prior_offset:
+                if status == "resolved" or (status is None and not verified):
+                    resolved_prior_indices.add(idx)
+                continue
             if verified and isinstance(idx, int):
                 verified_indices.add(idx)
             else:
@@ -155,10 +169,17 @@ class FindingVerifierService(VerifyFindingsPort):
                 )
 
         kept = [
-            item
-            for i, item in enumerate(survivors)
+            replace(item, status="open")
+            for i, item in enumerate(current_survivors)
             if i in verified_indices
         ]
+        kept.extend(
+            replace(
+                item,
+                status=("resolved" if i in resolved_prior_indices else "open"),
+            )
+            for i, item in enumerate(prior_items, start=prior_offset)
+        )
 
         dropped = len(survivors) - len(kept)
         if dropped:
@@ -501,7 +522,7 @@ class FindingVerifierService(VerifyFindingsPort):
         )
 
     def _format_findings_for_verification(
-        self, items: list[ReviewItem], repo_path: Path
+        self, items: list[ReviewItem], repo_path: Path, prior_offset: int = 0
     ) -> str:
         """Format blocking findings with surrounding file context for verification."""
         parts: list[str] = []
@@ -518,6 +539,7 @@ class FindingVerifierService(VerifyFindingsPort):
 
             parts.append(
                 f"## Finding {i}\n\n"
+                f"- **Status:** {'prior finding to revalidate' if i >= prior_offset else 'new finding'}\n"
                 f"- **File:** `{item.file_path or '(unknown)'}`\n"
                 f"- **Severity:** {item.severity.value}\n"
                 f"- **Category:** {item.category.value}\n"
