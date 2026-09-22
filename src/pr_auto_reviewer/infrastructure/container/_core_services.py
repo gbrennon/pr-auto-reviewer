@@ -102,14 +102,11 @@ from pr_auto_reviewer.infrastructure.llm.backend_detector import (
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )
-from pr_auto_reviewer.infrastructure.llm.llama_cpp.llama_cpp_chat_client import (
-    LlamaCppChatClient,
-)
 from pr_auto_reviewer.infrastructure.llm.llm_agent_adapter import (
     LlmAgentAdapter,
 )
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_chat_client import (
-    OllamaChatClient,
+from pr_auto_reviewer.infrastructure.llm.openai_compatible_chat_client import (
+    OpenAiCompatibleChatClient,
 )
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
@@ -256,23 +253,23 @@ class _ChatClientFactory:
         backend = (config.llm_backend or "ollama").lower()
         if backend == "auto":
             detector = BackendDetector(
-                ollama_host=config.llm_host,
-                llama_cpp_host=config.llm_host,
+                ollama_host=config.llm_host or "http://localhost:11434",
+                llama_cpp_host=config.llm_host or "http://localhost:8080",
                 timeout=2.0,
             )
             backend = detector.detect()
 
-        if backend == "llama_cpp":
-            return LlamaCppChatClient(
-                model=config.llm_model or "default",
-                host=config.llm_host,
-                timeout=config.llm_timeout,
-                max_retries=config.llm_max_retries,
-                max_llm_calls=config.llm_call_budget,
-            )
-        return OllamaChatClient(
-            model=config.llm_model or "code-review:latest",
-            host=config.llm_host,
+        default_host = (
+            "http://localhost:8080"
+            if backend == "llama_cpp"
+            else "http://localhost:11434"
+        )
+        default_model = (
+            "default" if backend == "llama_cpp" else "code-review:latest"
+        )
+        return OpenAiCompatibleChatClient(
+            model=config.llm_model or default_model,
+            host=config.llm_host or default_host,
             timeout=config.llm_timeout,
             max_retries=config.llm_max_retries,
             max_llm_calls=config.llm_call_budget,
