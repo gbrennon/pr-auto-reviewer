@@ -26,8 +26,12 @@ class BackendDetector:
         http_get: Callable[..., Any] | None = None,
     ) -> None:
         """Initialize detector with endpoint host targets and timeout."""
-        self._ollama_host = self._normalize_host(ollama_host)
-        self._llama_cpp_host = self._normalize_host(llama_cpp_host)
+        self._ollama_host = self._normalize_host(
+            ollama_host or "http://localhost:11434"
+        )
+        self._llama_cpp_host = self._normalize_host(
+            llama_cpp_host or "http://localhost:8080"
+        )
         self._timeout = timeout
         self._http_get = http_get
 
@@ -36,7 +40,9 @@ class BackendDetector:
         """Ensure host URL starts with an HTTP scheme and has no trailing slashes."""
         cleaned = host.strip().rstrip("/")
         if not cleaned.startswith(("http://", "https://")):
-            return f"http://{cleaned}"
+            cleaned = f"http://{cleaned}"
+        if cleaned.endswith("/v1"):
+            return cleaned[:-3]
         return cleaned
 
     def detect(self) -> str:
