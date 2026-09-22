@@ -27,9 +27,6 @@ from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestDiff
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.llm.ollama.ollama_llm_adapter import (
-    OllamaLlmAdapter,
-)
 from tests.fakes import (
     FakeChangesetFetcher,
     FakeLlmReview,
@@ -45,4 +42,4 @@ def _load_fixture(relative: str) -> str:
     return (FIXTURES / relative).read_text()
 
 
-__all__ = ['FIXTURES', 'CodeReview', 'CommitSha', 'ComposedPrompt', 'FakeChangesetFetcher', 'FakeLlmReview', 'FakePullRequestRepository', 'FakeReviewContextFactory', 'FakeReviewPublisher', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MagicMock', 'OllamaLlmAdapter', 'Path', 'PullRequestDiff', 'PullRequestId', 'ReviewItem', 'ReviewPullRequestCommand', 'ReviewPullRequestService', 'ReviewVerdict', '_load_fixture', 'annotations', 'json', 'pytest', 'req']
+__all__ = ['FIXTURES', 'CodeReview', 'CommitSha', 'ComposedPrompt', 'FakeChangesetFetcher', 'FakeLlmReview', 'FakePullRequestRepository', 'FakeReviewContextFactory', 'FakeReviewPublisher', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MagicMock', 'Path', 'PullRequestDiff', 'PullRequestId', 'ReviewItem', 'ReviewPullRequestCommand', 'ReviewPullRequestService', 'ReviewVerdict', '_load_fixture', 'annotations', 'json', 'pytest', 'req']
