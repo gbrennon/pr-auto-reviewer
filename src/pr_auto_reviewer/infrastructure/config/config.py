@@ -70,11 +70,6 @@ class ConfigLoader:
         self._detector = EnvironmentDetector()
         self._builder = ConfigBuilder()
 
-    def _merge_command_line_env(self, values: dict[str, str]) -> None:
-        for key in _COMMAND_LINE_KEYS:
-            if key in os.environ:
-                values[key] = os.environ[key]
-
     def load(self) -> Config:
         repo_root = RepoRoot.path()
         env = self._detector.detect()
@@ -87,6 +82,15 @@ class ConfigLoader:
 
         return self._load_development(user_config_path, repo_env_path, env)
 
+    def _merge_command_line_env(self, values: dict[str, str]) -> None:
+        for key in _COMMAND_LINE_KEYS:
+            if key in os.environ:
+                values[key] = os.environ[key]
+    def _apply_runtime_environment(self, values: dict[str, str]) -> None:
+        bundle = values.get("REQUESTS_CA_BUNDLE", "").strip()
+        if bundle:
+            os.environ["REQUESTS_CA_BUNDLE"] = bundle
+
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
             values = dotenv_values(config_path)
@@ -98,8 +102,10 @@ class ConfigLoader:
             )
             values = {}
         self._merge_command_line_env(values)
+        self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
+
         advisor_max_blocks = int(values.pop("ADVISOR_MAX_BLOCKS", 2))
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
@@ -138,7 +144,7 @@ class ConfigLoader:
             values.update(dotenv_values(repo_env_path))
 
         self._merge_command_line_env(values)
-
+        self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
         advisor_max_blocks = int(values.pop("ADVISOR_MAX_BLOCKS", 2))
@@ -161,7 +167,6 @@ class ConfigLoader:
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )
-
 
 def load_config() -> Config:
     return ConfigLoader().load()
