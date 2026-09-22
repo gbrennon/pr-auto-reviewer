@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 
 class ResponseNormalizerFixtures:
-    """Sample LLM response payloads captured from real Ollama outputs."""
+    """Sample LLM response payloads captured from an OpenAI-compatible response."""
 
     well_formed_issue: ClassVar[dict[str, Any]] = {
         "file": "src/app.py",
