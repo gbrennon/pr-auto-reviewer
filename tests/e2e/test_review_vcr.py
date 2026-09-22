@@ -57,6 +57,16 @@ def _cassette_name(scenario: ReviewScenario) -> str:
 
 
 @pytest.fixture
+def default_cassette_name(request: pytest.FixtureRequest) -> str:
+    cassette_name = request.node.name.replace(
+        "test_daemon_review_flow_notifies_success",
+        "test_review_flow",
+    )
+    for character in r'<>?%*:|"/\\':
+        cassette_name = cassette_name.replace(character, "-")
+    return f"TestReviewFlowVCR.{cassette_name}"
+
+@pytest.fixture
 def vcr_config(scenario: ReviewScenario):
     return {
         "cassette_library_dir": "tests/e2e/cassettes/review_vcr",
@@ -126,7 +136,6 @@ class TestReviewFlowVCR:
             "GITHUB_OWNER_TOKEN=e2e-owner-token",
             "GITHUB_REVIEWER_TOKEN=e2e-reviewer-token",
             "GITHUB_REVIEWER_USERNAME=e2e-reviewer",
-            "LLM_BACKEND=ollama",
             "LLM_HOST=http://localhost:11434",
             "LLM_MODEL=code-review:latest",
         ]) + "\n")
@@ -136,7 +145,6 @@ class TestReviewFlowVCR:
             [scenario["owner"], "owner"],
             [scenario["owner"], "reviewer"],
         ]))
-        monkeypatch.setenv("LLM_BACKEND", "ollama")
         monkeypatch.setenv("LLM_HOST", "http://localhost:11434")
         monkeypatch.setenv("LLM_MODEL", "code-review:latest")
         monkeypatch.setenv("REVIEW_OUTPUT", scenario["review_output"])
