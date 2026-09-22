@@ -34,6 +34,7 @@ from pr_auto_reviewer.presentation.ports import (
     RepoInfo,
     RepoListerPort,
 )
+from tests.fakes.fake_notifier import FakeNotifier
 
 
 class RecordingCommandService(ProcessIssueCommandsPort):
@@ -103,8 +104,9 @@ class RecordingReviewService(ReviewPullRequestPort):
     def __init__(self) -> None:
         self.executed_commands: list[ReviewPullRequestCommand] = []
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         self.executed_commands.append(command)
+        return True
 
 class PerRepoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
@@ -147,6 +149,55 @@ class TestPollingDaemon:
             pr_lister=pr_lister,
             review_service=mock_review_service,
         )
+
+    def test_does_not_notify_success_when_review_is_skipped(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = False
+        pull_request = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=7),
+            head_sha=CommitSha("abc123"),
+            title="Already reviewed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert notifier.successes == []
+
+    def test_notifies_success_after_review_completion(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = True
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        pull_request = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Completed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert len(notifier.successes) == 1
+        context, detail = notifier.successes[0]
+        assert context.startswith("Review complete for owner/repo1 (")
+        assert context.endswith(")")
+        assert detail == "PR #7"
 
     def test_processes_recent_closed_pr_commands(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
