@@ -123,9 +123,11 @@ class TestReviewFlowVCR:
         exit_code = components.cli_runner.run(review_argv)
         assert exit_code == 0
         assert notifier.errors == []
-        assert notifier.successes == [
-            ("Review complete", f"PR #{scenario['pr_id']} in {repo_spec}")
-        ]
+        assert len(notifier.successes) == 1
+        notification_context, notification_detail = notifier.successes[0]
+        assert notification_context.startswith(f"Review complete for {repo_spec} (")
+        assert notification_context.endswith(")")
+        assert notification_detail == f"PR #{scenario['pr_id']}"
 
         raw_body = _read_review_body(
             scenario["review_output"],
