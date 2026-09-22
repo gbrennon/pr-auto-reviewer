@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
@@ -94,6 +95,7 @@ class TestLoadConfig:
         assert cfg.llm_backend == "llama_cpp"
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
+
 
     def test_legacy_llm_environment_variables_are_ignored(
         self, monkeypatch, tmp_path: Path,
