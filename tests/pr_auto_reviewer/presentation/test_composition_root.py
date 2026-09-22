@@ -246,6 +246,7 @@ class TestCompositionRoot:
 
             def execute(self, command):
                 self.commands.append(command)
+                return True
 
         _fake_config.output_mode = "terminal"
         _fake_config.repos_allow_list = ("owner/only-this",)
