@@ -1,6 +1,7 @@
 """ReviewItem — a single actionable finding produced by the AI review."""
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
@@ -23,6 +24,7 @@ class ReviewItem:
     id: str = field(default="")
     current_code: str = field(default="", compare=False)
     suggested_fix: str = field(default="", compare=False)
+    status: Literal["open", "resolved"] = field(default="open", compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -31,6 +33,13 @@ class ReviewItem:
         object.__setattr__(
             self, "category", IssueCategory.from_value(str(self.category)),
         )
+        if self.status not in ("open", "resolved"):
+            raise ValueError("Review item status must be open or resolved")
+
+    @property
+    def is_open(self) -> bool:
+        """Return whether this finding remains active in the latest review."""
+        return self.status == "open"
 
     @property
     def is_blocking(self) -> bool:
@@ -42,3 +51,8 @@ class ReviewItem:
         if self.severity.is_blocking:
             return True
         return self.category == IssueCategory.SECURITY
+
+    @property
+    def is_open_blocking(self) -> bool:
+        """Return whether this open finding blocks approval."""
+        return self.is_open and self.is_blocking
