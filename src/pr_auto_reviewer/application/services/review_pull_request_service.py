@@ -269,6 +269,11 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
+                prior_items=(
+                    list(existing_pr.reviews[-1].items)
+                    if existing_pr is not None and existing_pr.reviews
+                    else []
+                ),
             )
         )
         return self._drop_persisted_duplicates(review, existing_pr)
@@ -295,8 +300,16 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             for prior_review in existing_pr.reviews
             for item in prior_review.items
         }
+        prior_ids = {
+            item.id
+            for item in existing_pr.reviews[-1].items
+            if item.id
+        }
         kept: list[ReviewItem] = []
         for item in review.items:
+            if item.id in prior_ids:
+                kept.append(item)
+                continue
             if self._content_signature(item) in published_signatures:
                 logger.warning(
                     "Dropping finding %s — byte-equivalent to a "
@@ -482,11 +495,11 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         return pending
 
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
-        """Return IDs of review items whose severity is blocking."""
+        """Return IDs of open review items whose severity is blocking."""
         return [
             item.id
             for item in review.items
-            if item.is_blocking and item.id
+            if item.is_open_blocking and item.id
         ]
 
     def _build_unresolved_reason(
