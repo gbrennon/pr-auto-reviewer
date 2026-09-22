@@ -142,7 +142,17 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             self._publish_invalid_items_message(updated_pr, invalid, review_items)
             return updated_pr
 
-        created_issues = self._dispatch_issue_creations(updated_pr, valid)
+        available_ids = list(
+            dict.fromkeys(
+                item_id
+                for item_id in valid
+                if item_id not in updated_pr.created_issue_item_ids
+            )
+        )
+        created_issues = self._dispatch_issue_creations(updated_pr, available_ids)
+        updated_pr = updated_pr.record_created_issue_items(
+            *(issue.source_item_id for issue in created_issues)
+        )
         if created_issues:
             self._publish_issues_created_message(updated_pr, created_issues)
         return updated_pr
