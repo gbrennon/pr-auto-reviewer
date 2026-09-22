@@ -96,9 +96,6 @@ from pr_auto_reviewer.infrastructure.fragments.file_system_fragment_repository i
 from pr_auto_reviewer.infrastructure.fragments.jinja2_renderer import (
     Jinja2Renderer,
 )
-from pr_auto_reviewer.infrastructure.llm.backend_detector import (
-    BackendDetector,
-)
 from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
     ExplorationToolService,
 )
@@ -245,31 +242,14 @@ class CoreServices:
 
 
 class _ChatClientFactory:
-    """Instantiate the appropriate AgentChatPort based on backend configuration."""
+    """Instantiate the configured OpenAI-compatible chat client."""
 
     @staticmethod
     def create(config: Config) -> AgentChatPort:
-        """Create an Ollama or llama.cpp chat client based on config."""
-        backend = (config.llm_backend or "ollama").lower()
-        if backend == "auto":
-            detector = BackendDetector(
-                ollama_host=config.llm_host or "http://localhost:11434",
-                llama_cpp_host=config.llm_host or "http://localhost:8080",
-                timeout=2.0,
-            )
-            backend = detector.detect()
-
-        default_host = (
-            "http://localhost:8080"
-            if backend == "llama_cpp"
-            else "http://localhost:11434"
-        )
-        default_model = (
-            "default" if backend == "llama_cpp" else "code-review:latest"
-        )
+        """Create the OpenAI-compatible chat client from resolved configuration."""
         return OpenAiCompatibleChatClient(
-            model=config.llm_model or default_model,
-            host=config.llm_host or default_host,
+            model=config.llm_model,
+            host=config.llm_host,
             timeout=config.llm_timeout,
             max_retries=config.llm_max_retries,
             max_llm_calls=config.llm_call_budget,
