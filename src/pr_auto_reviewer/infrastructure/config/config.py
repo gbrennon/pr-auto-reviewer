@@ -14,7 +14,9 @@ from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
 from pr_auto_reviewer.infrastructure.config.app_paths import (
     AppPaths,
 )
-from pr_auto_reviewer.infrastructure.config.config_builder import ConfigBuilder
+from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+    ConfigBuilderComposition,
+)
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.environment_detector import (
     EnvironmentDetector,
@@ -26,7 +28,6 @@ logger = logging.getLogger(__name__)
 _COMMAND_LINE_KEYS = {
     "PLATFORM_MODE", "FORGEJO_MODE",
     "REVIEW_OUTPUT", "DEBUG", "PROMPT_MODE",
-    "LLM_BACKEND",
     "LLM_HOST", "LLM_MODEL",
     "POLL_INTERVAL", "MAX_PROMPT_TOKENS",
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
@@ -68,7 +69,7 @@ class ConfigLoader:
 
     def __init__(self) -> None:
         self._detector = EnvironmentDetector()
-        self._builder = ConfigBuilder()
+        self._builder = ConfigBuilderComposition().compose()
 
     def load(self) -> Config:
         repo_root = RepoRoot.path()
