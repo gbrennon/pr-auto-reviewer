@@ -142,9 +142,20 @@ class PollingDaemon:
         )
 
         HttpRequestCounter.instance().reset()
+        review_started_at = time.perf_counter()
         try:
-            self._review_service.execute(command)
+            reviewed = self._review_service.execute(command)
+            if not reviewed:
+                return
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
+            if self._notifier:
+                duration = self._format_duration(
+                    time.perf_counter() - review_started_at
+                )
+                self._notifier.notify_success(
+                    f"Review complete for {pr.pr_id.repository} ({duration})",
+                    f"PR #{pr.pr_id.number}",
+                )
         except EmptyDiffError:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
         except RepositoryFetchError as e:
@@ -172,6 +183,12 @@ class PollingDaemon:
             logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:
             HttpRequestCounter.instance().log_summary()
+
+    @staticmethod
+    def _format_duration(duration_seconds: float) -> str:
+        total_seconds = max(0, int(duration_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes}m {seconds:02d}s"
 
     def _allowed_repos(self, repos: list[RepoInfo]) -> list[RepoInfo]:
         """Drop repositories the configured allow list does not permit."""
