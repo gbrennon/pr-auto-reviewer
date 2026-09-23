@@ -68,7 +68,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._chat_client._host == "http://custom-llm:9999"
+        assert result.llm_review._chat_client._host == "http://custom-llm:9999/v1"
 
     def test_llm_review_uses_config_llm_model(
         self,
@@ -84,15 +84,6 @@ class TestWireCoreServices:
         result = wire_core_services(config, repo_context)
 
         assert result.llm_review._chat_client._model == "custom-model:v2"
-
-    def test_llm_review_defaults_to_code_review_when_no_model(
-        self,
-        forgejo_config: Config,
-        repo_context,
-    ) -> None:
-        result = wire_core_services(forgejo_config, repo_context)
-
-        assert result.llm_review._chat_client._model == "code-review:latest"
 
     def test_llm_review_uses_config_llm_timeout(
         self,

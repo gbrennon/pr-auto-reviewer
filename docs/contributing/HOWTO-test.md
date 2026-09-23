@@ -24,7 +24,7 @@ uv run pytest tests/ -m integration -x -q
 uv run pytest tests/ -m e2e -x -q
 
 # Specific test file
-uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_ollama_llm_adapter.py -x -q
+uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_openai_compatible_chat_client.py -x -q
 
 # With coverage
 uv run pytest tests/ --cov=src/pr_auto_reviewer --cov-report=term-missing
@@ -95,10 +95,10 @@ uv run pytest tests/pr_auto_reviewer/test_e2e_review_flow.py -x -v
 uv run pytest tests/pr_auto_reviewer/application/services/test_review_pull_request_service.py -x -q
 ```
 
-### 2. Test LLM Adapter with Mock Ollama
+### 2. Test OpenAI-Compatible LLM Client
 
 ```bash
-uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_ollama_llm_adapter.py -x -q
+uv run pytest tests/pr_auto_reviewer/infrastructure/llm/test_openai_compatible_chat_client.py -x -q
 ```
 
 ### 3. Test Fragment Composition
@@ -131,7 +131,7 @@ REVIEW_OUTPUT=terminal uv run python -m pr_auto_reviewer review --repo owner/rep
 ### Verify Prompt Construction
 
 ```bash
-# Dumps prompt to /tmp/ollama-prompt-try1-initial.txt
+# Dumps prompt to /tmp/llm-prompt-try1-initial.txt
 DEBUG=1 uv run python -m pr_auto_reviewer review --repo owner/repo --pr N -v
 ```
 

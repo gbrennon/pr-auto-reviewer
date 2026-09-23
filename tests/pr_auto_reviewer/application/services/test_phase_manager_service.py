@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.services.phase_manager_service import (
     PhaseManagerService,
+)
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
 )
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
@@ -53,7 +57,7 @@ class TestPhaseManager:
 
     def test_brief_chat_failure_returns_empty(self) -> None:
         chat = MagicMock()
-        chat.send.side_effect = RuntimeError("ollama down")
+        chat.send.side_effect = RuntimeError("parse error")
         manager = PhaseManagerService(chat_port=chat)
 
         brief = manager.brief(
@@ -64,6 +68,18 @@ class TestPhaseManager:
         )
 
         assert brief == ""
+
+    def test_brief_raises_llm_unavailable_error(self) -> None:
+        chat = MagicMock()
+        chat.send.side_effect = LlmUnavailableError("host unreachable")
+        manager = PhaseManagerService(chat_port=chat)
+
+        with pytest.raises(LlmUnavailableError, match="host unreachable"):
+            manager.brief(
+                ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
+                "findings",
+                review_session="test-session",
+            )
 
     def test_brief_prompt_grounds_in_prior_findings(self) -> None:
         chat = MagicMock()

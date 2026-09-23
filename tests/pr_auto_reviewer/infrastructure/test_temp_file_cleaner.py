@@ -24,11 +24,11 @@ class TestCleanTempFiles:
         old_http.write_text("old")
         os.utime(old_http, (old_ts, old_ts))
 
-        old_prompt = tmp_path / "ollama-prompt-try1-old.txt"
+        old_prompt = tmp_path / "llm-prompt-try1-old.txt"
         old_prompt.write_text("old")
         os.utime(old_prompt, (old_ts, old_ts))
 
-        old_raw = tmp_path / "ollama_raw_response.txt"
+        old_raw = tmp_path / "llm_raw_response.txt"
         old_raw.write_text("old")
         os.utime(old_raw, (old_ts, old_ts))
 
@@ -36,7 +36,7 @@ class TestCleanTempFiles:
         new_http = tmp_path / "http-new.log"
         new_http.write_text("new")
 
-        new_prompt = tmp_path / "ollama-prompt-try2-new.txt"
+        new_prompt = tmp_path / "llm-prompt-try2-new.txt"
         new_prompt.write_text("new")
 
         deleted = clean_temp_files(target_dir=tmp_path)
@@ -101,7 +101,7 @@ class TestCleanTempFiles:
 
         # 90 seconds old — should be deleted under 60s threshold
         old_ts = now - 90
-        old = tmp_path / "ollama-prompt-old.txt"
+        old = tmp_path / "llm-prompt-old.txt"
         old.write_text("old")
         os.utime(old, (old_ts, old_ts))
 

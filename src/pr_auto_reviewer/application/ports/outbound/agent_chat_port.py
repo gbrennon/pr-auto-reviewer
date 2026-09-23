@@ -11,7 +11,7 @@ class AgentChatPort(Protocol):
     """Send a list of conversation messages to an LLM and return the response.
 
     Infrastructure adapters implement this to talk to specific LLM
-    backends (Ollama, OpenAI, etc.).
+    OpenAI-compatible language-model servers.
     """
 
     def send(self, messages: list[ConversationMessage]) -> str:

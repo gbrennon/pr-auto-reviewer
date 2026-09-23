@@ -56,18 +56,6 @@ class CompositionRoot:
     def container(self) -> Container:
         return self._container
 
-    def _setup_logging(self, debug: bool) -> None:
-        log_level = logging.DEBUG if debug else logging.INFO
-        logging.basicConfig(
-            level=log_level,
-            format="%(asctime)s %(levelname)s %(name)s %(message)s",
-            force=True,
-        )
-        logging.getLogger("pr_auto_reviewer").setLevel(log_level)
-        if not debug:
-            logging.getLogger("urllib3").setLevel(logging.WARNING)
-            logging.getLogger("requests").setLevel(logging.WARNING)
-
     def run_daemon(self) -> None:
         config = self._container.config if hasattr(self, '_container') else load_config()
 
@@ -95,6 +83,18 @@ class CompositionRoot:
 
         self._authenticate_for_git_host(config)
         daemon.start()
+
+    def _setup_logging(self, debug: bool) -> None:
+        log_level = logging.DEBUG if debug else logging.INFO
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
+            force=True,
+        )
+        logging.getLogger("pr_auto_reviewer").setLevel(log_level)
+        if not debug:
+            logging.getLogger("urllib3").setLevel(logging.WARNING)
+            logging.getLogger("requests").setLevel(logging.WARNING)
 
     def _git_host(self, config) -> str:
         if config.platform_mode == GitProvider.GITHUB:

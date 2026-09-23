@@ -59,6 +59,40 @@ class TestMultiPhaseReviewOrchestrator:
                 })()
             )
 
+    def test_execute_propagates_manager_llm_unavailable_error(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        manager = MagicMock()
+        manager.brief.side_effect = LlmUnavailableError("host unreachable")
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+            manager=manager,
+            max_retries=3,
+        )
+        plan = SimpleNamespace(
+            phases=_plan(), methodology="sub-agent-multi-phase",
+        )
+
+        with _pytest.raises(LlmUnavailableError, match="host unreachable"):
+            orchestrator.execute(
+                type("Cmd", (), {
+                    "existing_item_ids": frozenset(),
+                    "review_session": "test-session",
+                    "base_sha": "",
+                    "plan": plan,
+                    "repo_path": Path("/tmp"),
+                    "changed_files": ["src/main.py"],
+                    "model": "test",
+                })()
+            )
+
+        conversation_calls = [
+            call for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call.args[0], RunAgentConversationCommand)
+        ]
+        assert conversation_calls == []
+
     def test__run_phases_full_retry_no_items(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:

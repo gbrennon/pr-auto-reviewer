@@ -46,7 +46,7 @@ class TestReviewPullRequestService:
         existing = existing.add_review(_review(), cmd.head_sha)
         mock_pr_repository.find.return_value = existing
 
-        ReviewPullRequestService(
+        reviewed = ReviewPullRequestService(
             mock_pr_repository,
             mock_changeset_fetcher,
             mock_review_context_factory,
@@ -54,6 +54,7 @@ class TestReviewPullRequestService:
             mock_review_publisher,
         ).execute(cmd)
 
+        assert reviewed is False
         mock_changeset_fetcher.fetch.assert_not_called()
         mock_review_context_factory.build.assert_not_called()
         mock_llm_review.review_prompt.assert_not_called()

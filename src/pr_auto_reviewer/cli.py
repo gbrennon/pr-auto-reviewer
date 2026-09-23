@@ -11,6 +11,11 @@ SERVICE_NAME = "pr-auto-reviewer.service"
 
 def _run_systemctl(action: str) -> None:
     """Run a systemctl --user command for the service."""
+    if action in {"start", "restart"} and os.environ.get("SSH_AUTH_SOCK"):
+        subprocess.run(
+            ["systemctl", "--user", "import-environment", "SSH_AUTH_SOCK"],
+            check=False,
+        )
     subprocess.run(["systemctl", "--user", action, SERVICE_NAME], check=False)
 
 def _run_journalctl() -> None:

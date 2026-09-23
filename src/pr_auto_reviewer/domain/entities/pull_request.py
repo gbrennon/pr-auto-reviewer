@@ -28,6 +28,7 @@ class PullRequest:
     title: str
     head_sha: CommitSha
     unresolved_blocking_ids: frozenset[str] = frozenset()
+    created_issue_item_ids: frozenset[str] = frozenset()
     last_reviewed_at: str | None = None
     is_draft: bool = False
     processed_comment_ids: frozenset[CommentId] = frozenset()
@@ -76,6 +77,17 @@ class PullRequest:
         """Record the PR activity timestamp used for command processing."""
         return replace(self, last_command_checked_at=activity_timestamp)
 
+
+    def record_created_issue_items(self, *item_ids: str) -> PullRequest:
+        """Record review item IDs that already have tracker issues."""
+        if not item_ids:
+            return self
+        return replace(
+            self,
+            created_issue_item_ids=(
+                self.created_issue_item_ids | frozenset(item_ids)
+            ),
+        )
 
     def with_unresolved_blocking(self, *item_ids: str) -> PullRequest:
         """Record that blocking review items remain unresolved.

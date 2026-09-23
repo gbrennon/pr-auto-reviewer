@@ -19,7 +19,7 @@ and at least one platform's token set.
 | Variable | Description |
 |----------|-------------|
 | `PLATFORM_MODE` | Platform to use: `codeberg`, `github`, or `both` |
-| `LLM_MODEL` | Model name for AI reviews (falls back to `OLLAMA_MODEL`) |
+| `LLM_MODEL` | Model name for AI reviews |
 
 ### Single-Platform Tokens
 
@@ -111,11 +111,9 @@ inconclusive, the review fails instead of publishing an unverified verdict.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_HOST` | `http://localhost:11434` | LLM API endpoint (preferred; falls back to `OLLAMA_HOST`) |
-| `OLLAMA_HOST` | `http://localhost:11434` | Legacy name for `LLM_HOST` |
-| `LLM_MODEL` | — | Model name (preferred; falls back to `OLLAMA_MODEL`) |
-| `OLLAMA_MODEL` | — | Legacy name for `LLM_MODEL` |
-| `OLLAMA_TIMEOUT` | `120` | Seconds before a generation request times out |
+| `LLM_HOST` | — | LLM API endpoint; must be explicitly configured |
+| `LLM_MODEL` | — | Model name |
+| `LLM_TIMEOUT` | `120` | Seconds before a generation request times out |
 | `LLM_MAX_RETRIES` | `5` | Max retries on transient LLM errors |
 
 ## Daemon Settings

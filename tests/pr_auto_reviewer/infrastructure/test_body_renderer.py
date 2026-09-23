@@ -46,7 +46,7 @@ class TestReviewBodyRenderer:
             summary="test summary",
         )
         output = renderer.render(review)
-        assert "i1a01." in output, f"Item ID not found in output: {output}"
+        assert "`i1a01`." in output, f"Item ID not found in output: {output}"
 
     def test_render_includes_suggestion_ids(self, renderer: ReviewBodyRenderer) -> None:
         """Suggestion IDs are rendered in the output."""
@@ -80,8 +80,8 @@ class TestReviewBodyRenderer:
             summary="test summary",
         )
         output = renderer.render(review)
-        assert "s1." in output, f"Suggestion s1 ID not found in output: {output}"
-        assert "s2." in output, f"Suggestion s2 ID not found in output: {output}"
+        assert "`s1`." in output, f"Suggestion s1 ID not found in output: {output}"
+        assert "`s2`." in output, f"Suggestion s2 ID not found in output: {output}"
 
     def test_render_includes_praise_file(self, renderer: ReviewBodyRenderer) -> None:
         """Praise items display their associated file."""
