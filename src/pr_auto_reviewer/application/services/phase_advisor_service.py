@@ -20,6 +20,9 @@ from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import
     TranscriptMetadata,
 )
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
 )
@@ -54,7 +57,7 @@ class PhaseAdvisorService(AssessPhasePort):
     D: whatever, F: don't do this!), and on an F reports the blocker to
     the manager, who re-plans the task before the phase restarts. A
     missing or unparseable advisor reply resolves to ``OKOK`` so a
-    grading failure never halts the review.
+    non-fatal grading failure never halts the review.
     """
 
     _GRADE_KEYS = ("grade",)
@@ -86,6 +89,8 @@ class PhaseAdvisorService(AssessPhasePort):
         messages = self._build_messages(phase, assignment, phase_result)
         try:
             raw = self._chat_port.send(messages)
+        except LlmUnavailableError:
+            raise
         except Exception:
             logger.warning(
                 "Advisor grading failed for phase %s; accepting output",
@@ -122,6 +127,8 @@ class PhaseAdvisorService(AssessPhasePort):
         )
         try:
             raw = self._chat_port.send(messages)
+        except LlmUnavailableError:
+            raise
         except Exception:
             logger.warning(
                 "Advisor turn observation failed for %s; continuing",
@@ -273,9 +280,9 @@ class PhaseAdvisorService(AssessPhasePort):
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
         grade_values = [
-            payload.get(key)
+            value
             for key in cls._GRADE_KEYS
-            if isinstance(payload.get(key), str) and payload.get(key).strip()
+            if isinstance(value := payload.get(key), str) and value.strip()
         ]
         if len(grade_values) > 1:
             logger.warning(

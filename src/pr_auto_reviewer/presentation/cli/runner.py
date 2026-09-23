@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 import traceback
 
 import requests
@@ -156,11 +157,18 @@ class CliRunner:
         )
 
         HttpRequestCounter.instance().reset()
+        review_started_at = time.perf_counter()
         try:
             self._review_service.execute(command)
             print(f"Review posted for PR #{args.pr}")
             if self._notifier:
-                self._notifier.notify_success("Review complete", f"PR #{args.pr} in {args.repo}")
+                duration = self._format_duration(
+                    time.perf_counter() - review_started_at
+                )
+                self._notifier.notify_success(
+                    f"Review complete for {command.pr_id.repository} ({duration})",
+                    f"PR #{args.pr}",
+                )
             return 0
         except LlmUnavailableError as e:
             print("Error: LLM host unreachable — cancelling review")
@@ -184,6 +192,12 @@ class CliRunner:
             return 1
         finally:
             HttpRequestCounter.instance().log_summary()
+
+    @staticmethod
+    def _format_duration(duration_seconds: float) -> str:
+        total_seconds = max(0, int(duration_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes}m {seconds:02d}s"
 
     def _run_process_commands(self, argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog="pr-auto-reviewer process-commands")

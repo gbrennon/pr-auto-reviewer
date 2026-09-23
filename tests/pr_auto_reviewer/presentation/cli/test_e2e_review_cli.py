@@ -393,7 +393,7 @@ class TestReviewCliJsonOutput:
         output = buffer.getvalue()
 
         human_body = self._extract_human_body(output)
-        assert f"\n{item_id}. [" in human_body
+        assert f"\n`{item_id}`. [" in human_body
 
         payload = self._extract_json(output)
         assert payload["items"][0]["id"] == item_id
@@ -446,7 +446,7 @@ class TestReviewCliJsonOutput:
         output = buffer.getvalue()
 
         human_body = self._extract_human_body(output)
-        assert f"\n{suggestion_id}. " in human_body
+        assert f"\n`{suggestion_id}`. " in human_body
 
         payload = self._extract_json(output)
         assert payload["suggestions"][0]["id"] == suggestion_id

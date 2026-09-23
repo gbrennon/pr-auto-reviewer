@@ -34,6 +34,7 @@ from pr_auto_reviewer.presentation.ports import (
     RepoInfo,
     RepoListerPort,
 )
+from tests.fakes.fake_notifier import FakeNotifier
 
 
 class RecordingCommandService(ProcessIssueCommandsPort):
@@ -103,8 +104,9 @@ class RecordingReviewService(ReviewPullRequestPort):
     def __init__(self) -> None:
         self.executed_commands: list[ReviewPullRequestCommand] = []
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         self.executed_commands.append(command)
+        return True
 
 class PerRepoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
@@ -147,6 +149,55 @@ class TestPollingDaemon:
             pr_lister=pr_lister,
             review_service=mock_review_service,
         )
+
+    def test_does_not_notify_success_when_review_is_skipped(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = False
+        pull_request = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=7),
+            head_sha=CommitSha("abc123"),
+            title="Already reviewed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert notifier.successes == []
+
+    def test_notifies_success_after_review_completion(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = True
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        pull_request = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Completed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert len(notifier.successes) == 1
+        context, detail = notifier.successes[0]
+        assert context.startswith("Review complete for owner/repo1 (")
+        assert context.endswith(")")
+        assert detail == "PR #7"
 
     def test_processes_recent_closed_pr_commands(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
@@ -548,6 +599,45 @@ class TestPollingDaemon:
             c.args[0].pr_id.number for c in mock_review_service.execute.call_args_list
         ]
         assert handled_numbers == [1, 2]
+
+    def test_handles_review_verdict_error_gracefully(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+            ReviewVerdictError,
+        )
+
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            is_draft=False,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        pr_lister = MockPrLister([open_pr])
+        mock_review_service.execute.side_effect = ReviewVerdictError(
+            "Review remained inconclusive after 5 attempts."
+        )
+
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=mock_review_service,
+        )
+
+        with patch("pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger") as mock_logger:
+            daemon.start()
+            inconclusive_warnings = [
+                c for c in mock_logger.warning.call_args_list
+                if "Review inconclusive for PR #%d" in str(c)
+            ]
+            assert len(inconclusive_warnings) == 1
+            unexpected_calls = [
+                c for c in mock_logger.exception.call_args_list
+                if "Unexpected error processing PR #1" in str(c)
+            ]
+            assert len(unexpected_calls) == 0
 
     def test_signal_handler_raises_keyboard_interrupt(self, daemon):
         daemon._setup_signal_handlers()

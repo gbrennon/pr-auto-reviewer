@@ -44,6 +44,7 @@ def _serialize_item(item: ReviewItem) -> dict:
         "line": item.line,
         "current_code": item.current_code,
         "suggested_fix": item.suggested_fix,
+        "status": item.status,
     }
 
 
@@ -57,6 +58,7 @@ def _deserialize_item(raw_item: dict) -> ReviewItem:
         line=raw_item.get("line", ""),
         current_code=raw_item.get("current_code", ""),
         suggested_fix=raw_item.get("suggested_fix", ""),
+        status=raw_item.get("status", "open"),
     )
 
 
@@ -158,6 +160,9 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         unresolved_ids: frozenset[str] = frozenset(
             raw.get("unresolved_blocking_ids", [])
         )
+        created_issue_item_ids: frozenset[str] = frozenset(
+            raw.get("created_issue_item_ids", [])
+        )
         processed_ids: frozenset[CommentId] = frozenset(
             CommentId(str(cid))
             for cid in raw.get("processed_comment_ids", [])
@@ -167,6 +172,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             title=raw.get("title", ""),
             head_sha=CommitSha(raw.get("head_sha", "")),
             unresolved_blocking_ids=unresolved_ids,
+            created_issue_item_ids=created_issue_item_ids,
             last_reviewed_at=raw.get("last_reviewed_at"),
             is_draft=raw.get("is_draft", False),
             reviews=reviews,
@@ -211,6 +217,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
                 for r in pr.reviews
             ],
             "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
+            "created_issue_item_ids": sorted(pr.created_issue_item_ids),
             "last_reviewed_at": pr.last_reviewed_at,
             "processed_comment_ids": sorted(
                 str(c) for c in pr.processed_comment_ids

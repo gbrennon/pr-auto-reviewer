@@ -23,7 +23,7 @@ class SubReviewGuardrails:
         """Return the verdict implied by the blocking status of *items*."""
         if not items:
             return ReviewVerdict.APPROVED
-        if any(item.is_blocking for item in items):
+        if any(item.is_open_blocking for item in items):
             return ReviewVerdict.CHANGES_REQUESTED
         return ReviewVerdict.APPROVED
 
@@ -31,7 +31,7 @@ class SubReviewGuardrails:
         self, verdict: ReviewVerdict, items: list[ReviewItem]
     ) -> bool:
         """Return whether *verdict* is coherent with the items' blocking status."""
-        has_blocking = any(item.is_blocking for item in items)
+        has_blocking = any(item.is_open_blocking for item in items)
         incoherent = (
             (verdict is ReviewVerdict.APPROVED and has_blocking)
             or (

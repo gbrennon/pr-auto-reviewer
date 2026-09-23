@@ -59,6 +59,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             base_sha=command.base_sha,
             existing_item_ids=command.existing_item_ids,
             review_session=command.review_session,
+            prior_items=getattr(command, "prior_items", []),
         )
 
     def _run_phases_full_retry(
@@ -70,6 +71,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session: str,
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        prior_items: list[ReviewItem] | None = None,
     ) -> CodeReview:
         """Orchestrate all phases with full-review retry and feedback loop."""
         repo_name, pr_id_str = self._extract_repo_and_pr(repo_path)
@@ -87,12 +89,17 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
             attempt_items: list[ReviewItem] = []
             try:
+                phase_arguments = {
+                    "base_sha": base_sha,
+                    "existing_item_ids": existing_item_ids,
+                    "pr_identifier_service": f"{repo_name}/{pr_id_str}",
+                    "review_session": review_session,
+                }
+                if prior_items:
+                    phase_arguments["prior_items"] = prior_items
                 outcome = self._run_phases(
                     plan, repo_path, changed_files, model, attempt_items,
-                    base_sha=base_sha,
-                    existing_item_ids=existing_item_ids,
-                    pr_identifier_service=f"{repo_name}/{pr_id_str}",
-                    review_session=review_session,
+                    **phase_arguments,
                 )
                 result = outcome.review
                 dropped_findings = outcome.dropped_findings
@@ -349,6 +356,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
+        prior_items: list[ReviewItem] | None = None,
     ) -> _PhaseRunOutcome:
         """Orchestrate all review phases, merging results."""
         all_items: list[ReviewItem] = []
@@ -577,7 +585,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
         )
         items_before_verification = len(code_review.items)
-        if code_review.items:
+        if code_review.items or prior_items:
             verified_items = self._command_bus.dispatch(
                 VerifyFindingsCommand(
                     items=code_review.items,
@@ -585,6 +593,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     changed_files=changed_files,
                     base_sha=base_sha,
                     review_session=review_session,
+                    prior_items=prior_items or [],
                 )
             )
             if (
@@ -596,7 +605,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 )
         if (
             code_review.verdict is ReviewVerdict.APPROVED
-            and any(item.is_blocking for item in code_review.items)
+            and any(item.is_open_blocking for item in code_review.items)
         ):
             code_review = replace(
                 code_review,

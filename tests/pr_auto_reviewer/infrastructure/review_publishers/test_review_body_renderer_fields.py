@@ -123,6 +123,27 @@ class TestReviewBodyRendererFields:
         assert "tmp code" in body
         assert "clean code" in body
 
+    def test_renders_numeric_suggestion_id_as_literal_text(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Review reason",
+            summary="Review summary",
+            suggestions=[
+                ReviewItem(
+                    id="329301",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path="src/example.rs",
+                    description="Suggestion description",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert "`329301`. src/example.rs" in body
+
     def test_renders_all_nested_praise_fields(self) -> None:
         body = _RENDERER.render(_full_review())
         assert "praised design" in body
@@ -130,13 +151,13 @@ class TestReviewBodyRendererFields:
 
     def test_items_are_identified_by_id_not_number(self) -> None:
         body = _RENDERER.render(_full_review())
-        assert "\ni1. [bug] [CRITICAL] a/b.py:42" in body
+        assert "\n`i1`. [bug] [CRITICAL] a/b.py:42" in body
         assert "number" not in body
 
     def test_each_item_is_rendered_under_its_own_non_empty_id(self) -> None:
         body = _RENDERER.render(_multi_item_review())
-        assert "\ni1. [" in body
-        assert "\ni2. [" in body
+        assert "\n`i1`. [" in body
+        assert "\n`i2`. [" in body
         assert "\n. [" not in body
 
     def test_no_default_values_in_rendered_body(self) -> None:
