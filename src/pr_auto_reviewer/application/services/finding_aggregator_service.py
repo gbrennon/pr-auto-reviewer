@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import ClassVar
+
 from pr_auto_reviewer.application.ports.inbound.aggregate_review_findings_port import (
     AggregateReviewFindingsPort,
 )
@@ -34,7 +37,7 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
     _DUPLICATE_SUFFIX = (
         ". This was previously identified but may have additional instances."
     )
-    _SEVERITY_RANKS = {
+    _SEVERITY_RANKS: ClassVar[dict[ItemSeverity, int]] = {
         ItemSeverity.CRITICAL: 4,
         ItemSeverity.MAJOR: 3,
         ItemSeverity.MINOR: 2,
@@ -53,7 +56,25 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
             command.phase_result,
             command.suggestions_phase_result,
             command.model_used,
+            command.repo_path,
+            command.changed_files,
         )
+
+    def _normalize_citation_path(
+        self,
+        file_path: str,
+        repo_path: Path | None,
+        changed_files: list[str] | None,
+        *,
+        drop_unmapped: bool,
+    ) -> str | None:
+        """Normalize a citation path or apply the invalid-citation policy."""
+        normalized = ReviewItemFactory._normalize_file_path(
+            file_path, repo_path, changed_files,
+        )
+        if normalized is not None:
+            return normalized
+        return None if drop_unmapped else ""
 
     def _build_summary(self, merged: list[ReviewItem]) -> str:
         """Build a short human-readable summary from the merged items."""
@@ -158,6 +179,8 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
         phase_result: PhaseResult | None = None,
         suggestions_phase_result: PhaseResult | None = None,
         model_used: str = "",
+        repo_path: Path | None = None,
+        changed_files: list[str] | None = None,
     ) -> CodeReview:
         """Deduplicate *items* and build a ``CodeReview``.
 
@@ -222,36 +245,51 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
                 verdict = coerced
 
             suggestion_source = suggestions_phase_result or phase_result
-            for s in suggestion_source.llm_suggestions:
+            for suggestion in suggestion_source.llm_suggestions:
+                normalized_path = self._normalize_citation_path(
+                    suggestion.get("file", ""),
+                    repo_path,
+                    changed_files,
+                    drop_unmapped=False,
+                )
                 suggestions.append(ReviewItem(
                     severity=ItemSeverity.INFO,
                     category=IssueCategory.GENERAL,
-                    file_path=s.get("file", ""),
-                    description=s.get("description", ""),
-                    line=s.get("line", ""),
-                    id=s.get("id", "") or ReviewItemFactory.generate_id(),
-                    current_code=s.get("current_code", ""),
-                    suggested_fix=s.get("suggested_fix", ""),
+                    file_path=normalized_path or "",
+                    description=suggestion.get("description", ""),
+                    line=suggestion.get("line", ""),
+                    id=suggestion.get("id", "") or ReviewItemFactory.generate_id(),
+                    current_code=suggestion.get("current_code", ""),
+                    suggested_fix=suggestion.get("suggested_fix", ""),
                 ))
 
             praise_source = suggestions_phase_result or phase_result
             praise_entries = list(praise_source.llm_praise)
             if phase_result is not praise_source:
-                for p in phase_result.llm_praise:
-                    if p not in praise_entries:
-                        praise_entries.append(p)
+                for praise_entry in phase_result.llm_praise:
+                    if praise_entry not in praise_entries:
+                        praise_entries.append(praise_entry)
 
-            for p in praise_entries:
+            for praise_entry in praise_entries:
+                normalized_path = self._normalize_citation_path(
+                    praise_entry.get("file", ""),
+                    repo_path,
+                    changed_files,
+                    drop_unmapped=True,
+                )
+                if normalized_path is None:
+                    continue
                 praise.append(ReviewItem(
                     severity=ItemSeverity.INFO,
                     category=IssueCategory.GENERAL,
-                    file_path=p.get("file", ""),
-                    description=p.get("description", ""),
+                    file_path=normalized_path,
+                    description=praise_entry.get("description", ""),
                     line="",
-                    id=p.get("id", "") or ReviewItemFactory.generate_id(),
+                    id=praise_entry.get("id", "") or ReviewItemFactory.generate_id(),
                     current_code="",
                     suggested_fix="",
                 ))
+
 
         if not summary:
             summary = self._build_summary(merged)
