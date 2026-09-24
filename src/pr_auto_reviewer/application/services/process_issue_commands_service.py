@@ -103,10 +103,13 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
         return created
 
     def _publish_issues_created_message(
-        self, pr: PullRequest, created_issues: list[Issue],
+        self,
+        pr: PullRequest,
+        created_issues: list[Issue],
+        review_items: Sequence[ReviewItem],
     ) -> None:
         self._comment_publisher.post(
-            pr.id, issues_created_message(created_issues),
+            pr.id, issues_created_message(created_issues, review_items),
         )
 
     def _process_each_comment(
@@ -154,7 +157,9 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             *(issue.source_item_id for issue in created_issues)
         )
         if created_issues:
-            self._publish_issues_created_message(updated_pr, created_issues)
+            self._publish_issues_created_message(
+                updated_pr, created_issues, review_items
+            )
         return updated_pr
 
     def _persist_pull_request(self, pr: PullRequest) -> None:
