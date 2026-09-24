@@ -157,6 +157,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                             model_used=model,
                             repo_name=repo_name,
                             pr_id=pr_id_str,
+                            repo_path=repo_path,
+                            changed_files=changed_files,
                         )
                     ),
                 )
@@ -582,6 +584,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 phase_result=last_phase_result,
                 suggestions_phase_result=suggestions_source,
                 model_used=model,
+                repo_path=repo_path,
+                changed_files=changed_files,
             )
         )
         items_before_verification = len(code_review.items)
