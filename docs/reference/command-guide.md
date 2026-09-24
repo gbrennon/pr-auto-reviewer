@@ -141,7 +141,9 @@ When all item IDs are valid, the bot creates the issues on the target repository
 Created 2 issue(s):
 
 - #101: [CRITICAL] BUG: Token expiration logic fails on leap year
+  - review item `a3f2` (critical bug, blocking) — status: open (still relevant)
 - #102: [MAJOR] SECURITY: Unsanitized input in header parser
+  - review item `b7d1` (major security, blocking) — status: open (still relevant)
 ```
 
 ### Validation Failure Response
@@ -257,5 +259,6 @@ Here is a step-by-step example of the issue command workflow:
    Created 1 issue(s):
 
    - #105: [CRITICAL] BUG: Connection pool leak when connection handshake times out.
+     - review item `c4e5` (critical bug, blocking) — status: open (still relevant)
    ```
 6. **Re-run Safety**: If `process-commands` is run again, the comment is recognized as already processed and skipped without creating duplicate issues.
