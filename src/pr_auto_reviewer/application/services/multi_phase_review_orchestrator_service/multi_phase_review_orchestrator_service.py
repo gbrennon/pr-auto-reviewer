@@ -3,6 +3,9 @@ from dataclasses import replace
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.domain.value_objects.review_execution_context import (
+    ReviewExecutionContext,
+)
 
 from ._shared import *
 from .phase_run_outcome import _PhaseRunOutcome
@@ -89,17 +92,19 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
             attempt_items: list[ReviewItem] = []
             try:
-                phase_arguments = {
-                    "base_sha": base_sha,
-                    "existing_item_ids": existing_item_ids,
-                    "pr_identifier_service": f"{repo_name}/{pr_id_str}",
-                    "review_session": review_session,
-                }
-                if prior_items:
-                    phase_arguments["prior_items"] = prior_items
                 outcome = self._run_phases(
-                    plan, repo_path, changed_files, model, attempt_items,
-                    **phase_arguments,
+                    plan,
+                    accumulated_items=attempt_items,
+                    context=ReviewExecutionContext(
+                        repo_path=repo_path,
+                        changed_files=tuple(changed_files),
+                        model=model,
+                        base_sha=base_sha,
+                        existing_item_ids=existing_item_ids,
+                        pr_identifier_service=f"{repo_name}/{pr_id_str}",
+                        review_session=review_session,
+                        prior_items=tuple(prior_items or []),
+                    ),
                 )
                 result = outcome.review
                 dropped_findings = outcome.dropped_findings
@@ -221,14 +226,16 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             try:
                 outcome = self._run_phases(
                     plan,
-                    repo_path,
-                    changed_files,
-                    model,
                     initial_feedback=context,
-                    base_sha=base_sha,
-                    existing_item_ids=existing_item_ids,
-                    pr_identifier_service=pr_identifier_service,
-                    review_session=review_session,
+                    context=ReviewExecutionContext(
+                        repo_path=repo_path,
+                        changed_files=tuple(changed_files),
+                        model=model,
+                        base_sha=base_sha,
+                        existing_item_ids=existing_item_ids,
+                        pr_identifier_service=pr_identifier_service,
+                        review_session=review_session,
+                    ),
                 )
                 result = outcome.review
             except LlmUnavailableError:
@@ -349,9 +356,9 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     def _run_phases(
         self,
         plan: ReviewPlan,
-        repo_path: Path,
-        changed_files: list[str],
-        model: str,
+        repo_path: Path | None = None,
+        changed_files: list[str] | None = None,
+        model: str = "",
         accumulated_items: list[ReviewItem] | None = None,
         initial_feedback: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
@@ -359,8 +366,44 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session: str = "",
         base_sha: str = "",
         prior_items: list[ReviewItem] | None = None,
+        context: ReviewExecutionContext | None = None,
+    ) -> _PhaseRunOutcome:
+        """Run phases with a shared context or legacy arguments."""
+        if context is None and repo_path is None:
+            raise ValueError("repo_path is required without a review context")
+        execution_context = context or ReviewExecutionContext(
+            repo_path=repo_path or Path(),
+            changed_files=tuple(changed_files or []),
+            model=model,
+            base_sha=base_sha,
+            existing_item_ids=existing_item_ids,
+            pr_identifier_service=pr_identifier_service,
+            review_session=review_session,
+            prior_items=tuple(prior_items or []),
+        )
+        return self._run_phases_with_context(
+            plan,
+            execution_context,
+            accumulated_items=accumulated_items,
+            initial_feedback=initial_feedback,
+        )
+
+    def _run_phases_with_context(
+        self,
+        plan: ReviewPlan,
+        context: ReviewExecutionContext,
+        accumulated_items: list[ReviewItem] | None = None,
+        initial_feedback: str = "",
     ) -> _PhaseRunOutcome:
         """Orchestrate all review phases, merging results."""
+        repo_path = context.repo_path
+        changed_files = list(context.changed_files)
+        model = context.model
+        existing_item_ids = context.existing_item_ids
+        pr_identifier_service = context.pr_identifier_service
+        review_session = context.review_session
+        base_sha = context.base_sha
+        prior_items = list(context.prior_items)
         all_items: list[ReviewItem] = []
         last_phase_result: PhaseResult | None = None
         phase_results: dict[str, PhaseResult] = {}
