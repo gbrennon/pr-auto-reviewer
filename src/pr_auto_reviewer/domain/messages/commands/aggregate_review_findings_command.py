@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
@@ -23,3 +24,5 @@ class AggregateReviewFindingsCommand:
     suggestions_phase_result: PhaseResult | None = None
     repo_name: str = ""
     pr_id: str = ""
+    repo_path: Path | None = None
+    changed_files: list[str] | None = None

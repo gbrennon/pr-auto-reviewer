@@ -322,3 +322,56 @@ class TestReviewItemFactory:
         finally:
             shutil.rmtree(repo_path, ignore_errors=True)
 
+    def test_create_normalizes_cache_prefixed_absolute_path(
+        self, tmp_path,
+    ) -> None:
+        repo = tmp_path / "repo"
+        source_file = repo / "src/main.py"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("x = 1\n")
+
+        items, skip_reasons = ReviewItemFactory.create(
+            [
+                {
+                    "file": "/cache/clones/repo/src/main.py",
+                    "description": "Use the named value",
+                    "severity": "minor",
+                    "category": "bug",
+                    "line": "1",
+                    "current_code": "x = 1",
+                },
+            ],
+            repo,
+            ["src/main.py"],
+        )
+
+        assert len(items) == 1
+        assert skip_reasons == []
+        assert items[0].file_path == "src/main.py"
+        assert not items[0].file_path.startswith("/")
+        assert "/cache/clones" not in items[0].file_path
+
+    def test_create_skips_unmappable_absolute_path(self, tmp_path) -> None:
+        repo = tmp_path / "repo"
+        source_file = repo / "src/main.py"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("x = 1\n")
+
+        items, skip_reasons = ReviewItemFactory.create(
+            [
+                {
+                    "file": "/cache/clones/repo/tests/test_main.py",
+                    "description": "Use the named value",
+                    "severity": "minor",
+                    "category": "bug",
+                    "line": "1",
+                    "current_code": "x = 1",
+                },
+            ],
+            repo,
+            ["src/main.py"],
+        )
+
+        assert items == []
+        assert len(skip_reasons) == 1
+

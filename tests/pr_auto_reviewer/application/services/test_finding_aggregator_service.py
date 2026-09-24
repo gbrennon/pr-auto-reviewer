@@ -185,6 +185,47 @@ class TestFindingAggregator:
         assert len(review.praise) == 1
         assert review.praise[0].description == "Clean structure"
 
+    def test_phase_result_paths_are_normalized_before_review_creation(
+        self, mock_reason_factory, tmp_path,
+    ) -> None:
+        repo = tmp_path / "repo"
+        source_file = repo / "src/main.py"
+        source_file.parent.mkdir(parents=True)
+        source_file.write_text("x = 1\n")
+        absolute_path = "/cache/clones/repo/src/main.py"
+        items = [_review_item("Off-by-one in loop")]
+        phase_result = PhaseResult(
+            items=items,
+            llm_suggestions=[
+                {
+                    "file": absolute_path,
+                    "line": "1",
+                    "description": "Add bounds check",
+                },
+            ],
+            llm_praise=[
+                {
+                    "file": absolute_path,
+                    "description": "Clean structure",
+                },
+            ],
+        )
+        mock_reason_factory.make.return_value = "Stub reason"
+        aggregator = FindingAggregatorService(mock_reason_factory)
+
+        review = aggregator.execute(
+            AggregateReviewFindingsCommand(
+                items=items,
+                phase_result=phase_result,
+                model_used="test model",
+                repo_path=repo,
+                changed_files=["src/main.py"],
+            )
+        )
+
+        assert review.suggestions[0].file_path == "src/main.py"
+        assert review.praise[0].file_path == "src/main.py"
+
     def test_phase_result_reason_used_when_builder_returns_empty(
         self, mock_reason_factory,
     ) -> None:

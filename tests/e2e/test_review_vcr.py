@@ -8,6 +8,7 @@ from pr_auto_reviewer.application.ports.outbound.review_reader_port import (
     ReviewReaderPort,
 )
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.presentation.composition_root import bootstrap
 from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
@@ -18,7 +19,6 @@ from pr_auto_reviewer.presentation.ports import (
     RepoInfo,
     RepoListerPort,
 )
-from pr_auto_reviewer.presentation.composition_root import bootstrap
 from tests.e2e.scenarios import ReviewScenario, _get_normalized_scenarios
 from tests.fakes.fake_notifier import FakeNotifier
 
@@ -160,6 +160,9 @@ class TestReviewFlowVCR:
     ) -> None:
         repo_spec = f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
         pr_id = PullRequestId(repository=repo_spec, number=scenario["pr_id"])
+        expected_repository = (
+            f"{scenario['owner']}/{scenario['repo']}"
+        )
 
         review_argv = [
             "pr-auto-reviewer",
@@ -175,7 +178,9 @@ class TestReviewFlowVCR:
         assert notifier.errors == []
         assert len(notifier.successes) == 1
         notification_context, notification_detail = notifier.successes[0]
-        assert notification_context.startswith(f"Review complete for {repo_spec} (")
+        assert notification_context.startswith(
+            f"Review complete for {expected_repository} ("
+        )
         assert notification_context.endswith(")")
         assert notification_detail == f"PR #{scenario['pr_id']}"
 
@@ -209,6 +214,9 @@ class TestReviewFlowVCR:
         repository = (
             f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
         )
+        expected_repository = (
+            f"{scenario['owner']}/{scenario['repo']}"
+        )
         daemon = PollingDaemon(
             config=PollingDaemonConfig(
                 poll_interval_seconds=1,
@@ -229,7 +237,7 @@ class TestReviewFlowVCR:
         assert len(notifier.successes) == 1
         notification_context, notification_detail = notifier.successes[0]
         assert notification_context.startswith(
-            f"Review complete for {repository} ("
+            f"Review complete for {expected_repository} ("
         )
         assert notification_context.endswith(")")
         assert notification_detail == f"PR #{scenario['pr_id']}"
