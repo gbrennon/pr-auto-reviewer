@@ -164,3 +164,48 @@ class TestReviewBodyRendererFields:
         body = _RENDERER.render(_full_review())
         for default in ("No issues found.", "[]"):
             assert default not in body
+
+    def test_renders_repository_relative_paths_for_all_finding_types(
+        self,
+    ) -> None:
+        relative_path = "src/main.py"
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Review reason",
+            summary="Review summary",
+            items=[
+                ReviewItem(
+                    id="i1",
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.BUG,
+                    file_path=relative_path,
+                    description="Issue description",
+                    line="1",
+                ),
+            ],
+            suggestions=[
+                ReviewItem(
+                    id="s1",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=relative_path,
+                    description="Suggestion description",
+                ),
+            ],
+            praise=[
+                ReviewItem(
+                    id="p1",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=relative_path,
+                    description="Praise description",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert body.count(relative_path) == 3
+        assert "/cache/clones/repo/" not in body
+        assert "/src/main.py" not in body
