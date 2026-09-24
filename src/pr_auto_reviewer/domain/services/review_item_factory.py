@@ -5,9 +5,12 @@ import re
 import uuid as _uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.services.review_item_factory_constants import (
+    FABRICATED_ERROR_PATTERNS,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -31,18 +34,6 @@ class ReviewItemFactory:
     claimed line; hallucinated paths are skipped with a warning. Returns
     validated items and a list of human-readable skip reasons for feedback.
     """
-
-    _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
-        "file not found",
-        "unable to verify",
-        "cannot access",
-        "could not read",
-        "does not exist",
-        "not accessible",
-        "not found in",
-        "could not be found",
-        "unable to locate",
-    )
 
     @classmethod
     def _extract_symbols(cls, description: str) -> list[str]:
@@ -246,22 +237,36 @@ class ReviewItemFactory:
         return "\n".join(file_lines[:500]).strip()
 
     @classmethod
-    def _resolve_file_path(cls,
+    def _resolve_file_path(
+        cls,
         file_path: str,
         repo_root: Path,
         changed_files: list[str] | None,
     ) -> tuple[Path | None, str]:
         """Resolve a potentially partial file path against changed_files.
 
-        When the LLM returns a short or partial path (e.g. ``module.py``
-        or ``pkg/module.py``), this method attempts to find the full
-        repo-relative path by matching against the known changed files.
-        Returns ``(full_path, resolved_file_path)`` on success, or
-        ``(None, original_file_path)`` when no match is found.
+        Relative paths retain their existing direct and changed-file matching
+        behavior. Absolute paths are converted to repository-relative metadata
+        when they resolve inside the repository or match a known changed file.
         """
-        direct_path = repo_root / file_path
+        resolved_repo_root = repo_root.resolve()
+        supplied_path = Path(file_path)
+
+        if supplied_path.is_absolute():
+            resolved_path = supplied_path.resolve()
+            try:
+                relative_path = resolved_path.relative_to(resolved_repo_root)
+            except ValueError:
+                return cls._resolve_absolute_changed_file(
+                    resolved_path, resolved_repo_root, changed_files, file_path,
+                )
+            if not resolved_path.exists():
+                return None, file_path
+            return resolved_path, relative_path.as_posix()
+
+        direct_path = resolved_repo_root / file_path
         if direct_path.exists():
-            return direct_path, file_path
+            return direct_path, Path(file_path).as_posix()
 
         if not changed_files:
             return None, file_path
@@ -269,33 +274,73 @@ class ReviewItemFactory:
         cleaned = file_path.lstrip("/")
         candidates: list[tuple[int, str]] = []
 
-        for cf in changed_files:
-            cf_clean = cf[2:] if cf.startswith(("a/", "b/")) else cf
+        for changed_file in changed_files:
+            changed_file_path = cls._clean_changed_file(changed_file)
 
-            if cf_clean == cleaned:
-                candidates.append((0, cf_clean))
+            if changed_file_path == cleaned:
+                candidates.append((0, changed_file_path))
                 continue
 
-            if cf_clean.endswith("/" + cleaned):
-                candidates.append((1, cf_clean))
+            if changed_file_path.endswith("/" + cleaned):
+                candidates.append((1, changed_file_path))
                 continue
 
             if "/" not in cleaned:
-                cf_basename = (
-                    cf_clean.rsplit("/", 1)[-1]
-                    if "/" in cf_clean
-                    else cf_clean
-                )
-                if cf_basename == cleaned:
-                    candidates.append((2, cf_clean))
-                    continue
+                changed_basename = changed_file_path.rsplit("/", 1)[-1]
+                if changed_basename == cleaned:
+                    candidates.append((2, changed_file_path))
 
         if not candidates:
             return None, file_path
 
-        candidates.sort(key=lambda x: (x[0], len(x[1])))
+        candidates.sort(key=lambda candidate: (candidate[0], len(candidate[1])))
         matched = candidates[0][1]
-        return repo_root / matched, matched
+        return resolved_repo_root / matched, Path(matched).as_posix()
+
+    @classmethod
+    def _resolve_absolute_changed_file(
+        cls,
+        resolved_path: Path,
+        repo_root: Path,
+        changed_files: list[str] | None,
+        original_path: str,
+    ) -> tuple[Path | None, str]:
+        """Resolve an external absolute path by a known changed-file suffix."""
+        if not changed_files:
+            return None, original_path
+
+        normalized_path = resolved_path.as_posix()
+        for changed_file in changed_files:
+            cleaned = cls._clean_changed_file(changed_file)
+            if normalized_path.endswith("/" + cleaned):
+                repository_path = repo_root / cleaned
+                if repository_path.exists():
+                    return repository_path, Path(cleaned).as_posix()
+        return None, original_path
+
+    @staticmethod
+    def _clean_changed_file(changed_file: str) -> str:
+        """Return a changed-file path without diff prefixes."""
+        if changed_file.startswith(("a/", "b/")):
+            changed_file = changed_file[2:]
+        return Path(changed_file).as_posix()
+
+    @classmethod
+    def _normalize_file_path(
+        cls,
+        file_path: str,
+        repo_path: Path | None,
+        changed_files: list[str] | None,
+    ) -> str | None:
+        """Return safe repository-relative metadata for a cited file path."""
+        if not file_path or repo_path is None:
+            return file_path
+        _resolved_path, normalized_path = cls._resolve_file_path(
+            file_path, repo_path.resolve(), changed_files,
+        )
+        if _resolved_path is None:
+            return None
+        return normalized_path
 
     @classmethod
     def create(
@@ -322,10 +367,10 @@ class ReviewItemFactory:
             repo_root = None
         elif isinstance(repo_path, Path):
             logger.debug("repo_path is Path instance")
-            repo_root = repo_path
+            repo_root = repo_path.resolve()
         else:
             logger.debug(f"repo_path is other type: {type(repo_path)}, value: {repo_path!r}")
-            repo_root = Path(repo_path)
+            repo_root = Path(repo_path).resolve()
         review_items: list[ReviewItem] = []
         skip_reasons: list[str] = []
         default_file = (
@@ -434,7 +479,7 @@ class ReviewItemFactory:
 
                 if any(
                     pattern in description_lower
-                    for pattern in cls._FABRICATED_ERROR_PATTERNS
+                    for pattern in FABRICATED_ERROR_PATTERNS
                 ):
                     reason = (
                         f"fabricated narrative in {file_path}: "

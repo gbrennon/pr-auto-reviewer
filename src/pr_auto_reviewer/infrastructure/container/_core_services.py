@@ -21,6 +21,9 @@ from pr_auto_reviewer.application.services.event_logging_handler_service import 
 from pr_auto_reviewer.application.services.finding_aggregator_service import (
     FindingAggregatorService,
 )
+from pr_auto_reviewer.application.services.finding_deduplicator_service import (
+    FindingDeduplicatorService,
+)
 from pr_auto_reviewer.application.services.finding_verifier_service import (
     FindingVerifierService,
 )
@@ -306,7 +309,9 @@ def wire_core_services(
         command_bus=command_bus,
         max_turns=config.llm_max_turns,
     )
-    aggregator = FindingAggregatorService(ReasonFactory())
+    aggregator = FindingAggregatorService(
+        ReasonFactory(), FindingDeduplicatorService()
+    )
     orchestrator = MultiPhaseReviewOrchestratorService(
         command_bus=command_bus,
         tool_factory=lambda repo_path, changed_files, base_sha: ExplorationToolService(

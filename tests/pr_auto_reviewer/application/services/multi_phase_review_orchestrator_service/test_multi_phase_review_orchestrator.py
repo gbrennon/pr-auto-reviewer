@@ -14,7 +14,7 @@ class TestMultiPhaseReviewOrchestrator:
             max_retries=2,
         )
         plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
@@ -106,7 +106,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
@@ -143,7 +143,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -174,7 +174,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -312,14 +312,14 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -412,7 +412,7 @@ class TestMultiPhaseReviewOrchestrator:
         plan = _plan()
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path, changed_files, model, accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="": _outcome(
+        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
