@@ -5,9 +5,12 @@ import re
 import uuid as _uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
+from pr_auto_reviewer.domain.services.review_item_factory_constants import (
+    FABRICATED_ERROR_PATTERNS,
+)
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
@@ -31,18 +34,6 @@ class ReviewItemFactory:
     claimed line; hallucinated paths are skipped with a warning. Returns
     validated items and a list of human-readable skip reasons for feedback.
     """
-
-    _FABRICATED_ERROR_PATTERNS: ClassVar[tuple[str, ...]] = (
-        "file not found",
-        "unable to verify",
-        "cannot access",
-        "could not read",
-        "does not exist",
-        "not accessible",
-        "not found in",
-        "could not be found",
-        "unable to locate",
-    )
 
     @classmethod
     def _extract_symbols(cls, description: str) -> list[str]:
@@ -488,7 +479,7 @@ class ReviewItemFactory:
 
                 if any(
                     pattern in description_lower
-                    for pattern in cls._FABRICATED_ERROR_PATTERNS
+                    for pattern in FABRICATED_ERROR_PATTERNS
                 ):
                     reason = (
                         f"fabricated narrative in {file_path}: "
