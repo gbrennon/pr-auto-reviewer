@@ -47,6 +47,10 @@ class _FakeChatPort(AgentChatPort):
         del messages
         return "response"
 
+    def reset_budget(self) -> None:
+        """Reset the fake budget."""
+        return None
+
 
 class _FakeOrchestrator(RunMultiPhaseReviewPort):
     def __init__(self) -> None:
