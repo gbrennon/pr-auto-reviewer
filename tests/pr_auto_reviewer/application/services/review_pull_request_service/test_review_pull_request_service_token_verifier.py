@@ -1,4 +1,5 @@
 from ._helpers import *
+from pathlib import Path
 
 
 class TestReviewPullRequestServiceTokenVerifier:
@@ -73,7 +74,7 @@ class TestReviewPullRequestServiceTokenVerifier:
                 "@@ -0,0 +1 @@\n"
                 "+x = 1\n"
             ),
-            clone_path="/repos/owner_repo_42",
+            clone_path=Path("/repos/owner_repo_42"),
         )
         mock_pr_repository.find.return_value = None
         mock_changeset_fetcher.fetch.return_value = diff
@@ -117,7 +118,7 @@ class TestReviewPullRequestServiceTokenVerifier:
                 "@@ -0,0 +1 @@\n"
                 "+x = 1\n"
             ),
-            clone_path="/repos/owner_repo_42",
+            clone_path=Path("/repos/owner_repo_42"),
         )
         mock_pr_repository.find.return_value = None
         mock_changeset_fetcher.fetch.return_value = diff
@@ -126,7 +127,7 @@ class TestReviewPullRequestServiceTokenVerifier:
         )
         command_bus = MagicMock()
         command_bus.dispatch.return_value = _review(ReviewVerdict.APPROVED)
-        plan = ReviewPlan(methodology="sub-agent-multi-phase", phases=[])
+        plan = ReviewPlan(methodology="sub-agent-multi-phase", phases=())
 
         ReviewPullRequestService(
             mock_pr_repository,
