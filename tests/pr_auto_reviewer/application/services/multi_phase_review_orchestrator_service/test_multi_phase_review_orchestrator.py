@@ -13,19 +13,19 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
             max_retries=2,
         )
-        plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
-                "base_sha": "",
-                "plan": plan,
-                "repo_path": Path("/tmp"),
-                "changed_files": ["src/main.py"],
-                "model": "test",
-            })()
+            RunMultiPhaseReviewCommand(
+                plan=plan,
+                repo_path=Path("/tmp"),
+                changed_files=["src/main.py"],
+                model="test",
+                review_session="test-session",
+            )
         )
         assert result is not None
         assert len(result.items) == 1
@@ -39,24 +39,24 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
             max_retries=1,
         )
-        plan = SimpleNamespace(phases=_plan(), methodology="sub-agent-multi-phase")
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         def failing_run_phases(*args, **kwargs):
             raise MaxTurnsExceededError("Phase exceeded max turns (attempt 1)")
 
-        orchestrator._run_phases = failing_run_phases
+        orchestrator.__dict__["_run_phases"] = failing_run_phases
         # After max retries with no findings, refusing a default outcome is
         # mandatory: no silent COMMENTED fallback may be published.
 
         with _pytest.raises(ReviewVerdictError):
             orchestrator.execute(
-                type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
-                    "base_sha": "",
-                    "plan": plan,
-                    "repo_path": Path("/tmp"),
-                    "changed_files": ["src/main.py"],
-                    "model": "test",
-                })()
+                RunMultiPhaseReviewCommand(
+                    plan=plan,
+                    repo_path=Path("/tmp"),
+                    changed_files=["src/main.py"],
+                    model="test",
+                    review_session="test-session",
+                )
             )
 
     def test_execute_propagates_manager_llm_unavailable_error(
@@ -70,21 +70,19 @@ class TestMultiPhaseReviewOrchestrator:
             manager=manager,
             max_retries=3,
         )
-        plan = SimpleNamespace(
-            phases=_plan(), methodology="sub-agent-multi-phase",
+        plan = ReviewPlan(
+            phases=_plan(), methodology="sub-agent-multi-phase"
         )
 
         with _pytest.raises(LlmUnavailableError, match="host unreachable"):
             orchestrator.execute(
-                type("Cmd", (), {
-                    "existing_item_ids": frozenset(),
-                    "review_session": "test-session",
-                    "base_sha": "",
-                    "plan": plan,
-                    "repo_path": Path("/tmp"),
-                    "changed_files": ["src/main.py"],
-                    "model": "test",
-                })()
+                RunMultiPhaseReviewCommand(
+                    plan=plan,
+                    repo_path=Path("/tmp"),
+                    changed_files=["src/main.py"],
+                    model="test",
+                    review_session="test-session",
+                )
             )
 
         conversation_calls = [
@@ -103,15 +101,15 @@ class TestMultiPhaseReviewOrchestrator:
             max_retries=3,
         )
 
-        plan = _plan()
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         # Make _run_phases return a result with no items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator._run_feedback_loop = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", previous_dropped_findings=0: _outcome(
+        orchestrator.__dict__["_run_feedback_loop"] = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", previous_dropped_findings=0: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
@@ -140,10 +138,10 @@ class TestMultiPhaseReviewOrchestrator:
             max_retries=1,
         )
 
-        plan = _plan()
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -171,10 +169,10 @@ class TestMultiPhaseReviewOrchestrator:
             max_feedback_rounds=2,
         )
 
-        plan = _plan()
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         # Second round returns items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -309,17 +307,17 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
         )
 
-        plan = _plan()
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         # First run returns no items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="No issues",
             summary="No issues",
         )
 
         # Second run with feedback returns items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Fixed",
             summary="Issues fixed",
@@ -409,10 +407,10 @@ class TestMultiPhaseReviewOrchestrator:
             tool_factory=mock_tool_factory,
         )
 
-        plan = _plan()
+        plan = ReviewPlan(phases=_plan(), methodology="sub-agent-multi-phase")
 
         # Make _run_phases return a result with items
-        orchestrator._run_phases = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
+        orchestrator.__dict__["_run_phases"] = lambda plan, repo_path=None, changed_files=None, model="", accumulated_items=None, initial_feedback="", existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", **kwargs: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="LGTM",
             summary="Looks good",
@@ -420,13 +418,13 @@ class TestMultiPhaseReviewOrchestrator:
         )
 
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session", 
-                "base_sha": "",
-                "plan": {"phases": plan, "methodology": "sub-agent-multi-phase"},
-                "repo_path": Path("/tmp"),
-                "changed_files": ["src/main.py"],
-                "model": "test",
-            })()
+            RunMultiPhaseReviewCommand(
+                plan=plan,
+                repo_path=Path("/tmp"),
+                changed_files=["src/main.py"],
+                model="test",
+                review_session="test-session",
+            )
         )
 
         assert result.verdict == ReviewVerdict.APPROVED.value
@@ -472,13 +470,13 @@ class TestMultiPhaseReviewOrchestrator:
         mock_command_bus.dispatch.side_effect = dispatch
 
         result = orchestrator.execute(
-            type("Cmd", (), {"existing_item_ids": frozenset(), "review_session": "test-session",
-                "base_sha": "",
-                "plan": plan,
-                "repo_path": Path("/tmp"),
-                "changed_files": ["src/main.py"],
-                "model": "test",
-            })()
+            RunMultiPhaseReviewCommand(
+                plan=plan,
+                repo_path=Path("/tmp"),
+                changed_files=["src/main.py"],
+                model="test",
+                review_session="test-session",
+            )
         )
 
         conversation_calls = [
