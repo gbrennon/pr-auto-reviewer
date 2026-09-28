@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 
 from pr_auto_reviewer.infrastructure.client.token_resolver.role_suffix_parser import (
     RoleSuffixParser,
@@ -31,7 +32,7 @@ class EnvTokenScanner:
         """Return ``{org: {role: (token, env_var_key)}}``."""
         return self._org_tokens
 
-    def _scan(self, environ: dict[str, str]) -> None:
+    def _scan(self, environ: Mapping[str, str]) -> None:
         for key, value in environ.items():
             if not key.startswith(self._env_prefix):
                 continue
