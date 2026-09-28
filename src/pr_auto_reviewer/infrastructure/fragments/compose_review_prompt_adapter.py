@@ -87,11 +87,14 @@ class ComposeReviewPromptAdapter(ComposeReviewPromptPort):
     ) -> list[PromptFragment]:
         """Greedily select highest-priority fragments that fit the budget."""
         selected: list[PromptFragment] = []
-        self._budget_manager.reset()
+        budget_manager = self._budget_manager
+        if budget_manager is None:
+            return fragments
+        budget_manager.reset()
 
         for fragment in fragments:
-            if self._budget_manager.fits_budget(fragment.content):
-                self._budget_manager.consume(fragment.content)
+            if budget_manager.fits_budget(fragment.content):
+                budget_manager.consume(fragment.content)
                 selected.append(fragment)
 
         return selected
