@@ -1,6 +1,7 @@
 """Tests for load_config using captured fixture data."""
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -360,7 +361,8 @@ class TestLoadConfig:
 
         with pytest.raises(ValueError):
             ConfigBuilderComposition().compose().build(
-                {}, env_name="test", advisor_granularity="every-other-turn"
+                {}, env_name="test",
+                advisor_granularity=cast(AdvisorGranularity, "every-other-turn"),
             )
 
     def test_repos_allow_list_parsed_from_comma_separated_source(self):
