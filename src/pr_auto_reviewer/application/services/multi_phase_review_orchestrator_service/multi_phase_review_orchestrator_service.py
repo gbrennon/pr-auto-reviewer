@@ -543,20 +543,21 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
                     summary = last_phase_result.llm_summary
-                for s in suggestions_source.llm_suggestions:
-                    normalized_path = ReviewItemFactory._normalize_file_path(
-                        s.get("file", ""), repo_path, changed_files,
-                    ) or ""
-                    suggestions.append(ReviewItem(
-                        severity=ItemSeverity.INFO,
-                        category=IssueCategory.GENERAL,
-                        file_path=normalized_path,
-                        description=s.get("description", ""),
-                        line=s.get("line", ""),
-                        id=s.get("id", ""),
-                        current_code=s.get("current_code", ""),
-                        suggested_fix=s.get("suggested_fix", ""),
-                    ))
+                if suggestions_source is not None:
+                    for s in suggestions_source.llm_suggestions:
+                        normalized_path = ReviewItemFactory._normalize_file_path(
+                            s.get("file", ""), repo_path, changed_files,
+                        ) or ""
+                        suggestions.append(ReviewItem(
+                            severity=ItemSeverity.INFO,
+                            category=IssueCategory.GENERAL,
+                            file_path=normalized_path,
+                            description=s.get("description", ""),
+                            line=s.get("line", ""),
+                            id=s.get("id", ""),
+                            current_code=s.get("current_code", ""),
+                            suggested_fix=s.get("suggested_fix", ""),
+                        ))
                 praise_entries: list[dict[str, str]] = []
                 for pr in phase_results.values():
                     for p in pr.llm_praise:
@@ -709,7 +710,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             target = blocking[0] if blocking else review_items[0]
             desc = target.description.strip()
             sev = str(target.severity).lower()
-            file_path = target.file_path.strip()
+            file_path = (target.file_path or "").strip()
             file_str = f" in {file_path}" if file_path else ""
             reason = f"Identified {sev} issue{file_str}: {desc}" if desc else "Findings verified against source code."
             cat_list = sorted({str(item.category) for item in review_items if item.category})
