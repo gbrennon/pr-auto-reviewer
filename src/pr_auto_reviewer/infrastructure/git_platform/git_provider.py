@@ -9,6 +9,7 @@ class GitProvider(str, Enum):
     OTHER = "other"
     BOTH = "both"
 
+    @staticmethod
     def parse(value: str | None) -> GitProvider:
         if isinstance(value, GitProvider):
             return value
