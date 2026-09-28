@@ -92,7 +92,7 @@ class TestReviewItem:
             id="test-immut",
         )
         with pytest.raises(FrozenInstanceError):
-            item.description = "changed"
+            object.__setattr__(item, "description", "changed")
 
     def test_hash_consistency(self) -> None:
         item = ReviewItem(
