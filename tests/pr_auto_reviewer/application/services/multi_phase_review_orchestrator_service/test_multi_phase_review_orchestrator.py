@@ -579,3 +579,41 @@ class TestMultiPhaseReviewOrchestrator:
         assert result.items == []
         assert result.reason == "the code is wrong"
 
+    def test_zero_item_metadata_paths_are_repository_relative(
+        self, mock_command_bus, mock_tool_factory, tmp_path: Path,
+    ) -> None:
+        relative_path = "crates/application/src/services/run_workflow_service.rs"
+        absolute_path = tmp_path / relative_path
+        absolute_path.parent.mkdir(parents=True)
+        absolute_path.write_text("pub struct RunWorkflowService;\n")
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="architect", phase_name="Architecture Review",
+                    system_prompt="",
+                ),
+            ),
+            methodology="m",
+            suggestions_phase_id="architect",
+        )
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        architect_result = _phase_result(
+            verdict="approved",
+            suggestions=[{"file": str(absolute_path), "description": "suggestion"}],
+            praise=[{"file": str(absolute_path), "description": "praise"}],
+        )
+        mock_command_bus.dispatch.side_effect = [
+            architect_result,
+            MagicMock(),
+        ]
+
+        result = orchestrator._run_phases(
+            plan, tmp_path, [relative_path], "test",
+        ).review
+
+        assert result.suggestions[0].file_path == relative_path
+        assert result.praise[0].file_path == relative_path
+
