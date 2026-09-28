@@ -8,6 +8,7 @@ from pr_auto_reviewer.domain.value_objects.review_execution_context import (
 )
 
 from ._shared import *
+from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from .phase_run_outcome import _PhaseRunOutcome
 
 
@@ -543,10 +544,13 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 if last_phase_result.llm_summary:
                     summary = last_phase_result.llm_summary
                 for s in suggestions_source.llm_suggestions:
+                    normalized_path = ReviewItemFactory._normalize_file_path(
+                        s.get("file", ""), repo_path, changed_files,
+                    ) or ""
                     suggestions.append(ReviewItem(
                         severity=ItemSeverity.INFO,
                         category=IssueCategory.GENERAL,
-                        file_path=s.get("file", ""),
+                        file_path=normalized_path,
                         description=s.get("description", ""),
                         line=s.get("line", ""),
                         id=s.get("id", ""),
@@ -559,10 +563,13 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         if p not in praise_entries:
                             praise_entries.append(p)
                 for p in praise_entries:
+                    normalized_path = ReviewItemFactory._normalize_file_path(
+                        p.get("file", ""), repo_path, changed_files,
+                    ) or ""
                     praise_list.append(ReviewItem(
                         severity=ItemSeverity.INFO,
                         category=IssueCategory.GENERAL,
-                        file_path=p.get("file", ""),
+                        file_path=normalized_path,
                         description=p.get("description", ""),
                         line="",
                         id="",
