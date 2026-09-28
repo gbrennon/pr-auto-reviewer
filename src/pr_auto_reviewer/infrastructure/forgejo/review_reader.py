@@ -28,25 +28,35 @@ class ForgejoReviewReader(ReviewReaderPort):
         reviews = self._client.get(path, limit=10, repo=pr_id.repository)
 
         if isinstance(reviews, list):
+            review_entries = [entry for entry in reviews if isinstance(entry, dict)]
             sorted_reviews = sorted(
-                reviews,
-                key=lambda r: r.get("submitted_at", ""),
+                review_entries,
+                key=lambda review: str(review.get("submitted_at", "")),
                 reverse=True,
             )
             if sorted_reviews:
-                body: str | None = sorted_reviews[0].get("body")
+                body_value = sorted_reviews[0].get("body")
+                body = body_value if isinstance(body_value, str) else None
                 logger.debug(
                     "Latest review body: %s chars", len(body) if body else 0,
                 )
-                logger.info("ForgejoReviewReader return: body=%s chars", len(body))
+                logger.info(
+                    "ForgejoReviewReader return: body=%s chars",
+                    len(body) if body else 0,
+                )
                 return body
             logger.debug("No reviews found for %s", pr_id)
         elif isinstance(reviews, dict) and reviews:
-            body = reviews.get("body")
+            body_value = reviews.get("body")
+            body = body_value if isinstance(body_value, str) else None
             logger.debug(
-                "Single review object, body: %s chars", len(body) if body else 0,
+                "Single review object, body: %s chars",
+                len(body) if body else 0,
             )
-            logger.info("ForgejoReviewReader return: body=%s chars", len(body) if body else 0)
+            logger.info(
+                "ForgejoReviewReader return: body=%s chars",
+                len(body) if body else 0,
+            )
             return body
 
         logger.info("No review available for %s", pr_id)
