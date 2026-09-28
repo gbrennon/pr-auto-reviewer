@@ -72,8 +72,10 @@ class PullRequestRepositoryFake(PullRequestRepositoryPort):
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:
         self._repos = repos
+        self.list_calls = 0
 
     def list_repos(self) -> list[RepoInfo]:
+        self.list_calls += 1
         return self._repos
 
 class MockPrLister(PrListerPort):
@@ -149,6 +151,66 @@ class TestPollingDaemon:
             pr_lister=pr_lister,
             review_service=mock_review_service,
         )
+    def test_continuous_mode_runs_next_cycle_after_first_sleep(
+        self, mock_review_service: MagicMock
+    ) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=False,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+        )
+
+        with (
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.time.sleep",
+                side_effect=[None, KeyboardInterrupt],
+            ),
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
+            ) as mock_logger,
+        ):
+            daemon.start()
+
+        assert repo_lister.list_calls == 2
+        mock_logger.info.assert_any_call("PollingDaemon stopped after 2 cycle(s)")
+
+    def test_one_shot_mode_runs_exactly_one_cycle(
+        self, mock_review_service: MagicMock
+    ) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+        )
+
+        with (
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.time.sleep"
+            ) as mock_sleep,
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
+            ) as mock_logger,
+        ):
+            daemon.start()
+
+        assert repo_lister.list_calls == 1
+        mock_sleep.assert_not_called()
+        mock_logger.info.assert_any_call("PollingDaemon stopped after 1 cycle(s)")
+
 
     def test_does_not_notify_success_when_review_is_skipped(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
