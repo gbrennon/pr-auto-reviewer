@@ -150,7 +150,7 @@ class TestReviewItemFactory:
             }
         ]
 
-        repo_path = "/tmp/test_repo"
+        repo_path = Path("/tmp/test_repo")
         changed_files = ["src/main.py"]
 
         repo = Path(repo_path)
@@ -173,7 +173,7 @@ class TestReviewItemFactory:
 
         with patch("pr_auto_reviewer.domain.services.review_item_factory.logger.warning") as mock_warn:
             items, _skip_reasons = ReviewItemFactory.create(
-                item_dicts, "/tmp", None
+                item_dicts, Path("/tmp"), None
             )
             assert len(items) == 0
             assert mock_warn.call_count >= 1
@@ -189,7 +189,7 @@ class TestReviewItemFactory:
             }
         ]
 
-        repo_path = "/tmp/test_repo2"
+        repo_path = Path("/tmp/test_repo2")
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
         (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
@@ -215,7 +215,7 @@ class TestReviewItemFactory:
             }
         ]
 
-        repo_path = "/tmp/test_repo3"
+        repo_path = Path("/tmp/test_repo3")
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
         (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +241,7 @@ class TestReviewItemFactory:
             }
         ]
 
-        repo_path = "/tmp/test_repo4"
+        repo_path = Path("/tmp/test_repo4")
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
 
@@ -271,7 +271,7 @@ class TestReviewItemFactory:
             },
         ]
 
-        repo_path = "/tmp/test_repo5"
+        repo_path = Path("/tmp/test_repo5")
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
         (repo / "src/main.py").parent.mkdir(parents=True, exist_ok=True)
@@ -300,7 +300,7 @@ class TestReviewItemFactory:
             }
         ]
 
-        repo_path = "/tmp/test_repo6"
+        repo_path = Path("/tmp/test_repo6")
         repo = Path(repo_path)
         repo.mkdir(parents=True, exist_ok=True)
         (repo / "src/client.py").parent.mkdir(parents=True, exist_ok=True)
