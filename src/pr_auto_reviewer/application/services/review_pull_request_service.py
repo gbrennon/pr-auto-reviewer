@@ -94,6 +94,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             review = self._run_single_turn_review(composed)
         review = self._add_deterministic_findings(review, diff)
         review = ReviewItemFactory.ensure_unique_ids(review)
+        review = self._retain_prior_review_items(pr, review)
 
         blocking_ids = self._extract_blocking_ids(review)
 
@@ -493,6 +494,27 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         if description:
             return description + "\n" + pending
         return pending
+
+    def _retain_prior_review_items(
+        self, pr: PullRequest, review: CodeReview,
+    ) -> CodeReview:
+        """Carry every prior item into the newly published review."""
+        if not pr.reviews:
+            return review
+
+        current_by_id = {
+            item.id: item for item in review.items if item.id
+        }
+        prior_items = pr.latest_review_items()
+        retained = [
+            current_by_id.get(item.id, item)
+            for item in prior_items
+            if item.id and item.id not in current_by_id
+        ]
+        if not retained:
+            return review
+
+        return replace(review, items=retained + review.items)
 
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
         """Return IDs of open review items whose severity is blocking."""
