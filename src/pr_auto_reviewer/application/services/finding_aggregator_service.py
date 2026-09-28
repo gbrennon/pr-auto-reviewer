@@ -93,7 +93,7 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
         target = blocking[0] if blocking else merged[0]
         desc = target.description.strip()
         sev = str(target.severity).lower()
-        file_path = target.file_path.strip()
+        file_path = (target.file_path or "").strip()
         file_str = f" in {file_path}" if file_path else ""
         if desc:
             return f"Identified {sev} issue{file_str}: {desc}"
