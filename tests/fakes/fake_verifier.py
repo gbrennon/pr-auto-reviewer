@@ -7,9 +7,12 @@ from typing import Any
 from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
     PreflightVerificationError,
 )
+from pr_auto_reviewer.infrastructure.client.preflight.preflight_verifier import (
+    PreflightVerifier,
+)
 
 
-class FakeVerifier:
+class FakeVerifier(PreflightVerifier):
     """Lightweight fake PreflightVerifier that records calls and optionally
     raises ``PreflightVerificationError``."""
 

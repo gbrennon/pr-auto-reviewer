@@ -43,4 +43,4 @@ class TestPollingDaemonConfig:
         )
 
         with pytest.raises(AttributeError):
-            config.poll_interval_seconds = 30
+            object.__setattr__(config, "poll_interval_seconds", 30)

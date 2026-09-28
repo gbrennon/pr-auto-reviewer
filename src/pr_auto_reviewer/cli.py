@@ -112,8 +112,7 @@ def main() -> None:
             os.environ["REPOS_FILTER"] = args.repo
         if args.force_pr:
             os.environ["FORCE_PR"] = str(args.force_pr)
-        if args.once:
-            os.environ["RUN_ONCE"] = "true"
+        os.environ["RUN_ONCE"] = "true" if args.once else "false"
         if args.verbose:
             os.environ["DEBUG"] = "1"
         components = bootstrap()

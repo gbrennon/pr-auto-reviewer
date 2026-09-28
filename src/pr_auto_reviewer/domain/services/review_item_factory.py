@@ -491,7 +491,7 @@ class ReviewItemFactory:
                     skip_reasons.append(reason)
                     continue
 
-            if not current_code and full_path is not None:
+            if not current_code and full_path is not None and repo_root is not None:
                 current_code = cls._read_evidence(
                     full_path, repo_root, line_str, description
                 )

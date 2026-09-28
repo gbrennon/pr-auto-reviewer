@@ -9,7 +9,7 @@ class TestFindingVerifierExecute:
     def test_minor_items_are_llm_verified_and_kept_when_confirmed(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
-        items = [_item(1, severity=ItemSeverity.MINOR)]
+        items = [_item("1", severity=ItemSeverity.MINOR)]
         verifier = _verifier(mock_chat_port, mock_tool_factory, [
             json.dumps({"action": "read_file", "args": "src/a.py"}),
             json.dumps({

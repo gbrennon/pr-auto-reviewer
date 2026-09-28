@@ -14,9 +14,9 @@ class TestFormatFindingsForVerification:
             mock_chat_port, "verify {findings}", mock_tool_factory
         )
         items = [
-            _item(1, file_path="src/a.py"),
-            _item(2, file_path="src/missing.py"),
-            _item(3, file_path=None),
+            _item("1", file_path="src/a.py"),
+            _item("2", file_path="src/missing.py"),
+            _item("3", file_path=None),
         ]
 
         text = verifier._format_findings_for_verification(items, repo)

@@ -17,8 +17,8 @@ class TestTokenVerifierSkipsWhenCached:
         verifier.verify(pr_id)
         verifier.verify(pr_id)
 
-        assert len(owner._preflight_verifier.calls) == 1
-        assert len(reviewer._preflight_verifier.calls) == 1
+        assert len(getattr(owner, "_preflight_verifier").calls) == 1
+        assert len(getattr(reviewer, "_preflight_verifier").calls) == 1
 
     def test_verify_skips_when_no_org_in_repository(
         self, tmp_path: Path
@@ -31,7 +31,7 @@ class TestTokenVerifierSkipsWhenCached:
 
         verifier.verify(pr_id)
 
-        assert len(owner._preflight_verifier.calls) == 0
+        assert len(getattr(owner, "_preflight_verifier").calls) == 0
 
     def test_verify_skips_when_repository_starts_with_slash(
         self, tmp_path: Path
@@ -44,5 +44,5 @@ class TestTokenVerifierSkipsWhenCached:
 
         verifier.verify(pr_id)
 
-        assert len(owner._preflight_verifier.calls) == 0
+        assert len(getattr(owner, "_preflight_verifier").calls) == 0
 

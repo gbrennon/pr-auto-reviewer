@@ -179,8 +179,9 @@ class TestWirePlatformAdapters:
         self,
         fj_config: Config,
         fj_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(result, PlatformAdapters)
 
     # The field names below are kept in sync with FORGEJO_NON_TERMINAL_TYPES.
@@ -189,8 +190,9 @@ class TestWirePlatformAdapters:
         self,
         fj_config: Config,
         fj_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=local_repository)
 
         for attr, _ in FORGEJO_NON_TERMINAL_TYPES:
             assert getattr(result, attr) is not None, f"{attr} is None"
@@ -200,10 +202,11 @@ class TestWirePlatformAdapters:
         self,
         fj_config: Config,
         fj_clients,
+        local_repository,
         attr: str,
         expected_type: type,
     ) -> None:
-        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(getattr(result, attr), expected_type)
 
     # ── single-platform: github, non-terminal ─────────────────────────────
@@ -220,8 +223,9 @@ class TestWirePlatformAdapters:
         self,
         gh_config: Config,
         gh_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(result, PlatformAdapters)
 
     @pytest.mark.parametrize("attr,expected_type", GITHUB_NON_TERMINAL_TYPES)
@@ -229,10 +233,11 @@ class TestWirePlatformAdapters:
         self,
         gh_config: Config,
         gh_clients,
+        local_repository,
         attr: str,
         expected_type: type,
     ) -> None:
-        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(getattr(result, attr), expected_type)
 
     # ── BOTH mode ─────────────────────────────────────────────────────────
@@ -249,8 +254,9 @@ class TestWirePlatformAdapters:
         self,
         both_config: Config,
         both_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(result, PlatformAdapters)
 
     @pytest.mark.parametrize("attr,expected_type", BOTH_NON_TERMINAL_TYPES)
@@ -258,18 +264,20 @@ class TestWirePlatformAdapters:
         self,
         both_config: Config,
         both_clients,
+        local_repository,
         attr: str,
         expected_type: type,
     ) -> None:
-        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(getattr(result, attr), expected_type)
 
     def test_both_adapter_client_identity_and_review_mode(
         self,
         both_config: Config,
         both_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=False, local_repository=local_repository)
 
         # Client identity on composite adapters — verify inner adapters
         repo_ctx = cast(CompositeRepositoryContext, result.repository_context)
@@ -296,8 +304,9 @@ class TestWirePlatformAdapters:
         self,
         both_config: Config,
         both_clients,
+        local_repository,
     ) -> None:
-        result = wire_platform_adapters(both_config, both_clients, is_terminal=True, local_repository=self.local_repository)
+        result = wire_platform_adapters(both_config, both_clients, is_terminal=True, local_repository=local_repository)
         assert isinstance(result.review_publisher, TerminalReviewPublisherAdapter)
         assert isinstance(result.changeset_fetcher, CompositeChangesetFetcher)
         assert isinstance(result.repo_lister, CompositeRepoLister)
@@ -319,24 +328,29 @@ class TestWirePlatformAdapters:
     def test_terminal_review_publisher_is_terminal_type(
         self,
         request,
+        local_repository,
         config_fixture: str,
         clients_fixture: str,
     ) -> None:
         config = request.getfixturevalue(config_fixture)
         clients = request.getfixturevalue(clients_fixture)
-        result = wire_platform_adapters(config, clients, is_terminal=True, local_repository=self.local_repository)
+        result = wire_platform_adapters(config, clients, is_terminal=True, local_repository=local_repository)
         assert isinstance(result.review_publisher, TerminalReviewPublisherAdapter)
 
     # ── reviewer publisher platform routing ─────────────────────────────────
 
-    def test_forgejo_publisher_constructed_for_forgejo_config(self) -> None:
+    def test_forgejo_publisher_constructed_for_forgejo_config(
+        self, local_repository
+    ) -> None:
         fj_config = _forgejo_config(forgejo_reviewer_username="my-fj-bot")
         fj_clients = wire_platform_clients(fj_config)
-        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(fj_config, fj_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(result.review_publisher, ForgejoReviewPublisher)
 
-    def test_github_publisher_constructed_for_github_config(self) -> None:
+    def test_github_publisher_constructed_for_github_config(
+        self, local_repository
+    ) -> None:
         gh_config = _github_config(github_reviewer_username="my-gh-bot")
         gh_clients = wire_platform_clients(gh_config)
-        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=self.local_repository)
+        result = wire_platform_adapters(gh_config, gh_clients, is_terminal=False, local_repository=local_repository)
         assert isinstance(result.review_publisher, GithubReviewPublisher)

@@ -1,20 +1,26 @@
 """Tests for LinuxNotifier using injected fake callable."""
 
 import pytest
+from typing import Any
 
 from pr_auto_reviewer.infrastructure.notifier.linux_notifier import LinuxNotifier
 
 
+class _FakeRunCommand:
+    """Callable fake that records subprocess arguments."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, args: list[str], **kwargs: Any) -> None:
+        del kwargs
+        self.calls.append(args)
+
+
 @pytest.fixture
-def fake_run_command():
+def fake_run_command() -> _FakeRunCommand:
     """Fixture that records calls to a fake subprocess.run."""
-    calls = []
-
-    def fake_run(args, **kwargs):
-        calls.append(args)
-
-    fake_run.calls = calls
-    return fake_run
+    return _FakeRunCommand()
 
 
 class TestLinuxNotifier:

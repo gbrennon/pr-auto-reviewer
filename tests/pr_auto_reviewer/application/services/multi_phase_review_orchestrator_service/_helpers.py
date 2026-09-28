@@ -33,6 +33,9 @@ from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import 
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
+from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
+    RunMultiPhaseReviewCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.verify_findings_command import (
     VerifyFindingsCommand,
 )
@@ -137,4 +140,4 @@ def _make_review_item(file_path, description) -> ReviewItem:
         category="style",
     )
 
-__all__ = ['AdvisorBlockedError', 'AdvisorDirective', 'AggregateReviewFindingsCommand', 'CodeReview', 'EngineerAgent', 'InMemoryCommandBus', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MagicMock', 'MaxTurnsExceededError', 'MultiPhaseReviewOrchestratorService', 'ParseReviewTurnCommand', 'Path', 'PhaseResult', 'ReviewItem', 'ReviewPhase', 'ReviewPlan', 'ReviewResponseParser', 'ReviewVerdict', 'ReviewVerdictError', 'RunAgentConversationCommand', 'SimpleNamespace', 'SubAgentGrade', 'TurnParseResult', 'TurnParserService', 'VerifyFindingsCommand', '_PhaseRunOutcome', '_code_review', '_make_review_item', '_outcome', '_phase_result', '_plan', '_pytest', 'annotations', 'pytest']
+__all__ = ['AdvisorBlockedError', 'AdvisorDirective', 'AggregateReviewFindingsCommand', 'CodeReview', 'EngineerAgent', 'InMemoryCommandBus', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MagicMock', 'MaxTurnsExceededError', 'MultiPhaseReviewOrchestratorService', 'ParseReviewTurnCommand', 'Path', 'PhaseResult', 'ReviewItem', 'ReviewPhase', 'ReviewPlan', 'ReviewResponseParser', 'ReviewVerdict', 'ReviewVerdictError', 'RunAgentConversationCommand', 'RunMultiPhaseReviewCommand', 'SimpleNamespace', 'SubAgentGrade', 'TurnParseResult', 'TurnParserService', 'VerifyFindingsCommand', '_PhaseRunOutcome', '_code_review', '_make_review_item', '_outcome', '_phase_result', '_plan', '_pytest', 'annotations', 'pytest']

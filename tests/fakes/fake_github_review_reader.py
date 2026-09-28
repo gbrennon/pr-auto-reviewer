@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pr_auto_reviewer.application.ports.outbound.comment_reader_port import (
     CommentReaderPort,
 )
+from pr_auto_reviewer.domain.value_objects.comment_id import CommentId
 from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 
@@ -18,8 +21,8 @@ class FakeGithubReviewReader(CommentReaderPort):
         self.get_comments_calls.append((pr_id,))
         return [
             PrComment(
-                id="1",
+                id=CommentId("1"),
                 body="Test review comment",
-                created_at="2024-01-01T00:00:00Z",
+                created_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
             ),
         ]

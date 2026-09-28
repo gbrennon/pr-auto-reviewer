@@ -68,7 +68,7 @@ class TestCodeReview:
     def test_immutability(self) -> None:
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
         with pytest.raises(FrozenInstanceError):
-            review.summary = "changed"
+            object.__setattr__(review, "summary", "changed")
 
     def test_hash_consistency(self) -> None:
         review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")

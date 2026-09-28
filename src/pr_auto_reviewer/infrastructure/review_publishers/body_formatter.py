@@ -33,6 +33,7 @@ class ReviewBodyRenderer:
             numbered_items.append(
                 {
                     "id": item.id,
+                    "status": item.status,
                     "severity": item.severity,
                     "category": item.category,
                     "file_path": item.file_path,

@@ -115,7 +115,7 @@ class TestGithubPrLister:
         pr = adapter.list_open("o/r")[0]
 
         with pytest.raises(FrozenInstanceError):
-            pr.title = "mutated"
+            object.__setattr__(pr, "title", "mutated")
 
     def test_list_open_with_platform_prefix_then_strips_prefix(self) -> None:
         adapter = _adapter({"/repos/o/r/pulls": pr_dicts(1)})

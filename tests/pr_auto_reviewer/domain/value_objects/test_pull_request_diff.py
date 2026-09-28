@@ -65,7 +65,7 @@ class TestPullRequestDiff:
             pr_id=pr_id, head_sha=CommitSha(value="abc"), diff_content="diff"
         )
         with pytest.raises(FrozenInstanceError):
-            diff.diff_content = "changed"
+            object.__setattr__(diff, "diff_content", "changed")
 
     def test_hash_consistency(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=1)

@@ -1,6 +1,7 @@
 """Tests for InMemoryCommandBus."""
 
 import pytest
+from typing import cast
 
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -94,8 +95,12 @@ class TestInMemoryCommandBus:
 
     def test_dispatch_handles_multiple_commands(self, bus_with_handlers: InMemoryCommandBus) -> None:
         """Dispatch routes to correct handler based on command type."""
-        handler1 = bus_with_handlers._handlers[SomeCommand]
-        handler2 = bus_with_handlers._handlers[OtherCommand]
+        handler1 = cast(
+            _RecordingHandler, bus_with_handlers._handlers[SomeCommand]
+        )
+        handler2 = cast(
+            _RecordingHandler, bus_with_handlers._handlers[OtherCommand]
+        )
 
         bus_with_handlers.dispatch(SomeCommand(data="a"))
         bus_with_handlers.dispatch(OtherCommand(data="b"))

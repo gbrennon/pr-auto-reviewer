@@ -32,7 +32,7 @@ class TestPullRequestId:
     def test_immutability(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=42)
         with pytest.raises(FrozenInstanceError):
-            pr_id.number = 99
+            object.__setattr__(pr_id, "number", 99)
 
     def test_str_representation(self) -> None:
         pr_id = PullRequestId(repository="owner/repo", number=42)

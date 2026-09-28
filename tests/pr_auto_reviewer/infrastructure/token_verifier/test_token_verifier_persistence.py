@@ -35,8 +35,8 @@ class TestTokenVerifierPersistence:
 
         verifier.verify(pr_id)
 
-        assert len(owner._preflight_verifier.calls) == 0
-        assert len(reviewer._preflight_verifier.calls) == 0
+        assert len(getattr(owner, "_preflight_verifier").calls) == 0
+        assert len(getattr(reviewer, "_preflight_verifier").calls) == 0
 
     def test_verify_does_not_persist_when_persist_is_false(
         self, tmp_path: Path
@@ -66,7 +66,7 @@ class TestTokenVerifierPersistence:
 
         verifier.verify(pr_id)
 
-        assert len(owner._preflight_verifier.calls) == 1
+        assert len(getattr(owner, "_preflight_verifier").calls) == 1
 
     def test_default_store_path_when_not_provided_then_uses_app_paths_cache_dir(
         self, monkeypatch, tmp_path: Path

@@ -65,6 +65,7 @@ class TestExecute:
         result = _service(repo).execute_tool(tool)
 
         assert result.status == "ok"
+        assert result.data is not None
         assert result.data["content"].startswith("line1")
 
     def test_execute_tool_when_path_alias_then_reads_file(
