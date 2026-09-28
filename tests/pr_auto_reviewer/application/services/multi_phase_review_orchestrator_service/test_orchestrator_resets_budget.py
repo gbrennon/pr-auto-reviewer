@@ -16,16 +16,16 @@ class _BudgetTrackingChatPort:
 class TestOrchestratorResetsBudgetPerReview:
     """Each review must start with a fresh LLM call budget."""
 
-    def _command(self, plan):
-        return type("Cmd", (), {
-            "existing_item_ids": frozenset(),
-            "review_session": "test-session",
-            "base_sha": "",
-            "plan": plan,
-            "repo_path": Path("/tmp"),
-            "changed_files": ["src/main.py"],
-            "model": "test",
-        })()
+    def _command(
+        self, plan: ReviewPlan
+    ) -> RunMultiPhaseReviewCommand:
+        return RunMultiPhaseReviewCommand(
+            plan=plan,
+            repo_path=Path("/tmp"),
+            changed_files=["src/main.py"],
+            model="test",
+            review_session="test-session",
+        )
 
     def test_execute_resets_chat_client_budget_before_running_phases(
         self, mock_command_bus, mock_tool_factory,
@@ -40,7 +40,7 @@ class TestOrchestratorResetsBudgetPerReview:
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             items=[_make_review_item("src/main.py", "found")],
         )
-        plan = SimpleNamespace(
+        plan = ReviewPlan(
             phases=_plan(), methodology="sub-agent-multi-phase"
         )
         chat_port.calls_started = 300

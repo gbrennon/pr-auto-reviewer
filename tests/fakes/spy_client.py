@@ -9,10 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
+    GitPlatformHttpClient,
+)
 from tests.fixtures.integration_fixtures import FixtureHttpClient
 
 
-class SpyClient:
+class SpyClient(GitPlatformHttpClient):
     """Wraps a ``FixtureHttpClient`` to record key API calls."""
 
     def __init__(
@@ -36,14 +39,33 @@ class SpyClient:
         if self._fail_verify is not None:
             raise self._fail_verify
 
-    def get(self, path: str, **kwargs: Any) -> dict[str, Any]:
-        self.get_calls.append((path, kwargs))
-        return self._delegate.get(path, **kwargs)
+    def get(
+        self,
+        path: str,
+        headers: dict[str, str] | None = None,
+        *,
+        repo: str | None = None,
+        **params: Any,
+    ) -> dict[str, Any]:
+        self.get_calls.append((path, {"headers": headers, "repo": repo, **params}))
+        return self._delegate.get(path, headers, repo=repo, **params)
 
-    def get_raw(self, path: str, **kwargs: Any) -> str:
-        self.get_raw_calls.append((path, kwargs))
-        return self._delegate.get_raw(path, **kwargs)
+    def get_raw(
+        self,
+        path: str,
+        headers: dict[str, str] | None = None,
+        *,
+        repo: str | None = None,
+    ) -> str:
+        self.get_raw_calls.append((path, {"headers": headers, "repo": repo}))
+        return self._delegate.get_raw(path, headers, repo=repo)
 
-    def post(self, path: str, payload: dict[str, Any], **kwargs: Any) -> Any:
-        self.post_calls.append((path, kwargs))
-        return self._delegate.post(path, payload, **kwargs)
+    def post(
+        self,
+        path: str,
+        body: dict[str, Any],
+        *,
+        repo: str | None = None,
+    ) -> dict[str, Any]:
+        self.post_calls.append((path, {"repo": repo}))
+        return self._delegate.post(path, body, repo=repo)

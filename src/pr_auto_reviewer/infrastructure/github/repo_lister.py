@@ -30,9 +30,15 @@ class GithubRepoLister(RepoListerPort):
             repos = data if isinstance(data, list) else data.get("data", [])
 
             result = [
-                RepoInfo(full_name=repo["full_name"], pushed_at=repo.get("pushed_at"))
+                RepoInfo(
+                    full_name=repo["full_name"],
+                    pushed_at=repo.get("pushed_at")
+                    if isinstance(repo.get("pushed_at"), str)
+                    else None,
+                )
                 for repo in repos
-                if "full_name" in repo
+                if isinstance(repo, dict)
+                and isinstance(repo.get("full_name"), str)
             ]
 
             logger.info("GithubRepoLister.list_repos return: %d repos", len(result))

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import requests
 
@@ -35,10 +35,11 @@ class PepFetcher:
             logger.warning("Failed to fetch PEPs", exc_info=True)
             self._cache = []
             return self._cache
-        self._cache = [
-            entry
+        entries = [
+            cast(PepEntry, entry)
             for entry in raw.values()
             if isinstance(entry, dict) and "number" in entry
         ]
-        logger.info("Fetched %d PEPs", len(self._cache))
-        return self._cache
+        self._cache = entries
+        logger.info("Fetched %d PEPs", len(entries))
+        return entries

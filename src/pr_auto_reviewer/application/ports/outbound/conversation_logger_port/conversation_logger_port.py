@@ -24,4 +24,5 @@ class ConversationLoggerPort(Protocol):
         Returns:
             Absolute path to the transcript file.
         """
+        ...
 

@@ -87,6 +87,14 @@ class ConfigLoader:
         for key in _COMMAND_LINE_KEYS:
             if key in os.environ:
                 values[key] = os.environ[key]
+
+    def _load_values(self, path: Path) -> dict[str, str]:
+        return {
+            key: value
+            for key, value in dotenv_values(path).items()
+            if value is not None
+        }
+
     def _apply_runtime_environment(self, values: dict[str, str]) -> None:
         bundle = values.get("REQUESTS_CA_BUNDLE", "").strip()
         if bundle:
@@ -94,7 +102,7 @@ class ConfigLoader:
 
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
-            values = dotenv_values(config_path)
+            values = self._load_values(Path(config_path))
             logger.info("Loading production config from %s", config_path)
         else:
             logger.warning(
@@ -138,11 +146,11 @@ class ConfigLoader:
             logger.info(
                 "Loading dev user config from %s", user_config_path
             )
-            values.update(dotenv_values(user_cfg))
+            values.update(self._load_values(user_cfg))
 
         if repo_env_path.exists():
             logger.info("Loading dev .env from %s", repo_env_path)
-            values.update(dotenv_values(repo_env_path))
+            values.update(self._load_values(repo_env_path))
 
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)

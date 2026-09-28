@@ -674,3 +674,97 @@ class TestReviewPullRequestService:
         saved_items = saved_pr.reviews[-1].items
         assert {item.id for item in saved_items} == {item.id for item in review.items}
 
+
+    def test_republishes_prior_items_and_keeps_open_blocker_blocking(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+    ) -> None:
+        blocking = ReviewItem(
+            id="block-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="src/app.py",
+            description="Handle the failure path",
+        )
+        prior = _pr(_pr_id(), _sha("old111")).add_review(
+            _review(ReviewVerdict.CHANGES_REQUESTED, [blocking]),
+            _sha("old111"),
+        ).with_unresolved_blocking("block-1")
+        cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
+        mock_pr_repository.find.return_value = prior
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha,
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED,
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        published = mock_review_publisher.publish.call_args.args[1]
+        assert [item.id for item in published.items] == ["block-1"]
+        assert published.items[0].status == "open"
+        assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
+        saved_pr = mock_pr_repository.save.call_args.args[0]
+        assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
+
+    def test_republishes_all_items_with_resolved_status_after_fix(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+    ) -> None:
+        blocking = ReviewItem(
+            id="block-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="src/app.py",
+            description="Handle the failure path",
+        )
+        prior = _pr(_pr_id(), _sha("old111")).add_review(
+            _review(ReviewVerdict.CHANGES_REQUESTED, [blocking]),
+            _sha("old111"),
+        ).with_unresolved_blocking("block-1")
+        resolved = ReviewItem(
+            id="block-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="src/app.py",
+            description="Handle the failure path",
+            status="resolved",
+        )
+        cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
+        mock_pr_repository.find.return_value = prior
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha,
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED, [resolved],
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        published = mock_review_publisher.publish.call_args.args[1]
+        assert [item.id for item in published.items] == ["block-1"]
+        assert published.items[0].status == "resolved"
+        assert published.verdict == ReviewVerdict.APPROVED
+        saved_pr = mock_pr_repository.save.call_args.args[0]
+        assert not saved_pr.unresolved_blocking_ids

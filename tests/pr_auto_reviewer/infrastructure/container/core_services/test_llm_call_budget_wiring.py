@@ -15,7 +15,7 @@ class TestLlmCallBudgetWiring:
         )
         result = wire_core_services(config, repo_context, _config_dir=tmp_path)
 
-        client = result.llm_review._chat_client
+        client = getattr(result.llm_review, "_chat_client")
 
         assert client._max_llm_calls == 7
 

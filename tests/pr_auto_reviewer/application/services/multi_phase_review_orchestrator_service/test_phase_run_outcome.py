@@ -19,7 +19,7 @@ class TestPhaseRunOutcome:
     def _create_review(items: tuple[ReviewItem, ...] = ()) -> CodeReview:
         """Create a CodeReview for testing."""
         return CodeReview(
-            verdict=ReviewVerdict.APPROVED.value,
+            verdict=ReviewVerdict.APPROVED,
             reason="All checks passed.",
             summary="Clean review.",
             items=list(items),

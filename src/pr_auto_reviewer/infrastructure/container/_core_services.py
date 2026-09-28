@@ -251,7 +251,7 @@ class _ChatClientFactory:
     def create(config: Config) -> AgentChatPort:
         """Create the OpenAI-compatible chat client from resolved configuration."""
         return OpenAiCompatibleChatClient(
-            model=config.llm_model,
+            model=config.llm_model or "",
             host=config.llm_host,
             timeout=config.llm_timeout,
             max_retries=config.llm_max_retries,

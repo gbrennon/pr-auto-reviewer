@@ -1,5 +1,6 @@
 """End-to-end tests for CLI entry point (service commands)."""
 
+import os
 from unittest.mock import call, patch
 
 import pytest
@@ -58,3 +59,17 @@ class TestCliServiceCommands:
             main()
 
         assert exc_info.value.code == 0
+
+    def test_watch_mode_clears_stale_once_flag(self) -> None:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("pr_auto_reviewer.cli.bootstrap", return_value=object()),
+            patch("pr_auto_reviewer.cli.run_daemon"),
+            patch("sys.argv", ["pr-auto-reviewer", "watch-prs", "--once"]),
+        ):
+            main()
+            assert os.environ["RUN_ONCE"] == "true"
+
+            with patch("sys.argv", ["pr-auto-reviewer", "watch-prs"]):
+                main()
+            assert os.environ["RUN_ONCE"] == "false"

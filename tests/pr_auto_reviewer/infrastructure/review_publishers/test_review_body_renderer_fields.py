@@ -151,7 +151,7 @@ class TestReviewBodyRendererFields:
 
     def test_items_are_identified_by_id_not_number(self) -> None:
         body = _RENDERER.render(_full_review())
-        assert "\n`i1`. [bug] [CRITICAL] a/b.py:42" in body
+        assert "\n`i1`. [OPEN] [bug] [CRITICAL] a/b.py:42" in body
         assert "number" not in body
 
     def test_each_item_is_rendered_under_its_own_non_empty_id(self) -> None:
@@ -209,3 +209,33 @@ class TestReviewBodyRendererFields:
         assert body.count(relative_path) == 3
         assert "/cache/clones/repo/" not in body
         assert "/src/main.py" not in body
+
+    def test_marks_each_review_item_with_its_status(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Review reason",
+            summary="Review summary",
+            items=[
+                ReviewItem(
+                    id="open-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/open.py",
+                    description="Open finding",
+                ),
+                ReviewItem(
+                    id="resolved-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/resolved.py",
+                    description="Resolved finding",
+                    status="resolved",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert "`open-1`. [OPEN]" in body
+        assert "`resolved-1`. [RESOLVED]" in body

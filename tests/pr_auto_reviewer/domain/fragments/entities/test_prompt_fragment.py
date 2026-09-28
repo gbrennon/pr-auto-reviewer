@@ -35,7 +35,7 @@ class TestPromptFragment:
         )
 
         with pytest.raises(AttributeError):
-            fragment.id = "new-id"
+            object.__setattr__(fragment, "id", "new-id")
 
     def test_creates_universal_fragment_without_language(self) -> None:
         """PromptFragment with language=None represents universal fragment."""

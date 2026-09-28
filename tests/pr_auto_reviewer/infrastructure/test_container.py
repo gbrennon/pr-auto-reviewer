@@ -47,7 +47,7 @@ class TestContainer:
         container = Container(config)
         publisher = container.review_publisher
 
-        gh_adapter = publisher._publishers["github"]
+        gh_adapter = getattr(publisher, "_publishers")["github"]
         assert gh_adapter._publishing._client._token_resolver is not None
         _token, source = gh_adapter._publishing._client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
@@ -59,7 +59,7 @@ class TestContainer:
         )
         assert source2.startswith("GITHUB_")
 
-        fj_adapter = publisher._publishers["forgejo"]
+        fj_adapter = getattr(publisher, "_publishers")["forgejo"]
         assert fj_adapter._publishing._client._token_resolver is not None
         _token3, source3 = fj_adapter._publishing._client._token_resolver.resolve_source(
             "OWNER", "test-org/repo"
@@ -88,11 +88,11 @@ class TestContainer:
         container = Container(config)
         publisher = container.review_publisher
 
-        gh_adapter = publisher._publishers["github"]
+        gh_adapter = getattr(publisher, "_publishers")["github"]
         assert gh_adapter._publishing._client._preflight_verifier is not None
         assert gh_adapter._publishing._owner_client._preflight_verifier is not None
 
-        fj_adapter = publisher._publishers["forgejo"]
+        fj_adapter = getattr(publisher, "_publishers")["forgejo"]
         assert fj_adapter._publishing._client._preflight_verifier is not None
         assert fj_adapter._publishing._owner_client._preflight_verifier is not None
 
