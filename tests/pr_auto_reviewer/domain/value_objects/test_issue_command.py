@@ -35,7 +35,7 @@ class TestIssueCommand:
     def test_immutability(self) -> None:
         cmd = IssueCommand(comment_id="12345", item_ids=["id-1"])
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(cmd, "item_ids", ["id-2"])
+            setattr(cmd, "item_ids", ["id-2"])
 
     def test_hash_consistency(self) -> None:
         cmd = IssueCommand(comment_id="12345", item_ids=["id-1"])

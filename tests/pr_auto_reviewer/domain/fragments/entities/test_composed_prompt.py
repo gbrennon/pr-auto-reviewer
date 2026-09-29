@@ -30,7 +30,7 @@ class TestComposedPrompt:
         )
 
         with pytest.raises(AttributeError):
-            object.__setattr__(prompt, "content", "new content")
+            setattr(prompt, "content", "new content")
 
     @pytest.mark.parametrize(
         ("field", "value", "expected_msg"),

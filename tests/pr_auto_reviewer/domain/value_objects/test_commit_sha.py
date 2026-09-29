@@ -34,7 +34,7 @@ class TestCommitSha:
     def test_immutability(self) -> None:
         sha = CommitSha(value="abc123")
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(sha, "value", "def456")
+            setattr(sha, "value", "def456")
 
     def test_str_representation(self) -> None:
         sha = CommitSha(value="abc123def")

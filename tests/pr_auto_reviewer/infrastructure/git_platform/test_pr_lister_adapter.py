@@ -80,4 +80,4 @@ class TestForgejoPrLister:
         d = {pr: 1}
         assert d[pr] == 1
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(pr, "title", "mutated")
+            setattr(pr, "title", "mutated")

@@ -64,4 +64,4 @@ class TestReviewContext:
         )
 
         with pytest.raises(AttributeError):
-            object.__setattr__(context, "language", "go")
+            setattr(context, "language", "go")
