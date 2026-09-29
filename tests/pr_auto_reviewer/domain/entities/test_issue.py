@@ -104,7 +104,7 @@ class TestIssue:
             source_pr_id=pr_id, source_item_id="id-1",
         )
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(issue, "id", 200)
+            setattr(issue, "id", 200)
 
     def test_immutable_source_pr_id(self) -> None:
         pr_id = PullRequestId(repository="r", number=1)
@@ -113,6 +113,4 @@ class TestIssue:
             source_pr_id=pr_id, source_item_id="id-1",
         )
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(
-                issue, "source_pr_id", PullRequestId(repository="x", number=99)
-            )
+            setattr(issue, "source_pr_id", PullRequestId(repository="x", number=99))

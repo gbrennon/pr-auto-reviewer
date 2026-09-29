@@ -26,7 +26,7 @@ class TestCommentId:
     def test_immutability(self) -> None:
         cid = CommentId(value="c_abc123")
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(cid, "value", "changed")
+            setattr(cid, "value", "changed")
 
     def test_str_representation(self) -> None:
         cid = CommentId(value="c_abc123")

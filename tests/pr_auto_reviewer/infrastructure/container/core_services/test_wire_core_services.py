@@ -55,6 +55,20 @@ class TestWireCoreServices:
             for phase in result.review_plan.phases
         )
 
+    def test_architecture_phase_forbids_test_induced_design_changes(
+        self,
+        forgejo_config: Config,
+        repo_context,
+    ) -> None:
+        result = wire_core_services(forgejo_config, repo_context)
+
+        architecture_phase = next(
+            phase
+            for phase in result.review_plan.phases
+            if phase.phase_id == "architecture-review"
+        )
+        assert "test-induced design damage" in architecture_phase.system_prompt
+
     def test_llm_review_uses_config_llm_host(
         self,
         repo_context,

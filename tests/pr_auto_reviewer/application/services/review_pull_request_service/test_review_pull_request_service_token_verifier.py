@@ -1,5 +1,5 @@
 from ._helpers import *
-from pathlib import Path
+from pathlib import Path, PosixPath
 
 
 class TestReviewPullRequestServiceTokenVerifier:
@@ -143,5 +143,4 @@ class TestReviewPullRequestServiceTokenVerifier:
         dispatched = dispatch_args[0]
         assert isinstance(dispatched, RunMultiPhaseReviewCommand)
         assert dispatched.base_sha == "d896687cafc093f113ade5444f02df98fcfc9042"
-        assert dispatched.repo_path == "/repos/owner_repo_42"
-
+        assert dispatched.repo_path == PosixPath("/repos/owner_repo_42")

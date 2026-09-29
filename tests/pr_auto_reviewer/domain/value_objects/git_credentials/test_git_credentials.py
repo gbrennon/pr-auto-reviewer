@@ -16,7 +16,7 @@ class TestGitCredentials:
         assert creds.username == "alice"
         assert creds.secret == "s3cr3t"
         with pytest.raises(FrozenInstanceError):
-            object.__setattr__(creds, "username", "mallory")
+            setattr(creds, "username", "mallory")
 
     def test_protocol_is_normalized_to_lowercase(self) -> None:
         creds = GitCredentials(protocol="SSH", username="alice")
