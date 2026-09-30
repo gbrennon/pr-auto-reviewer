@@ -57,7 +57,7 @@ class ReviewContextFactory(ReviewContextFactoryPort):
             pr_description=pr_description,
         )
 
-        file_paths = sorted(diff.file_contents.keys())
+        file_paths = diff.changed_paths
         language, serialized = self._repository_context.build_fragment_context(
             repo_context, file_paths, diff.commit_messages or None,
         )
