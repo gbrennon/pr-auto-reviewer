@@ -1,5 +1,6 @@
 """Tests for PollingDaemon."""
 
+import logging
 import signal
 import threading
 from unittest.mock import MagicMock, patch
@@ -774,6 +775,70 @@ class TestPollingDaemon:
             for command in review_service.executed_commands
         ]
         assert reviewed_repositories == ["owner/allowed"]
+
+    def test_allow_list_skips_are_debug_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=PerRepoPrLister(),
+            review_service=RecordingReviewService(),
+        )
+        repos = [RepoInfo("owner/allowed"), RepoInfo("owner/other")]
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="pr_auto_reviewer.presentation.polling_daemon.polling_daemon",
+        ):
+            daemon._allowed_repos(repos)
+
+
+        assert not any(
+            "Skipping repository not in allow list" in record.message
+            for record in caplog.records
+        )
+
+        caplog.clear()
+        with caplog.at_level(
+            logging.DEBUG,
+            logger="pr_auto_reviewer.presentation.polling_daemon.polling_daemon",
+        ):
+            daemon._allowed_repos(repos)
+
+        assert any(
+            record.levelno == logging.DEBUG
+            and "Skipping repository not in allow list" in record.message
+            for record in caplog.records
+        )
+
+
+    def test_cycle_logs_allow_list_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/allowed")]),
+            pr_lister=PerRepoPrLister(),
+            review_service=RecordingReviewService(),
+        )
+
+        with caplog.at_level(logging.INFO):
+            daemon._run_cycle()
+
+        assert [
+            record.message
+            for record in caplog.records
+            if "Repository allow list:" in record.message
+        ] == ["Repository allow list: owner/allowed"]
 
     def test_empty_allow_list_reviews_every_repository(self) -> None:
         config = PollingDaemonConfig(
