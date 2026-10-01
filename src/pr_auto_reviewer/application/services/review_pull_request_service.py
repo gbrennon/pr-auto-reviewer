@@ -261,6 +261,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                         existing_ids.add(praise.id)
             existing_item_ids = frozenset(existing_ids)
 
+        logger.info(
+            "Dispatching multi-phase review for %s (changed files: %s)",
+            command.pr_id,
+            ", ".join(changed_files) or "(none)",
+        )
+
         review = self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=plan,
