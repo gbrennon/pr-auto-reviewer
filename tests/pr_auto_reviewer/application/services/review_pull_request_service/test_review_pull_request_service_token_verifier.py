@@ -144,3 +144,44 @@ class TestReviewPullRequestServiceTokenVerifier:
         assert isinstance(dispatched, RunMultiPhaseReviewCommand)
         assert dispatched.base_sha == "d896687cafc093f113ade5444f02df98fcfc9042"
         assert dispatched.repo_path == PosixPath("/repos/owner_repo_42")
+
+    def test_logs_before_multi_phase_dispatch(
+        self, caplog, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        cmd = _cmd()
+        diff = PullRequestDiff(
+            pr_id=cmd.pr_id,
+            head_sha=cmd.head_sha,
+            base_sha=CommitSha(value="base-sha"),
+            diff_content="diff --git a/src/a.py b/src/a.py\n",
+            clone_path=Path("/repos/owner_repo_42"),
+        )
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        command_bus = MagicMock()
+
+        def dispatch(command):
+            assert any(
+                "Dispatching multi-phase review" in record.message
+                for record in caplog.records
+            )
+            return _review(ReviewVerdict.APPROVED)
+
+        command_bus.dispatch.side_effect = dispatch
+        caplog.set_level(
+            logging.INFO,
+            logger="pr_auto_reviewer.application.services.review_pull_request_service",
+        )
+
+        from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=ReviewPlan(methodology="sub-agent-multi-phase", phases=()),
+        ).execute(cmd)
