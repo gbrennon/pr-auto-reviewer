@@ -37,7 +37,10 @@ def _make_pr_id() -> PullRequestId:
 _DEFAULT_FILE_CONTENTS = {"src/main.py": "def foo(): pass\n"}
 
 def _make_diff(
-    *, diff_content: str = "+def foo(): pass\n",
+    *, diff_content: str = (
+        "diff --git a/src/main.py b/src/main.py\n"
+        "+def foo(): pass\n"
+    ),
     file_contents: dict[str, str] | None = None,
     commit_messages: list[str] | None = None,
 ) -> PullRequestDiff:
@@ -122,22 +125,58 @@ class TestReviewContextFactoryBuild:
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
-        factory.build(_make_pr_id(), _make_diff(diff_content="+def bar():\n    pass\n"))
+        factory.build(_make_pr_id(), _make_diff(
+            diff_content=(
+                "diff --git a/src/main.py b/src/main.py\n"
+                "+def bar():\n"
+                "    pass\n"
+            ),
+        ))
 
         rctx = compose.execute_calls[0]
-        assert rctx.diff == "+def bar():\n    pass\n"
+        assert rctx.diff == (
+            "diff --git a/src/main.py b/src/main.py\n"
+            "+def bar():\n"
+            "    pass\n"
+        )
 
     def test_builds_review_context_with_sorted_file_paths(self) -> None:
         repo_ctx = FakeRepositoryContext()
         compose = _SpyComposeReviewPrompt()
         factory = ReviewContextFactory(repo_ctx, compose)
 
-        factory.build(_make_pr_id(), _make_diff(file_contents={
-            "z.py": "", "a.py": "", "m.py": "",
-        }))
+        factory.build(_make_pr_id(), _make_diff(
+            diff_content=(
+                "diff --git a/z.py b/z.py\n"
+                "diff --git a/a.py b/a.py\n"
+                "diff --git a/m.py b/m.py\n"
+            ),
+            file_contents={
+                "z.py": "", "a.py": "", "m.py": "",
+            },
+        ))
 
         rctx = compose.execute_calls[0]
         assert rctx.file_paths == ["a.py", "m.py", "z.py"]
+
+    def test_builds_review_context_with_deleted_file_path(self) -> None:
+        """Deleted files remain in the review context when no content is available."""
+        repo_ctx = FakeRepositoryContext()
+        compose = _SpyComposeReviewPrompt()
+        factory = ReviewContextFactory(repo_ctx, compose)
+        diff = _make_diff(
+            diff_content=(
+                "diff --git a/deleted.py b/deleted.py\n"
+                "deleted file mode 100644\n"
+                "--- a/deleted.py\n"
+                "+++ /dev/null\n"
+            ),
+            file_contents={},
+        )
+
+        factory.build(_make_pr_id(), diff)
+
+        assert compose.execute_calls[0].file_paths == ["deleted.py"]
 
     def test_builds_review_context_with_language_from_repository_context(self) -> None:
         repo_ctx = FakeRepositoryContext()
@@ -172,7 +211,10 @@ class TestReviewContextFactoryBuild:
         result = factory.build(_make_pr_id(), _make_diff())
 
         assert isinstance(result, ComposedPrompt)
-        assert compose.execute_calls[0].diff == "+def foo(): pass\n"
+        assert compose.execute_calls[0].diff == (
+            "diff --git a/src/main.py b/src/main.py\n"
+            "+def foo(): pass\n"
+        )
 
     def test_repo_path_comes_from_diff_clone_path(self) -> None:
         repo_ctx = FakeRepositoryContext()

@@ -200,7 +200,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             len(diff.file_contents),
         )
         if logger.isEnabledFor(logging.DEBUG):
-            file_list = sorted(diff.file_contents.keys()) if diff.file_contents else []
+            file_list = diff.changed_paths
             logger.debug("Files with full contents: %s", file_list or "(none)")
         return diff
 
@@ -239,7 +239,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
             return self._run_single_turn_review(composed)
 
-        changed_files: list[str] = sorted(diff.file_contents.keys()) if diff.file_contents else []
+        changed_files: list[str] = diff.changed_paths
         base_sha: str = (
             str(diff.base_sha) if diff.base_sha is not None else ""
         )
@@ -260,6 +260,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                     if praise.id:
                         existing_ids.add(praise.id)
             existing_item_ids = frozenset(existing_ids)
+
+        logger.info(
+            "Dispatching multi-phase review for %s (changed files: %s)",
+            command.pr_id,
+            ", ".join(changed_files) or "(none)",
+        )
 
         review = self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(

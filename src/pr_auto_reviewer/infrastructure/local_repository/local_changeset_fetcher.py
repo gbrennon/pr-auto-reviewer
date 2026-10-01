@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import re
+from dataclasses import replace
 
 from pr_auto_reviewer.application.ports.outbound.changeset_fetcher_port import (
     ChangesetFetcherPort,
@@ -19,14 +19,6 @@ from pr_auto_reviewer.domain.value_objects.pull_request_diff import PullRequestD
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 
 logger = logging.getLogger(__name__)
-
-_DIFF_FILE_PATH_RE = re.compile(
-    r"^\s*diff --git a/(.+?)\s+b/(.+?)$", re.MULTILINE
-)
-_DELETION_RE = re.compile(
-    r"^--- a/(\S+).*$\n^\+\+\+ /dev/null$", re.MULTILINE
-)
-
 
 
 class LocalChangesetFetcher(ChangesetFetcherPort):
@@ -64,18 +56,17 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
             repo_path, base_sha, pr_head_ref,
         )
 
-        file_paths: set[str] = set()
-
-        for match in _DIFF_FILE_PATH_RE.finditer(raw_diff):
-            new_path = match.group(2)
-            if new_path != "/dev/null":
-                file_paths.add(new_path)
-
-        for match in _DELETION_RE.finditer(raw_diff):
-            file_paths.discard(match.group(1))
+        diff = PullRequestDiff(
+            pr_id=pr_id,
+            head_sha=sha,
+            base_sha=CommitSha(base_sha),
+            diff_content=raw_diff,
+            commit_messages=commit_messages,
+            clone_path=repo_path,
+        )
 
         file_contents: dict[str, str] = {}
-        for file_path in sorted(file_paths):
+        for file_path in diff.changed_paths:
             try:
                 file_contents[file_path] = self._local_repo.read_file(
                     repo_path, file_path, ref=pr_head_ref,
@@ -85,12 +76,4 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
                     "Could not read file %s at ref %s", file_path, pr_head_ref,
                 )
 
-        return PullRequestDiff(
-            pr_id=pr_id,
-            head_sha=sha,
-            base_sha=CommitSha(base_sha),
-            diff_content=raw_diff,
-            file_contents=file_contents,
-            commit_messages=commit_messages,
-            clone_path=repo_path,
-        )
+        return replace(diff, file_contents=file_contents)

@@ -210,7 +210,7 @@ class PollingDaemon:
         allowed_names = {repo.full_name for repo in allowed}
         for repo in repos:
             if repo.full_name not in allowed_names:
-                logger.info(
+                logger.debug(
                     "Skipping repository not in allow list: %s", repo.full_name
                 )
         if not allowed:
@@ -218,6 +218,12 @@ class PollingDaemon:
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""
+        allow_list = (
+            ", ".join(sorted(self._repository_allow_list.allowed_repositories))
+            or "(all repositories)"
+        )
+        logger.info("Repository allow list: %s", allow_list)
+
         repos = self._repo_lister.list_repos()
 
         if not repos:

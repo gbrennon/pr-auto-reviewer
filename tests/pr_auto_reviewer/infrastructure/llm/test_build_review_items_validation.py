@@ -25,6 +25,31 @@ class TestBuildReviewItemsValidation:
         assert len(result) == 1
         assert result[0].file_path == "src/real.py"
 
+    def test_deleted_changed_file_is_kept_without_reading_worktree(
+        self, tmp_path: Path
+    ) -> None:
+        """Known deleted files do not crash validation when absent from the clone."""
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "deleted.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "The deleted module still needs review.",
+                "line": "1",
+                "current_code": "old_value = 1",
+                "suggested_fix": "old_value = 2",
+            }
+        ]
+
+        result, skip_reasons = ReviewItemFactory().create(
+            item_dicts, tmp_path, ["deleted.py"]
+        )
+
+        assert len(result) == 1
+        assert skip_reasons == []
+        assert result[0].file_path == "deleted.py"
+
+
     def test_hallucinated_paths_are_skipped(self, tmp_path: Path) -> None:
         """Items referencing non-existent files are dropped with warning."""
         item_dicts: list[dict[str, Any]] = [
