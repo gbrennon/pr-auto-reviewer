@@ -17,6 +17,9 @@ from pr_auto_reviewer.application.services.identifier_grounding_filter_service i
     IdentifierGroundingFilterService,
 )
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
+from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+    LlmUnavailableError,
+)
 from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
     AgentExchangeEvent,
 )
@@ -39,7 +42,7 @@ class PhaseManagerService(BriefNextPhasePort):
     The manager acts at the start of the review and between phases: it
     reads what the completed phases produced and hands the next phase a
     focused task so a phase never re-reviews findings another phase
-    owns. An unavailable or empty manager reply yields an empty brief so
+    owns. A non-fatal or empty manager reply yields an empty brief so
     the review proceeds unchanged.
     """
 
@@ -63,16 +66,8 @@ class PhaseManagerService(BriefNextPhasePort):
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
         messages = self._build_messages(next_phase, findings_summary)
-        try:
-            raw = self._chat_port.send(messages)
-        except Exception:
-            logger.warning(
-                "Manager briefing failed for phase %s; continuing without",
-                next_phase.phase_name,
-                exc_info=True,
-            )
-            return ""
-        brief = (raw or "").strip()
+        raw = self._send_brief(messages, next_phase.phase_name)
+        brief = raw.strip()
         if not brief:
             return ""
         evidence = self._grounding_evidence(next_phase, findings_summary)
@@ -92,6 +87,24 @@ class PhaseManagerService(BriefNextPhasePort):
         )
         return brief
 
+    def _send_brief(
+        self,
+        messages: list[ConversationMessage],
+        phase_name: str,
+    ) -> str:
+        """Send a manager brief, preserving fatal LLM availability errors."""
+        try:
+            return self._chat_port.send(messages)
+        except LlmUnavailableError:
+            raise
+        except Exception:
+            logger.warning(
+                "Manager briefing failed for phase %s; continuing without",
+                phase_name,
+                exc_info=True,
+            )
+            return ""
+
     def _grounding_evidence(
         self, next_phase: ReviewPhase, findings_summary: str,
     ) -> str:
@@ -102,11 +115,10 @@ class PhaseManagerService(BriefNextPhasePort):
             role_text = (
                 f"{peer.role}\n{peer.responsibility}\n{peer.behavior}"
             )
-        return "\n".join([
-            findings_summary,
-            role_text,
-            next_phase.system_prompt,
-        ])
+        return (
+            f"{findings_summary}\n{role_text}\n"
+            f"{next_phase.system_prompt}"
+        )
 
     def _publish_exchange(
         self,

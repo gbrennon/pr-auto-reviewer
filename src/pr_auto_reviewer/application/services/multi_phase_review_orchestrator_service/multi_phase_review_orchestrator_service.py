@@ -3,8 +3,12 @@ from dataclasses import replace
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.domain.value_objects.review_execution_context import (
+    ReviewExecutionContext,
+)
 
 from ._shared import *
+from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
 from .phase_run_outcome import _PhaseRunOutcome
 
 
@@ -59,6 +63,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             base_sha=command.base_sha,
             existing_item_ids=command.existing_item_ids,
             review_session=command.review_session,
+            prior_items=getattr(command, "prior_items", []),
         )
 
     def _run_phases_full_retry(
@@ -70,6 +75,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session: str,
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        prior_items: list[ReviewItem] | None = None,
     ) -> CodeReview:
         """Orchestrate all phases with full-review retry and feedback loop."""
         repo_name, pr_id_str = self._extract_repo_and_pr(repo_path)
@@ -88,11 +94,18 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             attempt_items: list[ReviewItem] = []
             try:
                 outcome = self._run_phases(
-                    plan, repo_path, changed_files, model, attempt_items,
-                    base_sha=base_sha,
-                    existing_item_ids=existing_item_ids,
-                    pr_identifier_service=f"{repo_name}/{pr_id_str}",
-                    review_session=review_session,
+                    plan,
+                    accumulated_items=attempt_items,
+                    context=ReviewExecutionContext(
+                        repo_path=repo_path,
+                        changed_files=tuple(changed_files),
+                        model=model,
+                        base_sha=base_sha,
+                        existing_item_ids=existing_item_ids,
+                        pr_identifier_service=f"{repo_name}/{pr_id_str}",
+                        review_session=review_session,
+                        prior_items=tuple(prior_items or []),
+                    ),
                 )
                 result = outcome.review
                 dropped_findings = outcome.dropped_findings
@@ -150,6 +163,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                             model_used=model,
                             repo_name=repo_name,
                             pr_id=pr_id_str,
+                            repo_path=repo_path,
+                            changed_files=changed_files,
                         )
                     ),
                 )
@@ -212,14 +227,16 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             try:
                 outcome = self._run_phases(
                     plan,
-                    repo_path,
-                    changed_files,
-                    model,
                     initial_feedback=context,
-                    base_sha=base_sha,
-                    existing_item_ids=existing_item_ids,
-                    pr_identifier_service=pr_identifier_service,
-                    review_session=review_session,
+                    context=ReviewExecutionContext(
+                        repo_path=repo_path,
+                        changed_files=tuple(changed_files),
+                        model=model,
+                        base_sha=base_sha,
+                        existing_item_ids=existing_item_ids,
+                        pr_identifier_service=pr_identifier_service,
+                        review_session=review_session,
+                    ),
                 )
                 result = outcome.review
             except LlmUnavailableError:
@@ -340,17 +357,54 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
     def _run_phases(
         self,
         plan: ReviewPlan,
-        repo_path: Path,
-        changed_files: list[str],
-        model: str,
+        repo_path: Path | None = None,
+        changed_files: list[str] | None = None,
+        model: str = "",
         accumulated_items: list[ReviewItem] | None = None,
         initial_feedback: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
         pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
+        prior_items: list[ReviewItem] | None = None,
+        context: ReviewExecutionContext | None = None,
+    ) -> _PhaseRunOutcome:
+        """Run phases with a shared context or legacy arguments."""
+        if context is None and repo_path is None:
+            raise ValueError("repo_path is required without a review context")
+        execution_context = context or ReviewExecutionContext(
+            repo_path=repo_path or Path(),
+            changed_files=tuple(changed_files or []),
+            model=model,
+            base_sha=base_sha,
+            existing_item_ids=existing_item_ids,
+            pr_identifier_service=pr_identifier_service,
+            review_session=review_session,
+            prior_items=tuple(prior_items or []),
+        )
+        return self._run_phases_with_context(
+            plan,
+            execution_context,
+            accumulated_items=accumulated_items,
+            initial_feedback=initial_feedback,
+        )
+
+    def _run_phases_with_context(
+        self,
+        plan: ReviewPlan,
+        context: ReviewExecutionContext,
+        accumulated_items: list[ReviewItem] | None = None,
+        initial_feedback: str = "",
     ) -> _PhaseRunOutcome:
         """Orchestrate all review phases, merging results."""
+        repo_path = context.repo_path
+        changed_files = list(context.changed_files)
+        model = context.model
+        existing_item_ids = context.existing_item_ids
+        pr_identifier_service = context.pr_identifier_service
+        review_session = context.review_session
+        base_sha = context.base_sha
+        prior_items = list(context.prior_items)
         all_items: list[ReviewItem] = []
         last_phase_result: PhaseResult | None = None
         phase_results: dict[str, PhaseResult] = {}
@@ -489,27 +543,34 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     reason = last_phase_result.llm_reason
                 if last_phase_result.llm_summary:
                     summary = last_phase_result.llm_summary
-                for s in suggestions_source.llm_suggestions:
-                    suggestions.append(ReviewItem(
-                        severity=ItemSeverity.INFO,
-                        category=IssueCategory.GENERAL,
-                        file_path=s.get("file", ""),
-                        description=s.get("description", ""),
-                        line=s.get("line", ""),
-                        id=s.get("id", ""),
-                        current_code=s.get("current_code", ""),
-                        suggested_fix=s.get("suggested_fix", ""),
-                    ))
+                if suggestions_source is not None:
+                    for s in suggestions_source.llm_suggestions:
+                        normalized_path = ReviewItemFactory._normalize_file_path(
+                            s.get("file", ""), repo_path, changed_files,
+                        ) or ""
+                        suggestions.append(ReviewItem(
+                            severity=ItemSeverity.INFO,
+                            category=IssueCategory.GENERAL,
+                            file_path=normalized_path,
+                            description=s.get("description", ""),
+                            line=s.get("line", ""),
+                            id=s.get("id", ""),
+                            current_code=s.get("current_code", ""),
+                            suggested_fix=s.get("suggested_fix", ""),
+                        ))
                 praise_entries: list[dict[str, str]] = []
                 for pr in phase_results.values():
                     for p in pr.llm_praise:
                         if p not in praise_entries:
                             praise_entries.append(p)
                 for p in praise_entries:
+                    normalized_path = ReviewItemFactory._normalize_file_path(
+                        p.get("file", ""), repo_path, changed_files,
+                    ) or ""
                     praise_list.append(ReviewItem(
                         severity=ItemSeverity.INFO,
                         category=IssueCategory.GENERAL,
-                        file_path=p.get("file", ""),
+                        file_path=normalized_path,
                         description=p.get("description", ""),
                         line="",
                         id="",
@@ -574,10 +635,12 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 phase_result=last_phase_result,
                 suggestions_phase_result=suggestions_source,
                 model_used=model,
+                repo_path=repo_path,
+                changed_files=changed_files,
             )
         )
         items_before_verification = len(code_review.items)
-        if code_review.items:
+        if code_review.items or prior_items:
             verified_items = self._command_bus.dispatch(
                 VerifyFindingsCommand(
                     items=code_review.items,
@@ -585,6 +648,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     changed_files=changed_files,
                     base_sha=base_sha,
                     review_session=review_session,
+                    prior_items=prior_items or [],
                 )
             )
             if (
@@ -596,7 +660,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 )
         if (
             code_review.verdict is ReviewVerdict.APPROVED
-            and any(item.is_blocking for item in code_review.items)
+            and any(item.is_open_blocking for item in code_review.items)
         ):
             code_review = replace(
                 code_review,
@@ -646,7 +710,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             target = blocking[0] if blocking else review_items[0]
             desc = target.description.strip()
             sev = str(target.severity).lower()
-            file_path = target.file_path.strip()
+            file_path = (target.file_path or "").strip()
             file_str = f" in {file_path}" if file_path else ""
             reason = f"Identified {sev} issue{file_str}: {desc}" if desc else "Findings verified against source code."
             cat_list = sorted({str(item.category) for item in review_items if item.category})

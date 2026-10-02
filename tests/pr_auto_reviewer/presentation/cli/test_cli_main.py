@@ -1,6 +1,7 @@
 """End-to-end tests for CLI entry point (service commands)."""
 
-from unittest.mock import patch
+import os
+from unittest.mock import call, patch
 
 import pytest
 
@@ -24,13 +25,23 @@ class TestCliServiceCommands:
     ) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", command]),
+            patch.dict("os.environ", {"SSH_AUTH_SOCK": "/run/user/1000/agent.sock"}),
             patch("subprocess.run") as mock_run,
         ):
             main()
 
-        mock_run.assert_called_once_with(
-            ["systemctl", "--user", expected_action, SERVICE_NAME], check=False
+        expected_calls = []
+        if command in {"start", "restart"}:
+            expected_calls.append(
+                call(
+                    ["systemctl", "--user", "import-environment", "SSH_AUTH_SOCK"],
+                    check=False,
+                )
+            )
+        expected_calls.append(
+            call(["systemctl", "--user", expected_action, SERVICE_NAME], check=False)
         )
+        assert mock_run.call_args_list == expected_calls
 
     def test_logs_command_dispatches_journalctl(self) -> None:
         with (
@@ -48,3 +59,17 @@ class TestCliServiceCommands:
             main()
 
         assert exc_info.value.code == 0
+
+    def test_watch_mode_clears_stale_once_flag(self) -> None:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("pr_auto_reviewer.cli.bootstrap", return_value=object()),
+            patch("pr_auto_reviewer.cli.run_daemon"),
+            patch("sys.argv", ["pr-auto-reviewer", "watch-prs", "--once"]),
+        ):
+            main()
+            assert os.environ["RUN_ONCE"] == "true"
+
+            with patch("sys.argv", ["pr-auto-reviewer", "watch-prs"]):
+                main()
+            assert os.environ["RUN_ONCE"] == "false"

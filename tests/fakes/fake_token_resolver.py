@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from pr_auto_reviewer.infrastructure.client.token_resolver.token_resolver import (
+    TokenResolver,
+)
 
-class FakeTokenResolver:
+
+class FakeTokenResolver(TokenResolver):
     """Lightweight fake TokenResolver for tracking calls in tests."""
 
     def __init__(self, token_map: dict[str, str] | None = None) -> None:

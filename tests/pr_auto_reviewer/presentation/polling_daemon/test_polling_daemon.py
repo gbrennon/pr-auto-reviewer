@@ -1,5 +1,6 @@
 """Tests for PollingDaemon."""
 
+import logging
 import signal
 import threading
 from unittest.mock import MagicMock, patch
@@ -34,6 +35,7 @@ from pr_auto_reviewer.presentation.ports import (
     RepoInfo,
     RepoListerPort,
 )
+from tests.fakes.fake_notifier import FakeNotifier
 
 
 class RecordingCommandService(ProcessIssueCommandsPort):
@@ -71,8 +73,10 @@ class PullRequestRepositoryFake(PullRequestRepositoryPort):
 class MockRepoLister(RepoListerPort):
     def __init__(self, repos: list[RepoInfo]) -> None:
         self._repos = repos
+        self.list_calls = 0
 
     def list_repos(self) -> list[RepoInfo]:
+        self.list_calls += 1
         return self._repos
 
 class MockPrLister(PrListerPort):
@@ -103,8 +107,9 @@ class RecordingReviewService(ReviewPullRequestPort):
     def __init__(self) -> None:
         self.executed_commands: list[ReviewPullRequestCommand] = []
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         self.executed_commands.append(command)
+        return True
 
 class PerRepoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
@@ -147,6 +152,115 @@ class TestPollingDaemon:
             pr_lister=pr_lister,
             review_service=mock_review_service,
         )
+    def test_continuous_mode_runs_next_cycle_after_first_sleep(
+        self, mock_review_service: MagicMock
+    ) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=False,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+        )
+
+        with (
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.time.sleep",
+                side_effect=[None, KeyboardInterrupt],
+            ),
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
+            ) as mock_logger,
+        ):
+            daemon.start()
+
+        assert repo_lister.list_calls == 2
+        mock_logger.info.assert_any_call("PollingDaemon stopped after 2 cycle(s)")
+
+    def test_one_shot_mode_runs_exactly_one_cycle(
+        self, mock_review_service: MagicMock
+    ) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+        )
+
+        with (
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.time.sleep"
+            ) as mock_sleep,
+            patch(
+                "pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger"
+            ) as mock_logger,
+        ):
+            daemon.start()
+
+        assert repo_lister.list_calls == 1
+        mock_sleep.assert_not_called()
+        mock_logger.info.assert_any_call("PollingDaemon stopped after 1 cycle(s)")
+
+
+    def test_does_not_notify_success_when_review_is_skipped(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = False
+        pull_request = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=7),
+            head_sha=CommitSha("abc123"),
+            title="Already reviewed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert notifier.successes == []
+
+    def test_notifies_success_after_review_completion(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        mock_review_service.execute.return_value = True
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        pull_request = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Completed fix",
+        )
+        notifier = FakeNotifier()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            notifier=notifier,
+        )
+
+        daemon._process_pr(pull_request)
+
+        assert len(notifier.successes) == 1
+        context, detail = notifier.successes[0]
+        assert context.startswith("Review complete for owner/repo1 (")
+        assert context.endswith(")")
+        assert detail == "PR #7"
 
     def test_processes_recent_closed_pr_commands(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
@@ -549,6 +663,45 @@ class TestPollingDaemon:
         ]
         assert handled_numbers == [1, 2]
 
+    def test_handles_review_verdict_error_gracefully(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+            ReviewVerdictError,
+        )
+
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+            is_draft=False,
+        )
+        repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
+        pr_lister = MockPrLister([open_pr])
+        mock_review_service.execute.side_effect = ReviewVerdictError(
+            "Review remained inconclusive after 5 attempts."
+        )
+
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=pr_lister,
+            review_service=mock_review_service,
+        )
+
+        with patch("pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger") as mock_logger:
+            daemon.start()
+            inconclusive_warnings = [
+                c for c in mock_logger.warning.call_args_list
+                if "Review inconclusive for PR #%d" in str(c)
+            ]
+            assert len(inconclusive_warnings) == 1
+            unexpected_calls = [
+                c for c in mock_logger.exception.call_args_list
+                if "Unexpected error processing PR #1" in str(c)
+            ]
+            assert len(unexpected_calls) == 0
+
     def test_signal_handler_raises_keyboard_interrupt(self, daemon):
         daemon._setup_signal_handlers()
         with pytest.raises(KeyboardInterrupt):
@@ -622,6 +775,70 @@ class TestPollingDaemon:
             for command in review_service.executed_commands
         ]
         assert reviewed_repositories == ["owner/allowed"]
+
+    def test_allow_list_skips_are_debug_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=PerRepoPrLister(),
+            review_service=RecordingReviewService(),
+        )
+        repos = [RepoInfo("owner/allowed"), RepoInfo("owner/other")]
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="pr_auto_reviewer.presentation.polling_daemon.polling_daemon",
+        ):
+            daemon._allowed_repos(repos)
+
+
+        assert not any(
+            "Skipping repository not in allow list" in record.message
+            for record in caplog.records
+        )
+
+        caplog.clear()
+        with caplog.at_level(
+            logging.DEBUG,
+            logger="pr_auto_reviewer.presentation.polling_daemon.polling_daemon",
+        ):
+            daemon._allowed_repos(repos)
+
+        assert any(
+            record.levelno == logging.DEBUG
+            and "Skipping repository not in allow list" in record.message
+            for record in caplog.records
+        )
+
+
+    def test_cycle_logs_allow_list_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/allowed")]),
+            pr_lister=PerRepoPrLister(),
+            review_service=RecordingReviewService(),
+        )
+
+        with caplog.at_level(logging.INFO):
+            daemon._run_cycle()
+
+        assert [
+            record.message
+            for record in caplog.records
+            if "Repository allow list:" in record.message
+        ] == ["Repository allow list: owner/allowed"]
 
     def test_empty_allow_list_reviews_every_repository(self) -> None:
         config = PollingDaemonConfig(

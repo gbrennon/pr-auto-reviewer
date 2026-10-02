@@ -2,6 +2,7 @@
 
 import json
 
+from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 
 
@@ -35,7 +36,7 @@ class ReviewJsonSerializer:
             if value not in ("", None)
         }
 
-    def _convert(self, item: object) -> object:
+    def _convert(self, item: ReviewItem) -> dict[str, object]:
         """Shape a review artifact into its JSON-safe dictionary form."""
         return self._compact({
             "severity": item.severity.value,

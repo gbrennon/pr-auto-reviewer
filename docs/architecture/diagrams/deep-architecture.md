@@ -53,7 +53,7 @@ Visual and structural reference for the pr-auto-reviewer codebase.
 │  │ Git Platform │ │    LLM       │ │ Persistence│ │ Fragments│  │
 │  │  Adapters    │ │  Adapters    │ │ Adapters   │ │ Adapters │  │
 │  ├──────────────┤ ├──────────────┤ ├────────────┤ ├──────────┤  │
-│  │ • ForgejoPR  │ │ • Ollama     │ │ • JSONFile │ │ • FS     │  │
+│  │ • ForgejoPR  │ │ • OpenAI-Compat│ │ • JSONFile │ │ • FS     │  │
 │  │   Lister     │ │   Adapter    │ │   PR Repo  │ │   Repo   │  │
 │  │ • GitHubPR   │ │ • LlamaCpp   │ │ • NullPR   │ │ • Jinja2 │  │
 │  │   Lister     │ │   Adapter    │ │   Repo     │ │   Render │  │
@@ -227,7 +227,7 @@ Visual and structural reference for the pr-auto-reviewer codebase.
     │ LLM        │  │ Parse      │  │ Tools:     │
     │ Chat       │─▶│ Response   │─▶│ read_file  │
     │ Adapter    │  │ (TurnParser)   search_codebase│
-    │ (Ollama)   │  │            │  │ list_dir   │
+    │ (OpenAI-compatible)   │  │            │  │ list_dir   │
     └────────────┘  └────────────┘  │ run_git    │
            │                        │ get_files  │
            │                        └────────────┘
@@ -293,13 +293,13 @@ GitPlatformHttpClient (base_url: /api/v1)
     └── GET /repos/{owner}/{repo}/issues/{pr}/comments
 ```
 
-### 5.2 LLM Adapter (Ollama)
+### 5.2 OpenAI-Compatible LLM Adapter
 
 ```
 AgentConversationService
     │
     ▼
-OllamaExploratoryChatAdapter / LlmAgentAdapter
+LlmAgentAdapter
     │
     ├── POST /api/chat
     │     { model, messages: [{role, content}], stream: true, tools }
@@ -312,7 +312,7 @@ OllamaExploratoryChatAdapter / LlmAgentAdapter
 └─────────────────────────────────────┘
     │
     ▼
-OllamaStreamingChatImpl (handles tool loop)
+OpenAiCompatibleChatClient (handles tool loop)
     │
     ├── Tool calls → ExplorationToolService
     │     • read_file(path)
@@ -453,6 +453,6 @@ Tool results injected back → continue conversation
 | ForgejoReviewPublisher | `src/pr_auto_reviewer/infrastructure/forgejo/forgejo_review_publisher.py` |
 | GithubReviewPublisher | `src/pr_auto_reviewer/infrastructure/github/github_review_publisher.py` |
 | ReviewPublisherProcessor | `src/pr_auto_reviewer/infrastructure/review_publishers/review_publishing_service.py` |
-| OllamaAdapter | `src/pr_auto_reviewer/infrastructure/llm/ollama/ollama_llm_adapter.py` |
+| OpenAICompatibleAdapter | `src/pr_auto_reviewer/infrastructure/llm/openai_compatible_chat_client.py` |
 | LocalChangesetFetcher | `src/pr_auto_reviewer/infrastructure/local_repository/local_changeset_fetcher.py` |
 | ConfigLoader | `src/pr_auto_reviewer/infrastructure/config/config.py` |

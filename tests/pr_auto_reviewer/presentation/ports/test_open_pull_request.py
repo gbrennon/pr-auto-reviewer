@@ -51,4 +51,4 @@ class TestOpenPullRequest:
         )
 
         with pytest.raises(AttributeError):
-            pr.is_draft = True
+            setattr(pr, "is_draft", True)

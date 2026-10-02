@@ -34,9 +34,10 @@ class FakeReviewService:
 
     executed_commands: list[ReviewPullRequestCommand]
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         """Accept a review command without external services."""
         self.executed_commands.append(command)
+        return True
 
 
 @dataclass

@@ -72,10 +72,12 @@ class FakeResponseParser:
     def extract_verdict_md(self, raw_text: str) -> ReviewVerdict:
         return self._verdict
 
-    def parse_prose_recommendations(self, raw_text: str) -> list[dict[str, Any]]:
+    def parse_prose_recommendations(
+        self, content: str,
+    ) -> list[dict[str, str]]:
         return self._prose_suggestions
 
-    def parse_prose_praise(self, raw_text: str) -> list[dict[str, Any]]:
+    def parse_prose_praise(self, content: str) -> list[dict[str, str]]:
         return self._prose_praise
 
     def normalize_item_dict(self, item: dict[str, Any]) -> dict[str, Any]:

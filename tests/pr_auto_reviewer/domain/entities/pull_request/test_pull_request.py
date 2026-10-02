@@ -201,7 +201,7 @@ class TestPullRequest:
             head_sha=CommitSha(value="abc"),
         )
         with pytest.raises(FrozenInstanceError):
-            pr.id = PullRequestId(repository="x", number=2)
+            setattr(pr, "id", PullRequestId(repository="x", number=2))
 
     def test_immutable_field_reassignment(self) -> None:
         pr = PullRequest(
@@ -210,7 +210,7 @@ class TestPullRequest:
             head_sha=CommitSha(value="abc"),
         )
         with pytest.raises(FrozenInstanceError):
-            pr.head_sha = CommitSha(value="def")
+            setattr(pr, "head_sha", CommitSha(value="def"))
 
     def test_unresolved_blocking_ids_defaults_to_empty(self) -> None:
         pr = PullRequest(
@@ -219,6 +219,31 @@ class TestPullRequest:
             head_sha=CommitSha(value="abc"),
         )
         assert pr.unresolved_blocking_ids == frozenset()
+
+    def test_record_created_issue_items_adds_ids(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+
+        updated = pr.record_created_issue_items("suggestion-1", "suggestion-2")
+
+        assert updated.created_issue_item_ids == frozenset(
+            {"suggestion-1", "suggestion-2"}
+        )
+
+    def test_record_created_issue_items_is_idempotent(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+
+        updated = pr.record_created_issue_items("suggestion-1")
+        repeated = updated.record_created_issue_items("suggestion-1")
+
+        assert repeated.created_issue_item_ids == frozenset({"suggestion-1"})
 
     def test_with_unresolved_blocking_adds_ids(self) -> None:
         pr = PullRequest(

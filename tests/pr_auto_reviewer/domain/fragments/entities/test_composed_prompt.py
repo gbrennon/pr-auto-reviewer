@@ -1,6 +1,7 @@
 """Unit tests for ComposedPrompt value object."""
 
 import pytest
+from typing import Any, cast
 
 from pr_auto_reviewer.domain.fragments.entities.composed_prompt import ComposedPrompt
 
@@ -29,7 +30,7 @@ class TestComposedPrompt:
         )
 
         with pytest.raises(AttributeError):
-            prompt.content = "new content"
+            setattr(prompt, "content", "new content")
 
     @pytest.mark.parametrize(
         ("field", "value", "expected_msg"),
@@ -52,7 +53,7 @@ class TestComposedPrompt:
         kwargs[field] = value
 
         with pytest.raises(ValueError, match=expected_msg):
-            ComposedPrompt(**kwargs)
+            ComposedPrompt(**cast(Any, kwargs))
 
     def test_allows_zero_tokens(self) -> None:
         """ComposedPrompt should allow zero tokens (empty prompt edge case)."""

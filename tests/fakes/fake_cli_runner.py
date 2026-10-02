@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 
 class FakeCliRunner:
@@ -13,8 +14,8 @@ class FakeCliRunner:
         self.run_calls: list[list[str]] = []
         self._review_result: int = 0
 
-    def __init_subclass__(**kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super(FakeCliRunner, cls).__init_subclass__(**kwargs)
 
     def run(self, argv: list[str] | None = None) -> int:
         """Track run call without executing CLI."""

@@ -85,6 +85,29 @@ class TestLocalChangesetFetcher:
         assert "src/bar.py" in result.file_contents
         assert len(repo.read_file_calls) == 2
 
+
+    def test_fetch_retains_deletion_only_path_when_file_is_unreadable(self) -> None:
+        """Deleted paths remain changed paths even when their content is unavailable."""
+        repo = self._make_repo()
+        repo.compute_diff_return = (
+            "diff --git a/deleted.py b/deleted.py\n"
+            "deleted file mode 100644\n"
+            "--- a/deleted.py\n"
+            "+++ /dev/null\n"
+            "@@ -1 +0,0 @@\n"
+            "-print('gone')\n"
+        )
+        repo.read_file_return = RuntimeError("deleted file")
+        pr_id = PullRequestId("test-org/test-repo", 42)
+        sha = CommitSha("def456")
+
+        result = LocalChangesetFetcher(
+            local_repository=repo,
+            url_resolver=FakeCloneUrlResolver("codeberg"),
+        ).fetch(pr_id, sha)
+
+        assert result.file_contents == {}
+        assert result.changed_paths == ["deleted.py"]
     def test_fetch_skips_unreadable_files(self) -> None:
         """Files that raise RuntimeError on read are skipped with a warning."""
         repo = self._make_repo()

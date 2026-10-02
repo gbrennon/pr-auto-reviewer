@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -23,7 +23,7 @@ class PromptFragment:
     language: str | None
     priority: int
     category: str
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate and initialise defaults after dataclass construction."""
@@ -31,8 +31,6 @@ class PromptFragment:
             raise ValueError("id cannot be empty")
         if self.priority < 0:
             raise ValueError("priority must be non-negative")
-        if self.metadata is None:
-            object.__setattr__(self, "metadata", {})
 
     def __eq__(self, other: object) -> bool:
         """Equality based on ID only (value-object identity)."""

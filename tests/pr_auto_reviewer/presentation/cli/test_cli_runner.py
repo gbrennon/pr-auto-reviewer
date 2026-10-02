@@ -67,6 +67,15 @@ class TestCliRunner:
         """Creates CliRunner with all dependencies."""
         assert runner is not None
 
+    @pytest.mark.parametrize(
+        ("duration_seconds", "expected"),
+        [(0, "0m 00s"), (134.9, "2m 14s"), (3600, "60m 00s")],
+    )
+    def test_format_duration(
+        self, duration_seconds: float, expected: str
+    ) -> None:
+        assert CliRunner._format_duration(duration_seconds) == expected
+
     def test_run_routes_to_review(self, runner: CliRunner) -> None:
         """Routes review command correctly."""
         with patch.object(runner, "_run_review", return_value=0) as mock:

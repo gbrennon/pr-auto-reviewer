@@ -132,5 +132,6 @@ class TestChangesRequestedMultilang:
                            "json_dose_record_repository.rs")
         assert r.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert len(r.items) == 1
+        assert r.items[0].file_path is not None
         assert "src/infrastructure" in r.items[0].file_path
 

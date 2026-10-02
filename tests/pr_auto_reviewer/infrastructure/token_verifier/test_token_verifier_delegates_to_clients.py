@@ -27,7 +27,7 @@ class TestTokenVerifierDelegatesToClients:
 
         verifier.verify(pr_id)
 
-        owner_preflight = owner._preflight_verifier
+        owner_preflight = getattr(owner, "_preflight_verifier")
         assert len(owner_preflight.calls) == 1
         assert owner_preflight.calls[0]["role"] == "owner"
 
@@ -40,7 +40,7 @@ class TestTokenVerifierDelegatesToClients:
 
         verifier.verify(pr_id)
 
-        reviewer_preflight = reviewer._preflight_verifier
+        reviewer_preflight = getattr(reviewer, "_preflight_verifier")
         assert len(reviewer_preflight.calls) == 1
         assert reviewer_preflight.calls[0]["role"] == "reviewer"
 

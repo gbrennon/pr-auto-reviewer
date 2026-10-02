@@ -16,11 +16,10 @@ class TestGitCredentials:
         assert creds.username == "alice"
         assert creds.secret == "s3cr3t"
         with pytest.raises(FrozenInstanceError):
-            creds.username = "mallory"
+            setattr(creds, "username", "mallory")
 
     def test_protocol_is_normalized_to_lowercase(self) -> None:
-        creds = GitCredentials(protocol="SSH", username="alice")  # type: ignore[arg-type]
-
+        creds = GitCredentials(protocol="SSH", username="alice")
         assert creds.protocol == "ssh"
 
     def test_rejects_unsupported_protocol(self) -> None:

@@ -14,7 +14,9 @@ from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
 from pr_auto_reviewer.infrastructure.config.app_paths import (
     AppPaths,
 )
-from pr_auto_reviewer.infrastructure.config.config_builder import ConfigBuilder
+from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+    ConfigBuilderComposition,
+)
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.environment_detector import (
     EnvironmentDetector,
@@ -26,7 +28,6 @@ logger = logging.getLogger(__name__)
 _COMMAND_LINE_KEYS = {
     "PLATFORM_MODE", "FORGEJO_MODE",
     "REVIEW_OUTPUT", "DEBUG", "PROMPT_MODE",
-    "LLM_BACKEND", "LLM_MODE",
     "LLM_HOST", "LLM_MODEL",
     "POLL_INTERVAL", "MAX_PROMPT_TOKENS",
     "MAX_FILE_CHARS", "MAX_FILES", "MAX_STRUCTURE_LINES",
@@ -68,12 +69,7 @@ class ConfigLoader:
 
     def __init__(self) -> None:
         self._detector = EnvironmentDetector()
-        self._builder = ConfigBuilder()
-
-    def _merge_command_line_env(self, values: dict[str, str]) -> None:
-        for key in _COMMAND_LINE_KEYS:
-            if key in os.environ:
-                values[key] = os.environ[key]
+        self._builder = ConfigBuilderComposition().compose()
 
     def load(self) -> Config:
         repo_root = RepoRoot.path()
@@ -87,9 +83,26 @@ class ConfigLoader:
 
         return self._load_development(user_config_path, repo_env_path, env)
 
+    def _merge_command_line_env(self, values: dict[str, str]) -> None:
+        for key in _COMMAND_LINE_KEYS:
+            if key in os.environ:
+                values[key] = os.environ[key]
+
+    def _load_values(self, path: Path) -> dict[str, str]:
+        return {
+            key: value
+            for key, value in dotenv_values(path).items()
+            if value is not None
+        }
+
+    def _apply_runtime_environment(self, values: dict[str, str]) -> None:
+        bundle = values.get("REQUESTS_CA_BUNDLE", "").strip()
+        if bundle:
+            os.environ["REQUESTS_CA_BUNDLE"] = bundle
+
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
-            values = dotenv_values(config_path)
+            values = self._load_values(Path(config_path))
             logger.info("Loading production config from %s", config_path)
         else:
             logger.warning(
@@ -98,8 +111,10 @@ class ConfigLoader:
             )
             values = {}
         self._merge_command_line_env(values)
+        self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
+
         advisor_max_blocks = int(values.pop("ADVISOR_MAX_BLOCKS", 2))
         review_max_conversations = int(
             values.pop("REVIEW_MAX_CONVERSATIONS", 48)
@@ -131,14 +146,14 @@ class ConfigLoader:
             logger.info(
                 "Loading dev user config from %s", user_config_path
             )
-            values.update(dotenv_values(user_cfg))
+            values.update(self._load_values(user_cfg))
 
         if repo_env_path.exists():
             logger.info("Loading dev .env from %s", repo_env_path)
-            values.update(dotenv_values(repo_env_path))
+            values.update(self._load_values(repo_env_path))
 
         self._merge_command_line_env(values)
-
+        self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
         llm_max_turns = int(values.pop("LLM_MAX_TURNS", 10))
         advisor_max_blocks = int(values.pop("ADVISOR_MAX_BLOCKS", 2))
@@ -161,7 +176,6 @@ class ConfigLoader:
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
         )
-
 
 def load_config() -> Config:
     return ConfigLoader().load()

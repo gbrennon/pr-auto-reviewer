@@ -123,6 +123,27 @@ class TestReviewBodyRendererFields:
         assert "tmp code" in body
         assert "clean code" in body
 
+    def test_renders_numeric_suggestion_id_as_literal_text(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Review reason",
+            summary="Review summary",
+            suggestions=[
+                ReviewItem(
+                    id="329301",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path="src/example.rs",
+                    description="Suggestion description",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert "`329301`. src/example.rs" in body
+
     def test_renders_all_nested_praise_fields(self) -> None:
         body = _RENDERER.render(_full_review())
         assert "praised design" in body
@@ -130,16 +151,91 @@ class TestReviewBodyRendererFields:
 
     def test_items_are_identified_by_id_not_number(self) -> None:
         body = _RENDERER.render(_full_review())
-        assert "\ni1. [bug] [CRITICAL] a/b.py:42" in body
+        assert "\n`i1`. [OPEN] [bug] [CRITICAL] a/b.py:42" in body
         assert "number" not in body
 
     def test_each_item_is_rendered_under_its_own_non_empty_id(self) -> None:
         body = _RENDERER.render(_multi_item_review())
-        assert "\ni1. [" in body
-        assert "\ni2. [" in body
+        assert "\n`i1`. [" in body
+        assert "\n`i2`. [" in body
         assert "\n. [" not in body
 
     def test_no_default_values_in_rendered_body(self) -> None:
         body = _RENDERER.render(_full_review())
         for default in ("No issues found.", "[]"):
             assert default not in body
+
+    def test_renders_repository_relative_paths_for_all_finding_types(
+        self,
+    ) -> None:
+        relative_path = "src/main.py"
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Review reason",
+            summary="Review summary",
+            items=[
+                ReviewItem(
+                    id="i1",
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.BUG,
+                    file_path=relative_path,
+                    description="Issue description",
+                    line="1",
+                ),
+            ],
+            suggestions=[
+                ReviewItem(
+                    id="s1",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=relative_path,
+                    description="Suggestion description",
+                ),
+            ],
+            praise=[
+                ReviewItem(
+                    id="p1",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=relative_path,
+                    description="Praise description",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert body.count(relative_path) == 3
+        assert "/cache/clones/repo/" not in body
+        assert "/src/main.py" not in body
+
+    def test_marks_each_review_item_with_its_status(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Review reason",
+            summary="Review summary",
+            items=[
+                ReviewItem(
+                    id="open-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/open.py",
+                    description="Open finding",
+                ),
+                ReviewItem(
+                    id="resolved-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/resolved.py",
+                    description="Resolved finding",
+                    status="resolved",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert "`open-1`. [OPEN]" in body
+        assert "`resolved-1`. [RESOLVED]" in body

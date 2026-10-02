@@ -15,3 +15,4 @@ class ToolExecutionPort(Protocol):
 
     def execute_tool(self, tool_call: ToolCall) -> ToolResult:
         """Execute *tool_call* and return the result."""
+        ...

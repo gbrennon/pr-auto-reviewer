@@ -44,6 +44,18 @@ DEFAULT_GITHUB = {
 
 class TestWirePlatformClients:
     """Behaviour of wire_platform_clients(config) -> PlatformClients."""
+    @staticmethod
+    def _token_resolver(client: GitPlatformHttpClient) -> TokenResolver:
+        resolver = getattr(client, "_token_resolver", None)
+        assert isinstance(resolver, TokenResolver)
+        return resolver
+
+    @staticmethod
+    def _preflight_verifier(client: GitPlatformHttpClient) -> PreflightVerifier:
+        verifier = getattr(client, "_preflight_verifier", None)
+        assert isinstance(verifier, PreflightVerifier)
+        return verifier
+
 
     # ── single-platform: forgejo ──────────────────────────────────────────
 
@@ -52,7 +64,9 @@ class TestWirePlatformClients:
         return Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            **DEFAULT_FORGEJO,
+            forgejo_owner_token="fj-own",
+            forgejo_reviewer_token="fj-rev",
+            forgejo_reviewer_username="fj-bot",
         )
 
     def test_forgejo_returns_platform_clients(self, forgejo_config: Config) -> None:
@@ -153,8 +167,7 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(forgejo_config)
 
-        pv = result.http_client._preflight_verifier
-        assert isinstance(pv, PreflightVerifier)
+        pv = self._preflight_verifier(result.http_client)
         assert pv._platform == "forgejo"
 
     def test_forgejo_preflight_uses_forgejo_api_url_http_client(
@@ -163,7 +176,7 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(forgejo_config)
 
-        pv = result.http_client._preflight_verifier
+        pv = self._preflight_verifier(result.http_client)
         assert isinstance(pv._http, RequestsHttpClient)
         assert pv._http._base_url == "https://codeberg.org/api/v1"
 
@@ -188,7 +201,9 @@ class TestWirePlatformClients:
         return Config(
             env="test",
             platform_mode=GitProvider.GITHUB,
-            **DEFAULT_GITHUB,
+            github_owner_token="gh-own",
+            github_reviewer_token="gh-rev",
+            github_reviewer_username="gh-bot",
         )
 
     def test_github_returns_platform_clients(self, github_config: Config) -> None:
@@ -213,12 +228,13 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(github_config)
 
-        _token, source = result.http_client._token_resolver.resolve_source(
+        resolver = self._token_resolver(result.http_client)
+        _token, source = resolver.resolve_source(
             "OWNER",
             "test-org/repo",
         )
         assert source.startswith("GITHUB_")
-        reviewer_token = result.http_client._token_resolver.resolve(
+        reviewer_token = resolver.resolve(
             "reviewer",
             "test-org/repo",
         )
@@ -230,7 +246,7 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(github_config)
 
-        pv = result.http_client._preflight_verifier
+        pv = self._preflight_verifier(result.http_client)
         assert pv._platform == "github"
 
     def test_github_reviewer_token_falls_back_to_owner_when_missing(self) -> None:
@@ -294,7 +310,8 @@ class TestWirePlatformClients:
         result = wire_platform_clients(github_config)
 
         assert (
-            result.http_client._token_resolver is result.reviewer_client._token_resolver
+            self._token_resolver(result.http_client)
+            is self._token_resolver(result.reviewer_client)
         )
 
     def test_github_preflight_uses_github_api_url_http_client(
@@ -303,7 +320,7 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(github_config)
 
-        pv = result.http_client._preflight_verifier
+        pv = self._preflight_verifier(result.http_client)
         assert isinstance(pv._http, RequestsHttpClient)
         assert pv._http._base_url == "https://api.github.com"
 
@@ -337,7 +354,7 @@ class TestWirePlatformClients:
         assert result.http_client._token == "gh-own"
         assert result.http_client._platform_mode == "github"
         assert result.http_client._role == "owner"
-        assert result.http_client._preflight_verifier._platform == "github"
+        assert self._preflight_verifier(result.http_client)._platform == "github"
 
     def test_both_reviewer_client_is_github_reviewer(
         self,
@@ -358,7 +375,9 @@ class TestWirePlatformClients:
         assert result.forgejo_owner._token == "fj-own"
         assert result.forgejo_owner._platform_mode == "forgejo"
         assert result.forgejo_owner._role == "owner"
-        assert result.forgejo_owner._preflight_verifier._platform == "forgejo"
+        assert (
+            self._preflight_verifier(result.forgejo_owner)._platform == "forgejo"
+        )
 
     def test_both_forgejo_reviewer_is_present(self, both_config: Config) -> None:
         result = wire_platform_clients(both_config)
@@ -375,11 +394,13 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(both_config)
 
-        gh_resolver = result.http_client._token_resolver
-        fj_resolver = result.forgejo_owner._token_resolver
+        gh_resolver = self._token_resolver(result.http_client)
+        assert result.forgejo_owner is not None
+        assert result.forgejo_reviewer is not None
+        fj_resolver = self._token_resolver(result.forgejo_owner)
         assert gh_resolver is not fj_resolver
-        assert result.reviewer_client._token_resolver is gh_resolver
-        assert result.forgejo_reviewer._token_resolver is fj_resolver
+        assert self._token_resolver(result.reviewer_client) is gh_resolver
+        assert self._token_resolver(result.forgejo_reviewer) is fj_resolver
 
     def test_both_github_resolver_has_github_prefix(
         self,
@@ -387,12 +408,13 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(both_config)
 
-        _token, source = result.http_client._token_resolver.resolve_source(
+        resolver = self._token_resolver(result.http_client)
+        _token, source = resolver.resolve_source(
             "OWNER",
             "test-org/repo",
         )
         assert source.startswith("GITHUB_")
-        reviewer_token = result.http_client._token_resolver.resolve(
+        reviewer_token = resolver.resolve(
             "reviewer",
             "test-org/repo",
         )
@@ -405,12 +427,13 @@ class TestWirePlatformClients:
         result = wire_platform_clients(both_config)
 
         assert result.forgejo_owner is not None
-        _token, source = result.forgejo_owner._token_resolver.resolve_source(
+        resolver = self._token_resolver(result.forgejo_owner)
+        _token, source = resolver.resolve_source(
             "OWNER",
             "test-org/repo",
         )
         assert source.startswith("FORGEJO_")
-        reviewer_token = result.forgejo_owner._token_resolver.resolve(
+        reviewer_token = resolver.resolve(
             "reviewer",
             "test-org/repo",
         )
@@ -440,7 +463,7 @@ class TestWirePlatformClients:
 
         result = wire_platform_clients(config)
 
-        assert result.token_verifier._persist is False
+        assert getattr(result.token_verifier, "_persist") is False
 
     @pytest.mark.parametrize(
         "platform_mode,output_mode",
@@ -465,7 +488,7 @@ class TestWirePlatformClients:
 
         result = wire_platform_clients(config)
 
-        assert result.token_verifier._persist is True
+        assert getattr(result.token_verifier, "_persist") is True
 
     def test_both_token_verifier_uses_owner_and_reviewer_clients(
         self,
@@ -473,8 +496,8 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(both_config)
 
-        assert result.token_verifier._owner_client is result.http_client
-        assert result.token_verifier._reviewer_client is result.reviewer_client
+        assert getattr(result.token_verifier, "_owner_client") is result.http_client
+        assert getattr(result.token_verifier, "_reviewer_client") is result.reviewer_client
 
     # ── org token overrides ───────────────────────────────────────────────
 
@@ -491,11 +514,9 @@ class TestWirePlatformClients:
 
         result = wire_platform_clients(config)
 
-        assert result.http_client._token_resolver._overrides is overrides
-        assert (
-            result.http_client._token_resolver.resolve("owner", "my-org/repo")
-            == "custom-token"
-        )
+        resolver = self._token_resolver(result.http_client)
+        assert getattr(resolver, "_overrides") is overrides
+        assert resolver.resolve("owner", "my-org/repo") == "custom-token"
 
     # ── custom API URLs ───────────────────────────────────────────────────
 

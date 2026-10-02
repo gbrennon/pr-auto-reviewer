@@ -23,6 +23,9 @@ from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
     RepositoryFetchError,
 )
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
 )
@@ -139,9 +142,20 @@ class PollingDaemon:
         )
 
         HttpRequestCounter.instance().reset()
+        review_started_at = time.perf_counter()
         try:
-            self._review_service.execute(command)
+            reviewed = self._review_service.execute(command)
+            if not reviewed:
+                return
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
+            if self._notifier:
+                duration = self._format_duration(
+                    time.perf_counter() - review_started_at
+                )
+                self._notifier.notify_success(
+                    f"Review complete for {pr.pr_id.repository} ({duration})",
+                    f"PR #{pr.pr_id.number}",
+                )
         except EmptyDiffError:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
         except RepositoryFetchError as e:
@@ -159,10 +173,22 @@ class PollingDaemon:
             raise
         except ReviewPublishError as e:
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
+        except ReviewVerdictError:
+            logger.warning(
+                "Review inconclusive for PR #%d in %s; will retry next cycle",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
         except Exception as _:
             logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:
             HttpRequestCounter.instance().log_summary()
+
+    @staticmethod
+    def _format_duration(duration_seconds: float) -> str:
+        total_seconds = max(0, int(duration_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes}m {seconds:02d}s"
 
     def _allowed_repos(self, repos: list[RepoInfo]) -> list[RepoInfo]:
         """Drop repositories the configured allow list does not permit."""
@@ -184,7 +210,7 @@ class PollingDaemon:
         allowed_names = {repo.full_name for repo in allowed}
         for repo in repos:
             if repo.full_name not in allowed_names:
-                logger.info(
+                logger.debug(
                     "Skipping repository not in allow list: %s", repo.full_name
                 )
         if not allowed:
@@ -192,6 +218,12 @@ class PollingDaemon:
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""
+        allow_list = (
+            ", ".join(sorted(self._repository_allow_list.allowed_repositories))
+            or "(all repositories)"
+        )
+        logger.info("Repository allow list: %s", allow_list)
+
         repos = self._repo_lister.list_repos()
 
         if not repos:

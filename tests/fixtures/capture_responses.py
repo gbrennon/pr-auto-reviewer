@@ -29,6 +29,9 @@ from pr_auto_reviewer.infrastructure.forgejo.review_reader import ForgejoReviewR
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher as GitReviewPublisherAdapter,
 )
+from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
+    ReviewBodyRenderer,
+)
 
 TOKEN = os.getenv("FORGEJO_OWNER_TOKEN")
 if not TOKEN:
@@ -142,20 +145,34 @@ save_json("issue_tracker_fixtures.json", it_fix)
 print("7. Review publisher ...")
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
-from pr_auto_reviewer.domain.value_objects.comment_id import CommentId
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
-rp = GitReviewPublisherAdapter(client, reviewer_username="gbrennon")
+rp = GitReviewPublisherAdapter(
+    ReviewBodyRenderer(
+        template_dir=Path("src/pr_auto_reviewer/infrastructure/templates")
+    ),
+    client,
+    client,
+)
 rp_fix = {}
 s = scenarios[0]
 pid = PullRequestId(repository=s["repo"], number=s["pr_number"])
 review = CodeReview(
-    id=CommentId("test-1"), verdict=ReviewVerdict.APPROVED,
+    verdict=ReviewVerdict.APPROVED,
     summary="Test review from capture script",
-    items=[ReviewItem(id="test-001", category="test", severity=ItemSeverity.LOW, description="Test item.", file_path="README.md")],
+    items=[
+        ReviewItem(
+            id="test-001",
+            category="test",
+            severity=ItemSeverity.INFO,
+            description="Test item.",
+            file_path="README.md",
+        )
+    ],
     reason="test reason",
-    pr_id=pid, model_used="test-capture")
+    model_used="test-capture",
+)
 try:
     rp.publish(pid, review)
     rp_fix["private"] = {"repo": s["repo"], "pr_number": s["pr_number"], "success": True}

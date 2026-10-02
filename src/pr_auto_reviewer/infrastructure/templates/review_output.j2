@@ -12,7 +12,7 @@
 ### Issues
 {% if items %}
 {% for item in items %}
-{{ item.id }}.{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
+`{{ item.id }}`.{% if item.status == 'resolved' %} [RESOLVED]{% else %} [OPEN]{% endif %}{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
 
 {{ item.description }}
 {% if item.current_code %}
@@ -42,7 +42,7 @@ No notable patterns or practices to highlight.
 ### Suggestions
 {% if suggestions %}
 {% for s in suggestions %}
-{{ s.id }}.{% if s.file_path %} {{ s.file_path }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
+`{{ s.id }}`.{% if s.file_path %} {{ s.file_path }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
 
 {{ s.description }}
 {% if s.current_code %}

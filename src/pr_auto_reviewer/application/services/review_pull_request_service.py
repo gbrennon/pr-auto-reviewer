@@ -65,14 +65,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._conversation_logger = conversation_logger
         self._plan = plan
 
-    def execute(self, command: ReviewPullRequestCommand) -> None:
+    def execute(self, command: ReviewPullRequestCommand) -> bool:
         self._log_start(command)
 
         pr = self._load_or_create_pull_request(command)
 
         if not self._needs_review(command, pr):
             self._handle_already_reviewed(command, pr)
-            return
+            return False
 
         if self._token_verifier:
             self._token_verifier.verify(command.pr_id)
@@ -94,6 +94,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             review = self._run_single_turn_review(composed)
         review = self._add_deterministic_findings(review, diff)
         review = ReviewItemFactory.ensure_unique_ids(review)
+        review = self._retain_prior_review_items(pr, review)
 
         blocking_ids = self._extract_blocking_ids(review)
 
@@ -143,6 +144,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 len(review.items),
                 (review.summary or "")[:80],
             )
+        return True
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
@@ -198,7 +200,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             len(diff.file_contents),
         )
         if logger.isEnabledFor(logging.DEBUG):
-            file_list = sorted(diff.file_contents.keys()) if diff.file_contents else []
+            file_list = diff.changed_paths
             logger.debug("Files with full contents: %s", file_list or "(none)")
         return diff
 
@@ -237,7 +239,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
             return self._run_single_turn_review(composed)
 
-        changed_files: list[str] = sorted(diff.file_contents.keys()) if diff.file_contents else []
+        changed_files: list[str] = diff.changed_paths
         base_sha: str = (
             str(diff.base_sha) if diff.base_sha is not None else ""
         )
@@ -259,6 +261,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                         existing_ids.add(praise.id)
             existing_item_ids = frozenset(existing_ids)
 
+        logger.info(
+            "Dispatching multi-phase review for %s (changed files: %s)",
+            command.pr_id,
+            ", ".join(changed_files) or "(none)",
+        )
+
         review = self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=plan,
@@ -268,6 +276,11 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
+                prior_items=(
+                    list(existing_pr.reviews[-1].items)
+                    if existing_pr is not None and existing_pr.reviews
+                    else []
+                ),
             )
         )
         return self._drop_persisted_duplicates(review, existing_pr)
@@ -294,8 +307,16 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             for prior_review in existing_pr.reviews
             for item in prior_review.items
         }
+        prior_ids = {
+            item.id
+            for item in existing_pr.reviews[-1].items
+            if item.id
+        }
         kept: list[ReviewItem] = []
         for item in review.items:
+            if item.id in prior_ids:
+                kept.append(item)
+                continue
             if self._content_signature(item) in published_signatures:
                 logger.warning(
                     "Dropping finding %s — byte-equivalent to a "
@@ -480,12 +501,33 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             return description + "\n" + pending
         return pending
 
+    def _retain_prior_review_items(
+        self, pr: PullRequest, review: CodeReview,
+    ) -> CodeReview:
+        """Carry every prior item into the newly published review."""
+        if not pr.reviews:
+            return review
+
+        current_by_id = {
+            item.id: item for item in review.items if item.id
+        }
+        prior_items = pr.latest_review_items()
+        retained = [
+            current_by_id.get(item.id, item)
+            for item in prior_items
+            if item.id and item.id not in current_by_id
+        ]
+        if not retained:
+            return review
+
+        return replace(review, items=retained + review.items)
+
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
-        """Return IDs of review items whose severity is blocking."""
+        """Return IDs of open review items whose severity is blocking."""
         return [
             item.id
             for item in review.items
-            if item.is_blocking and item.id
+            if item.is_open_blocking and item.id
         ]
 
     def _build_unresolved_reason(

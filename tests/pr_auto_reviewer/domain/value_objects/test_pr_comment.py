@@ -58,7 +58,7 @@ class TestPrComment:
         created = datetime(2025, 1, 15, tzinfo=UTC)
         comment = PrComment(id=cid, body="Body", created_at=created)
         with pytest.raises(FrozenInstanceError):
-            comment.body = "changed"
+            setattr(comment, "body", "changed")
 
     def test_hash_consistency(self) -> None:
         cid = CommentId(value="c_abc123")

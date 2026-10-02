@@ -20,6 +20,7 @@ from .pr_comment import PrComment
 from .pull_request_diff import PullRequestDiff
 from .pull_request_id import PullRequestId
 from .repository_context import RepositoryContext
+from .review_execution_context import ReviewExecutionContext
 from .review_phase import ReviewPhase
 from .review_plan import ReviewPlan
 from .review_verdict import ReviewVerdict
@@ -58,6 +59,7 @@ __all__ = [
     "PullRequestDiff",
     "PullRequestId",
     "RepositoryContext",
+    "ReviewExecutionContext",
     "ReviewPhase",
     "ReviewPlan",
     "ReviewVerdict",

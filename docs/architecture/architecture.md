@@ -74,7 +74,7 @@ Adapters that implement the outbound ports, plus concrete
 implementations of infrastructure concerns:
 
 - Git host clients (Forgejo/Codeberg, GitHub) and their publishers/readers.
-- LLM adapters (Ollama) and prompt fragments/renderers.
+- LLM adapters (OpenAI-compatible) and prompt fragments/renderers.
 - Persistence (JSON file repository, rate-limit/token/state stores).
 - Command bus, conversation logger, tool execution, notifiers.
 

@@ -15,7 +15,7 @@ class TestFeedbackRefusalGuard:
     def test_refuted_findings_re_enter_the_feedback_loop(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        plan = SimpleNamespace(
+        plan = ReviewPlan(
             phases=_plan(), methodology="sub-agent-multi-phase",
         )
         orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
@@ -49,7 +49,7 @@ class TestFeedbackRefusalGuard:
     def test_genuinely_empty_result_also_enters_feedback_loop(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        plan = SimpleNamespace(
+        plan = ReviewPlan(
             phases=_plan(), methodology="sub-agent-multi-phase",
         )
         orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
@@ -96,7 +96,7 @@ class TestFeedbackRefusalGuard:
     def test_inconclusive_refutation_keeps_trying_then_raises_by_default(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        plan = SimpleNamespace(
+        plan = ReviewPlan(
             phases=_plan(), methodology="sub-agent-multi-phase",
         )
         orchestrator = self._orchestrator(mock_command_bus, mock_tool_factory)
@@ -128,7 +128,7 @@ class TestFeedbackRefusalGuard:
     def test_inconclusive_refutation_raises_after_legacy_override_removal(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        plan = SimpleNamespace(
+        plan = ReviewPlan(
             phases=_plan(), methodology="sub-agent-multi-phase",
         )
         orchestrator = self._orchestrator(

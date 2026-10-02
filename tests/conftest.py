@@ -3,7 +3,7 @@
 Loads fixture data from tests/fixtures/*.json files.
 """
 
-pytest_plugins = ["tests.fixtures.integration_fixtures", "tests.fixtures.auto_fixtures"]
+pytest_plugins = ["tests.fixtures.integration_fixtures"]
 
 import json
 from pathlib import Path
@@ -78,11 +78,12 @@ class _StubReviewService:
         """Return call_args for the most recent call (like MagicMock)."""
         return self._last_call_args
 
-    def execute(self, command) -> None:
+    def execute(self, command) -> bool:
         self.commands.append(command)
         self.call_count = len(self.commands)
         self._last_call_args = _Call((command,))
         self.call_args_list.append(self._last_call_args)
+        return True
 
     def assert_called_once(self) -> None:
         assert self.call_count == 1, f"Expected 1 call, got {self.call_count}"
@@ -94,67 +95,3 @@ class _StubReviewService:
 def stub_review_service() -> _StubReviewService:
     """Stub ReviewPullRequestPort service."""
     return _StubReviewService()
-
-
-
-class _FakeResponse:
-    """A minimal fake requests.Response for Ollama adapter tests."""
-
-    def __init__(self, json_data: dict | str | None, *, status_code: int = 200) -> None:
-        self._json_data = json_data
-        self.status_code = status_code
-
-    def json(self) -> dict:
-        if isinstance(self._json_data, dict):
-            return self._json_data
-        if isinstance(self._json_data, str):
-            import json as _json
-            return _json.loads(self._json_data)
-        return {}
-
-    def raise_for_status(self) -> None:
-        pass
-
-def _make_ollama_fake_post(response_fixture: str, *, raise_exc: Exception | None = None):
-    """Build a fake requests.post that returns fixture-based responses."""
-    import json as _json
-    from pathlib import Path as _Path
-
-    _fixtures_dir = _Path(__file__).parent / "fixtures" / "ollama_responses"
-
-    def _fake_post(url, *, json=None, timeout=None, **kwargs):
-        if raise_exc is not None:
-            raise raise_exc
-        fixture_path = _fixtures_dir / response_fixture
-        if fixture_path.suffix == ".txt":
-            raw_text = fixture_path.read_text()
-            return _FakeResponse(raw_text)
-        return _FakeResponse(_json.loads(fixture_path.read_text()))
-
-    return _fake_post
-
-@pytest.fixture
-def ollama_fake_post():
-    """Fake requests.post that returns valid Ollama responses from fixtures.
-
-    Use with monkeypatch.setattr in tests:
-
-        monkeypatch.setattr(requests_module, "post", ollama_fake_post)
-    """
-    return _make_ollama_fake_post("response_with_response_field.json")
-
-@pytest.fixture
-def ollama_fake_post_error():
-    """Fake requests.post that raises a RequestException (connection error)."""
-    import requests as _requests
-    return _make_ollama_fake_post("", raise_exc=_requests.RequestException("Connection error"))
-
-@pytest.fixture
-def ollama_fake_post_invalid_json():
-    """Fake requests.post that returns invalid (non-JSON) text."""
-    return _make_ollama_fake_post("invalid_json.txt")
-
-@pytest.fixture
-def ollama_fake_post_empty():
-    """Fake requests.post that returns an empty response field."""
-    return _make_ollama_fake_post("empty_response.json")

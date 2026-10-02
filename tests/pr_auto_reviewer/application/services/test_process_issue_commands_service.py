@@ -130,6 +130,78 @@ class TestProcessIssueCommandsService:
             {CommentId(value="c1")}
         )
 
+    def test_creates_issues_for_multiple_non_blocking_item_ids(
+        self, _pr_id: PullRequestId, _sha: CommitSha
+    ) -> None:
+        items = [
+            ReviewItem(
+                id="suggestion-1",
+                severity=ItemSeverity.MINOR,
+                category=IssueCategory.STYLE,
+                file_path="x.py",
+                description="Simplify this branch",
+            ),
+            ReviewItem(
+                id="suggestion-2",
+                severity=ItemSeverity.MINOR,
+                category=IssueCategory.STYLE,
+                file_path="y.py",
+                description="Rename this variable",
+            ),
+        ]
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="No blocking issues",
+            summary="Suggestions available",
+            model_used="model",
+            suggestions=items,
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="c1"),
+                    body="create issue suggestion-1, suggestion-2",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+        dispatched: list[RegisterIssueCommand] = []
+
+        def handle_register(command: RegisterIssueCommand) -> Issue:
+            dispatched.append(command)
+            return Issue(
+                id=len(dispatched),
+                repository="owner/repo",
+                title="title",
+                body="body",
+                source_pr_id=_pr_id,
+                source_item_id=command.issue_id,
+            )
+
+        bus.register(RegisterIssueCommand, handle_register)
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert [command.issue_id for command in dispatched] == [
+            "suggestion-1", "suggestion-2",
+        ]
+        assert fake_repo.save_calls[0].created_issue_item_ids == frozenset(
+            {"suggestion-1", "suggestion-2"}
+        )
+
     def test_host_does_not_affect_process_command_logic(
         self, _sha: CommitSha, _item: ReviewItem
     ) -> None:
@@ -184,6 +256,56 @@ class TestProcessIssueCommandsService:
             assert dispatched[0].pr_id.repository == repository
             assert len(fake_publisher.post_calls) == 1
             assert CommentId(value="c1") in fake_repo.save_calls[0].processed_comment_ids
+
+    def test_does_not_create_duplicate_issue_for_repeated_item_commands(
+        self,
+        _pr_id: PullRequestId,
+        _sha: CommitSha,
+        _pr_with_review: PullRequest,
+        _item: ReviewItem,
+    ) -> None:
+        fake_repo = FakePullRequestRepository(_pr_with_review)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="c1"),
+                    body=f"create issue {_item.id}",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                ),
+                PrComment(
+                    id=CommentId(value="c2"),
+                    body=f"create issue {_item.id}",
+                    created_at=datetime(2025, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+        dispatched: list[RegisterIssueCommand] = []
+
+        def handle_register(command: RegisterIssueCommand) -> Issue:
+            dispatched.append(command)
+            return Issue(
+                id=101,
+                repository="owner/repo",
+                title="title",
+                body="body",
+                source_pr_id=_pr_id,
+                source_item_id=command.issue_id,
+            )
+
+        bus.register(RegisterIssueCommand, handle_register)
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert [command.issue_id for command in dispatched] == [_item.id]
 
     def test_skips_already_processed_comment(
         self,

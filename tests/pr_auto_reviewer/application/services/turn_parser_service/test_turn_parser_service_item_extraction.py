@@ -15,8 +15,8 @@ class TestTurnParserServiceItemExtraction:
             ],
         })))
         assert result.kind is TurnKind.VERDICT
-        assert result.metadata is not None
-        assert len(result.raw_items or []) == 1
+        assert result.raw_items is not None
+        assert len(result.raw_items) == 1
         assert result.raw_items[0]["description"] == "No error handling."
         assert result.raw_items[0]["severity"] == "major"
 
@@ -66,6 +66,7 @@ class TestTurnParserServiceItemExtraction:
         result = parser.execute(ParseReviewTurnCommand(content=content))
 
         assert result.kind is TurnKind.VERDICT
+        assert result.metadata is not None
         assert result.metadata["verdict"] == "changes_requested"
         assert result.metadata["reason"] != ""
         assert result.metadata["summary"] != ""
@@ -85,6 +86,6 @@ class TestTurnParserServiceItemExtraction:
         result = parser.execute(ParseReviewTurnCommand(content=content))
 
         assert result.kind is TurnKind.VERDICT
+        assert result.metadata is not None
         assert result.metadata["verdict"] == "approved"
         assert result.metadata["reason"] != ""
-

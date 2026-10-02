@@ -201,6 +201,7 @@ class TestComposeReviewPromptAdapter:
 
         assert mock_renderer.called
         call_args = mock_renderer.call_args
+        assert call_args is not None
         template_arg: str = call_args[0][0]
         variables_arg: dict = call_args[0][1]
         assert "{{ diff }}" in template_arg

@@ -2,8 +2,8 @@
 
 Transient files cleaned by this module:
 - ``/tmp/http-*.log``          — HTTP client debug logs
-- ``/tmp/ollama-prompt-*.txt`` — LLM prompt debug dumps
-- ``/tmp/ollama_raw_response.txt`` — LLM raw response dump
+- ``/tmp/llm-prompt-*.txt`` — LLM prompt debug dumps
+- ``/tmp/llm_raw_response.txt`` — LLM raw response dump
 
 Persisted state that MUST NOT be touched:
 - ``/tmp/pr-auto-reviewer/rate-limits/`` — rate-limit tracking state
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 _CLEANUP_PATTERNS: tuple[str, ...] = (
     "http-*.log",
-    "ollama-prompt-*.txt",
-    "ollama_raw_response.txt",
+    "llm-prompt-*.txt",
+    "llm_raw_response.txt",
 )
 
 

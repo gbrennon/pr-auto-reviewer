@@ -47,6 +47,7 @@ class TestJsonFilePullRequestRepository:
         reviews: tuple[CodeReview, ...] = (),
         processed_comment_ids: frozenset[CommentId] = frozenset(),
         unresolved_blocking_ids: frozenset[str] = frozenset(),
+        created_issue_item_ids: frozenset[str] = frozenset(),
         last_reviewed_at: str | None = None,
     ) -> PullRequest:
         return PullRequest(
@@ -57,6 +58,7 @@ class TestJsonFilePullRequestRepository:
             reviews=reviews,
             processed_comment_ids=processed_comment_ids,
             unresolved_blocking_ids=unresolved_blocking_ids,
+            created_issue_item_ids=created_issue_item_ids,
             last_reviewed_at=last_reviewed_at,
         )
 
@@ -148,6 +150,7 @@ class TestJsonFilePullRequestRepository:
             reviews=(review,),
             processed_comment_ids=frozenset({CommentId("101"), CommentId("204")}),
             unresolved_blocking_ids=frozenset({"a3f2", "b7d1"}),
+            created_issue_item_ids=frozenset({"suggestion-1", "suggestion-2"}),
             last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
@@ -167,6 +170,9 @@ class TestJsonFilePullRequestRepository:
         )
         assert found.last_reviewed_at == "2025-06-01T12:00:00Z"
         assert found.unresolved_blocking_ids == frozenset({"a3f2", "b7d1"})
+        assert found.created_issue_item_ids == frozenset(
+            {"suggestion-1", "suggestion-2"}
+        )
 
     def test_atomic_write_leaves_no_tmp_files(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
@@ -233,6 +239,7 @@ class TestJsonFilePullRequestRepository:
             reviews=(review,),
             processed_comment_ids=frozenset({CommentId("42")}),
             unresolved_blocking_ids=frozenset({"a3f2"}),
+            created_issue_item_ids=frozenset({"suggestion-1"}),
             last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
@@ -247,6 +254,7 @@ class TestJsonFilePullRequestRepository:
         assert entry["processed_comment_ids"] == ["42"]
         assert entry["last_reviewed_at"] == "2025-06-01T12:00:00Z"
         assert entry["unresolved_blocking_ids"] == ["a3f2"]
+        assert entry["created_issue_item_ids"] == ["suggestion-1"]
 
     def test_find_raises_on_os_error(self, tmp_path: Path, monkeypatch) -> None:
         state_file = tmp_path / "state.json"

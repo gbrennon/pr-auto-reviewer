@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ._helpers import *
 
 
@@ -7,7 +9,7 @@ class TestFindingVerifierExecute:
     def test_minor_items_are_llm_verified_and_kept_when_confirmed(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
-        items = [_item(1, severity=ItemSeverity.MINOR)]
+        items = [_item("1", severity=ItemSeverity.MINOR)]
         verifier = _verifier(mock_chat_port, mock_tool_factory, [
             json.dumps({"action": "read_file", "args": "src/a.py"}),
             json.dumps({
@@ -28,6 +30,50 @@ class TestFindingVerifierExecute:
         )
 
         assert result == items
+
+    def test_marks_prior_finding_resolved_from_verifier_status(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        prior = _item(item_id="prior")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({
+                "results": [
+                    {
+                        "finding_index": 0,
+                        "verified": False,
+                        "status": "resolved",
+                    },
+                ]
+            }),
+        ])
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[], repo_path=Path("."), changed_files=[],
+                review_session="test-session", prior_items=[prior],
+            )
+        )
+
+        assert result == [replace(prior, status="resolved")]
+
+    def test_keeps_prior_finding_open_when_verification_aborts(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        prior = _item(item_id="prior")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, ["", "", ""])
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[], repo_path=Path("."), changed_files=[],
+                review_session="test-session", prior_items=[prior],
+            )
+        )
+
+        assert result == [prior]
 
     def test_drops_blocking_when_verification_aborts_on_empty_responses(
         self, mock_chat_port, mock_tool_factory,

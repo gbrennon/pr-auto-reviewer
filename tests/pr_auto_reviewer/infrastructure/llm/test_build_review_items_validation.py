@@ -21,16 +21,41 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "src/real.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"}
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].file_path == "src/real.py"
+
+    def test_deleted_changed_file_is_kept_without_reading_worktree(
+        self, tmp_path: Path
+    ) -> None:
+        """Known deleted files do not crash validation when absent from the clone."""
+        item_dicts: list[dict[str, Any]] = [
+            {
+                "file": "deleted.py",
+                "severity": "major",
+                "category": "bug",
+                "description": "The deleted module still needs review.",
+                "line": "1",
+                "current_code": "old_value = 1",
+                "suggested_fix": "old_value = 2",
+            }
+        ]
+
+        result, skip_reasons = ReviewItemFactory().create(
+            item_dicts, tmp_path, ["deleted.py"]
+        )
+
+        assert len(result) == 1
+        assert skip_reasons == []
+        assert result[0].file_path == "deleted.py"
+
 
     def test_hallucinated_paths_are_skipped(self, tmp_path: Path) -> None:
         """Items referencing non-existent files are dropped with warning."""
         item_dicts: list[dict[str, Any]] = [
             {"file": "nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""}
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 0
 
     def test_mixed_real_and_hallucinated(self, tmp_path: Path) -> None:
@@ -41,7 +66,7 @@ class TestBuildReviewItemsValidation:
             {"file": "fake.py", "severity": "critical", "category": "security", "description": "invented", "line": "", "current_code": "", "suggested_fix": ""},
             {"file": "valid.py", "severity": "major", "category": "bug", "description": "also ok", "line": "", "current_code": "also ok", "suggested_fix": "also fixed"},
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 2
         assert result[0].id  # ID is generated
         assert result[1].id  # ID is generated
@@ -53,7 +78,7 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "a/src/lib.py", "severity": "info", "category": "maintainability", "description": "nice", "line": "", "current_code": "pass", "suggested_fix": "return None"},
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].file_path == "src/lib.py"
 
@@ -62,7 +87,7 @@ class TestBuildReviewItemsValidation:
         item_dicts: list[dict[str, Any]] = [
             {"file": "", "severity": "major", "category": "architecture", "description": "global concern", "line": "", "current_code": "", "suggested_fix": ""},
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].file_path == ""
 
@@ -91,7 +116,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].file_path == ""
 
@@ -110,7 +135,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "x = renamed_variable",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].suggested_fix == "x = renamed_variable"
 
@@ -129,7 +154,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].current_code == "x = 1"
 
@@ -148,7 +173,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "x = count",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].file_path == "src/real.py"
         assert result[0].current_code == "x = 1"
@@ -160,7 +185,7 @@ class TestBuildReviewItemsValidation:
             {"file": "src/foo.py", "severity": "major", "category": "bug", "description": "bad", "line": "1", "current_code": "pass", "suggested_fix": "return None"},
             {"file": "src/nonexistent.py", "severity": "critical", "category": "security", "description": "fake", "line": "", "current_code": "", "suggested_fix": ""},
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, "")
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, None)
         assert len(result) == 2
 
     def test_crosscutting_finding_without_code_evidence_is_kept(
@@ -178,7 +203,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "Add centralized file-not-found error handling middleware",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
 
     def test_drops_items_with_invalid_line_numbers(self, tmp_path: Path) -> None:
@@ -205,7 +230,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "fixed",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].description == "valid line"
 
@@ -233,7 +258,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "def bar() -> int:",
             },
         ]
-        result, skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         # A snippet that anchors in the file counts as located even with a
         # matching line adjustment; an unlocatable snippet no longer drops
         # the item — it is downgraded to info and marked anchor_unverified.
@@ -266,7 +291,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "    x = 2",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].line == "2"
 
@@ -289,7 +314,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "    a = 2\n    b = 2",
             },
         ]
-        result, _skip_reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        result, _skip_reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(result) == 1
         assert result[0].line == "2"
 
@@ -308,7 +333,7 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "Confirm the file exists and re-run the review",
             },
         ]
-        items, _reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        items, _reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(items) == 0
 
     def test_error_description_with_code_evidence_not_skipped(
@@ -328,6 +353,6 @@ class TestBuildReviewItemsValidation:
                 "suggested_fix": "except FileNotFoundError as e: logger.error(e)",
             },
         ]
-        items, _reasons = ReviewItemFactory().create(item_dicts, str(tmp_path))
+        items, _reasons = ReviewItemFactory().create(item_dicts, tmp_path)
         assert len(items) == 1
         assert items[0].description == "Bare except clause — file not found errors are silently swallowed"

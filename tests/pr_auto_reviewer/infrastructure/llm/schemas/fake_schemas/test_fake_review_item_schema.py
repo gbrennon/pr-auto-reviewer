@@ -28,7 +28,9 @@ class TestFakeReviewItemSchema:
 
     def test_fake_schema_from_parser_dict(self) -> None:
         """Fake schema can be constructed from parser dict."""
-        data = {"file": "test.py", "severity": "major", "description": "issue"}
+        data: dict[str, object] = {
+            "file": "test.py", "severity": "major", "description": "issue"
+        }
         fake = FakeReviewItemSchema.from_parser_dict(data)
         assert fake.file == "test.py"
         assert fake.severity == "major"

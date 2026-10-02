@@ -1,4 +1,5 @@
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from tests.fakes.fake_forgejo_review_publisher import FakeForgejoReviewPublisher
 
 
@@ -16,7 +17,7 @@ class TestFakeForgejoReviewPublisher:
 
         # Create a minimal CodeReview for testing
         review = CodeReview(
-            verdict="approved",
+            verdict=ReviewVerdict.APPROVED,
             reason="test reason",
             summary="test summary",
             model_used="test model",

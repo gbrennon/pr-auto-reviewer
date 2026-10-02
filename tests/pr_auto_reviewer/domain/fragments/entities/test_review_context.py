@@ -1,6 +1,7 @@
 """Unit tests for ReviewContext value object."""
 
 import pytest
+from typing import Any, cast
 
 from pr_auto_reviewer.domain.fragments.entities.review_context import ReviewContext
 
@@ -52,7 +53,7 @@ class TestReviewContext:
         kwargs[field] = value
 
         with pytest.raises(ValueError, match=expected_msg):
-            ReviewContext(**kwargs)
+            ReviewContext(**cast(Any, kwargs))
 
     def test_is_immutable(self) -> None:
         """ReviewContext should be immutable (frozen dataclass)."""
@@ -63,4 +64,4 @@ class TestReviewContext:
         )
 
         with pytest.raises(AttributeError):
-            context.language = "go"
+            setattr(context, "language", "go")

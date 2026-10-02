@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from pr_auto_reviewer.application.ports.outbound.repository_context_port import (
+    RepositoryContextPort,
+)
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -79,4 +82,4 @@ def repo_context(forgejo_config: Config, local_repository):
     return adapters.repository_context
 
 
-__all__ = ['CORE_SERVICES_INSTANCE_TYPES', 'AdvisorGranularity', 'Config', 'CoreServices', 'FileSystemFragmentRepository', 'GitProvider', 'InMemoryCommandBus', 'Jinja2Renderer', 'JsonFilePullRequestRepository', 'LinuxNotifier', 'LocalGitRepository', 'ReviewContextFactory', 'ReviewPlan', 'annotations', 'forgejo_config', 'local_repository', 'pytest', 'repo_context', 'wire_core_services', 'wire_platform_adapters', 'wire_platform_clients']
+__all__ = ['CORE_SERVICES_INSTANCE_TYPES', 'AdvisorGranularity', 'Config', 'CoreServices', 'FileSystemFragmentRepository', 'GitProvider', 'InMemoryCommandBus', 'Jinja2Renderer', 'JsonFilePullRequestRepository', 'LinuxNotifier', 'LocalGitRepository', 'RepositoryContextPort', 'ReviewContextFactory', 'ReviewPlan', 'annotations', 'forgejo_config', 'local_repository', 'pytest', 'repo_context', 'wire_core_services', 'wire_platform_adapters', 'wire_platform_clients']

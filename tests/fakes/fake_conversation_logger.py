@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
     ConversationLoggerPort,
@@ -23,6 +24,7 @@ class FakeMarkdownConversationLogger(ConversationLoggerPort):
         pr_identifier_service: str,
         messages: list[Any],
         metadata: dict[str, Any],
+        review_session: str = "",
     ) -> Path:
         """Track call without writing to disk."""
         self.log_conversation_calls.append((phase_name, pr_identifier_service, messages, metadata))

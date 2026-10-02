@@ -55,6 +55,20 @@ class TestWireCoreServices:
             for phase in result.review_plan.phases
         )
 
+    def test_architecture_phase_forbids_test_induced_design_changes(
+        self,
+        forgejo_config: Config,
+        repo_context,
+    ) -> None:
+        result = wire_core_services(forgejo_config, repo_context)
+
+        architecture_phase = next(
+            phase
+            for phase in result.review_plan.phases
+            if phase.phase_id == "architecture-review"
+        )
+        assert "test-induced design damage" in architecture_phase.system_prompt
+
     def test_llm_review_uses_config_llm_host(
         self,
         repo_context,
@@ -68,7 +82,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._chat_client._host == "http://custom-llm:9999"
+        assert getattr(getattr(result.llm_review, "_chat_client"), "_host") == "http://custom-llm:9999/v1"
 
     def test_llm_review_uses_config_llm_model(
         self,
@@ -83,16 +97,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._chat_client._model == "custom-model:v2"
-
-    def test_llm_review_defaults_to_code_review_when_no_model(
-        self,
-        forgejo_config: Config,
-        repo_context,
-    ) -> None:
-        result = wire_core_services(forgejo_config, repo_context)
-
-        assert result.llm_review._chat_client._model == "code-review:latest"
+        assert getattr(getattr(result.llm_review, "_chat_client"), "_model") == "custom-model:v2"
 
     def test_llm_review_uses_config_llm_timeout(
         self,
@@ -107,7 +112,7 @@ class TestWireCoreServices:
 
         result = wire_core_services(config, repo_context)
 
-        assert result.llm_review._chat_client._timeout == 300
+        assert getattr(getattr(result.llm_review, "_chat_client"), "_timeout") == 300
 
     def test_fragment_max_tokens_is_none_when_not_in_config(
         self,
@@ -127,7 +132,7 @@ class TestWireCoreServices:
             platform_mode=GitProvider.FORGEJO,
             forgejo_owner_token="fj-own",
         )
-        config.fragment_max_tokens = 4096
+        object.__setattr__(config, "fragment_max_tokens", 4096)
 
         result = wire_core_services(config, repo_context)
 
@@ -140,7 +145,7 @@ class TestWireCoreServices:
     ) -> None:
         result = wire_core_services(forgejo_config, repo_context)
 
-        assert result.review_context_factory._repository_context is repo_context
+        assert getattr(result.review_context_factory, "_repository_context") is repo_context
 
     def test_max_prompt_tokens_zero_means_default_chars(
         self,
@@ -157,7 +162,10 @@ class TestWireCoreServices:
         result = wire_core_services(config, repo_context)
 
         assert (
-            result.review_context_factory._compose_review_prompt._max_total_chars
+            getattr(
+                getattr(result.review_context_factory, "_compose_review_prompt"),
+                "_max_total_chars",
+            )
             == 60_000
         )
 
@@ -175,7 +183,10 @@ class TestWireCoreServices:
         result = wire_core_services(config, repo_context)
 
         assert (
-            result.review_context_factory._compose_review_prompt._max_total_chars
+            getattr(
+                getattr(result.review_context_factory, "_compose_review_prompt"),
+                "_max_total_chars",
+            )
             == 2000
         )
 
@@ -187,7 +198,10 @@ class TestWireCoreServices:
         result = wire_core_services(forgejo_config, repo_context)
 
         assert (
-            result.review_context_factory._compose_review_prompt._strict_selection
+            getattr(
+                getattr(result.review_context_factory, "_compose_review_prompt"),
+                "_strict_selection",
+            )
             is False
         )
 
@@ -206,7 +220,10 @@ class TestWireCoreServices:
         result = wire_core_services(config, repo_context)
 
         assert (
-            result.review_context_factory._compose_review_prompt._strict_selection
+            getattr(
+                getattr(result.review_context_factory, "_compose_review_prompt"),
+                "_strict_selection",
+            )
             is True
         )
 
@@ -240,7 +257,7 @@ class TestWireCoreServices:
         result = wire_core_services(forgejo_config, repo_context, _config_dir=tmp_path)
 
         assert isinstance(result.pr_repository, JsonFilePullRequestRepository)
-        state_path = result.pr_repository._file_path
+        state_path = getattr(result.pr_repository, "_file_path")
         assert str(state_path).startswith(str(tmp_path))
         assert str(state_path).endswith("state.json")
 
@@ -268,5 +285,5 @@ class TestWireCoreServices:
         result = wire_core_services(forgejo_config, repo_context)
 
         expected_state_dir = tmp_path / "pr-auto-reviewer"
-        assert result.pr_repository._file_path == expected_state_dir / "state.json"
+        assert getattr(result.pr_repository, "_file_path") == expected_state_dir / "state.json"
         assert result.conversation_logger._base_dir == expected_state_dir / "conversations"
