@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -44,6 +45,9 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 )
 from pr_auto_reviewer.domain.services.review_item_factory import (
     ReviewItemFactory,
+)
+from pr_auto_reviewer.domain.services.suggestion_scope_policy import (
+    SuggestionScopePolicy,
 )
 from pr_auto_reviewer.domain.value_objects.conversation_decision import (
     ConversationDecision,
@@ -142,9 +146,17 @@ class AgentConversationService(RunAgentConversationPort):
         for candidate in sorted(changed_files, key=len, reverse=True):
             basename = candidate.rsplit("/", 1)[-1]
             stem = basename.rsplit(".", 1)[0]
-            if basename in text or (stem and stem in text):
+            if self._contains_file_name(text, basename) or (
+                stem and self._contains_file_name(text, stem)
+            ):
                 return candidate
         return ""
+
+    @staticmethod
+    def _contains_file_name(text: str, name: str) -> bool:
+        """Return whether a file name appears as a distinct text token."""
+        pattern = rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])"
+        return re.search(pattern, text) is not None
 
     def _ground_cited_paths(
         self,
@@ -153,41 +165,90 @@ class AgentConversationService(RunAgentConversationPort):
         repo_path: Path,
         changed_files: list[str],
     ) -> list[dict[str, Any]]:
-        """Validate cited ``file`` paths against the repository.
-
-        Models cite nonexistent files in praise and suggestions (e.g.
-        ``src/main.py``, ``adapters/shallow_inbound.py`` observed in
-        live runs).  A *suggestion* with a drifted path keeps its prose
-        but loses the citation; a *praise* entry is dropped outright —
-        ungrounded praise is worthless.  Entries with empty paths pass
-        through unchanged.
-
-        Existence checks resolve the citation and require containment
-        within the repo, so absolute or ``..``-escaping citations
-        cannot ground against files outside the repository.
-        """
+        """Validate cited ``file`` paths against the repository."""
         grounded: list[dict[str, Any]] = []
         for entry in entries:
             cited = str(entry.get("file", "")).strip()
             if not cited:
                 grounded.append(entry)
                 continue
-            exists = (
-                cited in changed_files
-                or self._resolves_inside_repo(cited, repo_path)
-            )
-            if exists:
-                grounded.append(entry)
+            if kind == "suggestion":
+                grounded_entry = self._ground_suggestion_citation(
+                    entry, cited, repo_path, changed_files,
+                )
+                if grounded_entry is not None:
+                    grounded.append(grounded_entry)
                 continue
-            logger.info(
-                "Dropping %s citation of nonexistent path: %s",
-                kind, cited,
+            grounded_entry = self._ground_non_suggestion_citation(
+                entry, cited, kind, repo_path, changed_files,
             )
-            if kind == "praise":
-                continue
-            entry["file"] = ""
-            grounded.append(entry)
+            if grounded_entry is not None:
+                grounded.append(grounded_entry)
         return grounded
+
+    def _ground_suggestion_citation(
+        self,
+        entry: dict[str, Any],
+        cited: str,
+        repo_path: Path,
+        changed_files: list[str],
+    ) -> dict[str, Any] | None:
+        """Return a suggestion with a safe, evidenced path or ``None``."""
+        normalized = None
+        if not self._is_external_absolute_path(cited, repo_path):
+            normalized = ReviewItemFactory._normalize_file_path(
+                cited, repo_path, changed_files,
+            )
+        if (
+            normalized
+            and normalized not in changed_files
+            and not self._resolves_inside_repo(normalized, repo_path)
+        ):
+            normalized = None
+        description = str(entry.get("description", ""))
+        if not SuggestionScopePolicy.keep(
+            cited, description, changed_files, normalized,
+        ):
+            logger.info(
+                "Dropping suggestion citation without scope evidence: %s",
+                cited,
+            )
+            return None
+        entry["file"] = normalized or ""
+        return entry
+
+    def _ground_non_suggestion_citation(
+        self,
+        entry: dict[str, Any],
+        cited: str,
+        kind: str,
+        repo_path: Path,
+        changed_files: list[str],
+    ) -> dict[str, Any] | None:
+        """Return a grounded non-suggestion entry or ``None``."""
+        exists = (
+            cited in changed_files
+            or self._resolves_inside_repo(cited, repo_path)
+        )
+        if exists:
+            return entry
+        logger.info(
+            "Dropping %s citation of nonexistent path: %s",
+            kind, cited,
+        )
+        if kind == "praise":
+            return None
+        entry["file"] = ""
+        return entry
+
+    @staticmethod
+    def _is_external_absolute_path(cited: str, repo_path: Path) -> bool:
+        """Return whether an absolute citation resolves outside the clone."""
+        cited_path = Path(cited)
+        return (
+            cited_path.is_absolute()
+            and not cited_path.resolve().is_relative_to(repo_path.resolve())
+        )
 
     def _resolves_inside_repo(self, cited: str, repo_path: Path) -> bool:
         """Return whether *cited* resolves to an existing repo-internal path."""

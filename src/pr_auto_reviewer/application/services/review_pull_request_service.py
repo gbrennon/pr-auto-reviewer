@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
@@ -19,6 +20,7 @@ from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
 from ...domain.services.review_item_factory import ReviewItemFactory
+from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.issue_category import IssueCategory
@@ -92,6 +94,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             review = self._run_multi_phase_review(composed, command)
         else:
             review = self._run_single_turn_review(composed)
+        review = self._filter_suggestion_scope(review, diff)
         review = self._add_deterministic_findings(review, diff)
         review = ReviewItemFactory.ensure_unique_ids(review)
         review = self._retain_prior_review_items(pr, review)
@@ -362,6 +365,68 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             return (path, code)
         desc = " ".join(item.description.split())
         return (path, desc)
+
+    def _filter_suggestion_scope(
+        self, review: CodeReview, diff: PullRequestDiff,
+    ) -> CodeReview:
+        """Keep only safe, changed-file-evidenced suggestions."""
+        kept: list[ReviewItem] = []
+        for suggestion in review.suggestions:
+            materialized = self._materialize_suggestion(suggestion, diff)
+            if materialized is not None:
+                kept.append(materialized)
+        return replace(review, suggestions=kept)
+
+    def _materialize_suggestion(
+        self, suggestion: ReviewItem, diff: PullRequestDiff,
+    ) -> ReviewItem | None:
+        """Normalize a suggestion only when its target is safe and evidenced."""
+        file_path = str(suggestion.file_path or "").strip()
+        if not file_path:
+            return suggestion
+        normalized = self._safe_suggestion_path(file_path, diff)
+        if normalized is None:
+            return None
+        if not SuggestionScopePolicy.keep(
+            file_path, suggestion.description, diff.changed_paths, normalized,
+        ):
+            return None
+        return replace(suggestion, file_path=normalized)
+
+    def _safe_suggestion_path(
+        self, file_path: str, diff: PullRequestDiff,
+    ) -> str | None:
+        repo_path = diff.clone_path
+        if repo_path is None:
+            return file_path if file_path in diff.changed_paths else None
+        if self._is_external_absolute_path(file_path, repo_path):
+            return None
+        normalized = ReviewItemFactory._normalize_file_path(
+            file_path, repo_path, diff.changed_paths,
+        )
+        if normalized is None:
+            return None
+        if (
+            normalized not in diff.changed_paths
+            and not self._exists_inside_repo(normalized, repo_path)
+        ):
+            return None
+        return normalized
+
+    @staticmethod
+    def _is_external_absolute_path(file_path: str, repo_path: Path) -> bool:
+        """Return whether an absolute citation resolves outside the clone."""
+        cited_path = Path(file_path)
+        return (
+            cited_path.is_absolute()
+            and not cited_path.resolve().is_relative_to(repo_path.resolve())
+        )
+
+    @staticmethod
+    def _exists_inside_repo(file_path: str, repo_path: Path) -> bool:
+        """Return whether a path exists inside the clone."""
+        resolved = (repo_path / file_path).resolve()
+        return resolved.is_relative_to(repo_path.resolve()) and resolved.exists()
 
     def _run_single_turn_review(self, prompt) -> CodeReview:
         """Run single-turn LLM review.
