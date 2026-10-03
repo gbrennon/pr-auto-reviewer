@@ -120,8 +120,23 @@ class ReviewResponseParser:
         re.IGNORECASE,
     )
 
+    _ROOT_CAUSE = re.compile(r"(?im)^\s*\**\s*root cause\s*\**\s*:\s*(.+)$")
+    _REPRODUCTION = re.compile(r"(?im)^\s*\**\s*reproduction\s*\**\s*:\s*(.+)$")
+    _ACCEPTANCE = re.compile(
+        r"(?im)^\s*\**\s*acceptance criteria\s*\**\s*:\s*(.+)$"
+    )
+    _DETECTION = re.compile(
+        r"(?im)^\s*\**\s*detection method\s*\**\s*:\s*(.+)$"
+    )
+
     def __init__(self) -> None:
         pass
+
+    @staticmethod
+    def _first_group(pattern: "re.Pattern[str]", text: str) -> str:
+        """Return the first capture group of *pattern* in *text*, else ``""``."""
+        match = pattern.search(text)
+        return match.group(1).strip() if match else ""
 
     def _derive_summary(self, items: list[ReviewItem]) -> str:
         """Build a summary from the items when the LLM omitted one."""
@@ -316,6 +331,16 @@ class ReviewResponseParser:
                 "line": (line or "").strip(),
                 "current_code": current_code,
                 "suggested_fix": suggested_fix,
+                "root_cause": self._first_group(self._ROOT_CAUSE, section_body),
+                "reproduction": self._first_group(
+                    self._REPRODUCTION, section_body
+                ),
+                "acceptance_criteria": self._first_group(
+                    self._ACCEPTANCE, section_body
+                ),
+                "detection_method": self._first_group(
+                    self._DETECTION, section_body
+                ),
             })
         return items
 
@@ -1019,6 +1044,10 @@ class ReviewResponseParser:
             "description": description,
             "current_code": current_code,
             "suggested_fix": suggested_fix,
+            "root_cause": str(item.get("root_cause") or ""),
+            "reproduction": str(item.get("reproduction") or ""),
+            "acceptance_criteria": str(item.get("acceptance_criteria") or ""),
+            "detection_method": str(item.get("detection_method") or ""),
         }
 
     @staticmethod

@@ -24,6 +24,10 @@ class ReviewItem:
     id: str = field(default="")
     current_code: str = field(default="", compare=False)
     suggested_fix: str = field(default="", compare=False)
+    root_cause: str = field(default="", compare=False)
+    reproduction: str = field(default="", compare=False)
+    acceptance_criteria: str = field(default="", compare=False)
+    detection_method: str = field(default="", compare=False)
     status: Literal["open", "resolved"] = field(default="open", compare=False)
 
     def __init__(
@@ -36,6 +40,10 @@ class ReviewItem:
         id: str = "",
         current_code: str = "",
         suggested_fix: str = "",
+        root_cause: str = "",
+        reproduction: str = "",
+        acceptance_criteria: str = "",
+        detection_method: str = "",
         status: Literal["open", "resolved"] = "open",
     ) -> None:
         object.__setattr__(self, "severity", ItemSeverity.from_value(str(severity)))
@@ -46,6 +54,10 @@ class ReviewItem:
         object.__setattr__(self, "id", id)
         object.__setattr__(self, "current_code", current_code)
         object.__setattr__(self, "suggested_fix", suggested_fix)
+        object.__setattr__(self, "root_cause", root_cause)
+        object.__setattr__(self, "reproduction", reproduction)
+        object.__setattr__(self, "acceptance_criteria", acceptance_criteria)
+        object.__setattr__(self, "detection_method", detection_method)
         object.__setattr__(self, "status", status)
         if status not in ("open", "resolved"):
             raise ValueError("Review item status must be open or resolved")

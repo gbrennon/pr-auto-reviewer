@@ -99,6 +99,37 @@ class TestJsonFilePullRequestRepository:
             suggested_fix=suggested_fix,
         )
 
+    def test_praise_survives_save_and_find_round_trip(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo(tmp_path)
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="LGTM",
+            reason="clean",
+            model_used="code-review",
+            items=[],
+            suggestions=[self._item(item_id="s1", description="Extract helper")],
+            praise=[
+                self._item(
+                    item_id="p1",
+                    category="general",
+                    file_path="src/auth.py",
+                    description="Thorough input validation",
+                )
+            ],
+        )
+        pr = self._pr(reviews=(review,))
+        repo.save(pr)
+        found = repo.find(pr.id)
+        assert found is not None
+        saved = found.reviews[0]
+        assert [p.description for p in saved.praise] == [
+            "Thorough input validation"
+        ]
+        assert saved.praise[0].file_path == "src/auth.py"
+        assert [s.description for s in saved.suggestions] == ["Extract helper"]
+
     def test_find_returns_none_when_file_does_not_exist(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         result = repo.find(PullRequestId(repository="owner/repo", number=1))

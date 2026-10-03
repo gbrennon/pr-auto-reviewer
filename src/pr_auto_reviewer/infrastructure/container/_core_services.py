@@ -27,6 +27,9 @@ from pr_auto_reviewer.application.services.finding_deduplicator_service import (
 from pr_auto_reviewer.application.services.finding_verifier_service import (
     FindingVerifierService,
 )
+from pr_auto_reviewer.application.services.remediation_audit_service import (
+    RemediationAuditService,
+)
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
     MultiPhaseReviewOrchestratorService,
 )
@@ -43,6 +46,9 @@ from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
+)
+from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
+    AuditRemediationCommand,
 )
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
@@ -309,6 +315,15 @@ def wire_core_services(
         command_bus=command_bus,
         max_turns=config.llm_max_turns,
     )
+    audit_prompt_path = _PHASE_PROMPT_DIR / "remediation-audit.md"
+    audit_prompt = ReviewResponseParser.strip_frontmatter(
+        audit_prompt_path.read_text()
+    )
+    auditor = RemediationAuditService(
+        transcript_runner=verifier,
+        audit_prompt=audit_prompt,
+        command_bus=command_bus,
+    )
     aggregator = FindingAggregatorService(
         ReasonFactory(), FindingDeduplicatorService()
     )
@@ -331,6 +346,7 @@ def wire_core_services(
         AggregateReviewFindingsCommand, aggregator.execute
     )
     command_bus.register(VerifyFindingsCommand, verifier.execute)
+    command_bus.register(AuditRemediationCommand, auditor.execute)
     command_bus.register(ParseReviewTurnCommand, turn_parser.execute)
     event_logger = EventLoggingHandlerService(exchange_logger=conversation_logger)
     command_bus.register(AgentExchangeEvent, event_logger.handle_agent_exchange)

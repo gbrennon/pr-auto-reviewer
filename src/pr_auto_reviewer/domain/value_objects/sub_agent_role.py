@@ -18,3 +18,4 @@ class SubAgentRole(StrEnum):
     ENGINEER = "engineer"
     ARCHITECT = "architect"
     VERIFIER = "verifier"
+    AUDITOR = "auditor"

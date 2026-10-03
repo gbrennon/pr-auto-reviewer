@@ -46,6 +46,9 @@ from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
 )
+from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
+    AuditRemediationCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.run_agent_conversation_command import (
     RunAgentConversationCommand,
 )
@@ -88,4 +91,4 @@ logger = logging.getLogger(__name__)
 _FINDINGS_MARKER = "__PREVIOUS_FINDINGS__"
 
 
-__all__ = ['_FINDINGS_MARKER', 'AdvisorBlockedError', 'AdvisorCorrectionRenderer', 'AdvisorDirective', 'AggregateReviewFindingsCommand', 'Any', 'AssessPhasePort', 'BriefNextPhasePort', 'Callable', 'CodeReview', 'CommandBusPort', 'FeedbackContextRenderer', 'FindingsAggregatedEvent', 'IdentifierGroundingFilterService', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MaxTurnsExceededError', 'PRIdentifierService', 'Path', 'PhaseCompletedEvent', 'PhasePromptRenderer', 'PhaseResult', 'ReviewBudgetExhaustedError', 'ReviewItem', 'ReviewPhase', 'ReviewPlan', 'ReviewVerdict', 'ReviewVerdictError', 'RunAgentConversationCommand', 'RunMultiPhaseReviewCommand', 'RunMultiPhaseReviewPort', 'SubReviewGuardrails', 'VerifyFindingsCommand', 'annotations', 'cast', 'dataclass', 'json', 'logger', 'logging']
+__all__ = ['_FINDINGS_MARKER', 'AdvisorBlockedError', 'AdvisorCorrectionRenderer', 'AdvisorDirective', 'AggregateReviewFindingsCommand', 'AuditRemediationCommand', 'Any', 'AssessPhasePort', 'BriefNextPhasePort', 'Callable', 'CodeReview', 'CommandBusPort', 'FeedbackContextRenderer', 'FindingsAggregatedEvent', 'IdentifierGroundingFilterService', 'IssueCategory', 'ItemSeverity', 'LlmUnavailableError', 'MaxTurnsExceededError', 'PRIdentifierService', 'Path', 'PhaseCompletedEvent', 'PhasePromptRenderer', 'PhaseResult', 'ReviewBudgetExhaustedError', 'ReviewItem', 'ReviewPhase', 'ReviewPlan', 'ReviewVerdict', 'ReviewVerdictError', 'RunAgentConversationCommand', 'RunMultiPhaseReviewCommand', 'RunMultiPhaseReviewPort', 'SubReviewGuardrails', 'VerifyFindingsCommand', 'annotations', 'cast', 'dataclass', 'json', 'logger', 'logging']

@@ -55,7 +55,11 @@ When your review is complete, respond with a single JSON object:
       "category": "architecture|solid|convention|design",
       "description": "What violates the architecture and why",
       "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
-      "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
+      "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions",
+      "root_cause": "why the violation exists — the underlying reason, not the symptom",
+      "reproduction": "the concrete trigger or minimal example that exposes it",
+      "acceptance_criteria": "the observable condition that proves it is fixed",
+      "detection_method": "the technique you used to find it, to re-apply later"
     }
   ],
   "suggestions": [
@@ -98,6 +102,18 @@ explicitly stated. Follow these rules:
    isolation, or avoid real filesystem/network/IO in tests. That is test-induced
    design damage. A suggestion must stand on a production-behavior benefit; if
    easier testing is the only motivation, drop it entirely.
+
+For every `items` finding, populate these four fields so it can later be proven
+fixed (these apply to `items` only, never to `suggestions`):
+
+- `root_cause` — Root cause: why the violation exists (the underlying reason,
+  not the symptom)
+- `reproduction` — Reproduction: the concrete trigger or minimal example that
+  exposes it
+- `acceptance_criteria` — Acceptance criteria: the observable condition that
+  proves it is fixed
+- `detection_method` — Detection method: the technique you used to find it (the
+  lens to re-apply later)
 
 You MUST inspect the changed files with `read_file` before concluding. For
 multi-file pull requests, inspect the modified components across the codebase to

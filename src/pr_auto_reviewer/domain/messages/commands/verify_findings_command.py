@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
@@ -19,4 +19,3 @@ class VerifyFindingsCommand:
     """Opaque review-run key (start timestamp) grouping transcripts for one run."""
     base_sha: str = ""
     """PR merge-base against the default branch; scopes the verifier's git reads."""
-    prior_items: list[ReviewItem] = field(default_factory=list)
