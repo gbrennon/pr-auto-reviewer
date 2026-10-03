@@ -87,12 +87,8 @@ class FindingVerifierService(VerifyFindingsPort):
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Drop synthetic findings, then LLM-verify every survivor.
 
-        Verification covers all severities: the observed fabrication
-        class publishes as minor findings that mechanical gates cannot
-        refute (real snippets, wrong semantics), so severity is never a
-        reason to skip semantic verification.  On verifier abort the
-        fail-closed rule applies to blocking items only; non-blocking
-        survivors pass through unverified rather than unpublished.
+        On verifier abort the fail-closed rule drops blocking items
+        only while non-blocking survivors pass through unverified.
         """
         current_survivors = self._filter_synthetic_findings(
             list(command.items), command.repo_path,
@@ -101,24 +97,7 @@ class FindingVerifierService(VerifyFindingsPort):
         survivors = current_survivors + prior_items
         prior_offset = len(current_survivors)
         if not survivors:
-            logger.debug(
-                "No findings survived the synthetic filter; "
-                "verification skipped"
-            )
-            self._publish_exchange(
-                command.repo_path,
-                command.review_session,
-                self._verify_prompt.replace("{findings}", "(none)"),
-                [ConversationMessage(
-                    role="assistant",
-                    content=(
-                        '{"results": [], "note": "All '
-                        f"{len(command.items)} findings were dropped by "
-                        "the mechanical synthetic-finding filter before "
-                        'verification."}'
-                    ),
-                )],
-            )
+            self._publish_empty_verification(command)
             return []
 
         findings_text = self._format_findings_for_verification(
@@ -137,37 +116,119 @@ class FindingVerifierService(VerifyFindingsPort):
         )
 
         if results is None:
-            logger.warning(
-                "Verification aborted; dropping all %d blocking "
-                "findings as unverified",
-                sum(1 for i in survivors if i.is_blocking),
-            )
-            return [
-                replace(item, status="open")
-                for item in current_survivors
-                if not item.is_blocking
-            ] + [replace(item, status="open") for item in prior_items]
+            return self._fail_closed_result(current_survivors, prior_items)
 
-        verified_indices: set[int] = set()
-        resolved_prior_indices: set[int] = set()
+        verified_indices = self._verified_current_indices(results, prior_offset)
+        resolved_prior_indices = self._resolved_prior_indices(
+            results, prior_offset,
+        )
+        self._log_refuted_findings(results, prior_offset, verified_indices)
+        kept = self._reconcile_findings(
+            current_survivors,
+            prior_items,
+            prior_offset,
+            (verified_indices, resolved_prior_indices),
+        )
+        self._log_dropped(survivors, kept)
+        return kept
+
+    def _publish_empty_verification(
+        self, command: VerifyFindingsCommand,
+    ) -> None:
+        """Publish an audit transcript when nothing survived the filter."""
+        logger.debug(
+            "No findings survived the synthetic filter; verification skipped"
+        )
+        self._publish_exchange(
+            command.repo_path,
+            command.review_session,
+            self._verify_prompt.replace("{findings}", "(none)"),
+            [ConversationMessage(
+                role="assistant",
+                content=(
+                    '{"results": [], "note": "All '
+                    f"{len(command.items)} findings were dropped by "
+                    "the mechanical synthetic-finding filter before "
+                    'verification."}'
+                ),
+            )],
+        )
+
+    def _fail_closed_result(
+        self,
+        current_survivors: list[ReviewItem],
+        prior_items: list[ReviewItem],
+    ) -> list[ReviewItem]:
+        """Keep non-blocking survivors open and drop blocking ones on abort."""
+        logger.warning("Verification aborted; dropping blocking findings")
+        kept_current = [
+            replace(item, status="open")
+            for item in current_survivors
+            if not item.is_blocking
+        ]
+        kept_prior = [
+            replace(item, status="open") for item in prior_items
+        ]
+        return kept_current + kept_prior
+
+    def _resolved_prior_indices(
+        self, results: list[dict[str, Any]], prior_offset: int,
+    ) -> set[int]:
+        """Prior-finding indices the verifier proved resolved.
+
+        A prior finding is resolved only on an explicit
+        ``status == "resolved"`` proof; mere absence of re-confirmation
+        keeps it open so defects are never resolved by assumption.
+        """
+        return {
+            idx
+            for r in results
+            if isinstance((idx := r.get("finding_index")), int)
+            and idx >= prior_offset
+            and r.get("status") == "resolved"
+        }
+
+    def _verified_current_indices(
+        self, results: list[dict[str, Any]], prior_offset: int,
+    ) -> set[int]:
+        """Current-finding indices the verifier confirmed as real."""
+        return {
+            idx
+            for r in results
+            if isinstance((idx := r.get("finding_index")), int)
+            and idx < prior_offset
+            and r.get("verified", False)
+        }
+
+    def _log_refuted_findings(
+        self,
+        results: list[dict[str, Any]],
+        prior_offset: int,
+        verified_indices: set[int],
+    ) -> None:
+        """Log current-finding results the verifier did not confirm."""
         for r in results:
             idx = r.get("finding_index")
-            verified = r.get("verified", False)
-            status = r.get("status")
             if isinstance(idx, int) and idx >= prior_offset:
-                if status == "resolved" or (status is None and not verified):
-                    resolved_prior_indices.add(idx)
                 continue
-            if verified and isinstance(idx, int):
-                verified_indices.add(idx)
-            else:
-                logger.debug(
-                    "Verifier refuted finding: verified=%s idx=%s reasoning=%s",
-                    verified,
-                    idx,
-                    r.get("reasoning", "")[:120],
-                )
+            if idx in verified_indices:
+                continue
+            logger.debug(
+                "Verifier refuted finding: verified=%s idx=%s reasoning=%s",
+                r.get("verified", False),
+                idx,
+                r.get("reasoning", "")[:120],
+            )
 
+    def _reconcile_findings(
+        self,
+        current_survivors: list[ReviewItem],
+        prior_items: list[ReviewItem],
+        prior_offset: int,
+        indices: tuple[set[int], set[int]],
+    ) -> list[ReviewItem]:
+        """Build the kept list, marking prior findings open or resolved."""
+        verified_indices, resolved_prior_indices = indices
         kept = [
             replace(item, status="open")
             for i, item in enumerate(current_survivors)
@@ -180,7 +241,12 @@ class FindingVerifierService(VerifyFindingsPort):
             )
             for i, item in enumerate(prior_items, start=prior_offset)
         )
+        return kept
 
+    def _log_dropped(
+        self, survivors: list[ReviewItem], kept: list[ReviewItem],
+    ) -> None:
+        """Log how many findings the verifier dropped as hallucinations."""
         dropped = len(survivors) - len(kept)
         if dropped:
             logger.info(
@@ -188,8 +254,6 @@ class FindingVerifierService(VerifyFindingsPort):
                 dropped,
                 len(survivors),
             )
-
-        return kept
 
     def _run_verification_conversation(
         self,
