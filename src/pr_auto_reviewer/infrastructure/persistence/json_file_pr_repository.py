@@ -30,81 +30,107 @@ logger = logging.getLogger(__name__)
 
 _STATE_KEY_SEPARATOR = "/"
 
-def _make_key(pr_id: PullRequestId) -> str:
-    return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
+class StateKey:
+    """Build the composite storage key for a pull request."""
+
+    @staticmethod
+    def of(pr_id: PullRequestId) -> str:
+        return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
 
 
-def _serialize_item(item: ReviewItem) -> dict:
-    return {
-        "id": item.id,
-        "severity": item.severity.value,
-        "category": item.category.value,
-        "file_path": item.file_path,
-        "description": item.description,
-        "line": item.line,
-        "current_code": item.current_code,
-        "suggested_fix": item.suggested_fix,
-        "status": item.status,
-    }
+class ReviewItemCodec:
+    """Serialize and deserialize ``ReviewItem`` to and from JSON dicts."""
+
+    @staticmethod
+    def serialize(item: ReviewItem) -> dict:
+        return {
+            "id": item.id,
+            "severity": item.severity.value,
+            "category": item.category.value,
+            "file_path": item.file_path,
+            "description": item.description,
+            "line": item.line,
+            "current_code": item.current_code,
+            "suggested_fix": item.suggested_fix,
+            "root_cause": item.root_cause,
+            "reproduction": item.reproduction,
+            "acceptance_criteria": item.acceptance_criteria,
+            "detection_method": item.detection_method,
+            "status": item.status,
+        }
+
+    @staticmethod
+    def deserialize(raw_item: dict) -> ReviewItem:
+        return ReviewItem(
+            severity=ItemSeverity.from_value(raw_item.get("severity")),
+            category=IssueCategory.from_value(raw_item.get("category")),
+            file_path=raw_item.get("file_path"),
+            description=raw_item.get("description", ""),
+            id=raw_item.get("id", ""),
+            line=raw_item.get("line", ""),
+            current_code=raw_item.get("current_code", ""),
+            suggested_fix=raw_item.get("suggested_fix", ""),
+            root_cause=raw_item.get("root_cause", ""),
+            reproduction=raw_item.get("reproduction", ""),
+            acceptance_criteria=raw_item.get("acceptance_criteria", ""),
+            detection_method=raw_item.get("detection_method", ""),
+            status=raw_item.get("status", "open"),
+        )
 
 
-def _serialize_review(review: CodeReview) -> dict:
-    return {
-        "verdict": review.verdict.value,
-        "summary": review.summary,
-        "model_used": review.model_used,
-        "items": [_serialize_item(i) for i in review.items],
-        "suggestions": [_serialize_item(s) for s in review.suggestions],
-        "praise": [_serialize_item(p) for p in review.praise],
-    }
+class CodeReviewCodec:
+    """Serialize and deserialize ``CodeReview`` to and from JSON dicts."""
 
-def _deserialize_item(raw_item: dict) -> ReviewItem:
-    return ReviewItem(
-        severity=ItemSeverity.from_value(raw_item.get("severity")),
-        category=IssueCategory.from_value(raw_item.get("category")),
-        file_path=raw_item.get("file_path"),
-        description=raw_item.get("description", ""),
-        id=raw_item.get("id", ""),
-        line=raw_item.get("line", ""),
-        current_code=raw_item.get("current_code", ""),
-        suggested_fix=raw_item.get("suggested_fix", ""),
-        status=raw_item.get("status", "open"),
-    )
+    @staticmethod
+    def serialize(review: CodeReview) -> dict:
+        return {
+            "verdict": review.verdict.value,
+            "summary": review.summary,
+            "model_used": review.model_used,
+            "items": [ReviewItemCodec.serialize(i) for i in review.items],
+            "suggestions": [
+                ReviewItemCodec.serialize(s) for s in review.suggestions
+            ],
+            "praise": [ReviewItemCodec.serialize(p) for p in review.praise],
+        }
 
+    @classmethod
+    def deserialize(cls, raw: dict) -> CodeReview:
+        items = [ReviewItemCodec.deserialize(i) for i in raw.get("items", [])]
+        suggestions = [
+            ReviewItemCodec.deserialize(s) for s in raw.get("suggestions", [])
+        ]
+        praise = [ReviewItemCodec.deserialize(p) for p in raw.get("praise", [])]
+        verdict = cls._resolve_verdict(str(raw.get("verdict", "")), items)
+        summary, reason, model_used = cls._resolve_strings(raw, items)
+        return CodeReview(
+            verdict=verdict,
+            reason=reason,
+            summary=summary,
+            model_used=model_used,
+            items=items,
+            suggestions=suggestions,
+            praise=praise,
+        )
 
-def _resolve_stored_verdict(
-    raw_verdict: str, items: list[ReviewItem]
-) -> ReviewVerdict:
-    verdict = ReviewVerdict(raw_verdict.strip().lower())
-    if verdict is ReviewVerdict.COMMENTED:
-        return ReviewVerdict.CHANGES_REQUESTED if items else ReviewVerdict.APPROVED
-    return verdict
+    @staticmethod
+    def _resolve_verdict(raw_verdict: str, items: list[ReviewItem]) -> ReviewVerdict:
+        verdict = ReviewVerdict(raw_verdict.strip().lower())
+        if verdict is ReviewVerdict.COMMENTED:
+            return (
+                ReviewVerdict.CHANGES_REQUESTED if items else ReviewVerdict.APPROVED
+            )
+        return verdict
 
-
-def _resolve_stored_strings(
-    raw: dict, items: list[ReviewItem]
-) -> tuple[str, str, str]:
-    summary = raw.get("summary", "") or f"Found {len(items)} issue(s) in persisted review."
-    reason = raw.get("reason", "") or summary
-    model_used = raw.get("model_used", "") or "unknown"
-    return summary, reason, model_used
-
-
-def _deserialize_review(raw: dict) -> CodeReview:
-    items = [_deserialize_item(i) for i in raw.get("items", [])]
-    suggestions = [_deserialize_item(s) for s in raw.get("suggestions", [])]
-    praise = [_deserialize_item(p) for p in raw.get("praise", [])]
-    verdict = _resolve_stored_verdict(str(raw.get("verdict", "")), items)
-    summary, reason, model_used = _resolve_stored_strings(raw, items)
-    return CodeReview(
-        verdict=verdict,
-        reason=reason,
-        summary=summary,
-        model_used=model_used,
-        items=items,
-        suggestions=suggestions,
-        praise=praise,
-    )
+    @staticmethod
+    def _resolve_strings(raw: dict, items: list[ReviewItem]) -> tuple[str, str, str]:
+        summary = (
+            raw.get("summary", "")
+            or f"Found {len(items)} issue(s) in persisted review."
+        )
+        reason = raw.get("reason", "") or summary
+        model_used = raw.get("model_used", "") or "unknown"
+        return summary, reason, model_used
 
 class JsonFilePullRequestRepository(PullRequestRepositoryPort):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
@@ -120,7 +146,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         data = self._load()
         reviewed = data.get("reviewed", {})
 
-        key = _make_key(pr_id)
+        key = StateKey.of(pr_id)
         raw = reviewed.get(key)
         if raw is None:
             logger.debug("No persisted state for %s", pr_id)
@@ -139,7 +165,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         data = self._load()
         reviewed = data.setdefault("reviewed", {})
 
-        key = _make_key(pr.id)
+        key = StateKey.of(pr.id)
         reviewed[key] = self._serialize(pr)
 
         self._save(data)
@@ -166,7 +192,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
     def _deserialize(self, pr_id: PullRequestId, raw: dict) -> PullRequest:
         reviews_raw = raw.get("reviews", [])
         reviews: tuple[CodeReview, ...] = tuple(
-            _deserialize_review(r)
+            CodeReviewCodec.deserialize(r)
             for r in reviews_raw
         )
         unresolved_ids: frozenset[str] = frozenset(
@@ -216,7 +242,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "title": pr.title,
             "head_sha": str(pr.head_sha),
             "is_draft": pr.is_draft,
-            "reviews": [_serialize_review(r) for r in pr.reviews],
+            "reviews": [CodeReviewCodec.serialize(r) for r in pr.reviews],
             "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
             "created_issue_item_ids": sorted(pr.created_issue_item_ids),
             "last_reviewed_at": pr.last_reviewed_at,
