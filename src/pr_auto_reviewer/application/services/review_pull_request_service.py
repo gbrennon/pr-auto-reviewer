@@ -19,6 +19,7 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
+from ...domain.services.praise_regression_policy import PraiseRegressionPolicy
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
@@ -286,7 +287,34 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 ),
             )
         )
-        return self._drop_persisted_duplicates(review, existing_pr)
+        review = self._drop_persisted_duplicates(review, existing_pr)
+        return self._append_praise_regressions(review, existing_pr)
+
+    def _append_praise_regressions(
+        self,
+        review: CodeReview,
+        existing_pr: PullRequest | None,
+    ) -> CodeReview:
+        """Add a suggestion for each prior praise the review no longer affirms.
+
+        A quality praised in the last review but absent now is surfaced as a
+        non-blocking suggestion, never as an issue. Regressions already
+        suggested in the previous review are not restated.
+        """
+        if existing_pr is None or not existing_pr.reviews:
+            return review
+        last_review = existing_pr.reviews[-1]
+        regressions = PraiseRegressionPolicy().regressions(
+            list(last_review.praise),
+            list(review.praise),
+            list(last_review.suggestions),
+        )
+        if not regressions:
+            return review
+        return replace(
+            review,
+            suggestions=[*review.suggestions, *regressions],
+        )
 
     def _drop_persisted_duplicates(
         self,
