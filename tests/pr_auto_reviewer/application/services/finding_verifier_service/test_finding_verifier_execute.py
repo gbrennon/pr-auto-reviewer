@@ -58,9 +58,35 @@ class TestFindingVerifierExecute:
             )
         )
 
-        assert result == [replace(prior, status="resolved")]
+        assert [(i.id, i.status) for i in result] == [("prior", "resolved")]
+
+    def test_keeps_prior_finding_open_when_verifier_cannot_prove_it_gone(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        prior = _item(item_id="prior")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({
+                "results": [
+                    {"finding_index": 0, "verified": False},
+                ]
+            }),
+        ])
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[], repo_path=Path("."), changed_files=[],
+                review_session="test-session", prior_items=[prior],
+            )
+        )
+
+        assert [(i.id, i.status) for i in result] == [("prior", "open")]
 
     def test_keeps_prior_finding_open_when_verification_aborts(
+
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
         prior = _item(item_id="prior")
@@ -73,7 +99,7 @@ class TestFindingVerifierExecute:
             )
         )
 
-        assert result == [prior]
+        assert [(i.id, i.status) for i in result] == [("prior", "open")]
 
     def test_drops_blocking_when_verification_aborts_on_empty_responses(
         self, mock_chat_port, mock_tool_factory,
