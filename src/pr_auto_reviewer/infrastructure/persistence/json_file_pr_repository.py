@@ -48,6 +48,16 @@ def _serialize_item(item: ReviewItem) -> dict:
     }
 
 
+def _serialize_review(review: CodeReview) -> dict:
+    return {
+        "verdict": review.verdict.value,
+        "summary": review.summary,
+        "model_used": review.model_used,
+        "items": [_serialize_item(i) for i in review.items],
+        "suggestions": [_serialize_item(s) for s in review.suggestions],
+        "praise": [_serialize_item(p) for p in review.praise],
+    }
+
 def _deserialize_item(raw_item: dict) -> ReviewItem:
     return ReviewItem(
         severity=ItemSeverity.from_value(raw_item.get("severity")),
@@ -83,6 +93,7 @@ def _resolve_stored_strings(
 def _deserialize_review(raw: dict) -> CodeReview:
     items = [_deserialize_item(i) for i in raw.get("items", [])]
     suggestions = [_deserialize_item(s) for s in raw.get("suggestions", [])]
+    praise = [_deserialize_item(p) for p in raw.get("praise", [])]
     verdict = _resolve_stored_verdict(str(raw.get("verdict", "")), items)
     summary, reason, model_used = _resolve_stored_strings(raw, items)
     return CodeReview(
@@ -92,6 +103,7 @@ def _deserialize_review(raw: dict) -> CodeReview:
         model_used=model_used,
         items=items,
         suggestions=suggestions,
+        praise=praise,
     )
 
 class JsonFilePullRequestRepository(PullRequestRepositoryPort):
@@ -204,18 +216,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "title": pr.title,
             "head_sha": str(pr.head_sha),
             "is_draft": pr.is_draft,
-            "reviews": [
-                {
-                    "verdict": r.verdict.value,
-                    "summary": r.summary,
-                    "model_used": r.model_used,
-                    "items": [_serialize_item(i) for i in r.items],
-                    "suggestions": [
-                        _serialize_item(s) for s in r.suggestions
-                    ],
-                }
-                for r in pr.reviews
-            ],
+            "reviews": [_serialize_review(r) for r in pr.reviews],
             "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
             "created_issue_item_ids": sorted(pr.created_issue_item_ids),
             "last_reviewed_at": pr.last_reviewed_at,
