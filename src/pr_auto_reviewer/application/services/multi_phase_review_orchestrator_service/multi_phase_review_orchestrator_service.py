@@ -640,7 +640,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             )
         )
         items_before_verification = len(code_review.items)
-        if code_review.items or prior_items:
+        if code_review.items:
             verified_items = self._command_bus.dispatch(
                 VerifyFindingsCommand(
                     items=code_review.items,
@@ -648,7 +648,6 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     changed_files=changed_files,
                     base_sha=base_sha,
                     review_session=review_session,
-                    prior_items=prior_items or [],
                 )
             )
             if (
@@ -657,6 +656,20 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             ):
                 code_review = self._rebuild_after_verification(
                     verified_items, model, previous=code_review,
+                )
+        if prior_items:
+            audited = self._command_bus.dispatch(
+                AuditRemediationCommand(
+                    prior_items=prior_items,
+                    repo_path=repo_path,
+                    changed_files=changed_files,
+                    base_sha=base_sha,
+                    review_session=review_session,
+                )
+            )
+            if audited:
+                code_review = self._merge_audited_prior(
+                    code_review, audited, model,
                 )
         if (
             code_review.verdict is ReviewVerdict.APPROVED
@@ -673,6 +686,21 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 items_before_verification - len(code_review.items)
             ),
         )
+
+    def _merge_audited_prior(
+        self, code_review: CodeReview, audited: list[Any], model: str,
+    ) -> CodeReview:
+        """Append audited prior findings and recompute the verdict.
+
+        Prior findings carry their proof-gated status; resolved ones are
+        non-blocking, so only still-open prior blockers can move the
+        verdict. Summary, suggestions, and praise are preserved.
+        """
+        prior = [item for item in audited if isinstance(item, ReviewItem)]
+        merged = list(code_review.items) + prior
+        verdict = SubReviewGuardrails().verdict_for(merged)
+        return replace(code_review, items=merged, verdict=verdict,
+                       model_used=model)
 
     def _rebuild_after_verification(
         self, verified_items: list[Any], model: str,

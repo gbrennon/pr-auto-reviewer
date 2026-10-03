@@ -84,6 +84,18 @@ class FindingVerifierService(VerifyFindingsPort):
         self._unparseable_user = VerifyUnparseableResponseRenderer()
         self._explore_before_results = ExploreBeforeResultsRenderer()
 
+    def run(
+        self,
+        system_prompt: str,
+        repo_path: Path,
+        changed_files: list[str],
+        base_sha: str,
+    ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
+        """Run a verification-shaped transcript for remediation auditing."""
+        return self._run_verification_transcript(
+            system_prompt, repo_path, changed_files, base_sha,
+        )
+
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Drop synthetic findings, then LLM-verify every survivor.
 
