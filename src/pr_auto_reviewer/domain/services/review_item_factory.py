@@ -524,6 +524,12 @@ class ReviewItemFactory:
                 id=cls.generate_id(existing_ids),
                 current_code=current_code,
                 suggested_fix=suggested_fix,
+                root_cause=str(item_dict.get("root_cause", "")),
+                reproduction=str(item_dict.get("reproduction", "")),
+                acceptance_criteria=str(
+                    item_dict.get("acceptance_criteria", "")
+                ),
+                detection_method=str(item_dict.get("detection_method", "")),
             )
             review_items.append(review_item)
 
