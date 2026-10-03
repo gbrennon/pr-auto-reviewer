@@ -90,18 +90,15 @@ class FindingVerifierService(VerifyFindingsPort):
         On verifier abort the fail-closed rule drops blocking items
         only while non-blocking survivors pass through unverified.
         """
-        current_survivors = self._filter_synthetic_findings(
+        survivors = self._filter_synthetic_findings(
             list(command.items), command.repo_path,
         )
-        prior_items = list(command.prior_items)
-        survivors = current_survivors + prior_items
-        prior_offset = len(current_survivors)
         if not survivors:
             self._publish_empty_verification(command)
             return []
 
         findings_text = self._format_findings_for_verification(
-            survivors, command.repo_path, prior_offset=prior_offset
+            survivors, command.repo_path,
         )
         prompt = self._verify_prompt.replace("{findings}", findings_text)
 
@@ -116,19 +113,15 @@ class FindingVerifierService(VerifyFindingsPort):
         )
 
         if results is None:
-            return self._fail_closed_result(current_survivors, prior_items)
+            return self._fail_closed_result(survivors)
 
-        verified_indices = self._verified_current_indices(results, prior_offset)
-        resolved_prior_indices = self._resolved_prior_indices(
-            results, prior_offset,
-        )
-        self._log_refuted_findings(results, prior_offset, verified_indices)
-        kept = self._reconcile_findings(
-            current_survivors,
-            prior_items,
-            prior_offset,
-            (verified_indices, resolved_prior_indices),
-        )
+        verified_indices = self._verified_current_indices(results)
+        self._log_refuted_findings(results, verified_indices)
+        kept = [
+            replace(item, status="open")
+            for i, item in enumerate(survivors)
+            if i in verified_indices
+        ]
         self._log_dropped(survivors, kept)
         return kept
 
@@ -155,62 +148,35 @@ class FindingVerifierService(VerifyFindingsPort):
         )
 
     def _fail_closed_result(
-        self,
-        current_survivors: list[ReviewItem],
-        prior_items: list[ReviewItem],
+        self, survivors: list[ReviewItem],
     ) -> list[ReviewItem]:
         """Keep non-blocking survivors open and drop blocking ones on abort."""
         logger.warning("Verification aborted; dropping blocking findings")
-        kept_current = [
+        return [
             replace(item, status="open")
-            for item in current_survivors
+            for item in survivors
             if not item.is_blocking
         ]
-        kept_prior = [
-            replace(item, status="open") for item in prior_items
-        ]
-        return kept_current + kept_prior
-
-    def _resolved_prior_indices(
-        self, results: list[dict[str, Any]], prior_offset: int,
-    ) -> set[int]:
-        """Prior-finding indices the verifier proved resolved.
-
-        A prior finding is resolved only on an explicit
-        ``status == "resolved"`` proof; mere absence of re-confirmation
-        keeps it open so defects are never resolved by assumption.
-        """
-        return {
-            idx
-            for r in results
-            if isinstance((idx := r.get("finding_index")), int)
-            and idx >= prior_offset
-            and r.get("status") == "resolved"
-        }
 
     def _verified_current_indices(
-        self, results: list[dict[str, Any]], prior_offset: int,
+        self, results: list[dict[str, Any]],
     ) -> set[int]:
-        """Current-finding indices the verifier confirmed as real."""
+        """Finding indices the verifier confirmed as real."""
         return {
             idx
             for r in results
             if isinstance((idx := r.get("finding_index")), int)
-            and idx < prior_offset
             and r.get("verified", False)
         }
 
     def _log_refuted_findings(
         self,
         results: list[dict[str, Any]],
-        prior_offset: int,
         verified_indices: set[int],
     ) -> None:
-        """Log current-finding results the verifier did not confirm."""
+        """Log results the verifier did not confirm."""
         for r in results:
             idx = r.get("finding_index")
-            if isinstance(idx, int) and idx >= prior_offset:
-                continue
             if idx in verified_indices:
                 continue
             logger.debug(
@@ -219,29 +185,6 @@ class FindingVerifierService(VerifyFindingsPort):
                 idx,
                 r.get("reasoning", "")[:120],
             )
-
-    def _reconcile_findings(
-        self,
-        current_survivors: list[ReviewItem],
-        prior_items: list[ReviewItem],
-        prior_offset: int,
-        indices: tuple[set[int], set[int]],
-    ) -> list[ReviewItem]:
-        """Build the kept list, marking prior findings open or resolved."""
-        verified_indices, resolved_prior_indices = indices
-        kept = [
-            replace(item, status="open")
-            for i, item in enumerate(current_survivors)
-            if i in verified_indices
-        ]
-        kept.extend(
-            replace(
-                item,
-                status=("resolved" if i in resolved_prior_indices else "open"),
-            )
-            for i, item in enumerate(prior_items, start=prior_offset)
-        )
-        return kept
 
     def _log_dropped(
         self, survivors: list[ReviewItem], kept: list[ReviewItem],
@@ -586,7 +529,7 @@ class FindingVerifierService(VerifyFindingsPort):
         )
 
     def _format_findings_for_verification(
-        self, items: list[ReviewItem], repo_path: Path, prior_offset: int = 0
+        self, items: list[ReviewItem], repo_path: Path
     ) -> str:
         """Format blocking findings with surrounding file context for verification."""
         parts: list[str] = []
@@ -603,7 +546,6 @@ class FindingVerifierService(VerifyFindingsPort):
 
             parts.append(
                 f"## Finding {i}\n\n"
-                f"- **Status:** {'prior finding to revalidate' if i >= prior_offset else 'new finding'}\n"
                 f"- **File:** `{item.file_path or '(unknown)'}`\n"
                 f"- **Severity:** {item.severity.value}\n"
                 f"- **Category:** {item.category.value}\n"
