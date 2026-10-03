@@ -280,11 +280,15 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
-                prior_items=(
-                    list(existing_pr.reviews[-1].items)
-                    if existing_pr is not None and existing_pr.reviews
-                    else []
-                ),
+                prior_items=[
+                    item
+                    for item in (
+                        list(existing_pr.reviews[-1].items)
+                        if existing_pr is not None and existing_pr.reviews
+                        else []
+                    )
+                    if item.file_path in changed_files
+                ],
             )
         )
         review = self._drop_persisted_duplicates(review, existing_pr)
