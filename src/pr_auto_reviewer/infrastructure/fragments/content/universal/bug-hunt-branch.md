@@ -59,13 +59,28 @@ When your review is complete, respond with a single JSON object:
       "category": "bug|security|performance|style|quality",
       "description": "What is wrong and why",
       "current_code": "the exact code snippet from the file that needs to change — copy it verbatim from what read_file returned, with enough surrounding lines to show where the fix goes. Never use placeholders or summaries",
-      "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions"
+      "suggested_fix": "concrete, real code showing exactly what the corrected code should be — write actual code as it should appear in the file. Never use abstract text or descriptions",
+      "root_cause": "why the defect exists — the underlying reason, not the symptom",
+      "reproduction": "the concrete steps or minimal snippet that triggers it",
+      "acceptance_criteria": "the observable condition that proves it is fixed",
+      "detection_method": "the technique you used to find it, to re-apply later"
     }
   ],
   "suggestions": [],
   "praise": []
 }
 ```
+
+For every finding, populate these four fields so it can later be proven fixed:
+
+- `root_cause` — Root cause: why the defect exists (the underlying reason, not
+  the symptom)
+- `reproduction` — Reproduction: the concrete steps or minimal snippet that
+  triggers it
+- `acceptance_criteria` — Acceptance criteria: the observable condition that
+  proves it is fixed
+- `detection_method` — Detection method: the technique you used to find it (the
+  lens to re-apply later)
 
 You MUST inspect the changed files with `read_file` before concluding. For
 multi-file changes, explore across the modified subsystems rather than a single
