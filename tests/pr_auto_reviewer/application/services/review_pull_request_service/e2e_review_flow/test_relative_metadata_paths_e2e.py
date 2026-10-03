@@ -116,27 +116,44 @@ class TestRelativeMetadataPathsE2E:
     def test_review_command_publishes_relative_metadata_paths(
         self, tmp_path: Path,
     ) -> None:
-        relative_path = "crates/application/src/services/run_workflow_service.rs"
-        absolute_path = tmp_path / relative_path
-        absolute_path.parent.mkdir(parents=True)
-        absolute_path.write_text("pub struct RunWorkflowService;\n")
+        changed_path = "pyproject.toml"
+        related_path = "crates/application/src/services/run_workflow_service.rs"
+        unrelated_path = "src/unrelated.py"
+        changed_file = tmp_path / changed_path
+        changed_file.write_text("[project]\n")
+        related_absolute_path = tmp_path / related_path
+        related_absolute_path.parent.mkdir(parents=True)
+        related_absolute_path.write_text("pub struct RunWorkflowService;\n")
+        unrelated_absolute_path = tmp_path / unrelated_path
+        unrelated_absolute_path.parent.mkdir(parents=True)
+        unrelated_absolute_path.write_text("VALUE = 1\n")
         pr_id = PullRequestId(repository="owner/repo", number=153)
         head_sha = CommitSha("abc123")
         diff = PullRequestDiff(
             pr_id=pr_id,
             head_sha=head_sha,
-            diff_content="diff --git a/file b/file\n",
-            file_contents={relative_path: absolute_path.read_text()},
+            diff_content="diff --git a/pyproject.toml b/pyproject.toml\n",
+            file_contents={changed_path: changed_file.read_text()},
             clone_path=tmp_path,
         )
         phase_result = PhaseResult(
             items=[],
             llm_verdict="approved",
             llm_suggestions=[
-                {"file": str(absolute_path), "description": "suggestion"},
+                {
+                    "file": str(related_absolute_path),
+                    "description": (
+                        "The pyproject.toml configuration is related to this "
+                        "service boundary."
+                    ),
+                },
+                {
+                    "file": str(unrelated_absolute_path),
+                    "description": "Improve this module's organization.",
+                },
             ],
             llm_praise=[
-                {"file": str(absolute_path), "description": "praise"},
+                {"file": str(related_absolute_path), "description": "praise"},
             ],
         )
         command_bus = InMemoryCommandBus({
@@ -174,5 +191,6 @@ class TestRelativeMetadataPathsE2E:
         ))
 
         assert publisher.review is not None
-        assert publisher.review.suggestions[0].file_path == relative_path
-        assert publisher.review.praise[0].file_path == relative_path
+        assert len(publisher.review.suggestions) == 1
+        assert publisher.review.suggestions[0].file_path == related_path
+        assert publisher.review.praise[0].file_path == related_path

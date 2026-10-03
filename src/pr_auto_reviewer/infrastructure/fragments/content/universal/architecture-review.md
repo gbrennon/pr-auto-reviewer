@@ -81,14 +81,23 @@ explicitly stated. Follow these rules:
 3. Do not include `current_code` or `suggested_fix` code dumps in a
    suggestion. Describe the improvement in prose; an optional `suggested_fix`
    may sketch the target structure, not a diff.
-4. Prefer a concrete `file` (the module the improvement applies to). If the
-   improvement spans the whole repository, use an empty `file` and describe
-   the architectural direction.
-5. Never suggest introducing an abstraction, interface, port, trait, wrapper,
-   or "mockable" type whose only justification is to ease testing, improve
-   test isolation, or avoid real filesystem/network/IO in tests. That is
-   test-induced design damage. A suggestion must stand on a production-behavior
-   benefit; if easier testing is the only motivation, drop it entirely.
+4. Prefer a concrete `file` (the module the improvement applies to). A concrete
+   file may be changed in this pull request or any existing repository file that
+   is directly or indirectly related to a changed file through a dependency,
+   importer, caller, callee, configuration, wiring, or another traced
+   architectural relationship.
+5. Before emitting an unchanged-file citation, inspect the changed file and the
+   target file with the exploration tools and trace their relationship. The
+   suggestion `description` MUST name the changed file or files and explain the
+   direct or indirect relationship. An unchanged file without demonstrated
+   relationship evidence is not a valid suggestion target.
+6. If the improvement spans the whole repository and has no single target file,
+   use an empty `file` and describe the architectural direction.
+7. Never suggest introducing an abstraction, interface, port, trait, wrapper,
+   or "mockable" type whose only justification is to ease testing, improve test
+   isolation, or avoid real filesystem/network/IO in tests. That is test-induced
+   design damage. A suggestion must stand on a production-behavior benefit; if
+   easier testing is the only motivation, drop it entirely.
 
 You MUST inspect the changed files with `read_file` before concluding. For
 multi-file pull requests, inspect the modified components across the codebase to
