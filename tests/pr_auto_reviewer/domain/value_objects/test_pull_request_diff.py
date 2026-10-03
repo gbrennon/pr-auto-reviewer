@@ -73,3 +73,50 @@ class TestPullRequestDiff:
         diff = PullRequestDiff(pr_id=pr_id, head_sha=sha, diff_content="diff")
         with pytest.raises(TypeError, match="unhashable"):
             hash(diff)
+
+
+class TestChangedPaths:
+    """Tests for paths extracted from diff headers."""
+
+    def test_includes_modified_and_deleted_paths(self) -> None:
+        diff = PullRequestDiff(
+            pr_id=PullRequestId(repository="owner/repo", number=1),
+            head_sha=CommitSha(value="abc"),
+            diff_content=(
+                "diff --git a/old.py b/old.py\n"
+                "deleted file mode 100644\n"
+                "--- a/old.py\n"
+                "+++ /dev/null\n"
+                "diff --git a/changed.py b/changed.py\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n"
+            ),
+        )
+
+        assert diff.changed_paths == ["changed.py", "old.py"]
+
+    def test_sorts_and_deduplicates_paths(self) -> None:
+        diff = PullRequestDiff(
+            pr_id=PullRequestId(repository="owner/repo", number=1),
+            head_sha=CommitSha(value="abc"),
+            diff_content=(
+                "diff --git a/z.py b/z.py\n"
+                "diff --git a/a.py b/a.py\n"
+                "diff --git a/z.py b/z.py\n"
+            ),
+        )
+
+        assert diff.changed_paths == ["a.py", "z.py"]
+
+    @pytest.mark.parametrize("diff_content", ["", "header without a diff path\n"])
+    def test_returns_empty_for_content_without_diff_headers(
+        self, diff_content: str,
+    ) -> None:
+        diff = PullRequestDiff(
+            pr_id=PullRequestId(repository="owner/repo", number=1),
+            head_sha=CommitSha(value="abc"),
+            diff_content=diff_content,
+        )
+
+        assert diff.changed_paths == []

@@ -420,7 +420,7 @@ class ReviewItemFactory:
                 except ValueError:
                     pass
 
-            if full_path is not None and file_path and (
+            if full_path is not None and full_path.exists() and file_path and (
                 line_str or current_code
             ):
                 file_lines = full_path.read_text().splitlines()

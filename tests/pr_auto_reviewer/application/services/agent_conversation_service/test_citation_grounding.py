@@ -1,4 +1,12 @@
-from ._helpers import *
+from pathlib import Path
+from unittest.mock import MagicMock
+
+from pr_auto_reviewer.application.services.agent_conversation_service import (
+    AgentConversationService,
+)
+from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
+from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
 
 
 class TestCitationGrounding:
@@ -49,7 +57,7 @@ class TestCitationGrounding:
         assert len(result.llm_praise) == 1
         assert result.llm_praise[0]["file"] == "src/a.py"
 
-    def test_suggestion_with_drifted_path_empties_file_keeps_prose(
+    def test_suggestion_with_nonexistent_path_is_dropped(
         self, tmp_path,
     ) -> None:
         result = self._result_with_citations({
@@ -62,12 +70,7 @@ class TestCitationGrounding:
             ],
         }, repo_path=tmp_path)
 
-        assert len(result.llm_suggestions) == 1
-        assert result.llm_suggestions[0]["file"] == ""
-        assert (
-            result.llm_suggestions[0]["description"]
-            == "add explicit interface definitions"
-        )
+        assert result.llm_suggestions == []
 
     def test_praise_citing_existing_file_outside_repo_is_dropped(
         self, tmp_path,
@@ -106,4 +109,3 @@ class TestCitationGrounding:
         }, repo_path=tmp_path)
 
         assert result.llm_praise == []
-
