@@ -14,3 +14,4 @@ HANDOFF.md
 *.cover
 __pycache__/
 reviews/
+docs/superpowers/
