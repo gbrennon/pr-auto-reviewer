@@ -4,6 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
+from pr_auto_reviewer.application.dtos.list_allowed_repositories_request import (
+    ListAllowedRepositoriesRequest,
+)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
     ReviewPullRequestPort,
 )
@@ -60,6 +63,13 @@ class TestCompositionRoot:
 
     def test_components_cli_runner_is_wired(self, _root):
         assert isinstance(_root.components.cli_runner, CliRunner)
+
+    def test_components_list_allowed_repositories_is_wired(self, _root):
+        response = _root.components.list_allowed_repositories.execute(
+            ListAllowedRepositoriesRequest()
+        )
+
+        assert response.allows_every_repository is True
 
     def test_container_is_exposed(self, _root):
         assert _root.container is not None

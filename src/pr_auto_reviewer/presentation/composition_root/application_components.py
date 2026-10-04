@@ -12,6 +12,7 @@ class ApplicationComponents:
     repo_lister: RepoListerPort
     review_item_parser: ReviewItemParser
     cli_runner: CliRunner
+    list_allowed_repositories: ListAllowedRepositories
     notifier: NotifierPort | None = None
     token_verifier: TokenVerifierPort | None = None
     command_bus: InMemoryCommandBus | None = None

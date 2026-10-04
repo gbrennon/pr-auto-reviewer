@@ -10,6 +10,12 @@ import traceback
 
 import requests
 
+from pr_auto_reviewer.application.dtos.list_allowed_repositories_request import (
+    ListAllowedRepositoriesRequest,
+)
+from pr_auto_reviewer.application.ports.inbound.list_allowed_repositories import (
+    ListAllowedRepositories,
+)
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
@@ -63,9 +69,11 @@ class CliRunner:
         notifier: NotifierPort | None = None,
         token_verifier: TokenVerifierPort | None = None,
         output_mode: str = "forgejo",
+        list_allowed_repositories: ListAllowedRepositories | None = None,
     ) -> None:
         self._review_service = review_service
         self._process_commands_service = process_commands_service
+        self._list_allowed_repositories = list_allowed_repositories
         self._review_reader = review_reader
         self._pr_lister = pr_lister
         self._review_item_parser = review_item_parser
@@ -84,6 +92,10 @@ class CliRunner:
             "process-commands", help="Process issue commands for a PR"
         )
         subparsers.add_parser("list-items", help="List review items for a PR")
+        subparsers.add_parser(
+            "list-allowed-repositories",
+            help="List repositories permitted by the allowlist",
+        )
         subparsers.add_parser("clean", help="Reset all reviewed-PR tracking state")
 
         args, _unknown = parser.parse_known_args(argv[1:])
@@ -94,6 +106,21 @@ class CliRunner:
             return self._run_process_commands(argv[2:])
         elif args.command == "list-items":
             return self._run_list_items(argv[2:])
+        elif args.command == "list-allowed-repositories":
+            if self._list_allowed_repositories is None:
+                raise RuntimeError(
+                    "ListAllowedRepositories is not configured"
+                )
+            response = self._list_allowed_repositories.execute(
+                ListAllowedRepositoriesRequest()
+            )
+            if response.allows_every_repository:
+                print("All repositories allowed")
+            else:
+                print("Allowed repositories:")
+                for repository in response.allowed_repositories:
+                    print(f"- {repository}")
+            return 0
         elif args.command == "clean":
             return self._run_clean()
         else:

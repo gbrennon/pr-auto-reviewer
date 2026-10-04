@@ -31,9 +31,7 @@ class ForgejoRepoLister(RepoListerPort):
             logger.debug("Using REPOS_FILTER=%s, returning singleton", self._repos_filter)
             return [RepoInfo(full_name=self._repos_filter)]
         try:
-            result = self._fetch_repository_pages()
-            logger.info("ForgejoRepoLister.list_repos return: %d repos", len(result))
-            return result
+            return self._fetch_repository_pages()
         except (requests.RequestException, OSError, TypeError, KeyError) as exc:
             logger.warning("Failed to list repos: %s", exc)
             return []
@@ -42,33 +40,35 @@ class ForgejoRepoLister(RepoListerPort):
         repositories: list[RepoInfo] = []
         page = 1
         while True:
-            payload: object = self._client.get(
-                "/user/repos",
-                limit=_REPOSITORY_PAGE_SIZE,
-                page=page,
-                type="all",
-                sort="updated",
-            )
-            raw_rows: object = (
-                payload if isinstance(payload, list) else payload.get("data", [])
-            )
-            rows = (
-                [cast(dict[str, object], row) for row in raw_rows if isinstance(row, dict)]
-                if isinstance(raw_rows, list)
-                else []
-            )
-            repositories.extend(
-                RepoInfo(
-                    full_name=full_name,
-                    pushed_at=pushed_at,
-                )
-                for row in rows
-                if isinstance(full_name := row.get("full_name"), str)
-                and (
-                    (pushed_at := row.get("pushed_at")) is None
-                    or isinstance(pushed_at, str)
-                )
-            )
+            rows = self._fetch_repository_page(page)
+            repositories.extend(self._parse_repositories(rows))
             if len(rows) < _REPOSITORY_PAGE_SIZE:
                 return repositories
             page += 1
+
+    def _fetch_repository_page(self, page: int) -> list[dict[str, object]]:
+        payload: object = self._client.get(
+            "/user/repos",
+            limit=_REPOSITORY_PAGE_SIZE,
+            page=page,
+            type="all",
+            sort="updated",
+        )
+        raw_rows = payload if isinstance(payload, list) else payload.get("data", [])
+        return [cast(dict[str, object], row) for row in raw_rows if isinstance(row, dict)]
+
+    def _parse_repositories(self, rows: list[dict[str, object]]) -> list[RepoInfo]:
+        return [
+            parsed
+            for row in rows
+            if (parsed := self._parse_repository(row)) is not None
+        ]
+
+    def _parse_repository(self, row: dict[str, object]) -> RepoInfo | None:
+        full_name = row.get("full_name")
+        pushed_at = row.get("pushed_at")
+        if not isinstance(full_name, str):
+            return None
+        if pushed_at is not None and not isinstance(pushed_at, str):
+            return None
+        return RepoInfo(full_name=full_name, pushed_at=pushed_at)

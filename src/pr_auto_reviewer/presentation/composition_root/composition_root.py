@@ -6,6 +6,9 @@ from pr_auto_reviewer.application.ports.outbound.git_credential_provider_port im
 from pr_auto_reviewer.application.services.issue_content_preparer_service import (
     IssueContentPreparerService,
 )
+from pr_auto_reviewer.application.services.list_allowed_repositories_service import (
+    ListAllowedRepositoriesService,
+)
 from pr_auto_reviewer.application.services.register_issue_service import (
     RegisterIssueService,
 )
@@ -19,6 +22,9 @@ from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.config.repository_allow_list_entries import (
+    ConfiguredRepositoryAllowListEntries,
+)
 
 from ._shared import *
 from .application_components import ApplicationComponents
@@ -63,6 +69,7 @@ class CompositionRoot:
             poll_interval_seconds=config.poll_interval,
             repos_filter=config.repos_filter or None,
             repos_allow_list=config.repos_allow_list,
+            platforms=self._polling_platforms(config.platform_mode),
             run_once=config.run_once,
             force_pr=config.force_pr,
         )
@@ -92,9 +99,17 @@ class CompositionRoot:
             force=True,
         )
         logging.getLogger("pr_auto_reviewer").setLevel(log_level)
-        if not debug:
-            logging.getLogger("urllib3").setLevel(logging.WARNING)
-            logging.getLogger("requests").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("requests").setLevel(logging.WARNING)
+
+    @staticmethod
+    def _polling_platforms(platform_mode: GitProvider) -> tuple[str, ...]:
+        """Return platform prefixes used for allow-list candidate expansion."""
+        if platform_mode == GitProvider.BOTH:
+            return ("github", "forgejo")
+        if platform_mode == GitProvider.GITHUB:
+            return ("github",)
+        return ("forgejo",)
 
     def _git_host(self, config) -> str:
         if config.platform_mode == GitProvider.GITHUB:
@@ -140,6 +155,9 @@ class CompositionRoot:
         review_item_parser = ReviewItemParser()
         issue_command_parser = IssueCommandParser()
         issue_body_builder = IssueBodyBuilder()
+        list_allowed_repositories = ListAllowedRepositoriesService(
+            ConfiguredRepositoryAllowListEntries(c.config.repos_allow_list)
+        )
 
         issue_content_preparer = IssueContentPreparerService(
             chat_port=c.chat_client,
@@ -172,6 +190,7 @@ class CompositionRoot:
             notifier=notifier,
             token_verifier=c.token_verifier,
             output_mode=c.config.output_mode,
+            list_allowed_repositories=list_allowed_repositories,
         )
 
         return ApplicationComponents(
@@ -182,6 +201,7 @@ class CompositionRoot:
             repo_lister=c.repo_lister,
             review_item_parser=review_item_parser,
             cli_runner=cli_runner,
+            list_allowed_repositories=list_allowed_repositories,
             notifier=notifier,
             token_verifier=c.token_verifier,
         )
