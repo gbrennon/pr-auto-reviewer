@@ -216,7 +216,7 @@ class PollingDaemon:
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""
-        repos = self._repo_lister.list_repos()
+        repos = self._repositories_to_poll()
 
         if not repos:
             logger.warning("No repositories found")
@@ -229,6 +229,17 @@ class PollingDaemon:
                 self._process_repo(info)
         except LlmUnavailableError:
             logger.warning("LLM unavailable — cancelling this cycle")
+
+    def _repositories_to_poll(self) -> list[RepoInfo]:
+        """Build repository candidates without discovery when an allow list exists."""
+        if not self._repository_allow_list.allows_every_repository:
+            return [
+                RepoInfo(name)
+                for name in self._repository_allow_list.candidates(
+                    self._config.platforms
+                )
+            ]
+        return self._repo_lister.list_repos()
 
     def _process_repo(self, info: RepoInfo) -> None:
         """Process review and comment commands for one repository."""

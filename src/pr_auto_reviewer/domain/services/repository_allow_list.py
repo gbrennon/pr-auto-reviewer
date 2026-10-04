@@ -48,6 +48,54 @@ class RepositoryAllowList:
         """Check whether all repositories are unconditionally permitted."""
         return not self.allowed_repositories
 
+    def candidates(self, platforms: Iterable[str] = ()) -> tuple[str, ...]:
+        """Return allow-list entries as repository identities to poll.
+
+        Bare entries are expanded for each configured platform so polling can
+        bypass global repository discovery without changing cross-platform
+        allow-list behavior.
+        """
+        if not platforms:
+            return tuple(sorted(self.allowed_repositories))
+
+        normalized_platforms = tuple(
+            self._normalize_platform(platform) for platform in platforms
+        )
+        candidates = {
+            candidate
+            for entry in self.allowed_repositories
+            for candidate in self._candidates_for_entry(entry, normalized_platforms)
+        }
+        return tuple(sorted(candidates))
+
+    @classmethod
+    def _normalize_platform(cls, platform: str) -> str:
+        """Normalize a platform identifier used for candidate expansion."""
+        normalized = platform.strip().casefold()
+        return "forgejo" if normalized == "codeberg" else normalized
+
+    @classmethod
+    def _candidates_for_entry(
+        cls, entry: str, platforms: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """Expand one allow-list entry for the configured platforms."""
+        if ":" in entry:
+            return (entry,) if cls._entry_matches_platform(entry, platforms) else ()
+        return tuple(cls._candidate_for_entry(entry, platform) for platform in platforms)
+
+    @classmethod
+    def _entry_matches_platform(cls, entry: str, platforms: tuple[str, ...]) -> bool:
+        """Check whether a prefixed entry belongs to a configured platform."""
+        prefix, _, _ = entry.partition(":")
+        return prefix in platforms
+
+    @classmethod
+    def _candidate_for_entry(cls, entry: str, platform: str) -> str:
+        """Add a platform prefix to a bare repository entry."""
+        if ":" in entry:
+            return entry
+        return f"{platform}:{entry}"
+
     def allows(self, repository_full_name: str) -> bool:
         """Decide whether *repository_full_name* is permitted."""
         if self.allows_every_repository:

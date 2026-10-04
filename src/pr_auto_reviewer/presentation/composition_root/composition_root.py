@@ -69,6 +69,7 @@ class CompositionRoot:
             poll_interval_seconds=config.poll_interval,
             repos_filter=config.repos_filter or None,
             repos_allow_list=config.repos_allow_list,
+            platforms=self._polling_platforms(config.platform_mode),
             run_once=config.run_once,
             force_pr=config.force_pr,
         )
@@ -100,6 +101,15 @@ class CompositionRoot:
         logging.getLogger("pr_auto_reviewer").setLevel(log_level)
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("requests").setLevel(logging.WARNING)
+
+    @staticmethod
+    def _polling_platforms(platform_mode: GitProvider) -> tuple[str, ...]:
+        """Return platform prefixes used for allow-list candidate expansion."""
+        if platform_mode == GitProvider.BOTH:
+            return ("github", "forgejo")
+        if platform_mode == GitProvider.GITHUB:
+            return ("github",)
+        return ("forgejo",)
 
     def _git_host(self, config) -> str:
         if config.platform_mode == GitProvider.GITHUB:
