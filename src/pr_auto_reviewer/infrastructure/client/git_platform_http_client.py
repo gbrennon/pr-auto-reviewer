@@ -66,8 +66,6 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        logger.debug("GET%s %s params=%s", label, url, params)
-
         request_headers = self._get_auth_header(repo)
         if headers:
             request_headers.update(headers)
@@ -87,8 +85,6 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        logger.debug("GET_RAW%s %s", label, url)
-
         request_headers = self._get_auth_header(repo)
         if headers:
             request_headers.update(headers)
@@ -108,7 +104,6 @@ class GitPlatformHttpClient:
         self._rate_tracker.wait()
         url = f"{self._base_url}{path}"
         label = self._label("write")
-        logger.debug("POST%s %s body_keys=%s", label, url, list(body.keys()))
         response = requests.post(
             url,
             headers={
@@ -196,21 +191,6 @@ class GitPlatformHttpClient:
             return set()
 
     def _log_response_detail(self, method: str, label: str, url: str, response) -> None:
-        status = response.status_code
-        body_bytes = getattr(response, "content", b"")
-        body_len = len(body_bytes)
-        logger.debug("%s%s %s -> HTTP %d (%d bytes)", method, label, url, status, body_len)
-
-        if logger.isEnabledFor(logging.DEBUG):
-            text = response.text
-            if text:
-                truncated = text[:2000]
-                logger.debug(
-                    "%s%s %s body (%d chars):\n%s",
-                    method, label, url, len(text),
-                    truncated + ("..." if len(text) > 2000 else ""),
-                )
-
         self._capture_rate_limit(getattr(response, "headers", {}))
         self._write_http_log(method, label, url, response)
         HttpRequestCounter.instance().record(self._base_url)
