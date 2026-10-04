@@ -350,10 +350,10 @@ class TestPollingDaemon:
             daemon.start()
             mock_logger.warning.assert_called_once_with("No repositories found")
 
-    def test_no_prs(
+    def test_no_prs_does_not_log_repository_details(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
-        """Logs debug when no open PRs in repo."""
+        """Does not log a message for each repository without open PRs."""
         repo_lister = MockRepoLister([RepoInfo("owner/repo1")])
         pr_lister = MockPrLister([])
         daemon = PollingDaemon(
@@ -365,7 +365,7 @@ class TestPollingDaemon:
 
         with patch("pr_auto_reviewer.presentation.polling_daemon.polling_daemon.logger") as mock_logger:
             daemon.start()
-            mock_logger.debug.assert_called_with("No open PRs in owner/repo1")
+            mock_logger.debug.assert_not_called()
 
     def test_skips_draft_prs(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
@@ -750,6 +750,30 @@ class TestPollingDaemon:
         ]
         assert len(stopped_calls) == 1
 
+    def test_allow_list_avoids_repository_discovery(self) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        repo_lister = MockRepoLister([])
+        review_service = RecordingReviewService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=PerRepoPrLister(),
+            review_service=review_service,
+        )
+
+        daemon.start()
+
+        assert repo_lister.list_calls == 0
+        assert [
+            command.pr_id.repository
+            for command in review_service.executed_commands
+        ] == ["owner/allowed"]
+
     def test_reviews_only_allowed_repositories(self) -> None:
         config = PollingDaemonConfig(
             poll_interval_seconds=1,
@@ -810,14 +834,18 @@ class TestPollingDaemon:
         ):
             daemon._allowed_repos(repos)
 
-        assert any(
-            record.levelno == logging.DEBUG
-            and "Skipping repository not in allow list" in record.message
+        debug_records = [
+            record
             for record in caplog.records
+            if record.levelno == logging.DEBUG
+        ]
+        assert len(debug_records) == 1
+        assert debug_records[0].message == (
+            "Skipping 1 repositories not in allow list"
         )
 
 
-    def test_cycle_logs_allow_list_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_cycle_does_not_log_allow_list(self, caplog: pytest.LogCaptureFixture) -> None:
         config = PollingDaemonConfig(
             poll_interval_seconds=1,
             repos_filter=None,
@@ -834,11 +862,10 @@ class TestPollingDaemon:
         with caplog.at_level(logging.INFO):
             daemon._run_cycle()
 
-        assert [
-            record.message
+        assert not any(
+            "Repository allow list:" in record.message
             for record in caplog.records
-            if "Repository allow list:" in record.message
-        ] == ["Repository allow list: owner/allowed"]
+        )
 
     def test_empty_allow_list_reviews_every_repository(self) -> None:
         config = PollingDaemonConfig(

@@ -80,6 +80,11 @@ def main() -> None:
 
     subparsers.add_parser("clean", help="Clean state files")
 
+    subparsers.add_parser(
+        "list-allowed-repositories",
+        help="List repositories permitted by the allowlist",
+    )
+
     list_items_parser = subparsers.add_parser(
         "list-items", help="List review items for a PR"
     )
@@ -147,6 +152,13 @@ def main() -> None:
     elif args.command == "clean":
         components = bootstrap()
         components.cli_runner.run([sys.argv[0], "clean"])
+    elif args.command == "list-allowed-repositories":
+        components = bootstrap()
+        sys.exit(
+            components.cli_runner.run(
+                [sys.argv[0], "list-allowed-repositories"]
+            )
+        )
     elif args.command == "list-items":
         if args.verbose:
             os.environ["DEBUG"] = "1"

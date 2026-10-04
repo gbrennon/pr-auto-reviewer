@@ -14,3 +14,4 @@ class PollingDaemonConfig:
     run_once: bool
     repos_allow_list: tuple[str, ...] = ()
     force_pr: int | None = None
+    platforms: tuple[str, ...] = ()

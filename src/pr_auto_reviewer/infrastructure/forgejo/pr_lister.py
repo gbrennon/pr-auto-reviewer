@@ -29,7 +29,6 @@ class ForgejoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         """List all open PRs in the given repository."""
         _, repository = split_repository_prefix(repository)
-        logger.info("Listing open PRs for %s", repository)
         try:
             payload: object = self._client.get(
                 f"/repos/{repository}/pulls",
@@ -44,11 +43,6 @@ class ForgejoPrLister(PrListerPort):
                 if (parsed := self._parse_open_pull_request(repository, pr)) is not None
             ]
             logger.debug("Found %d open PRs in %s", len(result), repository)
-            pr_summaries = [
-                (p.pr_id.number, p.title[:40], p.head_sha.value[:7])
-                for p in result
-            ]
-            logger.info("ForgejoPrLister.list_open return: %s", pr_summaries)
             return result
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError) as exc:
             logger.warning("Failed to list PRs for %s: %s", repository, exc)

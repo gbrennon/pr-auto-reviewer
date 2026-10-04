@@ -149,19 +149,11 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         key = StateKey.of(pr_id)
         raw = reviewed.get(key)
         if raw is None:
-            logger.debug("No persisted state for %s", pr_id)
             return None
 
-        logger.debug("Found persisted state for %s", pr_id)
-        pr = self._deserialize(pr_id, raw)
-        logger.info(
-            "JsonFilePullRequestRepository.find return: title='%s' sha=%s reviews=%d",
-            pr.title, pr.head_sha.value[:7], len(pr.reviews),
-        )
-        return pr
+        return self._deserialize(pr_id, raw)
 
     def save(self, pr: PullRequest) -> None:
-        logger.info("Persisting state for %s (%d reviews)", pr.id, len(pr.reviews))
         data = self._load()
         reviewed = data.setdefault("reviewed", {})
 

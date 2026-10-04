@@ -88,6 +88,25 @@ class TestGitPlatformHttpClient:
         assert isinstance(result, str)
         assert result.startswith("diff --git")
 
+    def test_get_does_not_log_response_body(self, monkeypatch, caplog):
+        """GET does not emit response bodies into debug logs."""
+        monkeypatch.setattr(
+            requests_lib,
+            "get",
+            lambda *a, **kw: _FakeResponse(
+                json_data={"ok": True},
+                text='[{"full_name": "owner/private-repository"}]',
+                content=b"payload",
+            ),
+        )
+        caplog.set_level(logging.DEBUG, logger="pr_auto_reviewer.infrastructure.client.git_platform_http_client")
+        client = GitPlatformHttpClient("https://x", "t")
+
+        client.get("/user/repos")
+
+        assert "owner/private-repository" not in caplog.text
+        assert "body (" not in caplog.text
+
     def test_get_raw_uses_auth_header(self, monkeypatch):
         """GET_RAW passes Authorization header correctly."""
         captured_kwargs: dict[str, Any] = {}

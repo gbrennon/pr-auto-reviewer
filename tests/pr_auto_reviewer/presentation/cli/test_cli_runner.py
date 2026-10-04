@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pr_auto_reviewer.application.dtos.list_allowed_repositories_response import (
+    ListAllowedRepositoriesResponse,
+)
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
@@ -37,6 +40,10 @@ class TestCliRunner:
         return MagicMock()
 
     @pytest.fixture
+    def mock_list_allowed_repositories(self) -> MagicMock:
+        return MagicMock()
+
+    @pytest.fixture
     def mock_review_reader(self) -> MagicMock:
         reader = MagicMock()
         reader.get_latest_review.return_value = None
@@ -51,6 +58,7 @@ class TestCliRunner:
         self,
         mock_review_service: MagicMock,
         mock_process_commands_service: MagicMock,
+        mock_list_allowed_repositories: MagicMock,
         mock_review_reader: MagicMock,
         mock_review_item_parser: MagicMock,
     ) -> CliRunner:
@@ -61,6 +69,7 @@ class TestCliRunner:
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
             review_item_parser=mock_review_item_parser,
+            list_allowed_repositories=mock_list_allowed_repositories,
         )
 
     def test_creation(self, runner: CliRunner) -> None:
@@ -96,6 +105,44 @@ class TestCliRunner:
             result = runner.run(["cli", "list-items"])
             assert result == 0
             mock.assert_called_once()
+
+    def test_run_lists_allowed_repositories(
+        self,
+        runner: CliRunner,
+        mock_list_allowed_repositories: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_list_allowed_repositories.execute.return_value = (
+            ListAllowedRepositoriesResponse(
+                allowed_repositories=("forgejo:owner/repo",),
+                allows_every_repository=False,
+            )
+        )
+
+        result = runner.run(["cli", "list-allowed-repositories"])
+
+        assert result == 0
+        assert capsys.readouterr().out == (
+            "Allowed repositories:\n- forgejo:owner/repo\n"
+        )
+
+    def test_run_reports_unrestricted_allowlist(
+        self,
+        runner: CliRunner,
+        mock_list_allowed_repositories: MagicMock,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        mock_list_allowed_repositories.execute.return_value = (
+            ListAllowedRepositoriesResponse(
+                allowed_repositories=(),
+                allows_every_repository=True,
+            )
+        )
+
+        result = runner.run(["cli", "list-allowed-repositories"])
+
+        assert result == 0
+        assert capsys.readouterr().out == "All repositories allowed\n"
 
     def test_run_review_pr_found(
         self,
