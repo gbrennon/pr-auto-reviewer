@@ -750,6 +750,30 @@ class TestPollingDaemon:
         ]
         assert len(stopped_calls) == 1
 
+    def test_allow_list_avoids_repository_discovery(self) -> None:
+        config = PollingDaemonConfig(
+            poll_interval_seconds=1,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/allowed",),
+        )
+        repo_lister = MockRepoLister([])
+        review_service = RecordingReviewService()
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=repo_lister,
+            pr_lister=PerRepoPrLister(),
+            review_service=review_service,
+        )
+
+        daemon.start()
+
+        assert repo_lister.list_calls == 0
+        assert [
+            command.pr_id.repository
+            for command in review_service.executed_commands
+        ] == ["owner/allowed"]
+
     def test_reviews_only_allowed_repositories(self) -> None:
         config = PollingDaemonConfig(
             poll_interval_seconds=1,

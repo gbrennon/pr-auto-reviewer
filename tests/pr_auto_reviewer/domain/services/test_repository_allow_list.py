@@ -76,3 +76,18 @@ class TestRepositoryAllowList:
         allow_list = RepositoryAllowList.from_entries(["GitHub:Owner/Repo"])
         assert allow_list.allows("github:owner/repo") is True
         assert allow_list.allows("GITHUB:OWNER/REPO") is True
+
+    def test_candidates_expand_bare_entries_for_configured_platforms(self) -> None:
+        allow_list = RepositoryAllowList.from_entries(["owner/repo"])
+
+        assert allow_list.candidates(("github", "forgejo")) == (
+            "forgejo:owner/repo",
+            "github:owner/repo",
+        )
+
+    def test_candidates_keep_only_matching_prefixed_entries(self) -> None:
+        allow_list = RepositoryAllowList.from_entries(
+            ["github:owner/gh", "forgejo:owner/fj"]
+        )
+
+        assert allow_list.candidates(("github",)) == ("github:owner/gh",)
