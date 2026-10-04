@@ -101,7 +101,6 @@ class PollingDaemon:
         try:
             while True:
                 cycle += 1
-                logger.info("=== Cycle #%d ===", cycle)
                 self._run_cycle()
 
                 if self._config.run_once:
@@ -206,24 +205,17 @@ class PollingDaemon:
     def _log_repo_filtering(
         self, repos: list[RepoInfo], allowed: list[RepoInfo]
     ) -> None:
-        """Report repositories dropped by the allow list."""
-        allowed_names = {repo.full_name for repo in allowed}
-        for repo in repos:
-            if repo.full_name not in allowed_names:
-                logger.debug(
-                    "Skipping repository not in allow list: %s", repo.full_name
-                )
+        """Report the number of repositories dropped by the allow list."""
+        skipped_count = len(repos) - len(allowed)
+        if skipped_count:
+            logger.debug(
+                "Skipping %d repositories not in allow list", skipped_count
+            )
         if not allowed:
             logger.warning("No repositories remain after allow-list filtering")
 
     def _run_cycle(self) -> None:
         """Execute one polling cycle."""
-        allow_list = (
-            ", ".join(sorted(self._repository_allow_list.allowed_repositories))
-            or "(all repositories)"
-        )
-        logger.info("Repository allow list: %s", allow_list)
-
         repos = self._repo_lister.list_repos()
 
         if not repos:
@@ -252,14 +244,7 @@ class PollingDaemon:
         self._mark_repo_seen(info)
         actionable_prs = self._actionable_prs(open_prs, repo_is_stale)
 
-        if not open_prs:
-            logger.debug(f"No open PRs in {info.full_name}")
-            return
-        if not actionable_prs:
-            logger.debug(
-                "Repo %s unchanged since last cycle; no review requests",
-                info.full_name,
-            )
+        if not open_prs or not actionable_prs:
             return
 
         for pr in actionable_prs:
