@@ -27,7 +27,6 @@ class GithubPrLister(PrListerPort):
 
     def list_open(self, repository: str) -> list[OpenPullRequest]:
         _, repository = split_repository_prefix(repository)
-        logger.info("Listing open PRs for %s", repository)
         try:
             data = self._client.get(
                 f"/repos/{repository}/pulls",
