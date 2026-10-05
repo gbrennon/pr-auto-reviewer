@@ -19,7 +19,6 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
-from ...domain.services.praise_regression_policy import PraiseRegressionPolicy
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
@@ -29,6 +28,7 @@ from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_verdict import ReviewVerdict
+from ...domain.value_objects.suggestion_origin import SuggestionOrigin
 from ...domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from ..ports.inbound.review_pull_request_port import ReviewPullRequestPort
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
@@ -292,33 +292,8 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
         )
         review = self._drop_persisted_duplicates(review, existing_pr)
-        return self._append_praise_regressions(review, existing_pr)
+        return review
 
-    def _append_praise_regressions(
-        self,
-        review: CodeReview,
-        existing_pr: PullRequest | None,
-    ) -> CodeReview:
-        """Add a suggestion for each prior praise the review no longer affirms.
-
-        A quality praised in the last review but absent now is surfaced as a
-        non-blocking suggestion, never as an issue. Regressions already
-        suggested in the previous review are not restated.
-        """
-        if existing_pr is None or not existing_pr.reviews:
-            return review
-        last_review = existing_pr.reviews[-1]
-        regressions = PraiseRegressionPolicy().regressions(
-            list(last_review.praise),
-            list(review.praise),
-            list(last_review.suggestions),
-        )
-        if not regressions:
-            return review
-        return replace(
-            review,
-            suggestions=[*review.suggestions, *regressions],
-        )
 
     def _drop_persisted_duplicates(
         self,
@@ -619,21 +594,26 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         prior_review: CodeReview,
         review: CodeReview,
     ) -> tuple[list[ReviewItem], list[ReviewItem]]:
-        """Return retained prior items and suggestions by their categories."""
+        """Return eligible prior entries by their categories."""
         current_ids = {
             entry.id
             for entry in review.items + review.suggestions
             if entry.id
         }
+        retained_suggestions = (
+            ReviewPullRequestService._retain_entries(
+                prior_review.suggestions,
+                current_ids,
+            )
+            if prior_review.suggestion_origin is SuggestionOrigin.ARCHITECTURE
+            else []
+        )
         return (
             ReviewPullRequestService._retain_entries(
                 prior_review.items,
                 current_ids,
             ),
-            ReviewPullRequestService._retain_entries(
-                prior_review.suggestions,
-                current_ids,
-            ),
+            retained_suggestions,
         )
 
     @staticmethod
