@@ -9,7 +9,7 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
     AuditRemediationCommand,
 )
-
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 
 class FakeAuditTranscriptRunner:
     """Fake transcript seam returning canned audit results."""
@@ -38,7 +38,7 @@ class TestRemediationAuditExecute:
             )
         )
         out = service.execute(self._command())
-        assert out[0].status == "open"
+        assert out[0].status is ReviewItemStatus.OPEN
 
     def test_resolves_only_with_proof(self) -> None:
         service = self._build_service(
@@ -51,17 +51,17 @@ class TestRemediationAuditExecute:
             )
         )
         out = service.execute(self._command())
-        assert out[0].status == "resolved"
+        assert out[0].status is ReviewItemStatus.RESOLVED
 
     def test_defaults_open_when_result_missing(self) -> None:
         service = self._build_service(FakeAuditTranscriptRunner([]))
         out = service.execute(self._command())
-        assert out[0].status == "open"
+        assert out[0].status is ReviewItemStatus.OPEN
 
     def test_defaults_open_when_transcript_aborts(self) -> None:
         service = self._build_service(FakeAuditTranscriptRunner(None))
         out = service.execute(self._command())
-        assert out[0].status == "open"
+        assert out[0].status is ReviewItemStatus.OPEN
 
     @staticmethod
     def _prior() -> list[ReviewItem]:
