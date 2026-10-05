@@ -30,14 +30,23 @@ def issues_created_message(
     )
     return f"Created {len(issues)} issue(s):\n\n{lines}"
 
-def dismissed_items_message(item_ids: Sequence[str]) -> str:
-    """Build an acknowledgement for dismissed review items."""
-    ids = ", ".join(item_ids)
-    return f"Dismissed {len(item_ids)} review item(s): {ids}"
+def dismissed_items_message(
+    item_ids: Sequence[str], review_items: Sequence[ReviewItem],
+) -> str:
+    """Build an acknowledgement with each dismissed item's classification."""
+    items_by_id = {item.id: item for item in review_items}
+    details = ", ".join(
+        _command_item_label(items_by_id[item_id])
+        for item_id in item_ids
+        if item_id in items_by_id
+    )
+    return f"Dismissed {len(item_ids)} non-blocking review item(s): {details}"
 
 
 def rejected_command_items_message(
-    action: IssueCommandAction, item_ids: Sequence[str],
+    action: IssueCommandAction,
+    item_ids: Sequence[str],
+    review_items: Sequence[ReviewItem],
 ) -> str:
     """Explain why command IDs were not eligible for automation."""
     action_name = (
@@ -45,11 +54,25 @@ def rejected_command_items_message(
         if action is IssueCommandAction.CREATE_ISSUE
         else "dismiss review items"
     )
-    ids = ", ".join(item_ids)
+    items_by_id = {item.id: item for item in review_items}
+    details = ", ".join(
+        _command_item_label(items_by_id[item_id])
+        for item_id in item_ids
+        if item_id in items_by_id
+    )
     return (
-        f"Cannot {action_name} for: {ids}. "
+        f"Cannot {action_name} for: {details}. "
         "Only open non-blocking review items are eligible; "
         "blocking findings must be handled through code changes and formal review."
+    )
+
+
+def _command_item_label(item: ReviewItem) -> str:
+    """Format an item ID with severity, category, and blocking classification."""
+    blocking_label = "blocking" if item.is_blocking else "non-blocking"
+    return (
+        f"`{item.id}` ({item.severity.value} {item.category.value}, "
+        f"{blocking_label}; status: {item.status.value})"
     )
 
 

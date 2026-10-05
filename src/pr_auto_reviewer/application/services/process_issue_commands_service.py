@@ -98,9 +98,11 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
         pr: PullRequest,
         rejected: list[str],
         action: IssueCommandAction,
+        review_items: Sequence[ReviewItem],
     ) -> None:
         self._comment_publisher.post(
-            pr.id, rejected_command_items_message(action, rejected),
+            pr.id,
+            rejected_command_items_message(action, rejected, review_items),
         )
     def _publish_invalid_items_message(
         self,
@@ -133,9 +135,14 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             pr.id, issues_created_message(created_issues, review_items),
         )
     def _publish_dismissed_items_message(
-        self, pr: PullRequest, dismissed: list[str],
+        self,
+        pr: PullRequest,
+        dismissed: list[str],
+        review_items: Sequence[ReviewItem],
     ) -> None:
-        self._comment_publisher.post(pr.id, dismissed_items_message(dismissed))
+        self._comment_publisher.post(
+            pr.id, dismissed_items_message(dismissed, review_items),
+        )
 
     def _process_each_comment(
         self,
@@ -173,12 +180,14 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             )
         if rejected:
             self._publish_rejected_items_message(
-                updated_pr, rejected, cmd.action,
+                updated_pr, rejected, cmd.action, review_items,
             )
         if cmd.action is IssueCommandAction.DISMISS:
             updated_pr = updated_pr.dismiss_review_items(*valid)
             if valid:
-                self._publish_dismissed_items_message(updated_pr, valid)
+                self._publish_dismissed_items_message(
+                    updated_pr, valid, review_items,
+                )
             return updated_pr
 
         available_ids = list(
