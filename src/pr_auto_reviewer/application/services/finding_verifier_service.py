@@ -39,6 +39,7 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
     ExploreBeforeResultsRenderer,
     VerifyEmptyResponseRenderer,
@@ -130,7 +131,7 @@ class FindingVerifierService(VerifyFindingsPort):
         verified_indices = self._verified_current_indices(results)
         self._log_refuted_findings(results, verified_indices)
         kept = [
-            replace(item, status="open")
+            replace(item, status=ReviewItemStatus.OPEN)
             for i, item in enumerate(survivors)
             if i in verified_indices
         ]
@@ -165,7 +166,7 @@ class FindingVerifierService(VerifyFindingsPort):
         """Keep non-blocking survivors open and drop blocking ones on abort."""
         logger.warning("Verification aborted; dropping blocking findings")
         return [
-            replace(item, status="open")
+            replace(item, status=ReviewItemStatus.OPEN)
             for item in survivors
             if not item.is_blocking
         ]
