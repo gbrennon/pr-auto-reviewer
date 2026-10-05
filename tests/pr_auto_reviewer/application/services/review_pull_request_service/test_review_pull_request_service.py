@@ -768,3 +768,121 @@ class TestReviewPullRequestService:
         assert published.verdict == ReviewVerdict.APPROVED
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert not saved_pr.unresolved_blocking_ids
+
+    def test_republishes_prior_suggestions_as_suggestions(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+    ) -> None:
+        prior_item = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="src/app.py",
+            description="Handle the failure path",
+        )
+        prior_suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.STYLE,
+            file_path="src/app.py",
+            description="Consider a clearer name",
+        )
+        prior_review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[prior_item],
+            suggestions=[prior_suggestion],
+            summary="Needs changes",
+            model_used="test",
+            reason="test reason",
+        )
+        prior = _pr(_pr_id(), _sha("old111")).add_review(
+            prior_review,
+            _sha("old111"),
+        )
+        cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
+        mock_pr_repository.find.return_value = prior
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id,
+            cmd.head_sha,
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED,
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        published = mock_review_publisher.publish.call_args.args[1]
+
+        assert [item.id for item in published.items] == ["item-1"]
+        assert [item.id for item in published.suggestions] == ["suggestion-1"]
+
+    def test_does_not_duplicate_reclassified_prior_suggestions(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+    ) -> None:
+        prior_suggestion = ReviewItem(
+            id="shared-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.STYLE,
+            file_path="src/app.py",
+            description="Consider a clearer name",
+        )
+        prior_review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            suggestions=[prior_suggestion],
+            summary="Looks good",
+            model_used="test",
+            reason="test reason",
+        )
+        prior = _pr(_pr_id(), _sha("old111")).add_review(
+            prior_review,
+            _sha("old111"),
+        )
+        reclassified = ReviewItem(
+            id="shared-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.BUG,
+            file_path="src/app.py",
+            description="Handle the failure path",
+        )
+        current_review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[reclassified],
+            summary="Needs changes",
+            model_used="test",
+            reason="test reason",
+        )
+        cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
+        mock_pr_repository.find.return_value = prior
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id,
+            cmd.head_sha,
+        )
+        mock_llm_review.review_prompt.return_value = current_review
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        published = mock_review_publisher.publish.call_args.args[1]
+
+        assert [item.id for item in published.items] == ["shared-1"]
+        assert published.suggestions == []
