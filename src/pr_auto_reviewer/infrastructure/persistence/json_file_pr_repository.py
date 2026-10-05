@@ -25,6 +25,7 @@ from ...domain.value_objects.issue_category import IssueCategory
 from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_verdict import ReviewVerdict
+from ...domain.value_objects.suggestion_origin import SuggestionOrigin
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class CodeReviewCodec:
             "verdict": review.verdict.value,
             "summary": review.summary,
             "model_used": review.model_used,
+            "suggestion_origin": review.suggestion_origin.value,
             "items": [ReviewItemCodec.serialize(i) for i in review.items],
             "suggestions": [
                 ReviewItemCodec.serialize(s) for s in review.suggestions
@@ -96,10 +98,22 @@ class CodeReviewCodec:
 
     @classmethod
     def deserialize(cls, raw: dict) -> CodeReview:
+        """Load only provenance-backed suggestions from persisted reviews."""
+        suggestion_origin = SuggestionOrigin(
+            raw.get(
+                "suggestion_origin",
+                SuggestionOrigin.LEGACY_UNKNOWN.value,
+            )
+        )
         items = [ReviewItemCodec.deserialize(i) for i in raw.get("items", [])]
-        suggestions = [
-            ReviewItemCodec.deserialize(s) for s in raw.get("suggestions", [])
-        ]
+        suggestions = (
+            [
+                ReviewItemCodec.deserialize(s)
+                for s in raw.get("suggestions", [])
+            ]
+            if suggestion_origin is SuggestionOrigin.ARCHITECTURE
+            else []
+        )
         praise = [ReviewItemCodec.deserialize(p) for p in raw.get("praise", [])]
         verdict = cls._resolve_verdict(str(raw.get("verdict", "")), items)
         summary, reason, model_used = cls._resolve_strings(raw, items)
@@ -108,6 +122,12 @@ class CodeReviewCodec:
             reason=reason,
             summary=summary,
             model_used=model_used,
+            suggestion_origin=SuggestionOrigin(
+                raw.get(
+                    "suggestion_origin",
+                    SuggestionOrigin.LEGACY_UNKNOWN.value,
+                )
+            ),
             items=items,
             suggestions=suggestions,
             praise=praise,
