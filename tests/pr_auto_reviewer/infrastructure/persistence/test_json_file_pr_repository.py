@@ -23,6 +23,7 @@ from pr_auto_reviewer.domain import (
     PullRequestId,
     ReviewItem,
     ReviewVerdict,
+    SuggestionOrigin,
 )
 from pr_auto_reviewer.domain.exceptions import RepositoryCorruptedError
 from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
@@ -413,3 +414,53 @@ class TestJsonFilePullRequestRepository:
         assert len(loaded.reviews) == 1
         assert loaded.reviews[0].suggestions == []
         assert len(loaded.reviews[0].items) == 1
+
+    def test_old_review_suggestions_are_legacy_unknown(
+        self, tmp_path: Path,
+    ) -> None:
+        state_file = tmp_path / "state.json"
+        old_raw = {
+            "reviewed": {
+                "owner/repo/42": {
+                    "title": "Old PR",
+                    "head_sha": "abc1234",
+                    "is_draft": False,
+                    "reviews": [
+                        {
+                            "verdict": "approved",
+                            "summary": "Looks good",
+                            "model_used": "test-model",
+                            "reason": "All passed",
+                            "items": [],
+                            "suggestions": [
+                                {
+                                    "id": "legacy-1",
+                                    "severity": "info",
+                                    "category": "general",
+                                    "file_path": "src/app.py",
+                                    "description": "Previously praised quality",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            }
+        }
+        state_file.write_text(json.dumps(old_raw))
+
+        repo = self._repo(tmp_path)
+        loaded = repo.find(
+            PullRequestId(repository="owner/repo", number=42)
+        )
+
+        assert loaded is not None
+        assert loaded.reviews[0].suggestion_origin is (
+            SuggestionOrigin.LEGACY_UNKNOWN
+        )
+        assert loaded.reviews[0].suggestions == []
+
+        repo.save(loaded)
+        saved = json.loads(state_file.read_text())
+        assert saved["reviewed"]["owner/repo/42"]["reviews"][0][
+            "suggestions"
+        ] == []
