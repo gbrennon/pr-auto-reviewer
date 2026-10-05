@@ -601,23 +601,52 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     def _retain_prior_review_items(
         self, pr: PullRequest, review: CodeReview,
     ) -> CodeReview:
-        """Carry every prior item into the newly published review."""
+        """Carry prior items and suggestions into the newly published review."""
         if not pr.reviews:
             return review
 
-        current_by_id = {
-            item.id: item for item in review.items if item.id
-        }
-        prior_items = pr.latest_review_items()
-        retained = [
-            current_by_id.get(item.id, item)
-            for item in prior_items
-            if item.id and item.id not in current_by_id
-        ]
-        if not retained:
-            return review
+        retained_items, retained_suggestions = (
+            self._retained_review_entries(pr.reviews[-1], review)
+        )
+        return replace(
+            review,
+            items=retained_items + review.items,
+            suggestions=retained_suggestions + review.suggestions,
+        )
 
-        return replace(review, items=retained + review.items)
+    @staticmethod
+    def _retained_review_entries(
+        prior_review: CodeReview,
+        review: CodeReview,
+    ) -> tuple[list[ReviewItem], list[ReviewItem]]:
+        """Return retained prior items and suggestions by their categories."""
+        current_ids = {
+            entry.id
+            for entry in review.items + review.suggestions
+            if entry.id
+        }
+        return (
+            ReviewPullRequestService._retain_entries(
+                prior_review.items,
+                current_ids,
+            ),
+            ReviewPullRequestService._retain_entries(
+                prior_review.suggestions,
+                current_ids,
+            ),
+        )
+
+    @staticmethod
+    def _retain_entries(
+        prior_entries: list[ReviewItem],
+        current_ids: set[str],
+    ) -> list[ReviewItem]:
+        """Return prior entries whose IDs are absent from the current review."""
+        return [
+            entry
+            for entry in prior_entries
+            if entry.id and entry.id not in current_ids
+        ]
 
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
         """Return IDs of open review items whose severity is blocking."""
