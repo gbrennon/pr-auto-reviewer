@@ -1,4 +1,5 @@
 from ._helpers import *
+from pr_auto_reviewer.domain.value_objects.suggestion_origin import SuggestionOrigin
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -825,6 +826,66 @@ class TestReviewPullRequestService:
 
         assert [item.id for item in published.items] == ["item-1"]
         assert [item.id for item in published.suggestions] == ["suggestion-1"]
+
+    def test_drops_legacy_praise_suggestions_but_keeps_architecture_suggestions(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+    ) -> None:
+        legacy_suggestion = ReviewItem(
+            id="legacy-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.GENERAL,
+            file_path="src/app.py",
+            description="This pull request previously received praise",
+        )
+        prior_review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            suggestions=[legacy_suggestion],
+            summary="Previous review",
+            model_used="test",
+            reason="test reason",
+            suggestion_origin=SuggestionOrigin.LEGACY_UNKNOWN,
+        )
+        prior = _pr(_pr_id(), _sha("old111")).add_review(
+            prior_review,
+            _sha("old111"),
+        )
+        current_suggestion = ReviewItem(
+            id="architecture-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.MAINTAINABILITY,
+            file_path="README.md",
+            description="Extract the orchestration policy",
+        )
+        cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
+        mock_pr_repository.find.return_value = prior
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id,
+            cmd.head_sha,
+        )
+        mock_llm_review.review_prompt.return_value = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            suggestions=[current_suggestion],
+            summary="Current review",
+            model_used="test",
+            reason="test reason",
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        published = mock_review_publisher.publish.call_args.args[1]
+
+        assert [item.id for item in published.suggestions] == ["architecture-1"]
 
     def test_does_not_duplicate_reclassified_prior_suggestions(
         self,
