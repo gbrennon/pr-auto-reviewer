@@ -23,6 +23,7 @@ from .review_execution_context import ReviewExecutionContext
 from .review_phase import ReviewPhase
 from .review_plan import ReviewPlan
 from .review_verdict import ReviewVerdict
+from .suggestion_origin import SuggestionOrigin
 from .sub_agent_grade import SubAgentGrade
 from .sub_review_guardrails import SubReviewGuardrails
 from .token_slug import TokenSlug
@@ -57,6 +58,7 @@ __all__ = [
     "ReviewPhase",
     "ReviewPlan",
     "ReviewVerdict",
+    "SuggestionOrigin",
     "SubAgentGrade",
     "SubReviewGuardrails",
     "TokenSlug",
