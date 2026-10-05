@@ -20,7 +20,7 @@ class TestIssuesCreatedMessage:
             category=IssueCategory.BUG,
             file_path="x.py",
             description="broken",
-            status="open",
+            status=ReviewItemStatus.OPEN,
         )
 
         result = issues_created_message([issue], [item])
@@ -47,12 +47,12 @@ class TestIssuesCreatedMessage:
         item1 = ReviewItem(
             id="id-1", severity=ItemSeverity.CRITICAL,
             category=IssueCategory.SECURITY,
-            file_path="a.py", description="SQL injection", status="open",
+            file_path="a.py", description="SQL injection", status=ReviewItemStatus.OPEN,
         )
         item2 = ReviewItem(
             id="id-2", severity=ItemSeverity.MINOR,
             category=IssueCategory.DOCS,
-            file_path="b.py", description="Typo", status="open",
+            file_path="b.py", description="Typo", status=ReviewItemStatus.OPEN,
         )
 
         result = issues_created_message([issue1, issue2], [item1, item2])
@@ -93,7 +93,7 @@ class TestIssuesCreatedMessage:
             category=IssueCategory.STYLE,
             file_path="src/main.py",
             description="Rename variable",
-            status="resolved",
+            status=ReviewItemStatus.RESOLVED,
         )
 
         result = issues_created_message([issue], [item])
