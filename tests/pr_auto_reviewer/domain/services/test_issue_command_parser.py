@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.value_objects.issue_command import IssueCommand
+from pr_auto_reviewer.domain.value_objects.issue_command_action import (
+    IssueCommandAction,
+)
 
 
 class TestIssueCommandParser:
@@ -15,8 +18,9 @@ class TestIssueCommandParser:
         result = parser.parse("test/comment-id", "/create issue a3f2,b7d1")
 
         assert result is not None
+        assert result.action is IssueCommandAction.CREATE_ISSUE
         assert result.comment_id == "test/comment-id"
-        assert result.item_ids == ["a3f2", "b7d1"]
+        assert result.item_ids == ("a3f2", "b7d1")
 
     def test_parse_command_with_prefix(self) -> None:
         """Test parsing with /create issue for prefix."""
@@ -25,7 +29,7 @@ class TestIssueCommandParser:
 
         assert result is not None
         assert result.comment_id == "test/id"
-        assert result.item_ids == ["c4e5"]
+        assert result.item_ids == ("c4e5",)
 
     def test_parse_command_mixed_case(self) -> None:
         """Test parsing preserves case of IDs."""
@@ -34,7 +38,7 @@ class TestIssueCommandParser:
 
         assert result is not None
         # IDs are captured as-is (case preserved)
-        assert result.item_ids == ["X1", "Y2"]
+        assert result.item_ids == ("X1", "Y2")
 
     def test_parse_no_command_returns_none(self) -> None:
         """Test that non-matching bodies return None."""
@@ -60,11 +64,29 @@ class TestIssueCommandParser:
         result = parser.parse("id", "/create issue xyz123")
 
         assert result is not None
-        assert result.item_ids == ["xyz123"]
+        assert result.item_ids == ("xyz123",)
+
+    def test_parse_dismiss_command_with_spaces_around_commas(self) -> None:
+        """Parse dismissal IDs with optional whitespace around commas."""
+        parser = IssueCommandParser()
+
+        result = parser.parse("test/dismiss", "dismiss e03401 , b99602")
+
+        assert result is not None
+        assert result.action is IssueCommandAction.DISMISS
+        assert result.item_ids == ("e03401", "b99602")
+
+    def test_parse_dismiss_without_ids_returns_none(self) -> None:
+        """Reject a dismissal command without any item IDs."""
+        assert IssueCommandParser().parse("id", "dismiss") is None
+
+    def test_issue_command_defaults_to_create_action(self) -> None:
+        """Preserve create-issue action for direct value-object construction."""
+        cmd = IssueCommand(comment_id="test-id", item_ids=("a1", "b2"))
+        assert cmd.action is IssueCommandAction.CREATE_ISSUE
 
     def test_issue_command_creation(self) -> None:
         """Test IssueCommand VO creation."""
-        cmd = IssueCommand(comment_id="test-id", item_ids=["a1", "b2"])
+        cmd = IssueCommand(comment_id="test-id", item_ids=("a1", "b2"))
 
-        assert cmd.comment_id == "test-id"
-        assert cmd.item_ids == ["a1", "b2"]
+        assert cmd.item_ids == ("a1", "b2")
