@@ -6,6 +6,7 @@ from pr_auto_reviewer.domain import (
     ItemSeverity,
     PullRequestId,
     ReviewItem,
+    ReviewItemStatus,
 )
 from pr_auto_reviewer.domain.messages import (
     invalid_items_message,
@@ -18,6 +19,7 @@ __all__ = [
     "ItemSeverity",
     "PullRequestId",
     "ReviewItem",
+    "ReviewItemStatus",
     "invalid_items_message",
     "issues_created_message",
 ]
