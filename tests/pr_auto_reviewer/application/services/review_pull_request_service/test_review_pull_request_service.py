@@ -1,4 +1,5 @@
 from ._helpers import *
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -713,7 +714,7 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
         assert [item.id for item in published.items] == ["block-1"]
-        assert published.items[0].status == "open"
+        assert published.items[0].status is ReviewItemStatus.OPEN
         assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
@@ -743,7 +744,7 @@ class TestReviewPullRequestService:
             category=IssueCategory.BUG,
             file_path="src/app.py",
             description="Handle the failure path",
-            status="resolved",
+            status=ReviewItemStatus.RESOLVED,
         )
         cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
         mock_pr_repository.find.return_value = prior
@@ -764,7 +765,7 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
         assert [item.id for item in published.items] == ["block-1"]
-        assert published.items[0].status == "resolved"
+        assert published.items[0].status is ReviewItemStatus.RESOLVED
         assert published.verdict == ReviewVerdict.APPROVED
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert not saved_pr.unresolved_blocking_ids
