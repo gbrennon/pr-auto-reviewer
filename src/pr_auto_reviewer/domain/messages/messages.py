@@ -1,9 +1,10 @@
 """Pure domain functions to build human-readable comment messages."""
 
 from collections.abc import Sequence
+
 from ..entities.issue import Issue
 from ..entities.review_item import ReviewItem
-
+from ..value_objects.issue_command_action import IssueCommandAction
 
 def invalid_items_message(
     invalid: Sequence[str | int], available: Sequence[ReviewItem]
@@ -28,6 +29,28 @@ def issues_created_message(
         for issue in issues
     )
     return f"Created {len(issues)} issue(s):\n\n{lines}"
+
+def dismissed_items_message(item_ids: Sequence[str]) -> str:
+    """Build an acknowledgement for dismissed review items."""
+    ids = ", ".join(item_ids)
+    return f"Dismissed {len(item_ids)} review item(s): {ids}"
+
+
+def rejected_command_items_message(
+    action: IssueCommandAction, item_ids: Sequence[str],
+) -> str:
+    """Explain why command IDs were not eligible for automation."""
+    action_name = (
+        "create tracker issues"
+        if action is IssueCommandAction.CREATE_ISSUE
+        else "dismiss review items"
+    )
+    ids = ", ".join(item_ids)
+    return (
+        f"Cannot {action_name} for: {ids}. "
+        "Only open non-blocking review items are eligible; "
+        "blocking findings must be handled through code changes and formal review."
+    )
 
 
 def _created_issue_line(issue: Issue, item: ReviewItem | None) -> str:

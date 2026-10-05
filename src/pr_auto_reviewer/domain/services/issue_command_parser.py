@@ -5,15 +5,16 @@ from __future__ import annotations
 import re
 
 from ..value_objects.issue_command import IssueCommand
+from ..value_objects.issue_command_action import IssueCommandAction
 
 
 class IssueCommandParser:
-    """Pure domain service. Detects command syntax in a comment body
-    (e.g. ``/create issue a3f2,b7d1``) and returns
-    an IssueCommand VO, or None."""
+    """Pure domain service for parsing PR review commands."""
 
     _COMMAND_PATTERN = re.compile(
-        r"/?\s*create[- ]?issue(?:\s+for)?\s+(?P<ids>[a-zA-Z0-9\-]+(?:\s*,\s*[a-zA-Z0-9\-]+)*)",
+        r"/?\s*(?:(?P<create>create[- ]?issue)(?:\s+for)?|"
+        r"(?P<dismiss>dismiss))\s+"
+        r"(?P<ids>[a-zA-Z0-9\-]+(?:\s*,\s*[a-zA-Z0-9\-]+)*)",
         re.IGNORECASE,
     )
 
@@ -35,4 +36,9 @@ class IssueCommandParser:
         return IssueCommand(
             comment_id=comment_id,
             item_ids=ids,
+            action=(
+                IssueCommandAction.DISMISS
+                if match.group("dismiss")
+                else IssueCommandAction.CREATE_ISSUE
+            ),
         )

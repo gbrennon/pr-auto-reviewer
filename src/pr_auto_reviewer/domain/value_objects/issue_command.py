@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field
 
+from .issue_command_action import IssueCommandAction
 
 @dataclass(frozen=True)
 class IssueCommand:
-    """A parsed user intent extracted from a PR comment requesting issue creation.
+    """A parsed user intent extracted from a PR comment.
 
     Derived from parsing a comment body. It is a description of intent,
     not a persistent record.
@@ -13,3 +14,4 @@ class IssueCommand:
 
     comment_id: str
     item_ids: list[str] = field(default_factory=list)
+    action: IssueCommandAction = IssueCommandAction.CREATE_ISSUE

@@ -10,8 +10,10 @@ from .conversation_message import ConversationMessage
 from .git_credentials import GitCredentials
 from .issue_category import IssueCategory
 from .issue_command import IssueCommand
+from .issue_command_action import IssueCommandAction
 from .issue_content import IssueContent
 from .item_severity import ItemSeverity
+from .review_item_status import ReviewItemStatus
 from .phase_result import PhaseResult
 from .pr_comment import PrComment
 from .pull_request_diff import PullRequestDiff
@@ -42,9 +44,11 @@ __all__ = [
     "GitCredentials",
     "IssueCategory",
     "IssueCommand",
+    "IssueCommandAction",
     "IssueContent",
     "ItemSeverity",
     "PhaseResult",
+    "ReviewItemStatus",
     "PrComment",
     "PullRequestDiff",
     "PullRequestId",

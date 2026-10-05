@@ -29,6 +29,7 @@ from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -474,7 +475,7 @@ class TestProcessIssueCommandsService:
     def _item(self) -> ReviewItem:
         return ReviewItem(
             id="id-1",
-            severity=ItemSeverity.MAJOR,
+            severity=ItemSeverity.MINOR,
             category=IssueCategory.BUG,
             file_path="x.py",
             description="broken code",
@@ -494,3 +495,118 @@ class TestProcessIssueCommandsService:
         return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
             review, _sha
         )
+    def test_dismisses_nonblocking_suggestion_and_rejects_blocking_item(
+        self,
+        _pr_id: PullRequestId,
+        _sha: CommitSha,
+    ) -> None:
+        suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.STYLE,
+            file_path="x.py",
+            description="Simplify this branch",
+        )
+        blocking = ReviewItem(
+            id="blocking-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="x.py",
+            description="Fix this bug",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found issues",
+            summary="Review summary",
+            model_used="model",
+            items=[blocking],
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="c-dismiss"),
+                    body="dismiss suggestion-1 , blocking-1",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                ),
+                PrComment(
+                    id=CommentId(value="c-dismiss-again"),
+                    body="dismiss suggestion-1",
+                    created_at=datetime(2025, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=InMemoryCommandBus(),
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        saved_pr = fake_repo.save_calls[0]
+        assert saved_pr.dismissed_item_ids == frozenset({"suggestion-1"})
+        dismissed_items = saved_pr.latest_review_items()
+        assert dismissed_items[1].status is ReviewItemStatus.DISMISSED
+        assert saved_pr.reviews[-1].suggestions[0].status is ReviewItemStatus.OPEN
+        assert "blocking-1" in fake_publisher.post_calls[0][1]
+        assert len(fake_publisher.post_calls) == 3
+        assert "Cannot dismiss review items" in fake_publisher.post_calls[2][1]
+
+    def test_rejects_create_issue_for_blocking_item(
+        self,
+        _pr_id: PullRequestId,
+        _sha: CommitSha,
+    ) -> None:
+        blocking = ReviewItem(
+            id="id-1",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="x.py",
+            description="blocking bug",
+        )
+        pr = PullRequest(
+            id=_pr_id,
+            title="Test PR",
+            head_sha=_sha,
+        ).add_review(
+            CodeReview(
+                verdict=ReviewVerdict.CHANGES_REQUESTED,
+                reason="Found issues",
+                summary="Review summary",
+                model_used="model",
+                items=[blocking],
+            ),
+            _sha,
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="c-create-blocking"),
+                    body="create issue id-1",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert "id-1" in fake_publisher.post_calls[0][1]
+        assert fake_repo.save_calls[0].created_issue_item_ids == frozenset()

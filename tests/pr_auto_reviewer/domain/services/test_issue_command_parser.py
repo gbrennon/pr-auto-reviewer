@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pr_auto_reviewer.domain.services.issue_command_parser import IssueCommandParser
 from pr_auto_reviewer.domain.value_objects.issue_command import IssueCommand
-
+from pr_auto_reviewer.domain.value_objects.issue_command_action import (
+    IssueCommandAction,
+)
 
 class TestIssueCommandParser:
     """Tests for IssueCommandParser - pure domain service."""
@@ -15,7 +17,7 @@ class TestIssueCommandParser:
         result = parser.parse("test/comment-id", "/create issue a3f2,b7d1")
 
         assert result is not None
-        assert result.comment_id == "test/comment-id"
+        assert result.action is IssueCommandAction.CREATE_ISSUE
         assert result.item_ids == ["a3f2", "b7d1"]
 
     def test_parse_command_with_prefix(self) -> None:
@@ -68,3 +70,11 @@ class TestIssueCommandParser:
 
         assert cmd.comment_id == "test-id"
         assert cmd.item_ids == ["a1", "b2"]
+    def test_parse_dismiss_command_with_spaces_around_comma(self) -> None:
+        parser = IssueCommandParser()
+
+        result = parser.parse("id", "dismiss e03401 , b99602")
+
+        assert result is not None
+        assert result.action == "dismiss"
+        assert result.item_ids == ["e03401", "b99602"]

@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from pr_auto_reviewer.domain import ItemSeverity, ReviewItem
+from pr_auto_reviewer.domain import ItemSeverity, ReviewItem, ReviewItemStatus
 
 
 class TestReviewItem:
@@ -103,3 +103,15 @@ class TestReviewItem:
             id="test-hash",
         )
         assert hash(item) == hash(item)
+    def test_creation_with_dismissed_status(self) -> None:
+        item = ReviewItem(
+            severity=ItemSeverity.INFO,
+            category="style",
+            file_path=None,
+            description="dismissed suggestion",
+            id="dismissed-item",
+            status=ReviewItemStatus.DISMISSED,
+        )
+
+        assert item.status is ReviewItemStatus.DISMISSED
+        assert item.is_open is False

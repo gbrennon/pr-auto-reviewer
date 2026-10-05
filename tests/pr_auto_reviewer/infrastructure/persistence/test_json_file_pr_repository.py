@@ -48,6 +48,7 @@ class TestJsonFilePullRequestRepository:
         processed_comment_ids: frozenset[CommentId] = frozenset(),
         unresolved_blocking_ids: frozenset[str] = frozenset(),
         created_issue_item_ids: frozenset[str] = frozenset(),
+        dismissed_item_ids: frozenset[str] = frozenset(),
         last_reviewed_at: str | None = None,
     ) -> PullRequest:
         return PullRequest(
@@ -59,6 +60,7 @@ class TestJsonFilePullRequestRepository:
             processed_comment_ids=processed_comment_ids,
             unresolved_blocking_ids=unresolved_blocking_ids,
             created_issue_item_ids=created_issue_item_ids,
+            dismissed_item_ids=dismissed_item_ids,
             last_reviewed_at=last_reviewed_at,
         )
 
@@ -182,6 +184,7 @@ class TestJsonFilePullRequestRepository:
             processed_comment_ids=frozenset({CommentId("101"), CommentId("204")}),
             unresolved_blocking_ids=frozenset({"a3f2", "b7d1"}),
             created_issue_item_ids=frozenset({"suggestion-1", "suggestion-2"}),
+            dismissed_item_ids=frozenset({"id-2"}),
             last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
@@ -204,6 +207,7 @@ class TestJsonFilePullRequestRepository:
         assert found.created_issue_item_ids == frozenset(
             {"suggestion-1", "suggestion-2"}
         )
+        assert found.dismissed_item_ids == frozenset({"id-2"})
 
     def test_atomic_write_leaves_no_tmp_files(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)

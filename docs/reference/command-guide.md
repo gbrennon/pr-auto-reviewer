@@ -47,6 +47,30 @@ create issue for c9e4, d1f0
 /createissue 1a2b
 ```
 
+### Dismissal
+
+Non-blocking review items can be dismissed without creating a tracker issue:
+
+```markdown
+dismiss e03401 , b99602
+```
+
+Dismissal accepts item IDs from both findings and suggestions. The command records
+the IDs as `dismissed` in persisted PR state and does not close an external
+tracker issue.
+
+### Blocking-item restriction
+
+`create issue` and `dismiss` accept only open, non-blocking items. CRITICAL and
+MAJOR severities, plus every SECURITY-category item, are rejected and remain
+open for code changes and formal review. The bot acknowledges each rejected ID
+instead of creating or dismissing it.
+
+```markdown
+Cannot create tracker issues for: b7d1. Only open non-blocking review items are
+eligible; blocking findings must be handled through code changes and formal review.
+```
+
 ---
 
 ## Finding Review Item IDs
@@ -121,11 +145,13 @@ make issues REPO=owner/repo PR=42
 5. **Deduplication / Idempotency**: Evaluates each comment. If `pr.is_comment_processed(comment.id)` is true, the comment is skipped to prevent duplicate issue creation.
 6. **Command Parsing**: Inspects unprocessed comments with `issue_command_parser.parse(comment.id, comment.body)`.
 7. **Mark Processed**: Records the comment ID as processed on the PR entity (`pr.mark_comment_processed(comment.id)`).
-8. **Item Validation**: Compares requested IDs against parsed review items (`_partition_item_ids`):
-   - **Invalid IDs Present**: If any requested ID is not present in the review items, issue creation is halted for that command. A validation failure comment listing available items is posted on the PR.
-   - **All IDs Valid**: Issues are constructed using `issue_body_builder.build` and created via `issue_tracker.create`.
-9. **Post Confirmation**: A comment listing the created issues and titles is posted to the PR discussion.
-10. **Persist State**: Saves the updated pull request entity with updated processed comment IDs (`pr_repository.save`).
+8. **Item Validation**: Compares requested IDs against current review items:
+   - **Unknown IDs**: A validation failure comment lists available items.
+   - **Blocking or inactive IDs**: The ID is rejected and remains unchanged.
+   - **Open non-blocking IDs**: The command proceeds with issue creation or dismissal.
+9. **Apply Command**: Creates tracker issues or records dismissed IDs in the PR aggregate.
+10. **Post Confirmation**: A comment lists created issues, dismissed IDs, or rejected IDs.
+11. **Persist State**: Saves the updated pull request entity with processed comments and command state.
 
 ---
 
@@ -237,15 +263,16 @@ Processing commands and creating issues requires appropriate token permissions. 
 
 ## Practical Examples and Workflows
 
-Here is a step-by-step example of the issue command workflow:
 
-1. **Review Posted**: PR Auto Reviewer reviews PR `#42` and identifies a critical bug:
+Here is a step-by-step example of the non-blocking issue command workflow:
+
+1. **Review Posted**: PR Auto Reviewer reviews PR `#42` and identifies a minor suggestion:
    ```markdown
-   c4e5. [BUG] [CRITICAL] src/db/connection.py:88
+   c4e5. [STYLE] [MINOR] src/db/connection.py:88
 
-   Connection pool leak when connection handshake times out.
+   Simplify this connection setup.
    ```
-2. **Maintainer Comments**: The reviewer or author wants to track this as an issue before merging:
+2. **Maintainer Comments**: The reviewer or author wants to track this suggestion as an issue:
    ```markdown
    /create-issue c4e5
    ```
@@ -253,12 +280,6 @@ Here is a step-by-step example of the issue command workflow:
    ```bash
    pr-auto-reviewer process-commands --repo acme/backend --pr 42
    ```
-4. **Issue Created**: Issue `#105` is created in `acme/backend` titled `[CRITICAL] BUG: Connection pool leak when connection handshake times out.`.
-5. **Bot Feedback**: The bot comments on PR `#42`:
-   ```markdown
-   Created 1 issue(s):
-
-   - #105: [CRITICAL] BUG: Connection pool leak when connection handshake times out.
-     - review item `c4e5` (critical bug, blocking) — status: open (still relevant)
-   ```
+4. **Issue Created**: Issue `#105` is created in `acme/backend` for the non-blocking suggestion.
+5. **Bot Feedback**: The bot comments on PR `#42` with the created issue reference.
 6. **Re-run Safety**: If `process-commands` is run again, the comment is recognized as already processed and skipped without creating duplicate issues.
