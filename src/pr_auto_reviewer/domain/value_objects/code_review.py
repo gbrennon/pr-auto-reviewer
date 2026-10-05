@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from ..entities.review_item import ReviewItem
 from ..exceptions.review_verdict_error import ReviewVerdictError
 from .review_verdict import ReviewVerdict
+from .suggestion_origin import SuggestionOrigin
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class CodeReview:
     suggestions: list[ReviewItem] = field(default_factory=list)
     praise: list[ReviewItem] = field(default_factory=list)
     model_used: str = ""
+    suggestion_origin: SuggestionOrigin = SuggestionOrigin.ARCHITECTURE
 
     def __post_init__(self) -> None:
         """Reject default or unverified review outcomes."""
