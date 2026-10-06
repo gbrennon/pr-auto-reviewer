@@ -19,7 +19,6 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
-from ...domain.services.praise_regression_policy import PraiseRegressionPolicy
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
@@ -292,33 +291,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
         )
         review = self._drop_persisted_duplicates(review, existing_pr)
-        return self._append_praise_regressions(review, existing_pr)
-
-    def _append_praise_regressions(
-        self,
-        review: CodeReview,
-        existing_pr: PullRequest | None,
-    ) -> CodeReview:
-        """Add a suggestion for each prior praise the review no longer affirms.
-
-        A quality praised in the last review but absent now is surfaced as a
-        non-blocking suggestion, never as an issue. Regressions already
-        suggested in the previous review are not restated.
-        """
-        if existing_pr is None or not existing_pr.reviews:
-            return review
-        last_review = existing_pr.reviews[-1]
-        regressions = PraiseRegressionPolicy().regressions(
-            list(last_review.praise),
-            list(review.praise),
-            list(last_review.suggestions),
-        )
-        if not regressions:
-            return review
-        return replace(
-            review,
-            suggestions=[*review.suggestions, *regressions],
-        )
+        return review
 
     def _drop_persisted_duplicates(
         self,
@@ -601,52 +574,33 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     def _retain_prior_review_items(
         self, pr: PullRequest, review: CodeReview,
     ) -> CodeReview:
-        """Carry prior items and suggestions into the newly published review."""
-        if not pr.reviews:
+        """Carry only unresolved blocking items into the new review."""
+        if not pr.reviews or not pr.unresolved_blocking_ids:
             return review
 
-        retained_items, retained_suggestions = (
-            self._retained_review_entries(pr.reviews[-1], review)
+        retained_items = self._retained_blocking_items(
+            pr.reviews[-1], review, pr.unresolved_blocking_ids,
         )
-        return replace(
-            review,
-            items=retained_items + review.items,
-            suggestions=retained_suggestions + review.suggestions,
-        )
+        return replace(review, items=retained_items + review.items)
 
     @staticmethod
-    def _retained_review_entries(
+    def _retained_blocking_items(
         prior_review: CodeReview,
         review: CodeReview,
-    ) -> tuple[list[ReviewItem], list[ReviewItem]]:
-        """Return retained prior items and suggestions by their categories."""
+        unresolved_ids: frozenset[str],
+    ) -> list[ReviewItem]:
+        """Return unresolved prior blockers absent from the current review."""
         current_ids = {
             entry.id
             for entry in review.items + review.suggestions
             if entry.id
         }
-        return (
-            ReviewPullRequestService._retain_entries(
-                prior_review.items,
-                current_ids,
-            ),
-            ReviewPullRequestService._retain_entries(
-                prior_review.suggestions,
-                current_ids,
-            ),
-        )
-
-    @staticmethod
-    def _retain_entries(
-        prior_entries: list[ReviewItem],
-        current_ids: set[str],
-    ) -> list[ReviewItem]:
-        """Return prior entries whose IDs are absent from the current review."""
         return [
             entry
-            for entry in prior_entries
-            if entry.id and entry.id not in current_ids
+            for entry in prior_review.items
+            if entry.id in unresolved_ids and entry.id not in current_ids
         ]
+
 
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
         """Return IDs of open review items whose severity is blocking."""

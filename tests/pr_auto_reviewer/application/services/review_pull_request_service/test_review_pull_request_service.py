@@ -770,7 +770,7 @@ class TestReviewPullRequestService:
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert not saved_pr.unresolved_blocking_ids
 
-    def test_republishes_prior_suggestions_as_suggestions(
+    def test_does_not_republish_resolved_items_or_stale_suggestions(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -824,8 +824,9 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
 
-        assert [item.id for item in published.items] == ["item-1"]
-        assert [item.id for item in published.suggestions] == ["suggestion-1"]
+        assert published.items == []
+        assert published.suggestions == []
+
 
     def test_does_not_duplicate_reclassified_prior_suggestions(
         self,

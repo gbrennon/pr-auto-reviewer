@@ -103,3 +103,23 @@ class TestConversationGuardrails:
         decision, _state = guardrails.judge_verdict()
 
         assert decision is ConversationDecision.ACCEPT_VERDICT
+
+    def test_demands_when_tool_calls_lack_required_coverage(self) -> None:
+        guardrails = ConversationGuardrails(tool_calls=1)
+
+        decision, state = guardrails.judge_verdict(
+            exploration_complete=False,
+        )
+
+        assert decision is ConversationDecision.DEMAND_EXPLORATION
+        assert state.demands_issued == 1
+
+    def test_accepts_when_required_coverage_is_complete(self) -> None:
+        guardrails = ConversationGuardrails(tool_calls=1)
+
+        decision, state = guardrails.judge_verdict(
+            exploration_complete=True,
+        )
+
+        assert decision is ConversationDecision.ACCEPT_VERDICT
+        assert state.demands_issued == 0

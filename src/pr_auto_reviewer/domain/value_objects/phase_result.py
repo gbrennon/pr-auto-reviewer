@@ -12,8 +12,8 @@ class PhaseResult:
     """Items and metadata from a single review phase conversation.
 
     Carries LLM-extracted verdict, reason, summary, suggestions, and
-    praise alongside the validated ReviewItem list so downstream code
-    can populate every CodeReview field.
+    praise alongside the validated ReviewItem list. File-level read evidence
+    records which readable changed files were inspected before the verdict.
     """
 
     items: list[ReviewItem] = field(default_factory=list)
@@ -24,5 +24,7 @@ class PhaseResult:
     llm_praise: list[dict[str, str]] = field(default_factory=list)
     turn_count: int = 0
     read_file_calls: int = 0
+    read_file_paths: tuple[str, ...] = ()
     run_snippet_calls: int = 0
+    unread_changed_files: tuple[str, ...] = ()
     skip_reasons: list[str] = field(default_factory=list)

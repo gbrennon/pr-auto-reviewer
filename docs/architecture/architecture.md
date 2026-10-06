@@ -117,6 +117,8 @@ the final suggestions (in the production plan, the architecture
 phase). The other phases emit no suggestions, and rejected/dropped items
 are never promoted into suggestions — a suggestion is an improvement
 (design, coupling, patterns, layering), never a re-stated issue.
+Suggestions are revision-local and are not copied from prior reviews. The only
+historical entries carried into a new review are unresolved blocking findings.
 
 ### Sub-Agent Phases
 

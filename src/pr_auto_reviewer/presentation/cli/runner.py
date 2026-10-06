@@ -10,6 +10,9 @@ import traceback
 
 import requests
 
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
+)
 from pr_auto_reviewer.application.dtos.list_allowed_repositories_request import (
     ListAllowedRepositoriesRequest,
 )
@@ -193,7 +196,11 @@ class CliRunner:
                     time.perf_counter() - review_started_at
                 )
                 self._notifier.notify_success(
-                    f"Review complete for {command.pr_id.repository} ({duration})",
+                    (
+                        "Review complete for "
+                        f"{PRIdentifierService.normalize_repository(command.pr_id.repository)} "
+                        f"({duration})"
+                    ),
                     f"PR #{args.pr}",
                 )
             return 0

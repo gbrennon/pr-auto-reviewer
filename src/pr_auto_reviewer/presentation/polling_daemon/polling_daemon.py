@@ -7,6 +7,9 @@ import signal
 import time
 from datetime import UTC, datetime, timedelta
 
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
+)
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
@@ -152,7 +155,11 @@ class PollingDaemon:
                     time.perf_counter() - review_started_at
                 )
                 self._notifier.notify_success(
-                    f"Review complete for {pr.pr_id.repository} ({duration})",
+                    (
+                        "Review complete for "
+                        f"{PRIdentifierService.normalize_repository(pr.pr_id.repository)} "
+                        f"({duration})"
+                    ),
                     f"PR #{pr.pr_id.number}",
                 )
         except EmptyDiffError:
