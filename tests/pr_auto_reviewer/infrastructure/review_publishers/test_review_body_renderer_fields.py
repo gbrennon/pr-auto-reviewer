@@ -143,7 +143,7 @@ class TestReviewBodyRendererFields:
 
         body = _RENDERER.render(review)
 
-        assert "`329301`. src/example.rs" in body
+        assert "`329301`. [OPEN] src/example.rs" in body
 
     def test_renders_all_nested_praise_fields(self) -> None:
         body = _RENDERER.render(_full_review())
