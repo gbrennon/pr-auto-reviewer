@@ -133,7 +133,9 @@ if uv tool install --force --reinstall "$PROJECT_ROOT" 2>&1; then
 
     if [ -f "$SERVICE_TEMPLATE" ]; then
         mkdir -p "$SYSTEMD_USER_DIR"
-        cp "$SERVICE_TEMPLATE" "$SERVICE_FILE"
+        SERVICE_TEMP_FILE="${SERVICE_FILE}.tmp.$$"
+        cp "$SERVICE_TEMPLATE" "$SERVICE_TEMP_FILE"
+        mv -f "$SERVICE_TEMP_FILE" "$SERVICE_FILE"
         echo "Service file installed: $SERVICE_FILE"
 
         systemctl --user daemon-reload
