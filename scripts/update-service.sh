@@ -33,7 +33,9 @@ if [ ! -f "$SERVICE_SRC" ]; then
     exit 1
 fi
 mkdir -p "$SYSTEMD_DIR"
-cp "$SERVICE_SRC" "$SERVICE_DEST"
+SERVICE_TEMP_FILE="${SERVICE_DEST}.tmp.$$"
+cp "$SERVICE_SRC" "$SERVICE_TEMP_FILE"
+mv -f "$SERVICE_TEMP_FILE" "$SERVICE_DEST"
 echo "Service file installed: $SERVICE_SRC → $SERVICE_DEST"
 
 # Reload systemd and restart/start service

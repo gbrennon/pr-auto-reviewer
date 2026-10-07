@@ -29,6 +29,7 @@ from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.command_bus.in_memory_command_bus import (
     InMemoryCommandBus,
@@ -474,7 +475,7 @@ class TestProcessIssueCommandsService:
     def _item(self) -> ReviewItem:
         return ReviewItem(
             id="id-1",
-            severity=ItemSeverity.MAJOR,
+            severity=ItemSeverity.MINOR,
             category=IssueCategory.BUG,
             file_path="x.py",
             description="broken code",
@@ -494,3 +495,175 @@ class TestProcessIssueCommandsService:
         return PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
             review, _sha
         )
+
+    def test_mixed_dismissal_with_blocking_id_is_atomic(
+        self, _pr_id: PullRequestId, _sha: CommitSha
+    ) -> None:
+        """A blocking ID rejects the entire dismissal command."""
+        suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.STYLE,
+            file_path="x.py",
+            description="Simplify this branch",
+        )
+        blocking = ReviewItem(
+            id="blocking-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.SECURITY,
+            file_path="x.py",
+            description="Fix this bug",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found issues",
+            summary="Review summary",
+            model_used="model",
+            items=[blocking],
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="dismiss-mixed"),
+                    body="dismiss suggestion-1 , blocking-1",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=InMemoryCommandBus(),
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        saved_pr = fake_repo.save_calls[0]
+        assert saved_pr.dismissed_item_ids == frozenset()
+        assert saved_pr.latest_review_items()[1].status is ReviewItemStatus.OPEN
+        assert len(fake_publisher.post_calls) == 1
+        assert "blocking-1" in fake_publisher.post_calls[0][1]
+
+    def test_mixed_create_command_with_blocking_id_is_atomic(
+        self, _pr_id: PullRequestId, _sha: CommitSha
+    ) -> None:
+        """A blocking ID prevents creating any issue from the command."""
+        suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="x.py",
+            description="Simplify this branch",
+        )
+        blocking = ReviewItem(
+            id="blocking-1",
+            severity=ItemSeverity.CRITICAL,
+            category=IssueCategory.BUG,
+            file_path="x.py",
+            description="Fix this bug",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found issues",
+            summary="Review summary",
+            model_used="model",
+            items=[blocking],
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="create-mixed"),
+                    body="create issue suggestion-1, blocking-1",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            ]
+        )
+        bus = InMemoryCommandBus()
+        dispatched: list[RegisterIssueCommand] = []
+
+        def handle_register(command: RegisterIssueCommand) -> Issue:
+            dispatched.append(command)
+            return Issue(
+                id=101,
+                repository="owner/repo",
+                title="title",
+                body="body",
+                source_pr_id=_pr_id,
+                source_item_id=command.issue_id,
+            )
+
+        bus.register(RegisterIssueCommand, handle_register)
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=FakeCommentPublisher(),
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert dispatched == []
+        assert fake_repo.save_calls[0].created_issue_item_ids == frozenset()
+
+    def test_dismissal_does_not_close_external_issue_or_create_issue_id(
+        self, _pr_id: PullRequestId, _sha: CommitSha
+    ) -> None:
+        """Dismissal only records aggregate state and never dispatches creation."""
+        suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="x.py",
+            description="Simplify this branch",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="No blocking issues",
+            summary="Suggestions available",
+            model_used="model",
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="dismiss-one"),
+                    body="dismiss suggestion-1",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            ]
+        )
+        publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        saved = fake_repo.save_calls[0]
+        assert saved.dismissed_item_ids == frozenset({"suggestion-1"})
+        assert saved.created_issue_item_ids == frozenset()
+        assert "Dismissed" in publisher.post_calls[0][1]

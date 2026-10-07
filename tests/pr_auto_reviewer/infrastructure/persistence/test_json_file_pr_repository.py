@@ -22,6 +22,7 @@ from pr_auto_reviewer.domain import (
     PullRequest,
     PullRequestId,
     ReviewItem,
+    ReviewItemStatus,
     ReviewVerdict,
 )
 from pr_auto_reviewer.domain.exceptions import RepositoryCorruptedError
@@ -48,6 +49,7 @@ class TestJsonFilePullRequestRepository:
         processed_comment_ids: frozenset[CommentId] = frozenset(),
         unresolved_blocking_ids: frozenset[str] = frozenset(),
         created_issue_item_ids: frozenset[str] = frozenset(),
+        dismissed_item_ids: frozenset[str] = frozenset(),
         last_reviewed_at: str | None = None,
     ) -> PullRequest:
         return PullRequest(
@@ -59,6 +61,7 @@ class TestJsonFilePullRequestRepository:
             processed_comment_ids=processed_comment_ids,
             unresolved_blocking_ids=unresolved_blocking_ids,
             created_issue_item_ids=created_issue_item_ids,
+            dismissed_item_ids=dismissed_item_ids,
             last_reviewed_at=last_reviewed_at,
         )
 
@@ -271,6 +274,7 @@ class TestJsonFilePullRequestRepository:
             processed_comment_ids=frozenset({CommentId("42")}),
             unresolved_blocking_ids=frozenset({"a3f2"}),
             created_issue_item_ids=frozenset({"suggestion-1"}),
+            dismissed_item_ids=frozenset({"dismissed-1"}),
             last_reviewed_at="2025-06-01T12:00:00Z",
         )
         repo.save(pr)
@@ -286,6 +290,7 @@ class TestJsonFilePullRequestRepository:
         assert entry["last_reviewed_at"] == "2025-06-01T12:00:00Z"
         assert entry["unresolved_blocking_ids"] == ["a3f2"]
         assert entry["created_issue_item_ids"] == ["suggestion-1"]
+        assert entry["dismissed_item_ids"] == ["dismissed-1"]
 
     def test_find_raises_on_os_error(self, tmp_path: Path, monkeypatch) -> None:
         state_file = tmp_path / "state.json"
@@ -409,3 +414,36 @@ class TestJsonFilePullRequestRepository:
         assert len(loaded.reviews) == 1
         assert loaded.reviews[0].suggestions == []
         assert len(loaded.reviews[0].items) == 1
+
+    def test_dismissal_state_round_trips_without_mutating_review_history(
+        self, tmp_path: Path
+    ) -> None:
+        """Persisted dismissal IDs derive status while history stays open."""
+        repo = self._repo(tmp_path)
+        item = self._item(item_id="item-1", severity=ItemSeverity.MINOR)
+        review = self._review(items=[item])
+        pr = self._pr(reviews=(review,), dismissed_item_ids=frozenset({"item-1"}))
+
+        repo.save(pr)
+        loaded = repo.find(pr.id)
+
+        assert loaded is not None
+        assert loaded.dismissed_item_ids == frozenset({"item-1"})
+        assert loaded.reviews[0].items[0].status is ReviewItemStatus.OPEN
+        assert loaded.latest_review_items()[0].status is ReviewItemStatus.DISMISSED
+
+    def test_legacy_state_without_dismissal_ids_defaults_empty(
+        self, tmp_path: Path
+    ) -> None:
+        """Older JSON state remains readable without dismissal metadata."""
+        repo = self._repo(tmp_path)
+        pr = self._pr()
+        repo.save(pr)
+        raw = json.loads((tmp_path / "state.json").read_text())
+        del raw["reviewed"]["owner/repo/42"]["dismissed_item_ids"]
+        (tmp_path / "state.json").write_text(json.dumps(raw))
+
+        loaded = repo.find(pr.id)
+
+        assert loaded is not None
+        assert loaded.dismissed_item_ids == frozenset()

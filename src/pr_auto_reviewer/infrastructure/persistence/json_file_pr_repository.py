@@ -56,7 +56,7 @@ class ReviewItemCodec:
             "reproduction": item.reproduction,
             "acceptance_criteria": item.acceptance_criteria,
             "detection_method": item.detection_method,
-            "status": item.status,
+            "status": item.status.value,
         }
 
     @staticmethod
@@ -193,6 +193,9 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         created_issue_item_ids: frozenset[str] = frozenset(
             raw.get("created_issue_item_ids", [])
         )
+        dismissed_item_ids: frozenset[str] = frozenset(
+            raw.get("dismissed_item_ids", [])
+        )
         processed_ids: frozenset[CommentId] = frozenset(
             CommentId(str(cid))
             for cid in raw.get("processed_comment_ids", [])
@@ -203,6 +206,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             head_sha=CommitSha(raw.get("head_sha", "")),
             unresolved_blocking_ids=unresolved_ids,
             created_issue_item_ids=created_issue_item_ids,
+            dismissed_item_ids=dismissed_item_ids,
             last_reviewed_at=raw.get("last_reviewed_at"),
             is_draft=raw.get("is_draft", False),
             reviews=reviews,
@@ -237,6 +241,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "reviews": [CodeReviewCodec.serialize(r) for r in pr.reviews],
             "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
             "created_issue_item_ids": sorted(pr.created_issue_item_ids),
+            "dismissed_item_ids": sorted(pr.dismissed_item_ids),
             "last_reviewed_at": pr.last_reviewed_at,
             "processed_comment_ids": sorted(
                 str(c) for c in pr.processed_comment_ids

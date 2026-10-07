@@ -8,6 +8,7 @@ from ..value_objects.code_review import CodeReview
 from ..value_objects.comment_id import CommentId
 from ..value_objects.commit_sha import CommitSha
 from ..value_objects.pull_request_id import PullRequestId
+from ..value_objects.review_item_status import ReviewItemStatus
 from .review_item import ReviewItem
 
 
@@ -29,6 +30,7 @@ class PullRequest:
     head_sha: CommitSha
     unresolved_blocking_ids: frozenset[str] = frozenset()
     created_issue_item_ids: frozenset[str] = frozenset()
+    dismissed_item_ids: frozenset[str] = frozenset()
     last_reviewed_at: str | None = None
     is_draft: bool = False
     processed_comment_ids: frozenset[CommentId] = frozenset()
@@ -58,6 +60,7 @@ class PullRequest:
             self,
             reviews=self.reviews + (review,),
             head_sha=sha,
+            dismissed_item_ids=frozenset(),
         )
     def mark_comment_processed(self, comment_id: CommentId) -> PullRequest:
         """Records that a command comment was handled.
@@ -89,6 +92,15 @@ class PullRequest:
             ),
         )
 
+    def dismiss_review_items(self, *item_ids: str) -> PullRequest:
+        """Record non-blocking review items dismissed by a PR command."""
+        if not item_ids:
+            return self
+        return replace(
+            self,
+            dismissed_item_ids=self.dismissed_item_ids | frozenset(item_ids),
+        )
+
     def with_unresolved_blocking(self, *item_ids: str) -> PullRequest:
         """Record that blocking review items remain unresolved.
 
@@ -116,8 +128,13 @@ class PullRequest:
         )
 
     def latest_review_items(self) -> tuple[ReviewItem, ...]:
-        """Return items + suggestions of the most recent review, empty if none."""
+        """Return current items and suggestions with derived dismissal status."""
         if not self.reviews:
             return ()
         latest = self.reviews[-1]
-        return tuple(latest.items) + tuple(latest.suggestions)
+        return tuple(
+            replace(item, status=ReviewItemStatus.DISMISSED)
+            if item.id in self.dismissed_item_ids
+            else item
+            for item in (*latest.items, *latest.suggestions)
+        )

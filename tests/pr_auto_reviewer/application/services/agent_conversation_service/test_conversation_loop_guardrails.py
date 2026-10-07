@@ -34,6 +34,60 @@ class TestConversationLoopGuardrails:
         )
         assert demand_seen
 
+    def test_verdict_waits_for_every_readable_changed_file(
+        self, mock_chat_port, mock_command_bus, tmp_path,
+    ) -> None:
+        first_file = tmp_path / "first.py"
+        second_file = tmp_path / "second.py"
+        first_file.write_text("first = True\n")
+        second_file.write_text("second = True\n")
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=tmp_path,
+            changed_files=["first.py", "second.py"],
+            tool_execution=MagicMock(),
+            phase_name="phase",
+            review_session="test-session",
+        )
+        first_tool = ToolCall(
+            tool_name="read_file", arguments={"file": "first.py"}
+        )
+        second_tool = ToolCall(
+            tool_name="read_file", arguments={"file": "second.py"}
+        )
+        mock_chat_port.send.side_effect = [
+            "first tool", "verdict", "second tool", "verdict", None,
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            TurnParseResult(kind=TurnKind.TOOL_CALL, tool_call=first_tool),
+            None,
+            _verdict_parse(),
+            None,
+            TurnParseResult(kind=TurnKind.TOOL_CALL, tool_call=second_tool),
+            None,
+            _verdict_parse(),
+            None,
+            None,
+        ]
+        command.tool_execution.execute_tool.side_effect = [
+            ToolResult(status="ok", data={"path": "first.py"}),
+            ToolResult(status="ok", data={"path": "second.py"}),
+        ]
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
+        ).execute(command)
+
+        assert result.read_file_paths == ("first.py", "second.py")
+        assert result.unread_changed_files == ()
+        demand_seen = any(
+            "second.py" in message.content
+            for call in mock_chat_port.send.call_args_list
+            for message in call[0][0]
+        )
+        assert demand_seen
+
     def test_verdict_repeated_without_tools_is_refused(
         self, mock_chat_port, mock_command_bus,
     ) -> None:

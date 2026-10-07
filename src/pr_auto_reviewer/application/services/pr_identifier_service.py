@@ -12,6 +12,11 @@ class PRIdentifierService:
     """Normalize clone directories into the platform PR identity."""
 
     @staticmethod
+    def normalize_repository(repository: str) -> str:
+        """Return a repository label without its platform prefix."""
+        return repository.split(":", 1)[-1]
+
+    @staticmethod
     def derive(repo_path: Path | str | None) -> str:
         """Return ``owner/repo#pr`` for a clone path, or a best-effort label."""
         if repo_path is None:
@@ -19,5 +24,6 @@ class PRIdentifierService:
         path_str = str(repo_path)
         match = _REPO_PR_PATTERN.search(path_str)
         if match:
-            return f"{match.group(1)}/{match.group(2)}#{match.group(3)}"
+            owner = PRIdentifierService.normalize_repository(match.group(1))
+            return f"{owner}/{match.group(2)}#{match.group(3)}"
         return path_str.rsplit("/", 1)[-1]

@@ -74,27 +74,31 @@ class ConversationGuardrails:
         return replace(self, tool_calls=self.tool_calls + 1)
 
     def should_force_verdict(self) -> bool:
-        """Return whether the model explored enough and must conclude now.
+        """Return whether the model reached the soft tool-call budget.
 
-        Guards against exploration loops: after ``max_tool_calls`` tool
-        executions the phase must render a verdict instead of issuing
-        more tool calls.
+        The conversation loop uses this result to nudge the model toward a
+        verdict. File-level coverage is enforced separately by ``judge_verdict``.
         """
         return self.tool_calls >= self.max_tool_calls
+
     def judge_verdict(
-        self,
+        self, exploration_complete: bool | None = None,
     ) -> tuple[ConversationDecision, ConversationGuardrails]:
         """Decide whether to accept a verdict or demand exploration first.
 
-        Accepts the verdict when the model already explored the repository
-        (``tool_calls > 0``) or when ``exploration_required`` is False.
-        Otherwise demands exploration up to ``max_demands`` times. If the
-        model refuses every demand (re-emits a verdict without any tool
-        call), the phase is aborted.
+        ``exploration_complete`` lets the application layer enforce evidence
+        requirements such as reading every available changed file. When it is
+        omitted, the historical ``tool_calls > 0`` rule remains available for
+        callers that do not have file-level coverage information.
         """
         if not self.exploration_required:
             return ConversationDecision.ACCEPT_VERDICT, self
-        if self.tool_calls > 0:
+        explored = (
+            self.tool_calls > 0
+            if exploration_complete is None
+            else exploration_complete
+        )
+        if explored:
             return ConversationDecision.ACCEPT_VERDICT, self
         if self.demands_issued >= self.max_demands:
             return ConversationDecision.REFUSED_EXPLORATION, self

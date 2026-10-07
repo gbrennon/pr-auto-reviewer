@@ -80,6 +80,24 @@ class TestGithubPrLister:
         assert result.description == "desc"
         assert result.review_requested is True
 
+    def test_list_open_when_review_requested_event_exists_then_maps_event_id(
+        self,
+    ) -> None:
+        pull_request = pr_dict(42, "The Answer")
+        pull_request["requested_reviewers"] = [{"login": "personal-reviewer"}]
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls": [pull_request],
+                "/repos/o/r/issues/42/events": [
+                    {"id": 15, "event": "review_requested"},
+                ],
+            }
+        )
+
+        result = adapter.list_open("o/r")
+
+        assert result[0].review_request_event_id == 15
+
     def test_get_pr_when_pr_exists_then_returns_open_pull_request(self) -> None:
         adapter = _adapter({"/repos/o/r/pulls/42": pr_dict(42, "The Answer")})
 
@@ -89,6 +107,28 @@ class TestGithubPrLister:
         assert result.pr_id.number == 42
         assert result.title == "The Answer"
         assert result.head_sha == CommitSha("a" * 40)
+
+    def test_get_pr_when_review_requested_event_exists_then_maps_latest_event_id(
+        self,
+    ) -> None:
+        pull_request = pr_dict(42, "The Answer")
+        pull_request["requested_reviewers"] = [{"login": "personal-reviewer"}]
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls/42": pull_request,
+                "/repos/o/r/issues/42/events": [
+                    {"id": 9, "event": "review_requested"},
+                    {"id": 12, "event": "closed"},
+                    {"id": 15, "event": "review_requested"},
+                ],
+            }
+        )
+
+        result = adapter.get_pr("o/r", 42)
+
+        assert result is not None
+        assert result.review_requested is True
+        assert result.review_request_event_id == 15
 
     def test_get_pr_when_api_throws_then_returns_none(self) -> None:
         adapter = _adapter({"/repos/o/r/pulls/1": ConnectionError("down")})

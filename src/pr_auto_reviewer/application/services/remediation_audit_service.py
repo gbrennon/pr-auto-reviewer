@@ -24,6 +24,7 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,8 @@ class AuditTranscriptRunner(Protocol):
 class RemediationAuditService:
     """Decide open/resolved for prior findings against the updated code.
 
-    Prior findings default to ``open``. A finding becomes ``resolved``
-    only on an explicit ``status == "resolved"`` proof from the audit
+    Prior findings default to ``ReviewItemStatus.OPEN``. A finding becomes
+    ``ReviewItemStatus.RESOLVED`` only on explicit proof from the audit
     transcript, so defects are never resolved by absence or assumption.
     """
 
@@ -81,7 +82,14 @@ class RemediationAuditService:
 
         resolved = self._resolved_indices(results)
         return [
-            replace(item, status=("resolved" if i in resolved else "open"))
+            replace(
+                item,
+                status=(
+                    ReviewItemStatus.RESOLVED
+                    if i in resolved
+                    else ReviewItemStatus.OPEN
+                ),
+            )
             for i, item in enumerate(prior_items)
         ]
 
@@ -115,7 +123,7 @@ class RemediationAuditService:
         self, index: int, item: ReviewItem, repo_path: Path,
     ) -> str:
         """Render a single prior finding block with enriched fields."""
-        file_content = self._read_current_file(repo_path, item.file_path)
+        file_content = self._read_current_file(repo_path, item.file_path or "")
         return (
             f"## Finding {index}\n\n"
             f"- **File:** `{item.file_path or '(unknown)'}`\n"

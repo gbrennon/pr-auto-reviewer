@@ -64,7 +64,11 @@ class GithubPrLister(PrListerPort):
             return [
                 pr
                 for raw_pr in self._payload_rows(data)
-                if (pr := self._parse_pull_request(repository, raw_pr)) is not None
+                if (
+                    pr := self._parse_pull_request(
+                        repository, raw_pr, include_review_event=False
+                    )
+                ) is not None
                 and not pr.is_draft
             ]
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
@@ -79,9 +83,12 @@ class GithubPrLister(PrListerPort):
             return GithubPrLister._payload_rows(payload.get("data", []))
         return []
 
-    @staticmethod
     def _parse_pull_request(
-        repository: str, pull_request: dict[str, object]
+        self,
+        repository: str,
+        pull_request: dict[str, object],
+        *,
+        include_review_event: bool = True,
     ) -> OpenPullRequest | None:
         number = pull_request.get("number")
         if not isinstance(number, int):
@@ -98,16 +105,43 @@ class GithubPrLister(PrListerPort):
         description = pull_request.get("body")
         updated_at = pull_request.get("updated_at")
         target_branch = base.get("ref")
+        review_requested = bool(pull_request.get("requested_reviewers"))
+        review_request_event_id = (
+            self._latest_review_request_event_id(repository, number)
+            if include_review_event and review_requested
+            else None
+        )
         return OpenPullRequest(
             pr_id=PullRequestId(repository=repository, number=number),
             head_sha=CommitSha(sha),
             title=title if isinstance(title, str) else "",
             description=description if isinstance(description, str) else "",
             is_draft=pull_request.get("draft") is True,
-            review_requested=bool(pull_request.get("requested_reviewers")),
+            review_requested=review_requested,
+            review_request_event_id=review_request_event_id,
             updated_at=updated_at if isinstance(updated_at, str) else "",
             target_branch=target_branch if isinstance(target_branch, str) else "",
         )
+
+    def _latest_review_request_event_id(
+        self, repository: str, pr_number: int
+    ) -> int | None:
+        """Return the latest GitHub review-request issue event ID."""
+        try:
+            events = self._client.get(
+                f"/repos/{repository}/issues/{pr_number}/events",
+                repo=repository,
+                per_page=100,
+            )
+            event_ids = [
+                event_id
+                for row in self._payload_rows(events)
+                if row.get("event") == "review_requested"
+                and isinstance(event_id := row.get("id"), int)
+            ]
+            return max(event_ids, default=None)
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            return None
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         _, repository = split_repository_prefix(repository)
@@ -123,7 +157,11 @@ class GithubPrLister(PrListerPort):
             target_branch = pr.get("base", {}).get("ref", "")
             description = pr.get("body", "")
             review_requested = bool(pr.get("requested_reviewers"))
-
+            review_request_event_id = (
+                self._latest_review_request_event_id(repository, int(number))
+                if review_requested and isinstance(number, int)
+                else None
+            )
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
                 return None
@@ -134,6 +172,7 @@ class GithubPrLister(PrListerPort):
                 title=title,
                 description=description,
                 review_requested=review_requested,
+                review_request_event_id=review_request_event_id,
                 updated_at=pr.get("updated_at", ""),
                 target_branch=target_branch,
             )

@@ -12,7 +12,8 @@ from pr_auto_reviewer.domain import (
     PullRequest,
     PullRequestId,
     ReviewItem,
+    ReviewItemStatus,
     ReviewVerdict,
 )
 
-__all__ = ['CodeReview', 'CommentId', 'CommitSha', 'FrozenInstanceError', 'ItemSeverity', 'PullRequest', 'PullRequestId', 'ReviewItem', 'ReviewVerdict', 'pytest']
+__all__ = ['CodeReview', 'CommentId', 'CommitSha', 'FrozenInstanceError', 'ItemSeverity', 'PullRequest', 'PullRequestId', 'ReviewItem', 'ReviewItemStatus', 'ReviewVerdict', 'pytest']

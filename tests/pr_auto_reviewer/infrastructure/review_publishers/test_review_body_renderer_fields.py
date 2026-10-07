@@ -9,6 +9,7 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from tests.fakes.fake_review_body_renderer_factory import FakeReviewBodyRendererFactory
 
@@ -142,7 +143,7 @@ class TestReviewBodyRendererFields:
 
         body = _RENDERER.render(review)
 
-        assert "`329301`. src/example.rs" in body
+        assert "`329301`. [OPEN] src/example.rs" in body
 
     def test_renders_all_nested_praise_fields(self) -> None:
         body = _RENDERER.render(_full_review())
@@ -229,7 +230,7 @@ class TestReviewBodyRendererFields:
                     category=IssueCategory.BUG,
                     file_path="src/resolved.py",
                     description="Resolved finding",
-                    status="resolved",
+                    status=ReviewItemStatus.RESOLVED,
                 ),
             ],
             model_used="model-x",

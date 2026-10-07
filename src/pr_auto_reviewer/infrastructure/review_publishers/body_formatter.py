@@ -56,6 +56,7 @@ class ReviewBodyRenderer:
         for s in suggestions_raw:
             numbered_suggestions.append({
                 "id": s.id,
+                "status": s.status,
                 "description": s.description,
                 "file_path": s.file_path,
                 "line": s.line,
