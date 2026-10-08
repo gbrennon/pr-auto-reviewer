@@ -402,6 +402,9 @@ class AgentConversationService(RunAgentConversationPort):
         )
         guardrails = self._guardrails_for_files(repo_path, coverage_targets)
         readable_changed_files = self._readable_changed_files(
+            repo_path, changed_files,
+        )
+        readable_coverage_files = self._readable_changed_files(
             repo_path, coverage_targets,
         )
         seen_tool_calls: set[tuple[str, str]] = set()
@@ -558,7 +561,7 @@ class AgentConversationService(RunAgentConversationPort):
             if parsed.kind is TurnKind.VERDICT:
                 coverage_complete = self._coverage_complete(
                     guardrails,
-                    readable_changed_files,
+                    readable_coverage_files,
                     read_file_paths,
                 )
                 decision, guardrails = guardrails.judge_verdict(
@@ -627,7 +630,7 @@ class AgentConversationService(RunAgentConversationPort):
                         f"{guardrails.demands_issued} demand(s)"
                     )
                 missing_files = sorted(
-                    set(readable_changed_files) - read_file_paths
+                    set(readable_coverage_files) - read_file_paths
                 )
                 logger.debug(
                     "Verdict at turn %d without complete changed-file "
