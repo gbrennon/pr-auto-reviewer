@@ -130,6 +130,7 @@ class AgentConversationService(RunAgentConversationPort):
             system_prompt=command.system_prompt,
             repo_path=command.repo_path,
             changed_files=command.changed_files,
+            coverage_files=command.coverage_files,
             tool_execution=command.tool_execution,
             phase_name=command.phase_name,
             review_session=command.review_session,
@@ -374,6 +375,7 @@ class AgentConversationService(RunAgentConversationPort):
         system_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        coverage_files: tuple[str, ...] | None,
         tool_execution: Any,
         review_session: str,
         phase_name: str = "",
@@ -395,9 +397,12 @@ class AgentConversationService(RunAgentConversationPort):
             ),
         ]
 
-        guardrails = self._guardrails_for_files(repo_path, changed_files)
+        coverage_targets = (
+            changed_files if coverage_files is None else list(coverage_files)
+        )
+        guardrails = self._guardrails_for_files(repo_path, coverage_targets)
         readable_changed_files = self._readable_changed_files(
-            repo_path, changed_files,
+            repo_path, coverage_targets,
         )
         seen_tool_calls: set[tuple[str, str]] = set()
         read_file_paths: set[str] = set()
