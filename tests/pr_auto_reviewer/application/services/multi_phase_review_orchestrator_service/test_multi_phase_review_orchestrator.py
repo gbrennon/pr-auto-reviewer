@@ -256,6 +256,43 @@ class TestMultiPhaseReviewOrchestrator:
         assert len(phase_prompts) == 2
         assert all(feedback in p for p in phase_prompts)
 
+    def test_only_first_phase_requires_complete_changed_file_coverage(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="diff", phase_name="Diff", system_prompt="D",
+                ),
+                ReviewPhase(
+                    phase_id="branch", phase_name="Branch", system_prompt="B",
+                ),
+            ),
+            methodology="MM",
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["first.py", "second.py"], "test",
+        )
+
+        commands = [
+            call.args[0]
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call.args[0], RunAgentConversationCommand)
+        ]
+        assert [command.coverage_files for command in commands] == [
+            ("first.py", "second.py"),
+            (),
+        ]
+
     def test_role_brief_and_manager_brief_reach_phase_prompts(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
