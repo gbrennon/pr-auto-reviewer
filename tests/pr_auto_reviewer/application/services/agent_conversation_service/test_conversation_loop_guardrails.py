@@ -125,7 +125,8 @@ class TestConversationLoopGuardrails:
         ).execute(command)
 
         assert result.llm_verdict == "approved"
-        assert result.unread_changed_files == ()
+        assert result.read_file_paths == ("first.py",)
+        assert result.unread_changed_files == ("second.py",)
 
     def test_verdict_repeated_without_tools_is_refused(
         self, mock_chat_port, mock_command_bus,
