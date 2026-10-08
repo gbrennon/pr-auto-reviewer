@@ -88,6 +88,46 @@ class TestConversationLoopGuardrails:
         )
         assert demand_seen
 
+    def test_verdict_requires_only_explicit_coverage_files(
+        self, mock_chat_port, mock_command_bus, tmp_path,
+    ) -> None:
+        first_file = tmp_path / "first.py"
+        second_file = tmp_path / "second.py"
+        first_file.write_text("first = True\n")
+        second_file.write_text("second = True\n")
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=tmp_path,
+            changed_files=["first.py", "second.py"],
+            coverage_files=(),
+            tool_execution=MagicMock(),
+            phase_name="phase",
+            review_session="test-session",
+        )
+        first_tool = ToolCall(
+            tool_name="read_file", arguments={"file": "first.py"}
+        )
+        mock_chat_port.send.side_effect = ["first tool", "verdict", None]
+        mock_command_bus.dispatch.side_effect = [
+            TurnParseResult(kind=TurnKind.TOOL_CALL, tool_call=first_tool),
+            None,
+            _verdict_parse(),
+            None,
+            None,
+        ]
+        command.tool_execution.execute_tool.return_value = ToolResult(
+            status="ok", data={"path": "first.py"},
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+        assert result.read_file_paths == ("first.py",)
+        assert result.unread_changed_files == ("second.py",)
+
     def test_verdict_repeated_without_tools_is_refused(
         self, mock_chat_port, mock_command_bus,
     ) -> None:

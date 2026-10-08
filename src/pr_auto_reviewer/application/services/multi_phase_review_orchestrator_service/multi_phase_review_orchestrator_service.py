@@ -442,11 +442,13 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             existing_ids = frozenset(
                 item.id for item in all_items if item.id
             ) | existing_item_ids
+            coverage_files = tuple(changed_files) if idx == 0 else ()
             phase_result = self._run_phase_with_retry(
                 phase_name=phase.phase_name,
                 phase_prompt=phase_prompt,
                 repo_path=repo_path,
                 changed_files=changed_files,
+                coverage_files=coverage_files,
                 base_sha=base_sha,
                 review_session=review_session,
                 existing_item_ids=existing_ids,
@@ -461,6 +463,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 phase_result=phase_result,
                 repo_path=repo_path,
                 changed_files=changed_files,
+                coverage_files=coverage_files,
                 existing_item_ids=existing_ids,
             )
             phase_results[phase.phase_id] = phase_result
@@ -800,7 +803,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         phase_prompt: str,
         repo_path: Path,
         changed_files: list[str],
-        review_session: str,
+        coverage_files: tuple[str, ...] | None = None,
+        review_session: str = "",
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
     ) -> PhaseResult:
@@ -825,6 +829,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         system_prompt=phase_prompt,
                         repo_path=repo_path,
                         changed_files=changed_files,
+                        coverage_files=coverage_files,
                         tool_execution=tool_service,
                         phase_name=phase_name,
                         existing_item_ids=existing_item_ids,
@@ -855,6 +860,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         phase_result: PhaseResult,
         repo_path: Path,
         changed_files: list[str],
+        coverage_files: tuple[str, ...] | None,
         existing_item_ids: frozenset[str],
         pr_identifier_service: str = "",
         review_session: str = "",
@@ -905,6 +911,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             phase_prompt=corrected_prompt,
             repo_path=repo_path,
             changed_files=changed_files,
+            coverage_files=coverage_files,
             base_sha=base_sha,
             review_session=review_session,
             existing_item_ids=existing_item_ids,

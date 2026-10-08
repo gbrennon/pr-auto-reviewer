@@ -24,3 +24,5 @@ class RunAgentConversationCommand:
     """Opaque review-run key (start timestamp) grouping transcripts for one run."""
     phase_name: str = ""
     existing_item_ids: frozenset[str] = frozenset()
+    coverage_files: tuple[str, ...] | None = None
+    """Files that must be read before this phase may accept a verdict."""
