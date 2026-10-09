@@ -225,4 +225,4 @@ def test_cli_command_processing_creates_issue_for_open_suggestion() -> None:
     assert saved_pr is not None
     assert saved_pr.created_issue_item_ids == frozenset({suggestion.id})
     assert "Created 1 issue(s)" in comment_publisher.post_calls[0][1]
-    assert saved_pr.latest_review_items()[0].status is ReviewItemStatus.OPEN
+    assert saved_pr.latest_review_items()[0].status is ReviewItemStatus.CREATED
