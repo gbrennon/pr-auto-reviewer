@@ -1,3 +1,6 @@
+from .review_audit_result import ReviewAuditResult
+from .review_item_lifecycle import ReviewItemLifecycle
+from .review_item_transition import ReviewItemTransition
 from .advisor_directive import AdvisorDirective
 from .clone_protocol import CloneProtocol
 from .code_review import CodeReview
@@ -47,7 +50,10 @@ __all__ = [
     "IssueCommandAction",
     "IssueContent",
     "ItemSeverity",
+    "ReviewAuditResult",
+    "ReviewItemLifecycle",
     "ReviewItemStatus",
+    "ReviewItemTransition",
     "PhaseResult",
     "PrComment",
     "PullRequestDiff",
