@@ -27,10 +27,9 @@ from ._helpers import (
     logging,
     pytest,
 )
-from .test_content_level_dedup import TestContentLevelDedup
 from .test_review_pull_request_service import TestReviewPullRequestService
 from .test_review_pull_request_service_token_verifier import (
     TestReviewPullRequestServiceTokenVerifier,
 )
 
-__all__ = ['FIXTURES', 'CodeReview', 'CommitSha', 'ComposedPrompt', 'EmptyDiffError', 'IssueCategory', 'ItemSeverity', 'MagicMock', 'Path', 'PullRequest', 'PullRequestDiff', 'PullRequestId', 'ReviewItem', 'ReviewPullRequestCommand', 'ReviewPullRequestService', 'ReviewVerdict', 'TestContentLevelDedup', 'TestReviewPullRequestService', 'TestReviewPullRequestServiceTokenVerifier', 'annotations', 'logging', 'pytest']
+__all__ = ['FIXTURES', 'CodeReview', 'CommitSha', 'ComposedPrompt', 'EmptyDiffError', 'IssueCategory', 'ItemSeverity', 'MagicMock', 'Path', 'PullRequest', 'PullRequestDiff', 'PullRequestId', 'ReviewItem', 'ReviewPullRequestCommand', 'ReviewPullRequestService', 'ReviewVerdict', 'TestReviewPullRequestService', 'TestReviewPullRequestServiceTokenVerifier', 'annotations', 'logging', 'pytest']
