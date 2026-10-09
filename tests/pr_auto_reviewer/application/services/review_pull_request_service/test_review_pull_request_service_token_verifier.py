@@ -1,7 +1,13 @@
 from pathlib import Path, PosixPath
 
+from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
+    AuditRemediationCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
+)
+from pr_auto_reviewer.domain.value_objects.review_audit_result import (
+    ReviewAuditResult,
 )
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
@@ -99,6 +105,9 @@ class TestSingleTurnFallback:
             ReviewVerdict.APPROVED
         )
         command_bus = MagicMock()
+        command_bus.dispatch.return_value = ReviewAuditResult(
+            items=(), suggestions=(), lifecycles=(),
+        )
 
         ReviewPullRequestService(
             mock_pr_repository,
@@ -110,7 +119,8 @@ class TestSingleTurnFallback:
         ).execute(cmd)
 
         mock_llm_review.review_prompt.assert_called_once()
-        command_bus.dispatch.assert_not_called()
+        dispatched = command_bus.dispatch.call_args.args[0]
+        assert isinstance(dispatched, AuditRemediationCommand)
 
     def test_multi_phase_dispatch_carries_base_sha(
             self, request,
@@ -184,6 +194,10 @@ class TestMultiPhaseDispatchLogging:
         command_bus = MagicMock()
 
         def dispatch(command):
+            if isinstance(command, AuditRemediationCommand):
+                return ReviewAuditResult(
+                    items=(), suggestions=(), lifecycles=(),
+                )
             assert any(
                 "Dispatching multi-phase review" in record.message
                 for record in caplog.records
@@ -209,7 +223,7 @@ class TestMultiPhaseDispatchLogging:
 
 
 class TestPriorFindingAuditGate:
-    def test_multi_phase_audits_only_prior_findings_on_changed_files(
+    def test_multi_phase_audits_all_historical_sections_before_phases(
         self, mock_pr_repository, mock_changeset_fetcher, mock_review_publisher,
     ):
         cmd = _cmd()
@@ -220,9 +234,7 @@ class TestPriorFindingAuditGate:
 diff --git a/src/a.py b/src/a.py
 +++ b/src/a.py
 """,
-            file_contents={"src/a.py": """\
-x = 1
-"""},
+            file_contents={"src/a.py": "x = 1\n"},
             clone_path=Path("/repos/owner_repo_42"),
         )
         changed_item = ReviewItem(
@@ -233,14 +245,33 @@ x = 1
             severity="major", category="correctness", file_path="src/old.py",
             description="unchanged", id="bbbb",
         )
+        suggestion = ReviewItem(
+            severity="minor", category="style", file_path="src/old.py",
+            description="suggestion", id="cccc",
+        )
         existing = _pr(cmd.pr_id, _sha("old"))
         existing = existing.add_review(
-            _review(items=[changed_item, unchanged_item]), _sha("old"),
+            CodeReview(
+                verdict=ReviewVerdict.APPROVED,
+                items=[changed_item, unchanged_item],
+                suggestions=[suggestion],
+                summary="Looks good",
+                reason="test reason",
+                model_used="test",
+            ),
+            _sha("old"),
         )
         mock_pr_repository.find.return_value = existing
         mock_changeset_fetcher.fetch.return_value = diff
         command_bus = MagicMock()
-        command_bus.dispatch.return_value = _review()
+        command_bus.dispatch.side_effect = [
+            ReviewAuditResult(
+                items=(changed_item, unchanged_item),
+                suggestions=(suggestion,),
+                lifecycles=(),
+            ),
+            _review(),
+        ]
 
         ReviewPullRequestService(
             mock_pr_repository, mock_changeset_fetcher, MagicMock(), MagicMock(),
@@ -248,6 +279,12 @@ x = 1
             plan=ReviewPlan(methodology="sub-agent-multi-phase", phases=()),
         ).execute(cmd)
 
-        dispatched = command_bus.dispatch.call_args.args[0]
-        assert isinstance(dispatched, RunMultiPhaseReviewCommand)
-        assert dispatched.prior_items == [changed_item]
+        audit_command = command_bus.dispatch.call_args_list[0].args[0]
+        review_command = command_bus.dispatch.call_args_list[1].args[0]
+        assert isinstance(audit_command, AuditRemediationCommand)
+        assert audit_command.prior_items == [changed_item, unchanged_item]
+        assert audit_command.prior_suggestions == [suggestion]
+        assert audit_command.prior_lifecycles == existing.lifecycles
+        assert isinstance(review_command, RunMultiPhaseReviewCommand)
+        assert review_command.prior_items == [changed_item, unchanged_item]
+        assert review_command.prior_suggestions == [suggestion]
