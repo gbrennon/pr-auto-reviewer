@@ -548,7 +548,7 @@ class TestProcessIssueCommandsService:
 
         saved_pr = fake_repo.save_calls[0]
         assert saved_pr.dismissed_item_ids == frozenset()
-        assert saved_pr.latest_review_items()[1].status is ReviewItemStatus.OPEN
+        assert saved_pr.latest_review_items()[1].status is ReviewItemStatus.CREATED
         assert len(fake_publisher.post_calls) == 1
         assert "blocking-1" in fake_publisher.post_calls[0][1]
 
