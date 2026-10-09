@@ -34,6 +34,7 @@ class ReviewBodyRenderer:
                 {
                     "id": item.id,
                     "status": item.status,
+                    "status_explanation": item.status_explanation,
                     "severity": item.severity,
                     "category": item.category,
                     "file_path": item.file_path,
@@ -43,7 +44,6 @@ class ReviewBodyRenderer:
                     "suggested_fix": item.suggested_fix,
                 }
             )
-
         numbered_praise = []
         for p in review.praise:
             numbered_praise.append({
@@ -57,6 +57,7 @@ class ReviewBodyRenderer:
             numbered_suggestions.append({
                 "id": s.id,
                 "status": s.status,
+                "status_explanation": s.status_explanation,
                 "description": s.description,
                 "file_path": s.file_path,
                 "line": s.line,
