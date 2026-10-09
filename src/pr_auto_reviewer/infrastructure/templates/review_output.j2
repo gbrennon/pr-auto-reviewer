@@ -12,9 +12,12 @@
 ### Issues
 {% if items %}
 {% for item in items %}
-`{{ item.id }}`.{% if item.status == 'resolved' %} [RESOLVED]{% else %} [OPEN]{% endif %}{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
+`{{ item.id }}`.{% if item.status == 'created' %} [CREATED]{% elif item.status == 'resolved' %} [RESOLVED]{% elif item.status == 'dismissed' %} [DISMISSED]{% else %} [OPEN]{% endif %}{% if item.category %} [{{ item.category }}]{% endif %} [{{ item.severity.value.upper() }}]{% if item.file_path %} {{ item.file_path }}{% endif %}{% if item.line %}:{{ item.line }}{% endif %}
 
 {{ item.description }}
+{% if item.status_explanation %}
+**Status explanation:** {{ item.status_explanation }}
+{% endif %}
 {% if item.current_code %}
 #### Current:
 ```
@@ -42,9 +45,12 @@ No notable patterns or practices to highlight.
 ### Suggestions
 {% if suggestions %}
 {% for s in suggestions %}
-`{{ s.id }}`.{% if s.status == 'resolved' %} [RESOLVED]{% elif s.status == 'dismissed' %} [DISMISSED]{% else %} [OPEN]{% endif %}{% if s.file_path %} {{ s.file_path }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
+`{{ s.id }}`.{% if s.status == 'created' %} [CREATED]{% elif s.status == 'resolved' %} [RESOLVED]{% elif s.status == 'dismissed' %} [DISMISSED]{% else %} [OPEN]{% endif %}{% if s.file_path %} {{ s.file_path }}{% endif %}{% if s.line %}:{{ s.line }}{% endif %}
 
 {{ s.description }}
+{% if s.status_explanation %}
+**Status explanation:** {{ s.status_explanation }}
+{% endif %}
 {% if s.current_code %}
 #### Current:
 ```
