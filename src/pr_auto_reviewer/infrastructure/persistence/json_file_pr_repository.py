@@ -24,6 +24,9 @@ from ...domain.value_objects.commit_sha import CommitSha
 from ...domain.value_objects.issue_category import IssueCategory
 from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_id import PullRequestId
+from ...domain.value_objects.review_item_lifecycle import ReviewItemLifecycle
+from ...domain.value_objects.review_item_status import ReviewItemStatus
+from ...domain.value_objects.review_item_transition import ReviewItemTransition
 from ...domain.value_objects.review_verdict import ReviewVerdict
 
 logger = logging.getLogger(__name__)
@@ -57,6 +60,7 @@ class ReviewItemCodec:
             "acceptance_criteria": item.acceptance_criteria,
             "detection_method": item.detection_method,
             "status": item.status.value,
+            "status_explanation": item.status_explanation,
         }
 
     @staticmethod
@@ -75,6 +79,60 @@ class ReviewItemCodec:
             acceptance_criteria=raw_item.get("acceptance_criteria", ""),
             detection_method=raw_item.get("detection_method", ""),
             status=raw_item.get("status", "open"),
+            status_explanation=raw_item.get("status_explanation", ""),
+        )
+
+
+class ReviewItemLifecycleCodec:
+    """Serialize and deserialize review-item lifecycle projections."""
+
+    @staticmethod
+    def serialize(lifecycle: ReviewItemLifecycle) -> dict:
+        """Serialize a lifecycle projection into JSON-compatible data."""
+        return {
+            "item_id": lifecycle.item_id,
+            "status": lifecycle.status.value,
+            "first_seen_sha": lifecycle.first_seen_sha,
+            "last_audited_sha": lifecycle.last_audited_sha,
+            "status_explanation": lifecycle.status_explanation,
+            "transitions": [
+                {
+                    "from_status": (
+                        transition.from_status.value
+                        if transition.from_status is not None
+                        else None
+                    ),
+                    "to_status": transition.to_status.value,
+                    "commit_sha": transition.commit_sha,
+                    "explanation": transition.explanation,
+                }
+                for transition in lifecycle.transitions
+            ],
+        }
+
+    @staticmethod
+    def deserialize(raw_lifecycle: dict) -> ReviewItemLifecycle:
+        """Deserialize a lifecycle projection from persisted JSON data."""
+        transitions = tuple(
+            ReviewItemTransition(
+                from_status=(
+                    ReviewItemStatus(raw_transition["from_status"])
+                    if raw_transition.get("from_status") is not None
+                    else None
+                ),
+                to_status=ReviewItemStatus(raw_transition["to_status"]),
+                commit_sha=raw_transition.get("commit_sha", ""),
+                explanation=raw_transition.get("explanation", ""),
+            )
+            for raw_transition in raw_lifecycle.get("transitions", [])
+        )
+        return ReviewItemLifecycle(
+            item_id=raw_lifecycle.get("item_id", ""),
+            status=ReviewItemStatus(raw_lifecycle.get("status", "created")),
+            first_seen_sha=raw_lifecycle.get("first_seen_sha", ""),
+            last_audited_sha=raw_lifecycle.get("last_audited_sha", ""),
+            status_explanation=raw_lifecycle.get("status_explanation", ""),
+            transitions=transitions,
         )
 
 
@@ -86,6 +144,7 @@ class CodeReviewCodec:
         return {
             "verdict": review.verdict.value,
             "summary": review.summary,
+            "reason": review.reason,
             "model_used": review.model_used,
             "items": [ReviewItemCodec.serialize(i) for i in review.items],
             "suggestions": [
@@ -196,6 +255,10 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
         dismissed_item_ids: frozenset[str] = frozenset(
             raw.get("dismissed_item_ids", [])
         )
+        lifecycles: tuple[ReviewItemLifecycle, ...] = tuple(
+            ReviewItemLifecycleCodec.deserialize(raw_lifecycle)
+            for raw_lifecycle in raw.get("lifecycles", [])
+        )
         processed_ids: frozenset[CommentId] = frozenset(
             CommentId(str(cid))
             for cid in raw.get("processed_comment_ids", [])
@@ -215,7 +278,8 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
                 "last_review_request_event_id"
             ),
             last_command_checked_at=raw.get("last_command_checked_at"),
-        )
+            lifecycles=lifecycles,
+        ).with_derived_lifecycles()
 
     def _save(self, data: dict) -> None:
         self._file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -234,11 +298,16 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             raise
 
     def _serialize(self, pr: PullRequest) -> dict:
+
         return {
             "title": pr.title,
             "head_sha": str(pr.head_sha),
             "is_draft": pr.is_draft,
             "reviews": [CodeReviewCodec.serialize(r) for r in pr.reviews],
+            "lifecycles": [
+                ReviewItemLifecycleCodec.serialize(lifecycle)
+                for lifecycle in pr.lifecycles
+            ],
             "unresolved_blocking_ids": sorted(pr.unresolved_blocking_ids),
             "created_issue_item_ids": sorted(pr.created_issue_item_ids),
             "dismissed_item_ids": sorted(pr.dismissed_item_ids),
