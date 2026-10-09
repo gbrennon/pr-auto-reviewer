@@ -719,7 +719,7 @@ class TestReviewPullRequestService:
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
 
-    def test_republishes_all_items_with_resolved_status_after_fix(
+    def test_ignores_unverified_resolved_status_from_current_review(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -765,12 +765,12 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
         assert [item.id for item in published.items] == ["block-1"]
-        assert published.items[0].status is ReviewItemStatus.RESOLVED
-        assert published.verdict == ReviewVerdict.APPROVED
+        assert published.items[0].status is ReviewItemStatus.OPEN
+        assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
         saved_pr = mock_pr_repository.save.call_args.args[0]
-        assert not saved_pr.unresolved_blocking_ids
+        assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
 
-    def test_does_not_republish_resolved_items_or_stale_suggestions(
+    def test_republishes_prior_items_and_suggestions_until_audit_closes_them(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -807,8 +807,7 @@ class TestReviewPullRequestService:
         cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
         mock_pr_repository.find.return_value = prior
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
-            cmd.pr_id,
-            cmd.head_sha,
+            cmd.pr_id, cmd.head_sha,
         )
         mock_llm_review.review_prompt.return_value = _review(
             ReviewVerdict.APPROVED,
@@ -824,11 +823,11 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
 
-        assert published.items == []
-        assert published.suggestions == []
+        assert [item.id for item in published.items] == ["item-1"]
+        assert [item.id for item in published.suggestions] == ["suggestion-1"]
+        assert published.items[0].status is ReviewItemStatus.OPEN
 
-
-    def test_does_not_duplicate_reclassified_prior_suggestions(
+    def test_reclassifies_recurrence_as_a_new_record(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -871,8 +870,7 @@ class TestReviewPullRequestService:
         cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
         mock_pr_repository.find.return_value = prior
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
-            cmd.pr_id,
-            cmd.head_sha,
+            cmd.pr_id, cmd.head_sha,
         )
         mock_llm_review.review_prompt.return_value = current_review
 
@@ -886,5 +884,5 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
 
-        assert [item.id for item in published.items] == ["shared-1"]
-        assert published.suggestions == []
+        assert published.items[0].id != "shared-1"
+        assert [item.id for item in published.suggestions] == ["shared-1"]
