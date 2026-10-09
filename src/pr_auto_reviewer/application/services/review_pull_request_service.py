@@ -328,15 +328,17 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         pr: PullRequest, audit: ReviewAuditResult,
     ) -> bool:
         """Return whether an audit result includes every identified record."""
-        expected_ids = {
-            item.id
-            for item in (*pr.historical_items(), *pr.historical_suggestions())
-            if item.id
-        }
+        historical_records = (
+            *pr.historical_items(),
+            *pr.historical_suggestions(),
+        )
+        if any(not record.id for record in historical_records):
+            return False
+        expected_ids = {record.id for record in historical_records}
         actual_ids = {
-            item.id
-            for item in (*audit.items, *audit.suggestions)
-            if item.id
+            record.id
+            for record in (*audit.items, *audit.suggestions)
+            if record.id
         }
         return expected_ids <= actual_ids
 
