@@ -125,3 +125,47 @@ class TestHistoricalItemIdentity:
 
         assert [item.id for item in merged.items] == ["item-1", merged.items[1].id]
         assert merged.items[1].id != "item-1"
+    def test_blank_id_history_fails_closed_without_dropping_records(self) -> None:
+        first = self._item("", "", "Missing first docstring")
+        second = self._item("", "", "Missing second docstring")
+        suggestion = self._item("", "", "Consider a second docstring")
+        review = replace(
+            self._review_with_items(first, second),
+            suggestions=[suggestion],
+        )
+        pr = _pr(_pr_id(), _sha("old111")).add_review(
+            review, _sha("old111")
+        )
+        command_bus = MagicMock()
+        command_bus.dispatch.return_value = ReviewAuditResult(items=())
+        dependencies = {
+            "pr_repository": MagicMock(),
+            "changeset_fetcher": MagicMock(),
+            "review_context_factory": MagicMock(),
+            "llm_review": MagicMock(),
+            "review_publisher": MagicMock(),
+        }
+        service = ReviewPullRequestService(
+            command_bus=command_bus,
+            **dependencies,
+        )
+        diff = replace(
+            _diff_fixture(pr.id, _sha("new222")),
+            clone_path=Path("/tmp/review-repository"),
+        )
+
+        audited = service._audit_history(pr, diff)
+
+        assert audited is not None
+        assert [item.description for item in audited.items] == [
+            "Missing first docstring",
+            "Missing second docstring",
+        ]
+        assert [item.description for item in audited.suggestions] == [
+            "Consider a second docstring",
+        ]
+        assert all(item.status is ReviewItemStatus.OPEN for item in audited.items)
+        assert all(
+            item.status is ReviewItemStatus.OPEN
+            for item in audited.suggestions
+        )
