@@ -24,6 +24,9 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_CONTEXT_TOKEN_LIMIT = 55_000
+_ESTIMATED_CHARS_PER_TOKEN = 2
+
 
 class BaseChatClient(AgentChatPort, ABC):
     """Abstract base class for LLM chat clients with retry and budget control."""
@@ -35,6 +38,7 @@ class BaseChatClient(AgentChatPort, ABC):
         timeout: int = 120,
         max_retries: int = 5,
         max_llm_calls: int | None = None,
+        max_context_tokens: int = _DEFAULT_CONTEXT_TOKEN_LIMIT,
     ) -> None:
         """Initialize base client parameters and budget tracking."""
         self._model = model
@@ -42,6 +46,7 @@ class BaseChatClient(AgentChatPort, ABC):
         self._timeout = timeout
         self._max_retries = max_retries
         self._max_llm_calls = max_llm_calls
+        self._max_context_tokens = max_context_tokens
         self._calls_started = 0
 
     @property
@@ -49,27 +54,118 @@ class BaseChatClient(AgentChatPort, ABC):
         """Return the configured model identifier."""
         return self._model
 
-    @staticmethod
-    def _normalize_host(host: str) -> str:
+    def _normalize_host(self, host: str) -> str:
         """Ensure host URL starts with an HTTP scheme and has no trailing slashes."""
         cleaned = host.strip().rstrip("/")
         if not cleaned.startswith(("http://", "https://")):
             return f"http://{cleaned}"
         return cleaned
 
+    def _estimate_tokens(
+        self, messages: list[ConversationMessage]
+    ) -> int:
+        """Estimate prompt tokens conservatively from message content."""
+        return sum(
+            max(
+                1,
+                (len(message.content) + _ESTIMATED_CHARS_PER_TOKEN - 1)
+                // _ESTIMATED_CHARS_PER_TOKEN,
+            )
+            + 4
+            for message in messages
+        )
+
+    def _group_history(
+        self, messages: list[ConversationMessage]
+    ) -> list[list[ConversationMessage]]:
+        """Group each assistant response with the user messages that follow it."""
+        groups: list[list[ConversationMessage]] = []
+        current: list[ConversationMessage] = []
+        for message in messages:
+            if message.role == "assistant" and current:
+                groups.append(current)
+                current = []
+            current.append(message)
+        if current:
+            groups.append(current)
+        return groups
+
+    def _bound_context(
+        self, messages: list[ConversationMessage]
+    ) -> list[ConversationMessage]:
+        """Keep the initial prompt and newest complete turns in the budget."""
+        if self._max_context_tokens <= 0:
+            return messages
+        estimated_tokens = self._estimate_tokens(messages)
+        if estimated_tokens <= self._max_context_tokens:
+            return messages
+        prefix = list(messages[:2])
+        prefix_tokens = self._estimate_tokens(prefix)
+        if prefix_tokens >= self._max_context_tokens:
+            raise LlmUnavailableError(
+                "Initial chat prompt exceeds the configured context token budget"
+            )
+        remaining_tokens = self._max_context_tokens - prefix_tokens
+        retained_reversed: list[list[ConversationMessage]] = []
+        for group in reversed(self._group_history(messages[2:])):
+            group_tokens = self._estimate_tokens(group)
+            if group_tokens <= remaining_tokens:
+                retained_reversed.append(group)
+                remaining_tokens -= group_tokens
+        retained = [
+            message
+            for group in reversed(retained_reversed)
+            for message in group
+        ]
+        omitted_count = len(messages) - len(prefix) - len(retained)
+        marker = ConversationMessage(
+            role="user",
+            content=(
+                f"[{omitted_count} earlier messages omitted to stay within "
+                f"the {self._max_context_tokens}-token context budget.]"
+            ),
+        )
+        bounded = [*prefix, marker, *retained]
+        while (
+            retained_reversed
+            and self._estimate_tokens(bounded) > self._max_context_tokens
+        ):
+            retained_reversed.pop()
+            retained = [
+                message
+                for group in reversed(retained_reversed)
+                for message in group
+            ]
+            bounded = [*prefix, marker, *retained]
+        if self._estimate_tokens(bounded) > self._max_context_tokens:
+            raise LlmUnavailableError(
+                "Chat history cannot fit within the configured context token budget"
+            )
+        logger.warning(
+            "Bounded chat history from %d to %d messages "
+            "(estimated tokens %d to %d)",
+            len(messages),
+            len(bounded),
+            estimated_tokens,
+            self._estimate_tokens(bounded),
+        )
+        return bounded
+
+
     def send(self, messages: list[ConversationMessage]) -> str:
         """Send messages to the LLM backend with retry loop and budget tracking."""
         self._assert_budget_available()
+        bounded_messages = self._bound_context(messages)
         self._calls_started += 1
         call_index = self._calls_started
         started_at = time.monotonic()
         logger.info(
             "LLM chat call %s starting (%d messages in history)",
             self._describe_call(call_index),
-            len(messages),
+            len(bounded_messages),
         )
         url = self._endpoint_url()
-        payload = self._format_payload(messages)
+        payload = self._format_payload(bounded_messages)
         for attempt in range(self._max_retries):
             try:
                 return self._execute_attempt_with_logging(
@@ -78,7 +174,7 @@ class BaseChatClient(AgentChatPort, ABC):
                     attempt,
                     call_index,
                     started_at,
-                    len(messages),
+                    len(bounded_messages),
                 )
             except requests.RequestException as exc:
                 self._handle_attempt_failure(
