@@ -1,5 +1,8 @@
 from ._helpers import *
 from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -55,7 +58,8 @@ class TestReviewPullRequestService:
             mock_review_publisher,
         ).execute(cmd)
 
-        assert reviewed is False
+        assert reviewed.reviewed is False
+        assert reviewed.duration_seconds is None
         mock_changeset_fetcher.fetch.assert_not_called()
         mock_review_context_factory.build.assert_not_called()
         mock_llm_review.review_prompt.assert_not_called()
@@ -886,3 +890,82 @@ class TestReviewPullRequestService:
 
         assert published.items[0].id != "shared-1"
         assert [item.id for item in published.suggestions] == ["shared-1"]
+    def test_duration_starts_after_eligibility_and_stops_after_publish(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+        monkeypatch,
+    ):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        events = []
+        timestamps = iter([10.0, 13.5])
+
+        def now():
+            events.append("stopwatch")
+            return next(timestamps)
+
+        def needs_review(service, command, pull_request):
+            events.append("eligibility")
+            return True
+
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        mock_review_publisher.publish.side_effect = (
+            lambda *arguments: events.append("publish")
+        )
+        monkeypatch.setattr(ReviewPullRequestService, "_now", staticmethod(now))
+        monkeypatch.setattr(
+            ReviewPullRequestService,
+            "_needs_review",
+            needs_review,
+        )
+
+        result = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        assert result == ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=3.5,
+        )
+        assert events == ["eligibility", "stopwatch", "publish", "stopwatch"]
+
+    def test_duration_is_not_started_when_review_is_not_required(
+        self,
+        mock_pr_repository,
+        monkeypatch,
+    ):
+        cmd = _cmd()
+        clock = MagicMock(return_value=10.0)
+        mock_pr_repository.find.return_value = _pr(cmd.pr_id, cmd.head_sha)
+        monkeypatch.setattr(ReviewPullRequestService, "_now", clock)
+        monkeypatch.setattr(
+            ReviewPullRequestService,
+            "_needs_review",
+            lambda service, command, pull_request: False,
+        )
+
+        result = ReviewPullRequestService(
+            mock_pr_repository,
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        ).execute(cmd)
+
+        assert result == ReviewExecutionResult(
+            reviewed=False,
+            duration_seconds=None,
+        )
+        clock.assert_not_called()
