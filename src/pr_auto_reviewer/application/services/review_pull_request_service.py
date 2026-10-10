@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,9 @@ from pr_auto_reviewer.domain.value_objects.review_audit_result import (
     ReviewAuditResult,
 )
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -75,14 +79,19 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._conversation_logger = conversation_logger
         self._plan = plan
 
-    def execute(self, command: ReviewPullRequestCommand) -> bool:
+    def execute(self, command: ReviewPullRequestCommand) -> ReviewExecutionResult:
         self._log_start(command)
 
         pr = self._load_or_create_pull_request(command)
 
         if not self._needs_review(command, pr):
             self._handle_already_reviewed(command, pr)
-            return False
+            return ReviewExecutionResult(
+                reviewed=False,
+                duration_seconds=None,
+            )
+
+        review_started_at = self._now()
 
         if self._token_verifier:
             self._token_verifier.verify(command.pr_id)
@@ -153,6 +162,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
 
         self._publish_review(command.pr_id, review, diff)
+        duration_seconds = self._now() - review_started_at
         pr = self._record_review(
             pr, review, command.head_sha, command.review_request_event_id
         )
@@ -166,7 +176,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 len(review.items),
                 (review.summary or "")[:80],
             )
-        return True
+        return ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=duration_seconds,
+        )
+    @staticmethod
+    def _now() -> float:
+        return time.perf_counter()
+
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
