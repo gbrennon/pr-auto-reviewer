@@ -144,16 +144,17 @@ class PollingDaemon:
         )
 
         HttpRequestCounter.instance().reset()
-        review_started_at = time.perf_counter()
         try:
-            reviewed = self._review_service.execute(command)
-            if not reviewed:
+            result = self._review_service.execute(command)
+            if not result.reviewed:
                 return
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
             if self._notifier:
-                duration = self._format_duration(
-                    time.perf_counter() - review_started_at
-                )
+                if result.duration_seconds is None:
+                    raise RuntimeError(
+                        "Completed review did not report a duration"
+                    )
+                duration = self._format_duration(result.duration_seconds)
                 self._notifier.notify_success(
                     (
                         "Review complete for "
