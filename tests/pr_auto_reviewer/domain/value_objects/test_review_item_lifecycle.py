@@ -12,6 +12,7 @@ from pr_auto_reviewer.domain import (
     ReviewItem,
     ReviewItemLifecycle,
     ReviewItemStatus,
+    ReviewItemTransition,
     ReviewVerdict,
 )
 
@@ -42,6 +43,43 @@ class TestReviewItemLifecycle:
         assert lifecycle.first_seen_sha == "sha-1"
         assert lifecycle.last_audited_sha == "sha-1"
         assert lifecycle.transitions[0].from_status is None
+
+    def test_lifecycle_rejects_empty_item_id(self) -> None:
+        with pytest.raises(ValueError, match="ID"):
+            ReviewItemLifecycle(
+                item_id="",
+                status=ReviewItemStatus.CREATED,
+                first_seen_sha="sha-1",
+                last_audited_sha="sha-1",
+                status_explanation="",
+            )
+
+    @pytest.mark.parametrize(
+        ("first_seen_sha", "last_audited_sha"),
+        [("", "sha-1"), ("sha-1", "")],
+    )
+    def test_lifecycle_rejects_empty_sha(
+        self,
+        first_seen_sha: str,
+        last_audited_sha: str,
+    ) -> None:
+        with pytest.raises(ValueError, match="SHA"):
+            ReviewItemLifecycle(
+                item_id="item-1",
+                status=ReviewItemStatus.CREATED,
+                first_seen_sha=first_seen_sha,
+                last_audited_sha=last_audited_sha,
+                status_explanation="",
+            )
+
+    def test_transition_rejects_empty_commit_sha(self) -> None:
+        with pytest.raises(ValueError, match="SHA"):
+            ReviewItemTransition(
+                from_status=None,
+                to_status=ReviewItemStatus.CREATED,
+                commit_sha="",
+                explanation="",
+            )
 
     def test_audit_without_proof_opens_item(self) -> None:
         lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
@@ -85,6 +123,17 @@ class TestReviewItemLifecycle:
         assert dismissed.last_audited_sha == "sha-3"
         assert dismissed.transitions[-1].from_status is ReviewItemStatus.RESOLVED
         assert dismissed.transitions[-1].to_status is ReviewItemStatus.RESOLVED
+
+    def test_dismiss_dismissed_lifecycle_remains_terminal(self) -> None:
+        lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
+        dismissed = lifecycle.dismiss("sha-2")
+
+        repeated = dismissed.dismiss("sha-3", explanation="Still dismissed")
+
+        assert repeated.status is ReviewItemStatus.DISMISSED
+        assert repeated.last_audited_sha == "sha-3"
+        assert repeated.transitions[-1].from_status is ReviewItemStatus.DISMISSED
+        assert repeated.transitions[-1].to_status is ReviewItemStatus.DISMISSED
 
     def test_audit_with_proof_resolves_item(self) -> None:
         lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
@@ -201,7 +250,6 @@ class TestPullRequestLifecycle:
 
         assert projected.lifecycles[0].status is ReviewItemStatus.RESOLVED
         assert projected.latest_review_items()[0].status is ReviewItemStatus.RESOLVED
-
 
     def test_historical_items_deduplicate_by_id_and_project_status(self) -> None:
         first = _item("item-1", "first evidence")
