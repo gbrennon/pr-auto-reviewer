@@ -71,4 +71,6 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             diff_headers=None,
             diff=diff,
         )
+        if processed.comment_body is not None:
+            self._publishing.publish_comment(pr_id, processed.comment_body)
 
