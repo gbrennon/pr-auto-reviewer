@@ -25,6 +25,9 @@ from pr_auto_reviewer.domain.messages.commands.review_pull_request_command impor
 )
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
@@ -107,9 +110,11 @@ class RecordingReviewService(ReviewPullRequestPort):
     def __init__(self) -> None:
         self.executed_commands: list[ReviewPullRequestCommand] = []
 
-    def execute(self, command: ReviewPullRequestCommand) -> bool:
+    def execute(
+        self, command: ReviewPullRequestCommand,
+    ) -> ReviewExecutionResult:
         self.executed_commands.append(command)
-        return True
+        return ReviewExecutionResult(reviewed=True, duration_seconds=1.0)
 
 class PerRepoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
@@ -216,7 +221,10 @@ class TestPollingDaemon:
     def test_does_not_notify_success_when_review_is_skipped(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
-        mock_review_service.execute.return_value = False
+        mock_review_service.execute.return_value = ReviewExecutionResult(
+            reviewed=False,
+            duration_seconds=None,
+        )
         pull_request = OpenPullRequest(
             pr_id=PullRequestId(repository="owner/repo1", number=7),
             head_sha=CommitSha("abc123"),
@@ -238,7 +246,10 @@ class TestPollingDaemon:
     def test_notifies_success_after_review_completion(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
-        mock_review_service.execute.return_value = True
+        mock_review_service.execute.return_value = ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=134.0,
+        )
         pr_id = PullRequestId(repository="owner/repo1", number=7)
         pull_request = OpenPullRequest(
             pr_id=pr_id,
@@ -258,8 +269,7 @@ class TestPollingDaemon:
 
         assert len(notifier.successes) == 1
         context, detail = notifier.successes[0]
-        assert context.startswith("Review complete for owner/repo1 (")
-        assert context.endswith(")")
+        assert context == "Review complete for owner/repo1 (2m 14s)"
         assert detail == "PR #7"
 
     def test_processes_recent_closed_pr_commands(
