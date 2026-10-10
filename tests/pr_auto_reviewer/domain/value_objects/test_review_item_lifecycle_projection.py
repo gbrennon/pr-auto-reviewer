@@ -277,3 +277,22 @@ class TestReviewItemLifecycleProjection:
         projected = pr.with_derived_lifecycles()
 
         assert projected is pr
+
+    def test_historical_items_keeps_blank_id_record(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="reason",
+            summary="summary",
+            model_used="model",
+            items=[_item(""), _item("item-1")],
+        )
+        pr = PullRequest(
+            id=_pr().id,
+            title="Test",
+            head_sha=CommitSha("sha-2"),
+            reviews=(review,),
+        )
+
+        history = pr.historical_items()
+
+        assert tuple(item.id for item in history) == ("", "item-1")
