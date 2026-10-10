@@ -1,5 +1,3 @@
-import pytest
-
 from pr_auto_reviewer.domain import (
     CodeReview,
     CommitSha,
@@ -97,18 +95,7 @@ class TestPullRequestLifecycle:
 
         assert latest_items == ()
 
-    @pytest.mark.parametrize(
-        ("dismissed_item_ids", "expected_status"),
-        [
-            (frozenset(), ReviewItemStatus.OPEN),
-            (frozenset({"item-1"}), ReviewItemStatus.DISMISSED),
-        ],
-    )
-    def test_latest_review_items_projects_dismissed_ids(
-        self,
-        dismissed_item_ids: frozenset[str],
-        expected_status: ReviewItemStatus,
-    ) -> None:
+    def test_latest_review_items_projects_dismissed_ids(self) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="reason",
@@ -116,17 +103,25 @@ class TestPullRequestLifecycle:
             model_used="model",
             items=[_item("item-1")],
         )
-        pr = PullRequest(
+        active = PullRequest(
             id=_pr().id,
             title="Test",
             head_sha=CommitSha("sha-2"),
-            dismissed_item_ids=dismissed_item_ids,
+            reviews=(review,),
+        )
+        dismissed = PullRequest(
+            id=_pr().id,
+            title="Test",
+            head_sha=CommitSha("sha-2"),
+            dismissed_item_ids=frozenset({"item-1"}),
             reviews=(review,),
         )
 
-        latest_items = pr.latest_review_items()
+        active_items = active.latest_review_items()
+        dismissed_items = dismissed.latest_review_items()
 
-        assert latest_items[0].status is expected_status
+        assert active_items[0].status is ReviewItemStatus.OPEN
+        assert dismissed_items[0].status is ReviewItemStatus.DISMISSED
 
 
     def test_dismiss_review_items_does_not_append_terminal_transition(self) -> None:
