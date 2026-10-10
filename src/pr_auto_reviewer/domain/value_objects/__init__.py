@@ -1,4 +1,5 @@
 from .review_audit_result import ReviewAuditResult
+from .review_execution_result import ReviewExecutionResult
 from .review_item_lifecycle import ReviewItemLifecycle
 from .review_item_transition import ReviewItemTransition
 from .advisor_directive import AdvisorDirective
@@ -51,6 +52,7 @@ __all__ = [
     "IssueContent",
     "ItemSeverity",
     "ReviewAuditResult",
+    "ReviewExecutionResult",
     "ReviewItemLifecycle",
     "ReviewItemStatus",
     "ReviewItemTransition",
