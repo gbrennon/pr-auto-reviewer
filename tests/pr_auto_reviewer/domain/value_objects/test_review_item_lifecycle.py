@@ -52,6 +52,40 @@ class TestReviewItemLifecycle:
         assert audited.status_explanation == "Still present"
         assert audited.transitions[-1].to_status is ReviewItemStatus.OPEN
 
+    def test_audit_requires_presence_and_proof_to_resolve_item(self) -> None:
+        lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
+
+        audited = lifecycle.audit(
+            "sha-2",
+            present=False,
+            proof=True,
+            explanation="The record is absent",
+        )
+
+        assert audited.status is ReviewItemStatus.OPEN
+
+    def test_dismiss_active_lifecycle_records_terminal_transition(self) -> None:
+        lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
+
+        dismissed = lifecycle.dismiss("sha-2", explanation="Not actionable")
+
+        assert dismissed.status is ReviewItemStatus.DISMISSED
+        assert dismissed.transitions[-1].from_status is ReviewItemStatus.CREATED
+        assert dismissed.transitions[-1].to_status is ReviewItemStatus.DISMISSED
+        assert dismissed.transitions[-1].commit_sha == "sha-2"
+        assert dismissed.transitions[-1].explanation == "Not actionable"
+
+    def test_dismiss_resolved_lifecycle_preserves_terminal_status(self) -> None:
+        lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
+        resolved = lifecycle.audit("sha-2", proof=True)
+
+        dismissed = resolved.dismiss("sha-3", explanation="Already resolved")
+
+        assert dismissed.status is ReviewItemStatus.RESOLVED
+        assert dismissed.last_audited_sha == "sha-3"
+        assert dismissed.transitions[-1].from_status is ReviewItemStatus.RESOLVED
+        assert dismissed.transitions[-1].to_status is ReviewItemStatus.RESOLVED
+
     def test_audit_with_proof_resolves_item(self) -> None:
         lifecycle = ReviewItemLifecycle.first_appearance("item-1", "sha-1")
 
@@ -94,6 +128,80 @@ class TestPullRequestLifecycle:
 
         assert pr.lifecycles[0].status is ReviewItemStatus.CREATED
         assert pr.latest_review_items()[0].status is ReviewItemStatus.CREATED
+
+    def test_apply_audit_result_projects_resolved_status(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="reason",
+            summary="summary",
+            model_used="model",
+            items=[_item("item-1")],
+        )
+        pr = _pr().add_review(review, CommitSha("sha-1"))
+        audited = pr.lifecycles[0].audit(
+            "sha-2",
+            present=True,
+            proof=True,
+            explanation="Proof confirms fix",
+        )
+
+        updated = pr.apply_audit_result(
+            ReviewAuditResult(lifecycles=(audited,))
+        )
+
+        assert updated.lifecycles[0].status is ReviewItemStatus.RESOLVED
+        assert updated.latest_review_items()[0].status is ReviewItemStatus.RESOLVED
+        assert updated.reviews[0].items[0].status is ReviewItemStatus.OPEN
+
+    def test_apply_audit_result_preserves_dismissed_lifecycle(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="reason",
+            summary="summary",
+            model_used="model",
+            items=[_item("item-1")],
+        )
+        pr = _pr().add_review(review, CommitSha("sha-1"))
+        dismissed = pr.dismiss_review_items("item-1")
+        stale = ReviewItemLifecycle.first_appearance("item-1", "sha-3")
+
+        updated = dismissed.apply_audit_result(
+            ReviewAuditResult(lifecycles=(stale,))
+        )
+
+        assert updated.lifecycles[0].status is ReviewItemStatus.DISMISSED
+        assert updated.lifecycles[0].last_audited_sha == "sha-3"
+
+    def test_with_derived_lifecycles_reconstructs_terminal_status(self) -> None:
+        item = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.MAJOR,
+            category="bug",
+            file_path="src/a.py",
+            description="finding",
+            status=ReviewItemStatus.RESOLVED,
+            status_explanation="Proof confirms fix",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="reason",
+            summary="summary",
+            model_used="model",
+            items=[item],
+        )
+        pr = _pr()
+        legacy = PullRequest(
+            id=pr.id,
+            title=pr.title,
+            head_sha=pr.head_sha,
+            reviews=(review,),
+        )
+
+        projected = legacy.with_derived_lifecycles()
+
+        assert projected.lifecycles[0].status is ReviewItemStatus.RESOLVED
+        assert projected.latest_review_items()[0].status is ReviewItemStatus.RESOLVED
+
 
     def test_historical_items_deduplicate_by_id_and_project_status(self) -> None:
         first = _item("item-1", "first evidence")
