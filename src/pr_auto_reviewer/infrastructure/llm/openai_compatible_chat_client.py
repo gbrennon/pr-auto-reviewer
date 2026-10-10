@@ -39,8 +39,7 @@ class OpenAiCompatibleChatClient(BaseChatClient):
         )
         self._http_post = http_post
 
-    @staticmethod
-    def _normalize_api_base(host: str) -> str:
+    def _normalize_api_base(self, host: str) -> str:
         """Return a host with exactly one `/v1` API path suffix."""
         cleaned = host.strip().rstrip("/")
         if not cleaned.startswith(("http://", "https://")):
@@ -143,7 +142,15 @@ class OpenAiCompatibleChatClient(BaseChatClient):
             timeout=self._timeout,
             stream=True,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            logger.error(
+                "LLM chat request rejected with HTTP %s: %.1000s",
+                response.status_code,
+                response.text,
+            )
+            raise
         if hasattr(response, "encoding"):
             response.encoding = "utf-8"
         return self._accumulate_stream(response, attempt)
