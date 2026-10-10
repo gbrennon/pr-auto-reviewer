@@ -30,7 +30,7 @@ def _pr() -> PullRequest:
     )
 
 
-class TestPullRequestLifecycle:
+class TestReviewItemLifecycleProjection:
     def test_add_review_skips_blank_item_id_lifecycle(self) -> None:
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
