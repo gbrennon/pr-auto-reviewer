@@ -27,7 +27,7 @@ _TEMPLATE_DIR = (
 )
 
 
-def test_publisher_body_contains_updated_suggestion_status() -> None:
+def test_publisher_body_excludes_dismissed_suggestion() -> None:
     suggestion = ReviewItem(
         id="suggestion-1",
         severity=ItemSeverity.INFO,
@@ -53,6 +53,7 @@ def test_publisher_body_contains_updated_suggestion_status() -> None:
         review,
     )
 
-    assert "`suggestion-1`. [DISMISSED] src/example.py" in processed.body
+    assert "`suggestion-1`. [DISMISSED] src/example.py" not in processed.body
+    assert processed.comment_body is None
     assert processed.verdict_event == "APPROVED"
     assert processed.blocking_items == []
