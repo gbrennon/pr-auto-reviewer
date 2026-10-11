@@ -162,6 +162,8 @@ class TestCliRunner:
             head_sha=CommitSha("abc123"),
             title="Fix bug",
             is_draft=False,
+            review_requested=False,
+            review_request_event_id=7,
         )
         pr_lister = MockPrLister([open_pr])
 
@@ -177,6 +179,8 @@ class TestCliRunner:
 
         assert result == 0
         mock_review_service.execute.assert_called_once()
+        command = mock_review_service.execute.call_args.args[0]
+        assert command.review_request_event_id == 7
 
     def test_run_review_success_message(
         self,
