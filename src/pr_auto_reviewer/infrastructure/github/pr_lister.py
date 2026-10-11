@@ -108,8 +108,13 @@ class GithubPrLister(PrListerPort):
         review_requested = bool(pull_request.get("requested_reviewers"))
         review_request_event_id = (
             self._latest_review_request_event_id(repository, number)
-            if include_review_event and review_requested
+            if include_review_event
             else None
+        )
+        latest_review_id, latest_review_dismissed = (
+            self._latest_platform_review(repository, number)
+            if include_review_event
+            else (None, False)
         )
         return OpenPullRequest(
             pr_id=PullRequestId(repository=repository, number=number),
@@ -119,6 +124,8 @@ class GithubPrLister(PrListerPort):
             is_draft=pull_request.get("draft") is True,
             review_requested=review_requested,
             review_request_event_id=review_request_event_id,
+            latest_review_id=latest_review_id,
+            latest_review_dismissed=latest_review_dismissed,
             updated_at=updated_at if isinstance(updated_at, str) else "",
             target_branch=target_branch if isinstance(target_branch, str) else "",
         )
@@ -142,6 +149,45 @@ class GithubPrLister(PrListerPort):
             return max(event_ids, default=None)
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
             return None
+    @staticmethod
+    def _review_sort_key(row: dict[str, object]) -> tuple[str, int]:
+        review_id = row.get("id")
+        return (
+            str(row.get("submitted_at", "")),
+            review_id if isinstance(review_id, int) else 0,
+        )
+
+    def _latest_platform_review(
+        self, repository: str, pr_number: int
+    ) -> tuple[int | None, bool]:
+        """Return the latest submitted review ID and dismissal state."""
+        try:
+            reviews: object = self._client.get(
+                f"/repos/{repository}/pulls/{pr_number}/reviews",
+                repo=repository,
+                limit=10,
+            )
+            rows = self._payload_rows(reviews)
+            submitted = [
+                row
+                for row in rows
+                if row.get("state") != "REQUEST_REVIEW"
+                and isinstance(row.get("id"), int)
+            ]
+            if not submitted:
+                return None, False
+            latest = max(
+                submitted,
+                key=self._review_sort_key,
+            )
+            review_id = latest.get("id")
+            if not isinstance(review_id, int):
+                return None, False
+            state = str(latest.get("state", "")).upper()
+            dismissed = latest.get("dismissed") is True or state == "DISMISSED"
+            return review_id, dismissed
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            return None, False
 
     def get_pr(self, repository: str, pr_number: int) -> OpenPullRequest | None:
         _, repository = split_repository_prefix(repository)
@@ -159,8 +205,13 @@ class GithubPrLister(PrListerPort):
             review_requested = bool(pr.get("requested_reviewers"))
             review_request_event_id = (
                 self._latest_review_request_event_id(repository, int(number))
-                if review_requested and isinstance(number, int)
+                if isinstance(number, int)
                 else None
+            )
+            latest_review_id, latest_review_dismissed = (
+                self._latest_platform_review(repository, int(number))
+                if isinstance(number, int)
+                else (None, False)
             )
             if not number or not sha:
                 logger.warning("PR %s #%d has no number or sha", repository, pr_number)
@@ -173,6 +224,8 @@ class GithubPrLister(PrListerPort):
                 description=description,
                 review_requested=review_requested,
                 review_request_event_id=review_request_event_id,
+                latest_review_id=latest_review_id,
+                latest_review_dismissed=latest_review_dismissed,
                 updated_at=pr.get("updated_at", ""),
                 target_branch=target_branch,
             )
