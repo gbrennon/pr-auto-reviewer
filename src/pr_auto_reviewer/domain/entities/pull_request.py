@@ -33,6 +33,8 @@ class PullRequest:
     processed_comment_ids: frozenset[CommentId] = frozenset()
     reviews: tuple[CodeReview, ...] = ()
     last_review_request_event_id: int | None = None
+    last_platform_review_id: int | None = None
+    last_platform_review_dismissed: bool = False
     last_command_checked_at: str | None = None
     lifecycles: tuple[ReviewItemLifecycle, ...] = ()
 
@@ -62,6 +64,16 @@ class PullRequest:
         ):
             return self
         return replace(self, last_review_request_event_id=event_id)
+
+    def record_platform_review(
+        self, review_id: int, dismissed: bool
+    ) -> PullRequest:
+        """Record the latest platform review observed for this pull request."""
+        return replace(
+            self,
+            last_platform_review_id=review_id,
+            last_platform_review_dismissed=dismissed,
+        )
 
     def add_review(
         self, review: CodeReview, sha: CommitSha,
