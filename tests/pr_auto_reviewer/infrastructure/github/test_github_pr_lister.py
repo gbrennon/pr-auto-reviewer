@@ -84,7 +84,6 @@ class TestGithubPrLister:
         self,
     ) -> None:
         pull_request = pr_dict(42, "The Answer")
-        pull_request["requested_reviewers"] = [{"login": "personal-reviewer"}]
         adapter = _adapter(
             {
                 "/repos/o/r/pulls": [pull_request],
@@ -163,3 +162,42 @@ class TestGithubPrLister:
         result = adapter.list_open("github:o/r")
 
         assert [pr.pr_id.repository for pr in result] == ["o/r"]
+    def test_list_open_when_latest_review_is_dismissed_then_maps_review_state(self) -> None:
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls": [pr_dict(1)],
+                "/repos/o/r/pulls/1/reviews": [
+                    {
+                        "id": 7,
+                        "submitted_at": "2026-10-11T02:35:02Z",
+                        "state": "DISMISSED",
+                    },
+                    {
+                        "id": 8,
+                        "submitted_at": "2026-10-11T04:28:39Z",
+                        "state": "REQUEST_REVIEW",
+                    },
+                ],
+            }
+        )
+
+        result = adapter.list_open("o/r")
+
+        assert result[0].latest_review_id == 7
+        assert result[0].latest_review_dismissed is True
+
+    def test_get_pr_maps_review_request_event_without_active_reviewer(self) -> None:
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls/42": pr_dict(42, "The Answer"),
+                "/repos/o/r/issues/42/events": [
+                    {"id": 15, "event": "review_requested"},
+                ],
+            }
+        )
+
+        result = adapter.get_pr("o/r", 42)
+
+        assert result is not None
+        assert result.review_requested is False
+        assert result.review_request_event_id == 15
