@@ -277,6 +277,10 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             last_review_request_event_id=raw.get(
                 "last_review_request_event_id"
             ),
+            last_platform_review_id=raw.get("last_platform_review_id"),
+            last_platform_review_dismissed=raw.get(
+                "last_platform_review_dismissed", False
+            ),
             last_command_checked_at=raw.get("last_command_checked_at"),
             lifecycles=lifecycles,
         ).with_derived_lifecycles()
@@ -316,5 +320,7 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
                 str(c) for c in pr.processed_comment_ids
             ),
             "last_review_request_event_id": pr.last_review_request_event_id,
+            "last_platform_review_id": pr.last_platform_review_id,
+            "last_platform_review_dismissed": pr.last_platform_review_dismissed,
             "last_command_checked_at": pr.last_command_checked_at,
         }
