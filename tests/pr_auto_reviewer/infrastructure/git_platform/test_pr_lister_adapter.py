@@ -25,6 +25,34 @@ class TestForgejoPrLister:
         assert [pr.pr_id.number for pr in result] == [1, 2, 3]
         assert all(pr.pr_id.repository == "o/r" for pr in result)
         assert all(len(pr.head_sha.value) == 40 for pr in result)
+    def test_list_open_reports_latest_dismissed_review(self):
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls": [pr_dict(1)],
+                "/repos/o/r/issues/1/timeline": [],
+                "/repos/o/r/pulls/1/reviews": [
+                    {
+                        "id": 7,
+                        "commit_id": "a" * 40,
+                        "submitted_at": "2026-10-11T02:35:02+02:00",
+                        "dismissed": True,
+                    },
+                    {
+                        "id": 8,
+                        "commit_id": "",
+                        "submitted_at": "2026-10-11T04:28:39+02:00",
+                        "state": "REQUEST_REVIEW",
+                        "dismissed": False,
+                    },
+                ],
+            }
+        )
+
+        result = adapter.list_open("o/r")
+
+        assert result[0].latest_review_id == 7
+        assert result[0].latest_review_dismissed is True
+
 
     def test_list_open_when_repo_has_drafts_then_filters_them_out(self):
         prs = [pr_dict(1, draft=False), pr_dict(2, draft=True), pr_dict(3, draft=False)]
