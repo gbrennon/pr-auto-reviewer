@@ -164,7 +164,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._publish_review(command.pr_id, review, diff)
         duration_seconds = self._now() - review_started_at
         pr = self._record_review(
-            pr, review, command.head_sha, command.review_request_event_id
+            pr,
+            review,
+            command.head_sha,
+            command.review_request_event_id,
+            command.latest_review_id,
+            command.latest_review_dismissed,
         )
         self._persist(pr)
 
@@ -206,12 +211,29 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     ) -> bool:
         if command.force or pr.needs_review(command.head_sha):
             return True
-        return (
-            command.review_requested
-            and command.review_request_event_id is not None
+        if (
+            command.review_request_event_id is not None
             and command.review_request_event_id
             > (pr.last_review_request_event_id or 0)
+        ):
+            return True
+        return self._platform_review_requires_review(command, pr)
+
+    @staticmethod
+    def _platform_review_requires_review(
+        command: ReviewPullRequestCommand, pr: PullRequest
+    ) -> bool:
+        if not command.latest_review_dismissed or command.latest_review_id is None:
+            return False
+        if pr.last_platform_review_id is None:
+            return True
+        if command.latest_review_id > pr.last_platform_review_id:
+            return True
+        return (
+            command.latest_review_id == pr.last_platform_review_id
+            and not pr.last_platform_review_dismissed
         )
+
     def _handle_already_reviewed(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> None:
@@ -222,6 +244,11 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         )
         if command.review_request_event_id is not None:
             pr = pr.record_review_request_event(command.review_request_event_id)
+        if command.latest_review_id is not None:
+            pr = pr.record_platform_review(
+                command.latest_review_id,
+                command.latest_review_dismissed,
+            )
         self._pr_repository.save(pr)
 
     def _fetch_diff(
@@ -812,11 +839,21 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         logger.info("Publishing review to platform...")
         self._review_publisher.publish(pr_id, review, diff)
     def _record_review(
-        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
+        self,
+        pr: PullRequest,
+        review: CodeReview,
+        head_sha: CommitSha,
         review_request_event_id: int | None = None,
+        latest_review_id: int | None = None,
+        latest_review_dismissed: bool = False,
     ) -> PullRequest:
         if review_request_event_id is not None:
             pr = pr.record_review_request_event(review_request_event_id)
+        if latest_review_id is not None:
+            pr = pr.record_platform_review(
+                latest_review_id,
+                latest_review_dismissed,
+            )
         return pr.add_review(review, head_sha)
 
     def _persist(self, pr: PullRequest) -> None:
