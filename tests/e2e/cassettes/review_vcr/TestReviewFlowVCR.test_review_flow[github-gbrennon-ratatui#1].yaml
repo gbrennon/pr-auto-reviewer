@@ -13089,6 +13089,18 @@ interactions:
       message: OK
 - request:
     body: null
+    headers: {}
+    method: GET
+    uri: https://api.github.com/repos/gbrennon/ratatui/issues/1/events?per_page=100
+  response:
+    body:
+      string: '[]'
+    headers: {}
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
     headers:
       Accept:
       - '*/*'
