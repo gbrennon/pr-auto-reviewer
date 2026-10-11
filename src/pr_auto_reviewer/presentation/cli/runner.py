@@ -182,6 +182,9 @@ class CliRunner:
             description=pr.description,
             force=force_mode,
             review_requested=pr.review_requested,
+            review_request_event_id=pr.review_request_event_id,
+            latest_review_id=pr.latest_review_id,
+            latest_review_dismissed=pr.latest_review_dismissed,
             target_branch=pr.target_branch,
         )
 
