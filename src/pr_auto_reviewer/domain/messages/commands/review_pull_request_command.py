@@ -16,3 +16,5 @@ class ReviewPullRequestCommand:
     force: bool = False
     target_branch: str = ""
     review_request_event_id: int | None = None
+    latest_review_id: int | None = None
+    latest_review_dismissed: bool = False
