@@ -65,18 +65,30 @@ class OpenAiCompatibleChatClient(BaseChatClient):
             "stream": True,
         }
 
-    def _parse_stream_chunk(
-        self, line: str | bytes, attempt: int
-    ) -> dict[str, Any] | None:
-        """Parse one SSE data line and skip malformed or terminal lines."""
-        text = line.decode("utf-8") if isinstance(line, bytes) else line
-        cleaned = text.strip()
+    def _decode_line(self, line: str | bytes) -> str:
+        """Return a streamed line as text regardless of transport encoding."""
+        return line.decode("utf-8") if isinstance(line, bytes) else line
+
+    def _sse_payload(self, line: str | bytes) -> str | None:
+        """Return the JSON payload of an SSE line, skipping comment and terminal lines."""
+        cleaned = self._decode_line(line).strip()
+        if cleaned.startswith(":"):
+            return None
         if cleaned.startswith("data:"):
             cleaned = cleaned[5:].strip()
         if not cleaned or cleaned == "[DONE]":
             return None
+        return cleaned
+
+    def _parse_stream_chunk(
+        self, line: str | bytes, attempt: int
+    ) -> dict[str, Any] | None:
+        """Parse one SSE data line and skip comment, malformed, or terminal lines."""
+        payload = self._sse_payload(line)
+        if payload is None:
+            return None
         try:
-            parsed: dict[str, Any] = json.loads(cleaned)
+            parsed: dict[str, Any] = json.loads(payload)
         except (json.JSONDecodeError, UnicodeDecodeError):
             logger.warning(
                 "Skipping unparseable SSE line (attempt %d/%d): %.300s",
