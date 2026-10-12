@@ -1,3 +1,8 @@
+import pytest
+
+from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
+)
 from ._helpers import *
 
 _CONVERSATION_LOGGER = (
@@ -518,6 +523,40 @@ class TestConversationLoopGuardrails:
             for message in call[0][0]
         )
         assert refusal_seen
+
+    def test_repeated_tool_call_streak_aborts_without_progress(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        """A repeated-call loop stops after three calls without progress."""
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"path": "src/a.py"}
+        )
+        repeated = ToolCall(
+            tool_name="read_file", arguments={"file": "src/a.py"}
+        )
+        repeated_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL, tool_call=repeated,
+        )
+        mock_chat_port.send.side_effect = [
+            "first", "second", "third", "fourth",
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            repeated_parse, None,
+            repeated_parse, None,
+            repeated_parse, None,
+            repeated_parse, None,
+        ]
+
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=30,
+        )
+
+        with pytest.raises(ReviewBudgetExhaustedError, match="no progress"):
+            service.execute(_command(tool_execution))
+
+        assert tool_execution.execute_tool.call_count == 1
 
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,

@@ -24,7 +24,7 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CONTEXT_TOKEN_LIMIT = 55_000
+_DEFAULT_CONTEXT_TOKEN_LIMIT = 16_000
 _ESTIMATED_CHARS_PER_TOKEN = 2
 
 
