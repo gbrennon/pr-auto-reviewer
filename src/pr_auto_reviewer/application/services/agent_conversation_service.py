@@ -34,6 +34,9 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
 from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
     MaxTurnsExceededError,
 )
+from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
+)
 from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
     ParseReviewTurnCommand,
 )
@@ -78,6 +81,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 )
 
 logger = logging.getLogger(__name__)
+_MAX_REPEATED_TOOL_CALLS = 3
 
 
 
@@ -415,6 +419,7 @@ class AgentConversationService(RunAgentConversationPort):
         verdict_nudged = False
         read_file_count = 0
         run_snippet_count = 0
+        repeated_tool_call_streak = 0
 
         while guardrails.has_turns_remaining():
             logger.debug(
@@ -515,12 +520,22 @@ class AgentConversationService(RunAgentConversationPort):
                     ),
                 )
                 if call_key in seen_tool_calls:
+                    repeated_tool_call_streak += 1
                     logger.debug(
                         "Tool call repeated (%s); refusing and reprompting",
                         tool_call.tool_name,
                     )
+                    if repeated_tool_call_streak >= _MAX_REPEATED_TOOL_CALLS:
+                        logger.warning(
+                            "Aborting conversation after %d repeated tool calls",
+                            repeated_tool_call_streak,
+                        )
+                        raise ReviewBudgetExhaustedError(
+                            "Conversation made no progress after repeated tool calls"
+                        )
                     messages.append(self._repeated_tool_message.render())
                     continue
+                repeated_tool_call_streak = 0
                 seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
                 guardrails = guardrails.record_tool_call()
