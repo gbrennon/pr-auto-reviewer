@@ -20,6 +20,9 @@ from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest
 from pr_auto_reviewer.presentation.ports.pr_lister_port import PrListerPort
@@ -34,10 +37,12 @@ class FakeReviewService:
 
     executed_commands: list[ReviewPullRequestCommand]
 
-    def execute(self, command: ReviewPullRequestCommand) -> bool:
+    def execute(
+        self, command: ReviewPullRequestCommand,
+    ) -> ReviewExecutionResult:
         """Accept a review command without external services."""
         self.executed_commands.append(command)
-        return True
+        return ReviewExecutionResult(reviewed=True, duration_seconds=1.0)
 
 
 @dataclass

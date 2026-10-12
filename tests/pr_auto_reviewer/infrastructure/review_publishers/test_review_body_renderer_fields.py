@@ -218,6 +218,15 @@ class TestReviewBodyRendererFields:
             summary="Review summary",
             items=[
                 ReviewItem(
+                    id="created-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/created.py",
+                    description="Created finding",
+                    status=ReviewItemStatus.CREATED,
+                    status_explanation="First seen in this revision.",
+                ),
+                ReviewItem(
                     id="open-1",
                     severity=ItemSeverity.MAJOR,
                     category=IssueCategory.BUG,
@@ -232,11 +241,71 @@ class TestReviewBodyRendererFields:
                     description="Resolved finding",
                     status=ReviewItemStatus.RESOLVED,
                 ),
+                ReviewItem(
+                    id="dismissed-1",
+                    severity=ItemSeverity.MAJOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/dismissed.py",
+                    description="Dismissed finding",
+                    status=ReviewItemStatus.DISMISSED,
+                ),
+            ],
+            suggestions=[
+                ReviewItem(
+                    id="created-suggestion",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path="src/suggestion.py",
+                    description="Created suggestion",
+                    status=ReviewItemStatus.CREATED,
+                    status_explanation="Suggestion first appeared in this revision.",
+                ),
             ],
             model_used="model-x",
         )
 
         body = _RENDERER.render(review)
 
+        assert "`created-1`. [CREATED]" in body
         assert "`open-1`. [OPEN]" in body
         assert "`resolved-1`. [RESOLVED]" in body
+        assert "`dismissed-1`. [DISMISSED]" in body
+        assert "`created-suggestion`. [CREATED]" in body
+
+    def test_renders_latest_transition_explanations(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Review reason",
+            summary="Review summary",
+            items=[
+                ReviewItem(
+                    id="transition-1",
+                    severity=ItemSeverity.MINOR,
+                    category=IssueCategory.BUG,
+                    file_path="src/example.py",
+                    description="Audited finding",
+                    status=ReviewItemStatus.OPEN,
+                    status_explanation="Audit found the defect still present.",
+                ),
+            ],
+            suggestions=[
+                ReviewItem(
+                    id="transition-suggestion",
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path="src/design.py",
+                    description="Audited suggestion",
+                    status=ReviewItemStatus.RESOLVED,
+                    status_explanation="The suggested design change is now present.",
+                ),
+            ],
+            model_used="model-x",
+        )
+
+        body = _RENDERER.render(review)
+
+        assert "**Status explanation:** Audit found the defect still present." in body
+        assert (
+            "**Status explanation:** The suggested design change is now present."
+            in body
+        )

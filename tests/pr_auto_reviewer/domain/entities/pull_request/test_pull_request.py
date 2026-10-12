@@ -419,8 +419,10 @@ class TestPullRequest:
 
         assert twice.dismissed_item_ids == frozenset({"item-1"})
 
-    def test_new_review_clears_previous_dismissals(self) -> None:
-        """A new review starts with its own open item lifecycle."""
+    def test_terminal_lifecycle_does_not_reopen_when_id_is_reused(
+        self,
+    ) -> None:
+        """A persisted terminal status cannot be reopened by a raw snapshot."""
         old = ReviewItem(
             id="item-1",
             severity=ItemSeverity.INFO,
@@ -455,4 +457,4 @@ class TestPullRequest:
         )
 
         assert updated.dismissed_item_ids == frozenset()
-        assert updated.latest_review_items()[0].is_open
+        assert updated.latest_review_items()[0].status is ReviewItemStatus.DISMISSED

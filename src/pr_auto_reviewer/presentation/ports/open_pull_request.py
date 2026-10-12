@@ -19,5 +19,7 @@ class OpenPullRequest:
     is_draft: bool = False
     review_requested: bool = False
     review_request_event_id: int | None = None
+    latest_review_id: int | None = None
+    latest_review_dismissed: bool = False
     updated_at: str = ""
     target_branch: str = ""

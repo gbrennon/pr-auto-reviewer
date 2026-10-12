@@ -20,6 +20,9 @@ from pr_auto_reviewer.domain.services.review_item_parser import ReviewItemParser
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.git_credentials import GitCredentials
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 from pr_auto_reviewer.infrastructure.config import Config
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
@@ -256,7 +259,10 @@ class TestCompositionRoot:
 
             def execute(self, command):
                 self.commands.append(command)
-                return True
+                return ReviewExecutionResult(
+                    reviewed=True,
+                    duration_seconds=1.0,
+                )
 
         _fake_config.output_mode = "terminal"
         _fake_config.repos_allow_list = ("owner/only-this",)

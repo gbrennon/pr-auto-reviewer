@@ -23,3 +23,4 @@ class RunMultiPhaseReviewCommand:
     """PR merge-base against the default branch; scopes the LLM's git reads."""
     existing_item_ids: frozenset[str] = frozenset()
     prior_items: list[ReviewItem] = field(default_factory=list)
+    prior_suggestions: list[ReviewItem] = field(default_factory=list)

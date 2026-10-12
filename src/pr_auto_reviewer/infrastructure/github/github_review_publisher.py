@@ -74,4 +74,6 @@ class GithubReviewPublisher(ReviewPublisherPort):
             diff_headers={"Accept": "application/vnd.github.diff"},
             diff=diff,
         )
+        if processed.comment_body is not None:
+            self._publishing.publish_comment(pr_id, processed.comment_body)
 

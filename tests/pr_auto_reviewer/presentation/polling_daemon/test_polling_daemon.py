@@ -25,6 +25,9 @@ from pr_auto_reviewer.domain.messages.commands.review_pull_request_command impor
 )
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
@@ -107,9 +110,11 @@ class RecordingReviewService(ReviewPullRequestPort):
     def __init__(self) -> None:
         self.executed_commands: list[ReviewPullRequestCommand] = []
 
-    def execute(self, command: ReviewPullRequestCommand) -> bool:
+    def execute(
+        self, command: ReviewPullRequestCommand,
+    ) -> ReviewExecutionResult:
         self.executed_commands.append(command)
-        return True
+        return ReviewExecutionResult(reviewed=True, duration_seconds=1.0)
 
 class PerRepoPrLister(PrListerPort):
     def list_open(self, repository: str) -> list[OpenPullRequest]:
@@ -216,7 +221,10 @@ class TestPollingDaemon:
     def test_does_not_notify_success_when_review_is_skipped(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
-        mock_review_service.execute.return_value = False
+        mock_review_service.execute.return_value = ReviewExecutionResult(
+            reviewed=False,
+            duration_seconds=None,
+        )
         pull_request = OpenPullRequest(
             pr_id=PullRequestId(repository="owner/repo1", number=7),
             head_sha=CommitSha("abc123"),
@@ -238,7 +246,10 @@ class TestPollingDaemon:
     def test_notifies_success_after_review_completion(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
-        mock_review_service.execute.return_value = True
+        mock_review_service.execute.return_value = ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=134.0,
+        )
         pr_id = PullRequestId(repository="owner/repo1", number=7)
         pull_request = OpenPullRequest(
             pr_id=pr_id,
@@ -258,8 +269,7 @@ class TestPollingDaemon:
 
         assert len(notifier.successes) == 1
         context, detail = notifier.successes[0]
-        assert context.startswith("Review complete for owner/repo1 (")
-        assert context.endswith(")")
+        assert context == "Review complete for owner/repo1 (2m 14s)"
         assert detail == "PR #7"
 
     def test_processes_recent_closed_pr_commands(
@@ -522,6 +532,176 @@ class TestPollingDaemon:
         mock_review_service.execute.assert_called_once()
         dispatched = mock_review_service.execute.call_args.args[0]
         assert dispatched.review_requested is True
+
+    def test_re_review_request_is_actionable_without_active_reviewer(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        pr_id = PullRequestId(repository="owner/repo1", number=1)
+        sha = CommitSha("abc123")
+        stored = PullRequest(
+            id=pr_id,
+            title="Fix bug",
+            head_sha=sha,
+            last_review_request_event_id=1,
+        )
+        requested_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=sha,
+            title="Fix bug",
+            review_requested=False,
+            review_request_event_id=2,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([requested_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_called_once()
+        dispatched = mock_review_service.execute.call_args.args[0]
+        assert dispatched.review_request_event_id == 2
+    def test_dismissed_platform_review_is_not_repeated_after_observation(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        pr_id = PullRequestId(repository="owner/repo1", number=1)
+        sha = CommitSha("abc123")
+        stored = PullRequest(
+            id=pr_id,
+            title="Fix bug",
+            head_sha=sha,
+            reviews=(MagicMock(),),
+            last_platform_review_id=7,
+            last_platform_review_dismissed=True,
+        )
+        dismissed_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=sha,
+            title="Fix bug",
+            latest_review_id=7,
+            latest_review_dismissed=True,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([dismissed_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_not_called()
+
+    def test_dismissed_platform_review_is_actionable_when_repository_is_unchanged(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        pr_id = PullRequestId(repository="owner/repo1", number=1)
+        sha = CommitSha("abc123")
+        stored = PullRequest(
+            id=pr_id,
+            title="Fix bug",
+            head_sha=sha,
+            reviews=(MagicMock(),),
+            last_platform_review_id=7,
+            last_platform_review_dismissed=False,
+        )
+        dismissed_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=sha,
+            title="Fix bug",
+            latest_review_id=7,
+            latest_review_dismissed=True,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([dismissed_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_called_once()
+        dispatched = mock_review_service.execute.call_args.args[0]
+        assert dispatched.latest_review_id == 7
+        assert dispatched.latest_review_dismissed is True
+
+
+    def test_changed_head_is_actionable_when_repository_is_unchanged(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        pr_id = PullRequestId(repository="owner/repo1", number=1)
+        old_sha = CommitSha("old123")
+        new_sha = CommitSha("new123")
+        stored = PullRequest(
+            id=pr_id,
+            title="Fix bug",
+            head_sha=old_sha,
+            reviews=(MagicMock(),),
+        )
+        changed_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=new_sha,
+            title="Fix bug",
+            review_requested=False,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([changed_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_called_once()
+        dispatched = mock_review_service.execute.call_args.args[0]
+        assert dispatched.head_sha == new_sha
+
+    def test_failed_llm_cycle_does_not_mark_repository_seen(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+            LlmUnavailableError,
+        )
+
+        tracker = MagicMock()
+        tracker.is_stale.return_value = True
+        mock_review_service.execute.side_effect = LlmUnavailableError("offline")
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([open_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+        )
+
+        daemon._run_cycle()
+
+        tracker.mark_seen.assert_not_called()
 
     def test_unchanged_repo_skips_open_pr_without_review_request(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock

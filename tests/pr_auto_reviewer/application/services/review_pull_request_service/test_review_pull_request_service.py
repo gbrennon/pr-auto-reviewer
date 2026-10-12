@@ -1,5 +1,8 @@
 from ._helpers import *
 from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -55,7 +58,8 @@ class TestReviewPullRequestService:
             mock_review_publisher,
         ).execute(cmd)
 
-        assert reviewed is False
+        assert reviewed.reviewed is False
+        assert reviewed.duration_seconds is None
         mock_changeset_fetcher.fetch.assert_not_called()
         mock_review_context_factory.build.assert_not_called()
         mock_llm_review.review_prompt.assert_not_called()
@@ -157,6 +161,117 @@ class TestReviewPullRequestService:
         ).execute(cmd)
 
         mock_review_publisher.publish.assert_called_once()
+
+    def test_new_review_request_event_without_active_reviewer_bypasses_same_sha_guard(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            review_requested=False,
+            review_request_event_id=2,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id,
+            title=cmd.title,
+            head_sha=sha,
+            last_review_request_event_id=1,
+        ).add_review(_review(), sha)
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        mock_review_publisher.publish.assert_called_once()
+    def test_dismissed_platform_review_bypasses_same_sha_guard(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            latest_review_id=7,
+            latest_review_dismissed=True,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id,
+            title=cmd.title,
+            head_sha=sha,
+            last_platform_review_id=7,
+            last_platform_review_dismissed=False,
+        ).add_review(_review(), sha)
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        ReviewPullRequestService(
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        mock_review_publisher.publish.assert_called_once()
+    def test_dismissed_platform_review_is_recorded_and_not_repeated(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        sha = _sha()
+        cmd = ReviewPullRequestCommand(
+            pr_id=_pr_id(),
+            head_sha=sha,
+            title="Add feature X",
+            latest_review_id=7,
+            latest_review_dismissed=True,
+        )
+        existing = PullRequest(
+            id=cmd.pr_id,
+            title=cmd.title,
+            head_sha=sha,
+            last_platform_review_id=7,
+            last_platform_review_dismissed=False,
+        ).add_review(_review(), sha)
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = _diff_fixture(
+            cmd.pr_id, cmd.head_sha
+        )
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+
+        service = ReviewPullRequestService(
+            mock_pr_repository, mock_changeset_fetcher,
+            mock_review_context_factory, mock_llm_review,
+            mock_review_publisher,
+        )
+        first_result = service.execute(cmd)
+        saved = mock_pr_repository.save.call_args.args[0]
+        mock_pr_repository.find.return_value = saved
+        second_result = service.execute(cmd)
+
+        assert first_result.reviewed is True
+        assert second_result.reviewed is False
+        assert saved.last_platform_review_id == 7
+        assert saved.last_platform_review_dismissed is True
+        assert mock_review_publisher.publish.call_count == 1
+
 
     def test_no_re_review_when_review_requested_false(
         self, mock_pr_repository, mock_changeset_fetcher,
@@ -719,7 +834,7 @@ class TestReviewPullRequestService:
         saved_pr = mock_pr_repository.save.call_args.args[0]
         assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
 
-    def test_republishes_all_items_with_resolved_status_after_fix(
+    def test_ignores_unverified_resolved_status_from_current_review(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -765,12 +880,12 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
         assert [item.id for item in published.items] == ["block-1"]
-        assert published.items[0].status is ReviewItemStatus.RESOLVED
-        assert published.verdict == ReviewVerdict.APPROVED
+        assert published.items[0].status is ReviewItemStatus.OPEN
+        assert published.verdict == ReviewVerdict.CHANGES_REQUESTED
         saved_pr = mock_pr_repository.save.call_args.args[0]
-        assert not saved_pr.unresolved_blocking_ids
+        assert saved_pr.unresolved_blocking_ids == frozenset({"block-1"})
 
-    def test_does_not_republish_resolved_items_or_stale_suggestions(
+    def test_republishes_prior_items_and_suggestions_until_audit_closes_them(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -807,8 +922,7 @@ class TestReviewPullRequestService:
         cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
         mock_pr_repository.find.return_value = prior
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
-            cmd.pr_id,
-            cmd.head_sha,
+            cmd.pr_id, cmd.head_sha,
         )
         mock_llm_review.review_prompt.return_value = _review(
             ReviewVerdict.APPROVED,
@@ -824,11 +938,11 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
 
-        assert published.items == []
-        assert published.suggestions == []
+        assert [item.id for item in published.items] == ["item-1"]
+        assert [item.id for item in published.suggestions] == ["suggestion-1"]
+        assert published.items[0].status is ReviewItemStatus.OPEN
 
-
-    def test_does_not_duplicate_reclassified_prior_suggestions(
+    def test_reclassifies_recurrence_as_a_new_record(
         self,
         mock_pr_repository,
         mock_changeset_fetcher,
@@ -871,8 +985,7 @@ class TestReviewPullRequestService:
         cmd = _cmd(pr_id=prior.id, sha=_sha("new222"))
         mock_pr_repository.find.return_value = prior
         mock_changeset_fetcher.fetch.return_value = _diff_fixture(
-            cmd.pr_id,
-            cmd.head_sha,
+            cmd.pr_id, cmd.head_sha,
         )
         mock_llm_review.review_prompt.return_value = current_review
 
@@ -886,5 +999,84 @@ class TestReviewPullRequestService:
 
         published = mock_review_publisher.publish.call_args.args[1]
 
-        assert [item.id for item in published.items] == ["shared-1"]
-        assert published.suggestions == []
+        assert published.items[0].id != "shared-1"
+        assert [item.id for item in published.suggestions] == ["shared-1"]
+    def test_duration_starts_after_eligibility_and_stops_after_publish(
+        self,
+        mock_pr_repository,
+        mock_changeset_fetcher,
+        mock_review_context_factory,
+        mock_llm_review,
+        mock_review_publisher,
+        monkeypatch,
+    ):
+        cmd = _cmd()
+        diff = _diff_fixture(cmd.pr_id, cmd.head_sha)
+        events = []
+        timestamps = iter([10.0, 13.5])
+
+        def now():
+            events.append("stopwatch")
+            return next(timestamps)
+
+        def needs_review(service, command, pull_request):
+            events.append("eligibility")
+            return True
+
+        mock_pr_repository.find.return_value = None
+        mock_changeset_fetcher.fetch.return_value = diff
+        mock_llm_review.review_prompt.return_value = _review(
+            ReviewVerdict.APPROVED
+        )
+        mock_review_publisher.publish.side_effect = (
+            lambda *arguments: events.append("publish")
+        )
+        monkeypatch.setattr(ReviewPullRequestService, "_now", staticmethod(now))
+        monkeypatch.setattr(
+            ReviewPullRequestService,
+            "_needs_review",
+            needs_review,
+        )
+
+        result = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+        ).execute(cmd)
+
+        assert result == ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=3.5,
+        )
+        assert events == ["eligibility", "stopwatch", "publish", "stopwatch"]
+
+    def test_duration_is_not_started_when_review_is_not_required(
+        self,
+        mock_pr_repository,
+        monkeypatch,
+    ):
+        cmd = _cmd()
+        clock = MagicMock(return_value=10.0)
+        mock_pr_repository.find.return_value = _pr(cmd.pr_id, cmd.head_sha)
+        monkeypatch.setattr(ReviewPullRequestService, "_now", clock)
+        monkeypatch.setattr(
+            ReviewPullRequestService,
+            "_needs_review",
+            lambda service, command, pull_request: False,
+        )
+
+        result = ReviewPullRequestService(
+            mock_pr_repository,
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+        ).execute(cmd)
+
+        assert result == ReviewExecutionResult(
+            reviewed=False,
+            duration_seconds=None,
+        )
+        clock.assert_not_called()

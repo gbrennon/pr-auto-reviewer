@@ -96,29 +96,53 @@ Entry points only:
 
 1. CLI/daemon constructs a `ReviewPullRequestCommand` and invokes the
    review use case.
-2. The use case loads the PR, fetches the diff, composes the review
-   context/prompt, then runs a review plan: the multi-phase orchestrator
-   walks `plan.phases`, and for each phase runs an agent conversation
-   (multi-turn LLM loop with tool access: read_file, search_codebase,
-   list_directory, run_git).
-3. Each phase yields a `PhaseResult` (items, verdict, reason, summary,
-   suggestions, praise).
-4. The aggregator deduplicates items into a `CodeReview`.
-5. Findings verification drops items that do not survive re-checking
+2. The use case loads the PR and fetches the diff. Before normal review
+   phases run, it audits the complete historical set of findings and
+   suggestions from every persisted `CodeReview` snapshot.
+3. The audit returns lifecycle projections while preserving each record's
+   immutable evidence, source section, and ID. `created` records become
+   `open` when they remain present on the next audit, or `resolved` only
+   with positive proof. `resolved` and `dismissed` records are terminal.
+4. The use case composes the review context/prompt, then runs the review
+   plan: the multi-phase orchestrator walks `plan.phases`, and for each
+   phase runs an agent conversation (multi-turn LLM loop with tool access:
+   read_file, search_codebase, list_directory, run_git).
+5. Each phase yields a `PhaseResult` (items, verdict, reason, summary,
+   suggestions, praise). New findings and suggestions receive `created`
+   status before publication.
+6. The aggregator deduplicates only within the new review. It must not
+   match a new record to a terminal historical ID; recurrence is represented
+   by a new ID.
+7. Findings verification drops items that do not survive re-checking
    against source.
-6. The publisher renders the body and posts a formal review or comment
-   (platform-specific), and the use case persists the PR.
+8. The publisher renders the body and posts a formal review or comment
+   (platform-specific), and the use case persists the PR without discarding
+   prior `CodeReview` snapshots.
+
+### Review-item lifecycle
+
+The lifecycle projection is shared by findings and suggestions. Its status
+labels are rendered as `CREATED`, `OPEN`, `RESOLVED`, or `DISMISSED`.
+`RESOLVED` and `DISMISSED` are terminal; they are still included in
+all-history audits, but cannot be reopened. A recurrence after a terminal
+status is a genuinely new record with a new ID, not a transition on the old
+record. The latest transition explanation is retained with the lifecycle
+and rendered when the current output model exposes it.
 
 ### Suggestion Policy
 
 `CodeReview.suggestions` is **architecture-only**: the plan's
 `suggestions_phase_id` names the phase whose `llm_suggestions` populate
-the final suggestions (in the production plan, the architecture
-phase). The other phases emit no suggestions, and rejected/dropped items
-are never promoted into suggestions — a suggestion is an improvement
-(design, coupling, patterns, layering), never a re-stated issue.
-Suggestions are revision-local and are not copied from prior reviews. The only
-historical entries carried into a new review are unresolved blocking findings.
+the final suggestions (in the production plan, the architecture phase).
+The other phases emit no suggestions, and rejected/dropped items are never
+promoted into suggestions — a suggestion is an improvement (design,
+coupling, patterns, layering), never a re-stated issue.
+
+Suggestions are persisted alongside findings as actionable historical
+records. They are included in the pre-review all-history audit, including
+terminal suggestions, while genuinely new suggestions enter the lifecycle
+as `created`. A suggestion keeps its source section and ID; the Auditor
+does not convert it into a finding or reuse a terminal ID.
 
 ### Sub-Agent Phases
 
@@ -177,10 +201,16 @@ The role team is documented per page in [docs/sub-agents/](sub-agents/README.md)
 5. **Blocking threshold.** `ItemSeverity.is_blocking` (CRITICAL/MAJOR,
    or SECURITY category) decides whether a review is a formal
    `CHANGES_REQUESTED` case.
-6. **No comments, classes only.** Python source uses docstrings, not
+6. **Lifecycle history is lossless.** Every historical `CodeReview`
+   snapshot and every actionable finding or suggestion remains auditable;
+   lifecycle projection updates never replace immutable evidence.
+7. **Terminal statuses stay terminal.** `RESOLVED` and `DISMISSED` cannot
+   be reopened. A recurrence receives a new ID and is never matched to the
+   terminal record by the Auditor.
+8. **No comments, classes only.** Python source uses docstrings, not
    comments; behavior lives in classes, not standalone functions. See
    the AI guardrails file at the repo root.
-6. **External contracts are verified upstream.** Platform API behavior
+9. **External contracts are verified upstream.** Platform API behavior
    (endpoints, headers, review payloads, rate-limit headers) matches the
    official docs; quirks the hosts actually exhibit are preserved, not
    "fixed" — documented in `review-flow-architecture.md`.

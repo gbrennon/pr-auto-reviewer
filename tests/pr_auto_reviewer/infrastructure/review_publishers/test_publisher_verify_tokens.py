@@ -16,6 +16,7 @@ from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
+from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.infrastructure.github.github_review_publisher import (
     GithubReviewPublisher,
 )
@@ -231,3 +232,50 @@ class TestPublisherVerifyTokens:
         assert len(owner_spy.get_raw_calls) == 0, (
             f"Expected 0 get_raw() calls on owner_client when diff is provided, got {owner_spy.get_raw_calls}"
         )
+
+    def test_inline_comments_exclude_terminal_records(
+        self, integration_data: dict,
+    ) -> None:
+        from pr_auto_reviewer.infrastructure.review_publishers.review_publishing_service import (
+            ReviewPublishingService,
+        )
+
+        client = SpyClient(
+            FixtureHttpClient(integration_data["private"], "private"),
+        )
+        service = ReviewPublishingService(client=client, owner_client=client)
+        terminal = ReviewItem(
+            id="terminal",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="file.py",
+            description="Already resolved",
+            current_code="print('hello')",
+            status=ReviewItemStatus.RESOLVED,
+        )
+        active = ReviewItem(
+            id="active",
+            severity=ItemSeverity.MAJOR,
+            category=IssueCategory.BUG,
+            file_path="file.py",
+            description="Still active",
+            current_code="print('hello')",
+            status=ReviewItemStatus.OPEN,
+        )
+        terminal_suggestion = ReviewItem(
+            id="terminal-suggestion",
+            severity=ItemSeverity.INFO,
+            category=IssueCategory.STYLE,
+            file_path="file.py",
+            description="Already suggested",
+            current_code="print('hello')",
+            status=ReviewItemStatus.DISMISSED,
+        )
+        diff = "diff --git a/file.py b/file.py\n@@ -1 +1 @@\n+print('hello')\n"
+
+        comments = service.build_inline_comments(
+            diff, [terminal, active], [terminal_suggestion],
+        )
+
+        assert len(comments) == 1
+        assert comments[0]["body"] == "Still active"

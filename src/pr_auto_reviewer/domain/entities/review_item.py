@@ -31,6 +31,7 @@ class ReviewItem:
     status: ReviewItemStatus = field(
         default=ReviewItemStatus.OPEN, compare=False
     )
+    status_explanation: str = field(default="", compare=False)
 
     def __init__(
         self,
@@ -47,6 +48,7 @@ class ReviewItem:
         acceptance_criteria: str = "",
         detection_method: str = "",
         status: ReviewItemStatus | str = ReviewItemStatus.OPEN,
+        status_explanation: str = "",
     ) -> None:
         object.__setattr__(self, "severity", ItemSeverity.from_value(str(severity)))
         object.__setattr__(self, "category", IssueCategory.from_value(str(category)))
@@ -62,11 +64,17 @@ class ReviewItem:
         object.__setattr__(self, "detection_method", detection_method)
         normalized_status = ReviewItemStatus(status)
         object.__setattr__(self, "status", normalized_status)
+        object.__setattr__(self, "status_explanation", status_explanation)
+
+    @property
+    def is_active(self) -> bool:
+        """Return whether this finding remains actionable."""
+        return self.status.is_active
 
     @property
     def is_open(self) -> bool:
         """Return whether this finding remains active in the latest review."""
-        return self.status is ReviewItemStatus.OPEN
+        return self.is_active
 
     @property
     def is_blocking(self) -> bool:

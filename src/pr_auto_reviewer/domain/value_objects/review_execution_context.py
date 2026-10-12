@@ -20,3 +20,4 @@ class ReviewExecutionContext:
     existing_item_ids: frozenset[str] = frozenset()
     pr_identifier_service: str = ""
     prior_items: tuple[ReviewItem, ...] = ()
+    prior_suggestions: tuple[ReviewItem, ...] = ()

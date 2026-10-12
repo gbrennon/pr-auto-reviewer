@@ -113,6 +113,18 @@ uv run pytest tests/pr_auto_reviewer/infrastructure/fragments/test_compose_revie
 uv run pytest tests/pr_auto_reviewer/infrastructure/review_publishers/ -x -q
 ```
 
+Publisher tests must cover the lifecycle labels for both findings and
+suggestions: `CREATED`, `OPEN`, `RESOLVED`, and `DISMISSED`. They should also
+assert that a materialized latest transition explanation is rendered when
+present and omitted when absent. Rendering is platform-neutral; platform
+adapter tests cover only payload and event differences.
+
+Lifecycle integration tests should verify that the pre-review audit receives
+all historical findings and suggestions, including terminal records, keeps
+their IDs and source sections, and runs before normal review phases. A
+terminal recurrence must be represented by a new ID rather than reopening or
+reusing the old record.
+
 ### 5. Test Multi-Platform Adapters
 
 ```bash

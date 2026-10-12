@@ -64,6 +64,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             existing_item_ids=command.existing_item_ids,
             review_session=command.review_session,
             prior_items=getattr(command, "prior_items", []),
+            prior_suggestions=getattr(command, "prior_suggestions", []),
         )
 
     def _run_phases_full_retry(
@@ -76,6 +77,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
         prior_items: list[ReviewItem] | None = None,
+        prior_suggestions: list[ReviewItem] | None = None,
     ) -> CodeReview:
         """Orchestrate all phases with full-review retry and feedback loop."""
         repo_name, pr_id_str = self._extract_repo_and_pr(repo_path)
@@ -105,6 +107,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         pr_identifier_service=f"{repo_name}/{pr_id_str}",
                         review_session=review_session,
                         prior_items=tuple(prior_items or []),
+                        prior_suggestions=tuple(prior_suggestions or []),
                     ),
                 )
                 result = outcome.review
@@ -190,6 +193,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 review_session=review_session,
                 pr_identifier_service=f"{repo_name}/{pr_id_str}",
                 existing_item_ids=existing_item_ids,
+                prior_items=prior_items,
+                prior_suggestions=prior_suggestions,
                 previous_dropped_findings=dropped_findings,
             )
 
@@ -206,6 +211,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         pr_identifier_service: str,
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        prior_items: list[ReviewItem] | None = None,
+        prior_suggestions: list[ReviewItem] | None = None,
         previous_dropped_findings: int = 0,
     ) -> CodeReview:
         """Re-run the review with a progressively-improving prompt until resolved.
@@ -236,6 +243,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         existing_item_ids=existing_item_ids,
                         pr_identifier_service=pr_identifier_service,
                         review_session=review_session,
+                        prior_items=tuple(prior_items or []),
+                        prior_suggestions=tuple(prior_suggestions or []),
                     ),
                 )
                 result = outcome.review
@@ -367,6 +376,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session: str = "",
         base_sha: str = "",
         prior_items: list[ReviewItem] | None = None,
+        prior_suggestions: list[ReviewItem] | None = None,
         context: ReviewExecutionContext | None = None,
     ) -> _PhaseRunOutcome:
         """Run phases with a shared context or legacy arguments."""
@@ -381,6 +391,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             pr_identifier_service=pr_identifier_service,
             review_session=review_session,
             prior_items=tuple(prior_items or []),
+            prior_suggestions=tuple(prior_suggestions or []),
         )
         return self._run_phases_with_context(
             plan,
@@ -405,10 +416,23 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session = context.review_session
         base_sha = context.base_sha
         prior_items = list(context.prior_items)
+        prior_suggestions = list(context.prior_suggestions)
         all_items: list[ReviewItem] = []
         last_phase_result: PhaseResult | None = None
         phase_results: dict[str, PhaseResult] = {}
-        previous_findings: str = ""
+        previous_findings = json.dumps(
+            [
+                {
+                    "id": item.id,
+                    "file": item.file_path,
+                    "severity": str(item.severity),
+                    "category": str(item.category),
+                    "description": item.description,
+                }
+                for item in (*prior_items, *prior_suggestions)
+            ],
+            indent=2,
+        )
         phase_sequence = list(plan.phases)
         next_manager_brief = ""
         if self._manager is not None and phase_sequence:
@@ -620,8 +644,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     "default COMMENTED review."
                 )
 
-            return _PhaseRunOutcome(
-                review=CodeReview(
+            historical_review = self._merge_prior_records(
+                CodeReview(
                     verdict=verdict,
                     reason=reason,
                     summary=summary,
@@ -629,6 +653,11 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     praise=praise_list,
                     model_used=model,
                 ),
+                prior_items,
+                prior_suggestions,
+            )
+            return _PhaseRunOutcome(
+                review=historical_review,
                 dropped_findings=len(skipped),
             )
 
@@ -660,20 +689,9 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 code_review = self._rebuild_after_verification(
                     verified_items, model, previous=code_review,
                 )
-        if prior_items:
-            audited = self._command_bus.dispatch(
-                AuditRemediationCommand(
-                    prior_items=prior_items,
-                    repo_path=repo_path,
-                    changed_files=changed_files,
-                    base_sha=base_sha,
-                    review_session=review_session,
-                )
-            )
-            if audited:
-                code_review = self._merge_audited_prior(
-                    code_review, audited, model,
-                )
+        code_review = self._merge_prior_records(
+            code_review, prior_items, prior_suggestions,
+        )
         if (
             code_review.verdict is ReviewVerdict.APPROVED
             and any(item.is_open_blocking for item in code_review.items)
@@ -690,20 +708,45 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             ),
         )
 
-    def _merge_audited_prior(
-        self, code_review: CodeReview, audited: list[Any], model: str,
-    ) -> CodeReview:
-        """Append audited prior findings and recompute the verdict.
 
-        Prior findings carry their proof-gated status; resolved ones are
-        non-blocking, so only still-open prior blockers can move the
-        verdict. Summary, suggestions, and praise are preserved.
-        """
-        prior = [item for item in audited if isinstance(item, ReviewItem)]
-        merged = list(code_review.items) + prior
-        verdict = SubReviewGuardrails().verdict_for(merged)
-        return replace(code_review, items=merged, verdict=verdict,
-                       model_used=model)
+    def _merge_prior_records(
+        self,
+        review: CodeReview,
+        prior_items: list[ReviewItem] | None,
+        prior_suggestions: list[ReviewItem] | None,
+    ) -> CodeReview:
+        """Keep audited history in its original item or suggestion section."""
+        historical_items = list(prior_items or [])
+        historical_suggestions = list(prior_suggestions or [])
+        item_keys = {
+            (item.id, item.file_path, item.description)
+            for item in historical_items
+        }
+        suggestion_keys = {
+            (item.id, item.file_path, item.description)
+            for item in historical_suggestions
+        }
+        items = historical_items + [
+            item for item in review.items
+            if (item.id, item.file_path, item.description) not in item_keys
+        ]
+        suggestions = historical_suggestions + [
+            item for item in review.suggestions
+            if (item.id, item.file_path, item.description)
+            not in suggestion_keys
+        ]
+        guardrail_verdict = SubReviewGuardrails().verdict_for(items)
+        verdict = (
+            ReviewVerdict.CHANGES_REQUESTED
+            if guardrail_verdict is ReviewVerdict.CHANGES_REQUESTED
+            else review.verdict
+        )
+        return replace(
+            review,
+            items=items,
+            suggestions=suggestions,
+            verdict=verdict,
+        )
 
     def _rebuild_after_verification(
         self, verified_items: list[Any], model: str,

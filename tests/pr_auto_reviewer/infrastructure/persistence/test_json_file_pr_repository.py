@@ -156,6 +156,23 @@ class TestJsonFilePullRequestRepository:
         assert found.processed_comment_ids == frozenset()
         assert found.unresolved_blocking_ids == frozenset()
 
+    def test_platform_review_status_round_trips(self, tmp_path: Path) -> None:
+        repo = self._repo(tmp_path)
+        pr = PullRequest(
+            id=PullRequestId(repository="owner/repo", number=42),
+            title="Fix login bug",
+            head_sha=CommitSha(value="abc1234"),
+            last_platform_review_id=7,
+            last_platform_review_dismissed=True,
+        )
+
+        repo.save(pr)
+
+        found = repo.find(pr.id)
+        assert found is not None
+        assert found.last_platform_review_id == 7
+        assert found.last_platform_review_dismissed is True
+
     def test_save_and_find_full_aggregate(self, tmp_path: Path) -> None:
         repo = self._repo(tmp_path)
         review = self._review(
