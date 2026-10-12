@@ -36,6 +36,35 @@ class _FakeStreamingResponse:
 
 
 class TestOpenAiCompatibleChatClient:
+    def test_send_keeps_default_context_small_for_interactive_reviews(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def fake_post(*_args: Any, **kwargs: Any) -> _FakeStreamingResponse:
+            payloads.append(kwargs["json"])
+            return _FakeStreamingResponse(["data: [DONE]"])
+
+        messages = [
+            ConversationMessage(role="system", content="system"),
+            ConversationMessage(role="user", content="request"),
+            *[
+                message
+                for index in range(30)
+                for message in (
+                    ConversationMessage(
+                        role="assistant", content=f"assistant {index} " + "x" * 2000
+                    ),
+                    ConversationMessage(
+                        role="user", content=f"result {index} " + "y" * 2000
+                    ),
+                )
+            ],
+        ]
+        client = OpenAiCompatibleChatClient(http_post=fake_post)
+
+        client.send(messages)
+
+        assert len(payloads[0]["messages"]) <= 35
+
     def test_send_uses_one_v1_suffix_and_accumulates_sse_content(self) -> None:
         calls: list[tuple[str, dict[str, Any], bool]] = []
         lines = [
