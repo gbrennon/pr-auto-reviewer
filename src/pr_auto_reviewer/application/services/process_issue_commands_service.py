@@ -1,4 +1,4 @@
-"""ProcessIssueCommandsService — scans PR comments for issue-creation commands."""
+"""ProcessIssueCommandsService — scans PR comments for review commands."""
 
 from __future__ import annotations
 
@@ -15,11 +15,16 @@ from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
 from pr_auto_reviewer.domain.messages.messages import (
+    dismissed_items_message,
     invalid_items_message,
     issues_created_message,
+    rejected_command_items_message,
 )
 from pr_auto_reviewer.domain.services.issue_command_parser import (
     IssueCommandParser,
+)
+from pr_auto_reviewer.domain.value_objects.issue_command_action import (
+    IssueCommandAction,
 )
 from pr_auto_reviewer.domain.value_objects.pr_comment import PrComment
 
@@ -70,16 +75,23 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
         return self._comment_reader.get_comments(pr.id)
 
     def _partition_item_ids(
-        self, requested: list[str], items: Sequence[ReviewItem],
-    ) -> tuple[list[str], list[str]]:
-        valid_ids = {item.id for item in items}
+        self, requested: Sequence[str], items: Sequence[ReviewItem],
+    ) -> tuple[list[str], list[str], list[str]]:
+        items_by_id = {item.id: item for item in items}
         valid: list[str] = []
-        invalid: list[str] = []
+        rejected: list[str] = []
+        unknown: list[str] = []
 
-        for id_ in requested:
-            (valid if id_ in valid_ids else invalid).append(id_)
+        for item_id in requested:
+            item = items_by_id.get(item_id)
+            if item is None:
+                unknown.append(item_id)
+            elif item.is_open and not item.is_blocking:
+                valid.append(item_id)
+            else:
+                rejected.append(item_id)
 
-        return valid, invalid
+        return valid, rejected, unknown
 
     def _publish_invalid_items_message(
         self,
@@ -89,6 +101,18 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
     ) -> None:
         self._comment_publisher.post(
             pr.id, invalid_items_message(invalid, list(review_items)),
+        )
+
+    def _publish_rejected_items_message(
+        self,
+        pr: PullRequest,
+        rejected: list[str],
+        action: IssueCommandAction,
+        review_items: Sequence[ReviewItem],
+    ) -> None:
+        self._comment_publisher.post(
+            pr.id,
+            rejected_command_items_message(action, rejected, review_items),
         )
 
     def _dispatch_issue_creations(
@@ -112,14 +136,25 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             pr.id, issues_created_message(created_issues, review_items),
         )
 
+    def _publish_dismissed_items_message(
+        self,
+        pr: PullRequest,
+        dismissed: list[str],
+        review_items: Sequence[ReviewItem],
+    ) -> None:
+        self._comment_publisher.post(
+            pr.id, dismissed_items_message(dismissed, review_items),
+        )
+
     def _process_each_comment(
         self,
         pr: PullRequest,
         comments: list[PrComment],
-        review_items: Sequence[ReviewItem],
     ) -> PullRequest:
         for comment in comments:
-            pr = self._handle_single_comment(pr, comment, review_items)
+            pr = self._handle_single_comment(
+                pr, comment, pr.latest_review_items(),
+            )
         return pr
 
     def _handle_single_comment(
@@ -138,11 +173,26 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
             return pr
 
         updated_pr = pr.mark_comment_processed(comment.id)
-        valid, invalid = self._partition_item_ids(
+        valid, rejected, unknown = self._partition_item_ids(
             cmd.item_ids, review_items,
         )
-        if invalid:
-            self._publish_invalid_items_message(updated_pr, invalid, review_items)
+        if unknown:
+            self._publish_invalid_items_message(
+                updated_pr, unknown, review_items,
+            )
+        if rejected:
+            self._publish_rejected_items_message(
+                updated_pr, rejected, cmd.action, review_items,
+            )
+        if unknown or rejected:
+            return updated_pr
+
+        if cmd.action is IssueCommandAction.DISMISS:
+            updated_pr = updated_pr.dismiss_review_items(*valid)
+            if valid:
+                self._publish_dismissed_items_message(
+                    updated_pr, valid, review_items,
+                )
             return updated_pr
 
         available_ids = list(
@@ -152,13 +202,15 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
                 if item_id not in updated_pr.created_issue_item_ids
             )
         )
-        created_issues = self._dispatch_issue_creations(updated_pr, available_ids)
+        created_issues = self._dispatch_issue_creations(
+            updated_pr, available_ids,
+        )
         updated_pr = updated_pr.record_created_issue_items(
             *(issue.source_item_id for issue in created_issues)
         )
         if created_issues:
             self._publish_issues_created_message(
-                updated_pr, created_issues, review_items
+                updated_pr, created_issues, review_items,
             )
         return updated_pr
 
@@ -174,5 +226,5 @@ class ProcessIssueCommandsService(ProcessIssueCommandsPort):
         if not comments:
             return
 
-        pr = self._process_each_comment(pr, comments, items)
+        pr = self._process_each_comment(pr, comments)
         self._persist_pull_request(pr)

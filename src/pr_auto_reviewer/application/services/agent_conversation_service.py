@@ -19,6 +19,9 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
+from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
+    TranscriptMetadata,
+)
 from pr_auto_reviewer.application.services.pr_identifier_service import (
     PRIdentifierService,
 )
@@ -127,6 +130,7 @@ class AgentConversationService(RunAgentConversationPort):
             system_prompt=command.system_prompt,
             repo_path=command.repo_path,
             changed_files=command.changed_files,
+            coverage_files=command.coverage_files,
             tool_execution=command.tool_execution,
             phase_name=command.phase_name,
             review_session=command.review_session,
@@ -136,6 +140,91 @@ class AgentConversationService(RunAgentConversationPort):
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
         return PRIdentifierService.derive(repo_path)
 
+    def _guardrails_for_files(
+        self, repo_path: Path, changed_files: list[str],
+    ) -> ConversationGuardrails:
+        """Scale exploration budgets to the readable changed-file set."""
+        readable_files = self._readable_changed_files(repo_path, changed_files)
+        required_reads = len(readable_files)
+        return replace(
+            self._guardrails,
+            max_tool_calls=max(
+                self._guardrails.max_tool_calls, required_reads + 3,
+            ),
+            max_turns=max(self._guardrails.max_turns, required_reads + 5),
+        )
+
+    @staticmethod
+    def _readable_changed_files(
+        repo_path: Path, changed_files: list[str],
+    ) -> tuple[str, ...]:
+        """Return changed files that can be inspected in the checked-out tree."""
+        root = repo_path.resolve()
+        readable: list[str] = []
+        for file_path in changed_files:
+            candidate = (root / file_path).resolve()
+            if candidate.is_relative_to(root) and candidate.is_file():
+                readable.append(file_path)
+        return tuple(readable)
+
+    @staticmethod
+    def _normalize_read_file_path(
+        raw_path: str, repo_path: Path, changed_files: tuple[str, ...],
+    ) -> str | None:
+        """Map a successful tool path to its changed-file spelling."""
+        candidate = Path(raw_path)
+        if candidate.is_absolute():
+            try:
+                candidate = candidate.resolve().relative_to(repo_path.resolve())
+            except ValueError:
+                return None
+        normalized = candidate.as_posix()
+        for changed_file in changed_files:
+            if Path(changed_file).as_posix() == normalized:
+                return changed_file
+        return None
+
+    def _record_read_file(
+        self,
+        result: Any,
+        repo_path: Path,
+        changed_files: tuple[str, ...],
+        read_file_paths: set[str],
+    ) -> None:
+        """Record a changed file only after a successful read."""
+        if getattr(result, "status", "") != "ok":
+            return
+        data = getattr(result, "data", None)
+        raw_path = data.get("path") if isinstance(data, dict) else None
+        if isinstance(raw_path, str):
+            normalized = self._normalize_read_file_path(
+                raw_path, repo_path, changed_files,
+            )
+            if normalized is not None:
+                read_file_paths.add(normalized)
+
+    @staticmethod
+    def _coverage_complete(
+        guardrails: ConversationGuardrails,
+        readable_changed_files: tuple[str, ...],
+        read_file_paths: set[str],
+    ) -> bool:
+        """Return whether the phase has explored and covered every target file."""
+        return (
+            guardrails.tool_calls > 0
+            and set(readable_changed_files).issubset(read_file_paths)
+        )
+
+    @staticmethod
+    def _coverage_demand(missing_files: list[str]) -> str:
+        """Describe the changed files still required before a verdict."""
+        if not missing_files:
+            return ""
+        files = "\n".join(f"- {file_path}" for file_path in missing_files)
+        return (
+            "\nThe following changed files are still unread. Use read_file "
+            "on each before concluding:\n" + files
+        )
 
     def _find_mentioned_file(
         self, text: str, changed_files: list[str]
@@ -286,6 +375,7 @@ class AgentConversationService(RunAgentConversationPort):
         system_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        coverage_files: tuple[str, ...] | None,
         tool_execution: Any,
         review_session: str,
         phase_name: str = "",
@@ -307,8 +397,18 @@ class AgentConversationService(RunAgentConversationPort):
             ),
         ]
 
-        guardrails = replace(self._guardrails)
+        coverage_targets = (
+            changed_files if coverage_files is None else list(coverage_files)
+        )
+        guardrails = self._guardrails_for_files(repo_path, coverage_targets)
+        readable_changed_files = self._readable_changed_files(
+            repo_path, changed_files,
+        )
+        readable_coverage_files = self._readable_changed_files(
+            repo_path, coverage_targets,
+        )
         seen_tool_calls: set[tuple[str, str]] = set()
+        read_file_paths: set[str] = set()
         accumulated_praise: list[dict[str, Any]] = []
         accumulated_suggestions: list[dict[str, Any]] = []
         self._consecutive_blocks = 0
@@ -318,7 +418,7 @@ class AgentConversationService(RunAgentConversationPort):
 
         while guardrails.has_turns_remaining():
             logger.debug(
-                "Turn %d/%d", guardrails.turn + 1, self._guardrails.max_turns
+                "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
             content = self._chat_port.send(messages)
             guardrails = guardrails.advance_turn()
@@ -426,6 +526,12 @@ class AgentConversationService(RunAgentConversationPort):
                 guardrails = guardrails.record_tool_call()
                 if tool_call.tool_name == "read_file":
                     read_file_count += 1
+                    self._record_read_file(
+                        result,
+                        repo_path,
+                        readable_changed_files,
+                        read_file_paths,
+                    )
                 elif tool_call.tool_name == "run_snippet":
                     run_snippet_count += 1
                 result_json = json.dumps({
@@ -453,7 +559,14 @@ class AgentConversationService(RunAgentConversationPort):
                 continue
 
             if parsed.kind is TurnKind.VERDICT:
-                decision, guardrails = guardrails.judge_verdict()
+                coverage_complete = self._coverage_complete(
+                    guardrails,
+                    readable_coverage_files,
+                    read_file_paths,
+                )
+                decision, guardrails = guardrails.judge_verdict(
+                    exploration_complete=coverage_complete,
+                )
                 if decision is ConversationDecision.ACCEPT_VERDICT:
                     logger.debug("Got verdict at turn %d", guardrails.turn)
                     if guardrails.has_turns_remaining():
@@ -484,7 +597,13 @@ class AgentConversationService(RunAgentConversationPort):
                         parsed, repo_path, changed_files,
                         turn_count=guardrails.turn,
                         read_file_calls=read_file_count,
+                        read_file_paths=tuple(sorted(read_file_paths)),
                         run_snippet_calls=run_snippet_count,
+                        unread_changed_files=tuple(
+                            sorted(
+                                set(readable_changed_files) - read_file_paths
+                            )
+                        ),
                         existing_ids=existing_item_ids,
                         accumulated_praise=accumulated_praise,
                         accumulated_suggestions=accumulated_suggestions,
@@ -510,16 +629,25 @@ class AgentConversationService(RunAgentConversationPort):
                         "Model refused exploration after "
                         f"{guardrails.demands_issued} demand(s)"
                     )
+                missing_files = sorted(
+                    set(readable_coverage_files) - read_file_paths
+                )
                 logger.debug(
-                    "Verdict at turn %d with no tool exploration; "
-                    "demanding exploration",
+                    "Verdict at turn %d without complete changed-file "
+                    "coverage; demanding exploration",
                     guardrails.turn,
                 )
-                messages.append(self._explore_message.render())
+                demand = self._explore_message.render()
+                messages.append(
+                    ConversationMessage(
+                        role="user",
+                        content=demand.content + self._coverage_demand(missing_files),
+                    )
+                )
                 continue
 
         self._log_conversation(
-            phase_name, messages, self._guardrails.max_turns, None,
+            phase_name, messages, guardrails.turn, None,
             repo_path=repo_path, review_session=review_session,
         )
         fd, dump_path = tempfile.mkstemp(
@@ -534,14 +662,16 @@ class AgentConversationService(RunAgentConversationPort):
                 default=str,
             )
         raise MaxTurnsExceededError(
-            f"Phase exceeded max turns ({self._guardrails.max_turns}) "
+            f"Phase exceeded max turns ({guardrails.max_turns}) "
             f"without a verdict. Full conversation dumped to {dump_path}"
         )
 
     def _build_phase_result(
         self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str],
         turn_count: int = 0, read_file_calls: int = 0,
+        read_file_paths: tuple[str, ...] = (),
         run_snippet_calls: int = 0,
+        unread_changed_files: tuple[str, ...] = (),
         existing_ids: frozenset[str] = frozenset(),
         accumulated_praise: list[dict[str, Any]] | None = None,
         accumulated_suggestions: list[dict[str, Any]] | None = None,
@@ -585,10 +715,11 @@ class AgentConversationService(RunAgentConversationPort):
             llm_praise=praise,
             turn_count=turn_count,
             read_file_calls=read_file_calls,
+            read_file_paths=read_file_paths,
             run_snippet_calls=run_snippet_calls,
+            unread_changed_files=unread_changed_files,
             skip_reasons=skip_reasons,
         )
-
     def _publish(self, event: Any) -> None:
         """Publish an event to the bus."""
         self._command_bus.dispatch(event)
@@ -625,6 +756,14 @@ class AgentConversationService(RunAgentConversationPort):
                 if phase_result else 0
             ),
             "skipped": skipped,
+            TranscriptMetadata.READ_FILE_PATHS: (
+                list(phase_result.read_file_paths)
+                if phase_result else []
+            ),
+            TranscriptMetadata.UNREAD_CHANGED_FILES: (
+                list(phase_result.unread_changed_files)
+                if phase_result else []
+            ),
         }
 
         try:

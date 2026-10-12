@@ -100,6 +100,9 @@ class ForgejoPrLister(PrListerPort):
             review_request_event_id = self._latest_review_request_event_id(
                 repository, number
             )
+            latest_review_id, latest_review_dismissed = (
+                self._latest_platform_review(repository, number)
+            )
             result = OpenPullRequest(
                 pr_id=PullRequestId(repository=repository, number=number),
                 head_sha=CommitSha(sha),
@@ -108,6 +111,8 @@ class ForgejoPrLister(PrListerPort):
                 is_draft=self._bool_value(pr.get("draft")),
                 review_requested=review_requested,
                 review_request_event_id=review_request_event_id,
+                latest_review_id=latest_review_id,
+                latest_review_dismissed=latest_review_dismissed,
                 updated_at=self._string_value(pr.get("updated_at")),
                 target_branch=target_branch,
             )
@@ -145,6 +150,11 @@ class ForgejoPrLister(PrListerPort):
             if include_review_event
             else None
         )
+        latest_review_id, latest_review_dismissed = (
+            self._latest_platform_review(repository, number)
+            if include_review_event
+            else (None, False)
+        )
         return OpenPullRequest(
             pr_id=PullRequestId(repository=repository, number=number),
             head_sha=CommitSha(sha),
@@ -153,6 +163,8 @@ class ForgejoPrLister(PrListerPort):
             is_draft=draft,
             review_requested=bool(pr.get("requested_reviewers")),
             review_request_event_id=review_request_event_id,
+            latest_review_id=latest_review_id,
+            latest_review_dismissed=latest_review_dismissed,
             updated_at=self._string_value(pr.get("updated_at")),
             target_branch=self._string_value(
                 self._nested_value(self._nested_value(pr.get("base"), "ref"), "value")
@@ -198,3 +210,38 @@ class ForgejoPrLister(PrListerPort):
             return max(request_ids, default=None)
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
             return None
+
+    def _latest_platform_review(
+        self, repository: str, pr_number: int
+    ) -> tuple[int | None, bool]:
+        """Return the latest submitted review ID and dismissal state."""
+        try:
+            reviews: object = self._client.get(
+                f"/repos/{repository}/pulls/{pr_number}/reviews",
+                repo=repository,
+                limit=100,
+            )
+            if isinstance(reviews, dict):
+                reviews = reviews.get("data", [])
+            if not isinstance(reviews, list):
+                return None, False
+            submitted = [
+                row
+                for row in reviews
+                if isinstance(row, dict)
+                and row.get("state") != "REQUEST_REVIEW"
+                and isinstance(row.get("id"), int)
+            ]
+            if not submitted:
+                return None, False
+            latest = max(
+                submitted,
+                key=lambda row: (
+                    str(row.get("submitted_at", "")),
+                    int(row["id"]),
+                ),
+            )
+            state = str(latest.get("state", "")).upper()
+            return int(latest["id"]), latest.get("dismissed") is True or state == "DISMISSED"
+        except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
+            return None, False

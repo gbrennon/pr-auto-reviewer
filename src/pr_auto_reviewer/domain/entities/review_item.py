@@ -1,10 +1,10 @@
 """ReviewItem — a single actionable finding produced by the AI review."""
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 from ..value_objects.issue_category import IssueCategory
 from ..value_objects.item_severity import ItemSeverity
+from ..value_objects.review_item_status import ReviewItemStatus
 
 
 @dataclass(frozen=True, init=False)
@@ -28,7 +28,10 @@ class ReviewItem:
     reproduction: str = field(default="", compare=False)
     acceptance_criteria: str = field(default="", compare=False)
     detection_method: str = field(default="", compare=False)
-    status: Literal["open", "resolved"] = field(default="open", compare=False)
+    status: ReviewItemStatus = field(
+        default=ReviewItemStatus.OPEN, compare=False
+    )
+    status_explanation: str = field(default="", compare=False)
 
     def __init__(
         self,
@@ -44,7 +47,8 @@ class ReviewItem:
         reproduction: str = "",
         acceptance_criteria: str = "",
         detection_method: str = "",
-        status: Literal["open", "resolved"] = "open",
+        status: ReviewItemStatus | str = ReviewItemStatus.OPEN,
+        status_explanation: str = "",
     ) -> None:
         object.__setattr__(self, "severity", ItemSeverity.from_value(str(severity)))
         object.__setattr__(self, "category", IssueCategory.from_value(str(category)))
@@ -58,14 +62,19 @@ class ReviewItem:
         object.__setattr__(self, "reproduction", reproduction)
         object.__setattr__(self, "acceptance_criteria", acceptance_criteria)
         object.__setattr__(self, "detection_method", detection_method)
-        object.__setattr__(self, "status", status)
-        if status not in ("open", "resolved"):
-            raise ValueError("Review item status must be open or resolved")
+        normalized_status = ReviewItemStatus(status)
+        object.__setattr__(self, "status", normalized_status)
+        object.__setattr__(self, "status_explanation", status_explanation)
+
+    @property
+    def is_active(self) -> bool:
+        """Return whether this finding remains actionable."""
+        return self.status.is_active
 
     @property
     def is_open(self) -> bool:
         """Return whether this finding remains active in the latest review."""
-        return self.status == "open"
+        return self.is_active
 
     @property
     def is_blocking(self) -> bool:

@@ -7,6 +7,9 @@ import signal
 import time
 from datetime import UTC, datetime, timedelta
 
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
+)
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
@@ -17,6 +20,7 @@ from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPo
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
     PullRequestRepositoryPort,
 )
+from pr_auto_reviewer.domain.entities.pull_request import PullRequest
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavailableError
 from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
@@ -137,22 +141,29 @@ class PollingDaemon:
             force=force,
             review_requested=pr.review_requested,
             review_request_event_id=pr.review_request_event_id,
+            latest_review_id=pr.latest_review_id,
+            latest_review_dismissed=pr.latest_review_dismissed,
             target_branch=pr.target_branch,
         )
 
         HttpRequestCounter.instance().reset()
-        review_started_at = time.perf_counter()
         try:
-            reviewed = self._review_service.execute(command)
-            if not reviewed:
+            result = self._review_service.execute(command)
+            if not result.reviewed:
                 return
             logger.info("Reviewed PR #%d in %s", pr.pr_id.number, pr.pr_id.repository)
             if self._notifier:
-                duration = self._format_duration(
-                    time.perf_counter() - review_started_at
-                )
+                if result.duration_seconds is None:
+                    raise RuntimeError(
+                        "Completed review did not report a duration"
+                    )
+                duration = self._format_duration(result.duration_seconds)
                 self._notifier.notify_success(
-                    f"Review complete for {pr.pr_id.repository} ({duration})",
+                    (
+                        "Review complete for "
+                        f"{PRIdentifierService.normalize_repository(pr.pr_id.repository)} "
+                        f"({duration})"
+                    ),
                     f"PR #{pr.pr_id.number}",
                 )
         except EmptyDiffError:
@@ -252,10 +263,10 @@ class PollingDaemon:
         self._process_command_prs(open_prs)
         open_prs = self._include_configured_force_pr(info.full_name, open_prs)
         repo_is_stale = self._repo_is_stale(info)
-        self._mark_repo_seen(info)
         actionable_prs = self._actionable_prs(open_prs, repo_is_stale)
 
         if not open_prs or not actionable_prs:
+            self._mark_repo_seen(info)
             return
 
         for pr in actionable_prs:
@@ -263,6 +274,8 @@ class PollingDaemon:
                 logger.debug(f"Skipping draft PR #{pr.pr_id.number}")
                 continue
             self._process_pr(pr)
+
+        self._mark_repo_seen(info)
 
     def _process_command_prs(self, prs: list[OpenPullRequest]) -> None:
         service = self._process_commands_service
@@ -333,8 +346,33 @@ class PollingDaemon:
     ) -> list[OpenPullRequest]:
         if repo_is_stale:
             return open_prs
-        return [
-            pr
-            for pr in open_prs
-            if pr.review_requested or pr.pr_id.number == self._force_pr
-        ]
+        return [pr for pr in open_prs if self._is_actionable_pr(pr)]
+
+    def _is_actionable_pr(self, pr: OpenPullRequest) -> bool:
+        if pr.review_requested or pr.pr_id.number == self._force_pr:
+            return True
+        if self._pr_repository is None:
+            return False
+        stored = self._pr_repository.find(pr.pr_id)
+        if stored is None:
+            return True
+        return stored.needs_review(pr.head_sha) or (
+            pr.review_request_event_id is not None
+            and pr.review_request_event_id
+            > (stored.last_review_request_event_id or 0)
+        ) or self._platform_review_actionable(pr, stored)
+
+    @staticmethod
+    def _platform_review_actionable(
+        pr: OpenPullRequest, stored: PullRequest
+    ) -> bool:
+        if not pr.latest_review_dismissed or pr.latest_review_id is None:
+            return False
+        if stored.last_platform_review_id is None:
+            return True
+        if pr.latest_review_id > stored.last_platform_review_id:
+            return True
+        return (
+            pr.latest_review_id == stored.last_platform_review_id
+            and not stored.last_platform_review_dismissed
+        )

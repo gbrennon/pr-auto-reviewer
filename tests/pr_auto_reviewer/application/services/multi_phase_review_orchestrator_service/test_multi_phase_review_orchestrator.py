@@ -109,7 +109,7 @@ class TestMultiPhaseReviewOrchestrator:
             reason="No issues found",
             summary="No issues found",
         )
-        orchestrator.__dict__["_run_feedback_loop"] = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", previous_dropped_findings=0: _outcome(
+        orchestrator.__dict__["_run_feedback_loop"] = lambda plan, repo_path, changed_files, model, previous_result, existing_item_ids=frozenset(), pr_identifier_service="", review_session="", base_sha="", prior_items=None, prior_suggestions=None, previous_dropped_findings=0: _outcome(
             verdict=ReviewVerdict.APPROVED,
             reason="Recovered after feedback",
             summary="Issues resolved",
@@ -255,6 +255,43 @@ class TestMultiPhaseReviewOrchestrator:
         phase_prompts = [p for p in prompts if "EEP" in p or "AAP" in p]
         assert len(phase_prompts) == 2
         assert all(feedback in p for p in phase_prompts)
+
+    def test_only_first_phase_requires_complete_changed_file_coverage(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        plan = ReviewPlan(
+            phases=(
+                ReviewPhase(
+                    phase_id="diff", phase_name="Diff", system_prompt="D",
+                ),
+                ReviewPhase(
+                    phase_id="branch", phase_name="Branch", system_prompt="B",
+                ),
+            ),
+            methodology="MM",
+        )
+        phase_result = _phase_result(verdict="approved")
+        mock_command_bus.dispatch.side_effect = [
+            phase_result, MagicMock(), phase_result, MagicMock(),
+        ]
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+
+        orchestrator._run_phases(
+            plan, Path("/tmp"), ["first.py", "second.py"], "test",
+        )
+
+        commands = [
+            call.args[0]
+            for call in mock_command_bus.dispatch.call_args_list
+            if isinstance(call.args[0], RunAgentConversationCommand)
+        ]
+        assert [command.coverage_files for command in commands] == [
+            ("first.py", "second.py"),
+            (),
+        ]
 
     def test_role_brief_and_manager_brief_reach_phase_prompts(
         self, mock_command_bus, mock_tool_factory,
@@ -614,4 +651,23 @@ class TestMultiPhaseReviewOrchestrator:
 
         assert result.suggestions[0].file_path == relative_path
         assert result.praise[0].file_path == relative_path
+
+    def test_merge_prior_records_preserves_nonblocking_requested_verdict(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[_make_review_item("src/main.py", "Minor issue")],
+            summary="Needs changes",
+            reason="Explicit phase verdict",
+            model_used="test",
+        )
+
+        merged = orchestrator._merge_prior_records(review, [], [])
+
+        assert merged.verdict is ReviewVerdict.CHANGES_REQUESTED
 

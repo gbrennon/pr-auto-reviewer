@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-import time
 import traceback
 
 import requests
 
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
+)
 from pr_auto_reviewer.application.dtos.list_allowed_repositories_request import (
     ListAllowedRepositoriesRequest,
 )
@@ -180,20 +182,31 @@ class CliRunner:
             description=pr.description,
             force=force_mode,
             review_requested=pr.review_requested,
+            review_request_event_id=pr.review_request_event_id,
+            latest_review_id=pr.latest_review_id,
+            latest_review_dismissed=pr.latest_review_dismissed,
             target_branch=pr.target_branch,
         )
 
         HttpRequestCounter.instance().reset()
-        review_started_at = time.perf_counter()
         try:
-            self._review_service.execute(command)
+            result = self._review_service.execute(command)
+            if not result.reviewed:
+                print(f"Review not required for PR #{args.pr}")
+                return 0
             print(f"Review posted for PR #{args.pr}")
             if self._notifier:
-                duration = self._format_duration(
-                    time.perf_counter() - review_started_at
-                )
+                if result.duration_seconds is None:
+                    raise RuntimeError(
+                        "Completed review did not report a duration"
+                    )
+                duration = self._format_duration(result.duration_seconds)
                 self._notifier.notify_success(
-                    f"Review complete for {command.pr_id.repository} ({duration})",
+                    (
+                        "Review complete for "
+                        f"{PRIdentifierService.normalize_repository(command.pr_id.repository)} "
+                        f"({duration})"
+                    ),
                     f"PR #{args.pr}",
                 )
             return 0

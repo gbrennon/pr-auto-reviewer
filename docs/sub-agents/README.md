@@ -11,15 +11,15 @@ into phase prompts at runtime. See the individual pages for details:
 | [advisor](advisor.md) | watches peers turn-by-turn; grades S/A/B/C/D/F and interrupts drift | keep every sub-agent on its assigned task | grade every turn; block on F and hand to manager |
 | [engineer](engineer.md) | exercises the diff and its indirect blast radius like a principal | find bugs, security issues, biased tests; suggest fitting practices | probe from many angles; verify tests test real behavior |
 | [architect](architect.md) | reviews structure, not behavior | enforce architecture rules and conventions | read source for violations, coupling, anti-patterns |
-| [auditor](auditor.md) | audits prior findings against current code | prove remediation or preserve the open finding | reproduce defects, check acceptance criteria, resolve only with explicit proof |
+| [auditor](auditor.md) | audits all historical findings and suggestions against current code | prove remediation or preserve active records | run before normal phases; preserve evidence, statuses, source sections, and IDs |
 | [teacher](teacher.md) | teaches each role its task and craft | keep the sub-agent skill curve rising | coach via task planning, live feedback, and transcripts |
 
 The current production plan runs three phases: Bug Hunt — Diff and Bug
 Hunt — Branch execute as an *engineer*; Architecture Review executes as
-an *architect*. The Auditor's remediation audit runs only when prior
-findings exist on changed files. The manager opens the review and the advisor watches
-every phase — both shape the composed prompts even though they do not
-run their own phases.
+an *architect*. Before those normal phases, the Auditor audits every
+historical finding and suggestion, including terminal records. The manager
+opens the review and the advisor watches every phase — both shape the
+composed prompts even though they do not run their own phases.
 
 ## Runtime rules
 

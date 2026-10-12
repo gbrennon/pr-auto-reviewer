@@ -365,3 +365,96 @@ class TestPullRequest:
         assert items[0] == item
         assert items[1] == suggestion
 
+    def test_dismiss_review_items_preserves_history_and_categories(self) -> None:
+        """Dismissals derive copies without mutating the stored review."""
+        item = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.MINOR,
+            category="bug",
+            file_path="src/a.py",
+            description="Finding",
+        )
+        suggestion = ReviewItem(
+            id="suggestion-1",
+            severity=ItemSeverity.INFO,
+            category="style",
+            file_path="src/b.py",
+            description="Suggestion",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            summary="Summary",
+            reason="Reason",
+            model_used="model",
+            items=[item],
+            suggestions=[suggestion],
+        )
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        ).add_review(review, CommitSha(value="abc"))
+
+        dismissed = pr.dismiss_review_items("suggestion-1")
+
+        assert pr.dismissed_item_ids == frozenset()
+        assert dismissed.dismissed_item_ids == frozenset({"suggestion-1"})
+        assert dismissed.reviews[-1] == review
+        latest = dismissed.latest_review_items()
+        assert latest[0] == item
+        assert latest[1].status is ReviewItemStatus.DISMISSED
+        assert latest[1].category == suggestion.category
+        assert latest[1].description == suggestion.description
+
+    def test_dismiss_review_items_is_idempotent(self) -> None:
+        """Repeated dismissal IDs do not change aggregate state."""
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        )
+
+        once = pr.dismiss_review_items("item-1")
+        twice = once.dismiss_review_items("item-1")
+
+        assert twice.dismissed_item_ids == frozenset({"item-1"})
+
+    def test_terminal_lifecycle_does_not_reopen_when_id_is_reused(
+        self,
+    ) -> None:
+        """A persisted terminal status cannot be reopened by a raw snapshot."""
+        old = ReviewItem(
+            id="item-1",
+            severity=ItemSeverity.INFO,
+            category="style",
+            file_path=None,
+            description="Old",
+        )
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test",
+            head_sha=CommitSha(value="abc"),
+        ).add_review(
+            CodeReview(
+                verdict=ReviewVerdict.APPROVED,
+                summary="Summary",
+                reason="Reason",
+                model_used="model",
+                suggestions=[old],
+            ),
+            CommitSha(value="abc"),
+        ).dismiss_review_items("item-1")
+
+        updated = pr.add_review(
+            CodeReview(
+                verdict=ReviewVerdict.APPROVED,
+                summary="Summary 2",
+                reason="Reason 2",
+                model_used="model",
+                suggestions=[old],
+            ),
+            CommitSha(value="def"),
+        )
+
+        assert updated.dismissed_item_ids == frozenset()
+        assert updated.latest_review_items()[0].status is ReviewItemStatus.DISMISSED

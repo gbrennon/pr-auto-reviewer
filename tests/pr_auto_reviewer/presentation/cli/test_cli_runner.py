@@ -9,6 +9,9 @@ from pr_auto_reviewer.application.dtos.list_allowed_repositories_response import
 )
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 from pr_auto_reviewer.presentation.cli.runner import CliRunner
 from pr_auto_reviewer.presentation.ports import OpenPullRequest, PrListerPort
 
@@ -159,6 +162,8 @@ class TestCliRunner:
             head_sha=CommitSha("abc123"),
             title="Fix bug",
             is_draft=False,
+            review_requested=False,
+            review_request_event_id=7,
         )
         pr_lister = MockPrLister([open_pr])
 
@@ -174,6 +179,8 @@ class TestCliRunner:
 
         assert result == 0
         mock_review_service.execute.assert_called_once()
+        command = mock_review_service.execute.call_args.args[0]
+        assert command.review_request_event_id == 7
 
     def test_run_review_success_message(
         self,
@@ -182,7 +189,7 @@ class TestCliRunner:
         mock_review_reader: MagicMock,
         mock_review_item_parser: MagicMock,
     ) -> None:
-        """Prints success message after review."""
+        """Prints success message and reports service duration."""
         from pr_auto_reviewer.presentation.cli.runner import CliRunner
 
         open_pr = OpenPullRequest(
@@ -191,7 +198,12 @@ class TestCliRunner:
             title="Fix bug",
             is_draft=False,
         )
+        mock_review_service.execute.return_value = ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=12.0,
+        )
         pr_lister = MockPrLister([open_pr])
+        notifier = MagicMock()
 
         runner = CliRunner(
             review_service=mock_review_service,
@@ -199,12 +211,17 @@ class TestCliRunner:
             review_reader=mock_review_reader,
             pr_lister=pr_lister,
             review_item_parser=mock_review_item_parser,
+            notifier=notifier,
         )
 
         with patch("builtins.print") as mock_print:
             runner._run_review(["--repo", "owner/repo", "--pr", "1"])
             mock_print.assert_any_call("Review posted for PR #1")
 
+        notifier.notify_success.assert_called_once_with(
+            "Review complete for owner/repo (0m 12s)",
+            "PR #1",
+        )
     def test_run_review_pr_not_found(
         self,
         mock_review_service: MagicMock,

@@ -28,6 +28,8 @@ class CompositePrLister(PrListerPort):
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
                 review_request_event_id=pr.review_request_event_id,
+                latest_review_id=pr.latest_review_id,
+                latest_review_dismissed=pr.latest_review_dismissed,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
@@ -55,6 +57,8 @@ class CompositePrLister(PrListerPort):
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
                 review_request_event_id=pr.review_request_event_id,
+                latest_review_id=pr.latest_review_id,
+                latest_review_dismissed=pr.latest_review_dismissed,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )
@@ -79,6 +83,8 @@ class CompositePrLister(PrListerPort):
                 is_draft=pr.is_draft,
                 review_requested=pr.review_requested,
                 review_request_event_id=pr.review_request_event_id,
+                latest_review_id=pr.latest_review_id,
+                latest_review_dismissed=pr.latest_review_dismissed,
                 updated_at=pr.updated_at,
                 target_branch=pr.target_branch,
             )

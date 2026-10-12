@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
+from pr_auto_reviewer.application.ports.inbound.list_allowed_repositories import (
+    ListAllowedRepositories,
+)
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
     ReviewPullRequestPort,
 )
@@ -76,4 +79,4 @@ def run_daemon(components: ApplicationComponents | None = None) -> None:
         root.run_daemon()
 
 
-__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon']
+__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'ListAllowedRepositories', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon']

@@ -225,12 +225,17 @@ class ReviewPublishingService:
         platform: str = "github",
     ) -> list[dict]:
         """Build inline comment payloads from diff positions."""
-
+        active_items = [item for item in items if item.status.is_active]
+        active_suggestions = [
+            item for item in suggestions if item.status.is_active
+        ]
         if platform == "forgejo":
             return self._build_forgejo_inline_comments(
-                diff_text, items, suggestions,
+                diff_text, active_items, active_suggestions,
             )
-        return self._build_github_inline_comments(diff_text, items, suggestions)
+        return self._build_github_inline_comments(
+            diff_text, active_items, active_suggestions,
+        )
 
     # -- diff position lookup -----------------------------------------------
 

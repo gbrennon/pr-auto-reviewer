@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,12 +15,20 @@ from pr_auto_reviewer.domain.messages.commands.review_pull_request_command impor
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
+from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
+    AuditRemediationCommand,
+)
+from pr_auto_reviewer.domain.value_objects.review_audit_result import (
+    ReviewAuditResult,
+)
 from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
+from pr_auto_reviewer.domain.value_objects.review_execution_result import (
+    ReviewExecutionResult,
+)
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
-from ...domain.services.praise_regression_policy import PraiseRegressionPolicy
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
@@ -28,7 +37,9 @@ from ...domain.value_objects.issue_category import IssueCategory
 from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
+from ...domain.value_objects.review_item_status import ReviewItemStatus
 from ...domain.value_objects.review_verdict import ReviewVerdict
+from ...domain.value_objects.review_item_lifecycle import ReviewItemLifecycle
 from ...domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from ..ports.inbound.review_pull_request_port import ReviewPullRequestPort
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
@@ -68,19 +79,25 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         self._conversation_logger = conversation_logger
         self._plan = plan
 
-    def execute(self, command: ReviewPullRequestCommand) -> bool:
+    def execute(self, command: ReviewPullRequestCommand) -> ReviewExecutionResult:
         self._log_start(command)
 
         pr = self._load_or_create_pull_request(command)
 
         if not self._needs_review(command, pr):
             self._handle_already_reviewed(command, pr)
-            return False
+            return ReviewExecutionResult(
+                reviewed=False,
+                duration_seconds=None,
+            )
+
+        review_started_at = self._now()
 
         if self._token_verifier:
             self._token_verifier.verify(command.pr_id)
 
         diff = self._fetch_diff(command)
+        audit_result = self._audit_history(pr, diff)
         description = self._augment_description(command.description, pr)
         composed = self._review_context_factory.build(
             command.pr_id, diff,
@@ -89,16 +106,26 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             target_branch=command.target_branch,
         )
 
-        # Use multi-phase orchestrator if command_bus is available,
-        # otherwise fall back to single-turn review
         if self._command_bus is not None:
-            review = self._run_multi_phase_review(composed, command)
+            review = self._run_multi_phase_review(
+                composed, command, diff, pr, audit_result,
+            )
         else:
             review = self._run_single_turn_review(composed)
         review = self._filter_suggestion_scope(review, diff)
         review = self._add_deterministic_findings(review, diff)
-        review = ReviewItemFactory.ensure_unique_ids(review)
-        review = self._retain_prior_review_items(pr, review)
+        review = self._merge_audited_history(
+            review,
+            audit_result,
+            self._historical_ids(pr),
+            review_contains_audit=(
+                self._command_bus is not None
+                and self._plan is not None
+                and diff.clone_path is not None
+            ),
+        )
+        if audit_result is not None:
+            pr = pr.apply_audit_result(audit_result)
 
         blocking_ids = self._extract_blocking_ids(review)
 
@@ -135,8 +162,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             )
 
         self._publish_review(command.pr_id, review, diff)
+        duration_seconds = self._now() - review_started_at
         pr = self._record_review(
-            pr, review, command.head_sha, command.review_request_event_id
+            pr,
+            review,
+            command.head_sha,
+            command.review_request_event_id,
+            command.latest_review_id,
+            command.latest_review_dismissed,
         )
         self._persist(pr)
 
@@ -148,7 +181,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 len(review.items),
                 (review.summary or "")[:80],
             )
-        return True
+        return ReviewExecutionResult(
+            reviewed=True,
+            duration_seconds=duration_seconds,
+        )
+    @staticmethod
+    def _now() -> float:
+        return time.perf_counter()
+
     def _log_start(self, command: ReviewPullRequestCommand) -> None:
         sha_str = str(command.head_sha.value[:7]) if command.head_sha else "none"
         logger.info("Starting review for PR %s (SHA: %s, force=%s)",
@@ -171,12 +211,29 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     ) -> bool:
         if command.force or pr.needs_review(command.head_sha):
             return True
-        return (
-            command.review_requested
-            and command.review_request_event_id is not None
+        if (
+            command.review_request_event_id is not None
             and command.review_request_event_id
             > (pr.last_review_request_event_id or 0)
+        ):
+            return True
+        return self._platform_review_requires_review(command, pr)
+
+    @staticmethod
+    def _platform_review_requires_review(
+        command: ReviewPullRequestCommand, pr: PullRequest
+    ) -> bool:
+        if not command.latest_review_dismissed or command.latest_review_id is None:
+            return False
+        if pr.last_platform_review_id is None:
+            return True
+        if command.latest_review_id > pr.last_platform_review_id:
+            return True
+        return (
+            command.latest_review_id == pr.last_platform_review_id
+            and not pr.last_platform_review_dismissed
         )
+
     def _handle_already_reviewed(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> None:
@@ -187,6 +244,11 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         )
         if command.review_request_event_id is not None:
             pr = pr.record_review_request_event(command.review_request_event_id)
+        if command.latest_review_id is not None:
+            pr = pr.record_platform_review(
+                command.latest_review_id,
+                command.latest_review_dismissed,
+            )
         self._pr_repository.save(pr)
 
     def _fetch_diff(
@@ -221,21 +283,19 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         return review
 
     def _run_multi_phase_review(
-        self, composed: Any, command: ReviewPullRequestCommand,
+        self,
+        composed: Any,
+        command: ReviewPullRequestCommand,
+        diff: PullRequestDiff,
+        existing_pr: PullRequest,
+        audit_result: ReviewAuditResult | None,
     ) -> CodeReview:
-        """Run multi-phase review by dispatching the command to the command bus.
-
-        The command handler registered against ``RunMultiPhaseReviewCommand``
-        executes the orchestrator, keeping this inbound service decoupled
-        from the other inbound use case.
-        """
+        """Run multi-phase review with the pre-phase audit history."""
         if self._plan is None:
             logger.warning(
                 "No review plan wired; falling back to single-turn review"
             )
             return self._run_single_turn_review(composed)
-        plan = self._plan
-        diff = self._fetch_diff(command)
         if diff.clone_path is None:
             logger.warning(
                 "PR %s has no local clone; falling back to single-turn review",
@@ -247,146 +307,30 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         base_sha: str = (
             str(diff.base_sha) if diff.base_sha is not None else ""
         )
-
-        # Load existing PR to get existing review item IDs for unique ID generation
-        existing_pr = self._pr_repository.find(command.pr_id)
-        existing_item_ids = frozenset()
-        if existing_pr is not None:
-            existing_ids = set()
-            for review in existing_pr.reviews:
-                for item in review.items:
-                    if item.id:
-                        existing_ids.add(item.id)
-                for suggestion in review.suggestions:
-                    if suggestion.id:
-                        existing_ids.add(suggestion.id)
-                for praise in review.praise:
-                    if praise.id:
-                        existing_ids.add(praise.id)
-            existing_item_ids = frozenset(existing_ids)
+        existing_item_ids = self._historical_ids(existing_pr)
+        audit = audit_result or ReviewAuditResult(
+            items=(), suggestions=(), lifecycles=(),
+        )
 
         logger.info(
             "Dispatching multi-phase review for %s (changed files: %s)",
             command.pr_id,
             ", ".join(changed_files) or "(none)",
         )
-
-        review = self._command_bus.dispatch(
+        return self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
-                plan=plan,
+                plan=self._plan,
                 repo_path=diff.clone_path,
                 changed_files=changed_files,
                 model="code-review:latest",
                 review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
-                prior_items=[
-                    item
-                    for item in (
-                        list(existing_pr.reviews[-1].items)
-                        if existing_pr is not None and existing_pr.reviews
-                        else []
-                    )
-                    if item.file_path in changed_files
-                ],
+                prior_items=list(audit.items),
+                prior_suggestions=list(audit.suggestions),
             )
         )
-        review = self._drop_persisted_duplicates(review, existing_pr)
-        return self._append_praise_regressions(review, existing_pr)
 
-    def _append_praise_regressions(
-        self,
-        review: CodeReview,
-        existing_pr: PullRequest | None,
-    ) -> CodeReview:
-        """Add a suggestion for each prior praise the review no longer affirms.
-
-        A quality praised in the last review but absent now is surfaced as a
-        non-blocking suggestion, never as an issue. Regressions already
-        suggested in the previous review are not restated.
-        """
-        if existing_pr is None or not existing_pr.reviews:
-            return review
-        last_review = existing_pr.reviews[-1]
-        regressions = PraiseRegressionPolicy().regressions(
-            list(last_review.praise),
-            list(review.praise),
-            list(last_review.suggestions),
-        )
-        if not regressions:
-            return review
-        return replace(
-            review,
-            suggestions=[*review.suggestions, *regressions],
-        )
-
-    def _drop_persisted_duplicates(
-        self,
-        review: CodeReview,
-        existing_pr: PullRequest | None,
-    ) -> CodeReview:
-        """Drop findings byte-equivalent to an already-published one.
-
-        Recycled fabrications reappear across runs under freshly
-        generated IDs (observed: ``1a0305`` republished as
-        ``1a0306``).  ID-level uniqueness cannot catch them, so a
-        normalized ``(file_path, current_code)`` signature — falling
-        back to description when code is absent — from the persisted
-        reviews blocks republication.  Distinct findings on the same
-        file are unaffected.
-        """
-        if existing_pr is None or not review.items:
-            return review
-        published_signatures = {
-            self._content_signature(item)
-            for prior_review in existing_pr.reviews
-            for item in prior_review.items
-        }
-        prior_ids = {
-            item.id
-            for item in existing_pr.reviews[-1].items
-            if item.id
-        }
-        kept: list[ReviewItem] = []
-        for item in review.items:
-            if item.id in prior_ids:
-                kept.append(item)
-                continue
-            if self._content_signature(item) in published_signatures:
-                logger.warning(
-                    "Dropping finding %s — byte-equivalent to a "
-                    "previously published finding on %s",
-                    item.id, item.file_path,
-                )
-                continue
-            kept.append(item)
-        if len(kept) == len(review.items):
-            return review
-        dropped_count = len(review.items) - len(kept)
-        logger.info(
-            "Content dedup dropped %d finding(s) already present in "
-            "persisted reviews",
-            dropped_count,
-        )
-        verdict = SubReviewGuardrails().verdict_for(kept)
-        summary = (
-            f"{dropped_count} duplicate finding(s) already published "
-            "were suppressed; no new actionable findings remained."
-            if not kept
-            else review.summary
-        )
-        reason = (
-            "All findings were duplicates of previously published ones."
-            if not kept
-            else review.reason
-        )
-        return replace(
-            review,
-            items=kept,
-            verdict=verdict,
-            reason=reason,
-            summary=summary,
-        )
 
     @staticmethod
     def _content_signature(item: ReviewItem) -> tuple[str, str]:
@@ -397,6 +341,261 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             return (path, code)
         desc = " ".join(item.description.split())
         return (path, desc)
+    def _audit_history(
+        self,
+        pr: PullRequest,
+        diff: PullRequestDiff,
+    ) -> ReviewAuditResult | None:
+        """Audit every historical item before running normal review phases."""
+        if self._command_bus is None or diff.clone_path is None:
+            return self._fail_closed_history(pr, diff)
+        audit = self._command_bus.dispatch(
+            AuditRemediationCommand(
+                prior_items=list(pr.historical_items()),
+                prior_suggestions=list(pr.historical_suggestions()),
+                prior_lifecycles=pr.lifecycles,
+                repo_path=diff.clone_path,
+                changed_files=diff.changed_paths,
+                review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
+                base_sha=str(diff.base_sha) if diff.base_sha else "",
+                current_sha=str(diff.head_sha),
+            )
+        )
+        if isinstance(audit, ReviewAuditResult):
+            if not self._audit_covers_history(pr, audit):
+                return self._fail_closed_history(pr, diff)
+            return audit
+        return self._fail_closed_history(pr, diff)
+
+    @staticmethod
+    def _audit_covers_history(
+        pr: PullRequest, audit: ReviewAuditResult,
+    ) -> bool:
+        """Return whether an audit result includes every identified record."""
+        historical_records = (
+            *pr.historical_items(),
+            *pr.historical_suggestions(),
+        )
+        if any(not record.id for record in historical_records):
+            return False
+        expected_ids = {record.id for record in historical_records}
+        actual_ids = {
+            record.id
+            for record in (*audit.items, *audit.suggestions)
+            if record.id
+        }
+        return expected_ids <= actual_ids
+
+    def _fail_closed_history(
+        self, pr: PullRequest, diff: PullRequestDiff,
+    ) -> ReviewAuditResult:
+        """Carry history forward as open when remediation auditing is unavailable."""
+        audit_sha = str(diff.head_sha)
+        lifecycles = tuple(
+            lifecycle.audit(
+                audit_sha,
+                present=True,
+                proof=False,
+                explanation="Remediation audit was unavailable; record remains open.",
+            )
+            if lifecycle.is_active
+            else lifecycle
+            for lifecycle in pr.lifecycles
+        )
+        lifecycle_by_id = {
+            lifecycle.item_id: lifecycle for lifecycle in lifecycles
+        }
+        return ReviewAuditResult(
+            items=self._project_fail_closed(
+                pr.historical_items(), lifecycle_by_id,
+            ),
+            suggestions=self._project_fail_closed(
+                pr.historical_suggestions(), lifecycle_by_id,
+            ),
+            lifecycles=lifecycles,
+        )
+
+    @staticmethod
+    def _project_fail_closed(
+        records: tuple[ReviewItem, ...],
+        lifecycles: dict[str, ReviewItemLifecycle],
+    ) -> tuple[ReviewItem, ...]:
+        """Materialize fail-closed lifecycle status on historical records."""
+        projected: list[ReviewItem] = []
+        for record in records:
+            lifecycle = lifecycles.get(record.id)
+            if lifecycle is None:
+                projected.append(
+                    replace(
+                        record,
+                        status=(
+                            ReviewItemStatus.OPEN
+                            if record.is_active
+                            else record.status
+                        ),
+                    )
+                )
+                continue
+            projected.append(
+                replace(
+                    record,
+                    status=lifecycle.status,
+                    status_explanation=lifecycle.status_explanation,
+                )
+            )
+        return tuple(projected)
+
+    @staticmethod
+    def _historical_ids(pr: PullRequest) -> frozenset[str]:
+        """Return every ID reserved by persisted evidence and lifecycles."""
+        ids = {
+            item.id
+            for item in (*pr.historical_items(), *pr.historical_suggestions())
+            if item.id
+        }
+        ids.update(
+            item.id
+            for review in pr.reviews
+            for item in (*review.items, *review.suggestions, *review.praise)
+            if item.id
+        )
+        ids.update(
+            lifecycle.item_id for lifecycle in pr.lifecycles if lifecycle.item_id
+        )
+        return frozenset(ids)
+
+    @staticmethod
+    def _is_active(item: ReviewItem) -> bool:
+        """Return whether an item may suppress a newly reported duplicate."""
+        return item.status in (
+            ReviewItemStatus.CREATED,
+            ReviewItemStatus.OPEN,
+        )
+
+    def _merge_audited_history(
+        self,
+        review: CodeReview,
+        audit_result: ReviewAuditResult | None,
+        reserved_ids: frozenset[str],
+        review_contains_audit: bool = False,
+    ) -> CodeReview:
+        """Merge audited records and mark genuinely new records as CREATED."""
+        if audit_result is None:
+            audited_items: tuple[ReviewItem, ...] = ()
+            audited_suggestions: tuple[ReviewItem, ...] = ()
+        else:
+            audited_items = audit_result.items
+            audited_suggestions = audit_result.suggestions
+
+        historical_ids = {
+            item.id for item in (*audited_items, *audited_suggestions) if item.id
+        }
+        active_items = {
+            item.id for item in audited_items if item.id and self._is_active(item)
+        }
+        active_suggestions = {
+            item.id
+            for item in audited_suggestions
+            if item.id and self._is_active(item)
+        }
+        active_item_signatures = {
+            self._content_signature(item)
+            for item in audited_items
+            if self._is_active(item)
+        }
+        active_suggestion_signatures = {
+            self._content_signature(item)
+            for item in audited_suggestions
+            if self._is_active(item)
+        }
+        audited_item_keys = (
+            {
+                (item.id, self._content_signature(item))
+                for item in audited_items
+                if self._is_active(item)
+            }
+            if review_contains_audit
+            else set()
+        )
+        audited_suggestion_keys = (
+            {
+                (item.id, self._content_signature(item))
+                for item in audited_suggestions
+                if self._is_active(item)
+            }
+            if review_contains_audit
+            else set()
+        )
+        reserved = set(reserved_ids) | set(historical_ids)
+
+        def prepare(
+            entries: list[ReviewItem],
+            active_ids: set[str],
+            active_signatures: set[tuple[str, str]],
+            audited_keys: set[tuple[str, tuple[str, str]]],
+        ) -> list[ReviewItem]:
+            result: list[ReviewItem] = []
+            for entry in entries:
+                key = (entry.id, self._content_signature(entry))
+                if key in audited_keys:
+                    continue
+                if (
+                    entry.id in active_ids
+                    or self._content_signature(entry) in active_signatures
+                ):
+                    continue
+                item = replace(
+                    entry,
+                    status=ReviewItemStatus.CREATED,
+                    status_explanation=(
+                        entry.status_explanation or "First appearance in review"
+                    ),
+                )
+                if not item.id or item.id in reserved:
+                    item = replace(
+                        item,
+                        id=ReviewItemFactory.generate_id(frozenset(reserved)),
+                    )
+                reserved.add(item.id)
+                result.append(item)
+            return result
+
+        fresh_items = prepare(
+            list(review.items),
+            active_items,
+            active_item_signatures,
+            audited_item_keys,
+        )
+        fresh_suggestions = prepare(
+            list(review.suggestions),
+            active_suggestions,
+            active_suggestion_signatures,
+            audited_suggestion_keys,
+        )
+        merged_items = list(audited_items) + fresh_items
+        merged_suggestions = list(audited_suggestions) + fresh_suggestions
+        praise: list[ReviewItem] = []
+        for entry in review.praise:
+            if not entry.id or entry.id in reserved:
+                entry = replace(
+                    entry,
+                    id=ReviewItemFactory.generate_id(frozenset(reserved)),
+                )
+            reserved.add(entry.id)
+            praise.append(entry)
+        derived_verdict = SubReviewGuardrails().verdict_for(merged_items)
+        verdict = (
+            ReviewVerdict.CHANGES_REQUESTED
+            if review.verdict is ReviewVerdict.CHANGES_REQUESTED
+            else derived_verdict
+        )
+        return replace(
+            review,
+            items=merged_items,
+            suggestions=merged_suggestions,
+            praise=praise,
+            verdict=verdict,
+        )
 
     def _filter_suggestion_scope(
         self, review: CodeReview, diff: PullRequestDiff,
@@ -598,26 +797,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             return description + "\n" + pending
         return pending
 
-    def _retain_prior_review_items(
-        self, pr: PullRequest, review: CodeReview,
-    ) -> CodeReview:
-        """Carry every prior item into the newly published review."""
-        if not pr.reviews:
-            return review
 
-        current_by_id = {
-            item.id: item for item in review.items if item.id
-        }
-        prior_items = pr.latest_review_items()
-        retained = [
-            current_by_id.get(item.id, item)
-            for item in prior_items
-            if item.id and item.id not in current_by_id
-        ]
-        if not retained:
-            return review
-
-        return replace(review, items=retained + review.items)
 
     def _extract_blocking_ids(self, review: CodeReview) -> list[str]:
         """Return IDs of open review items whose severity is blocking."""
@@ -659,11 +839,21 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         logger.info("Publishing review to platform...")
         self._review_publisher.publish(pr_id, review, diff)
     def _record_review(
-        self, pr: PullRequest, review: CodeReview, head_sha: CommitSha,
+        self,
+        pr: PullRequest,
+        review: CodeReview,
+        head_sha: CommitSha,
         review_request_event_id: int | None = None,
+        latest_review_id: int | None = None,
+        latest_review_dismissed: bool = False,
     ) -> PullRequest:
         if review_request_event_id is not None:
             pr = pr.record_review_request_event(review_request_event_id)
+        if latest_review_id is not None:
+            pr = pr.record_platform_review(
+                latest_review_id,
+                latest_review_dismissed,
+            )
         return pr.add_review(review, head_sha)
 
     def _persist(self, pr: PullRequest) -> None:

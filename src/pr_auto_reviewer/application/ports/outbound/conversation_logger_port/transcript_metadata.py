@@ -13,6 +13,7 @@ class TranscriptMetadata:
     VERDICT = "verdict"
     ITEM_COUNT = "item_count"
     SKIPPED = "skipped"
+    READ_FILE_PATHS = "read_file_paths"
+    UNREAD_CHANGED_FILES = "unread_changed_files"
     GRADE = "grade"
     FEEDBACK = "feedback"
-
