@@ -82,6 +82,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 
 logger = logging.getLogger(__name__)
 _MAX_REPEATED_TOOL_CALLS = 3
+_MIN_READ_FILE_REPLAY_FILES = 2
 
 
 
@@ -519,7 +520,11 @@ class AgentConversationService(RunAgentConversationPort):
                         tool_call.arguments, sort_keys=True, default=str
                     ),
                 )
-                if call_key in seen_tool_calls:
+                allow_read_file_replay = (
+                    tool_call.tool_name == "read_file"
+                    and len(changed_files) >= _MIN_READ_FILE_REPLAY_FILES
+                )
+                if call_key in seen_tool_calls and not allow_read_file_replay:
                     repeated_tool_call_streak += 1
                     logger.debug(
                         "Tool call repeated (%s); refusing and reprompting",
