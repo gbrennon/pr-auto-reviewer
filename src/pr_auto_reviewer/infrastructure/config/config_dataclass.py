@@ -42,6 +42,7 @@ class Config:
     llm_max_turns: int = 10
     advisor_max_blocks: int = 2
     review_max_conversations: int = 48
+    review_max_retries: int = 1
     review_max_tries: int = 2
     llm_call_budget: int = 300
     advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE

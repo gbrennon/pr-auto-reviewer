@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import tempfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +82,23 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 
 logger = logging.getLogger(__name__)
 _MAX_REPEATED_TOOL_CALLS = 3
+_MIN_READ_FILE_REPLAY_FILES = 2
 
+
+@dataclass(frozen=True)
+class _FinalVerdictContext:
+    phase_name: str
+    repo_path: Path
+    changed_files: list[str]
+    review_session: str
+    readable_changed_files: tuple[str, ...]
+    readable_coverage_files: tuple[str, ...]
+    read_file_paths: set[str]
+    read_file_count: int
+    run_snippet_count: int
+    existing_item_ids: frozenset[str]
+    accumulated_praise: list[dict[str, Any]]
+    accumulated_suggestions: list[dict[str, Any]]
 
 
 class AgentConversationService(RunAgentConversationPort):
@@ -415,7 +431,7 @@ class AgentConversationService(RunAgentConversationPort):
         read_file_paths: set[str] = set()
         accumulated_praise: list[dict[str, Any]] = []
         accumulated_suggestions: list[dict[str, Any]] = []
-        self._consecutive_blocks = 0
+        consecutive_blocks = 0
         verdict_nudged = False
         read_file_count = 0
         run_snippet_count = 0
@@ -461,23 +477,23 @@ class AgentConversationService(RunAgentConversationPort):
                     changed_files=changed_files,
                 )
                 if directive.blocks_output:
-                    self._consecutive_blocks += 1
+                    consecutive_blocks += 1
                     messages.append(
                         self._advisor_block_message.render(
                             feedback=directive.feedback
                         )
                     )
-                    if self._consecutive_blocks >= self._max_advisor_blocks:
+                    if consecutive_blocks >= self._max_advisor_blocks:
                         self._log_conversation(
                             phase_name, messages, guardrails.turn, None,
                             repo_path=repo_path, review_session=review_session,
                         )
                         raise AdvisorBlockedError(
                             f"Advisor blocked phase {phase_name} after "
-                            f"{self._consecutive_blocks} blocking grades"
+                            f"{consecutive_blocks} blocking grades"
                         )
                 else:
-                    self._consecutive_blocks = 0
+                    consecutive_blocks = 0
                     if directive.feedback and directive.grade is (
                         SubAgentGrade.WHATEVER
                     ):
@@ -519,7 +535,11 @@ class AgentConversationService(RunAgentConversationPort):
                         tool_call.arguments, sort_keys=True, default=str
                     ),
                 )
-                if call_key in seen_tool_calls:
+                allow_read_file_replay = (
+                    tool_call.tool_name == "read_file"
+                    and len(changed_files) >= _MIN_READ_FILE_REPLAY_FILES
+                )
+                if call_key in seen_tool_calls and not allow_read_file_replay:
                     repeated_tool_call_streak += 1
                     logger.debug(
                         "Tool call repeated (%s); refusing and reprompting",
@@ -661,6 +681,26 @@ class AgentConversationService(RunAgentConversationPort):
                 )
                 continue
 
+        forced_result = self._attempt_final_verdict(
+            messages, guardrails,
+            _FinalVerdictContext(
+                phase_name=phase_name,
+                repo_path=repo_path,
+                changed_files=changed_files,
+                review_session=review_session,
+                readable_changed_files=readable_changed_files,
+                readable_coverage_files=readable_coverage_files,
+                read_file_paths=read_file_paths,
+                read_file_count=read_file_count,
+                run_snippet_count=run_snippet_count,
+                existing_item_ids=existing_item_ids,
+                accumulated_praise=accumulated_praise,
+                accumulated_suggestions=accumulated_suggestions,
+            ),
+        )
+        if forced_result is not None:
+            return forced_result
+
         self._log_conversation(
             phase_name, messages, guardrails.turn, None,
             repo_path=repo_path, review_session=review_session,
@@ -680,6 +720,118 @@ class AgentConversationService(RunAgentConversationPort):
             f"Phase exceeded max turns ({guardrails.max_turns}) "
             f"without a verdict. Full conversation dumped to {dump_path}"
         )
+
+    def _attempt_final_verdict(
+        self,
+        messages: list[ConversationMessage],
+        guardrails: ConversationGuardrails,
+        context: _FinalVerdictContext,
+    ) -> PhaseResult | None:
+        """Request one tool-free verdict as a last resort after exhaustion.
+
+        The turn budget is spent and no verdict was accepted in-loop. When the
+        agent explored the repository at all, ask once for a verdict-only
+        response rather than discarding the whole review. Full changed-file
+        coverage is not required here because reviews must still land; the
+        anti-hallucination invariant is preserved downstream by
+        ``ReviewItemFactory``, which drops findings that reference files the
+        agent never read or that do not exist on disk.
+        """
+        if guardrails.tool_calls <= 0:
+            return None
+        messages.append(
+            ConversationMessage(
+                role="user",
+                content=(
+                    "The review turn budget is exhausted. Based only on the "
+                    "files you have already inspected, do not call any "
+                    "tools. Respond now with only the final review verdict "
+                    "in the required JSON format. The verdict must be "
+                    "decisive: use \"approved\" when you found no blocking "
+                    "issues, or \"changes_requested\" when you did. Do not "
+                    "answer \"commented\" \u2014 a commented verdict is "
+                    "treated as inconclusive and will be rejected."
+                ),
+            )
+        )
+        try:
+            final_content = self._chat_port.send(messages)
+        except Exception as error:
+            logger.debug("Final verdict attempt failed: %s", error)
+            return None
+        if not final_content:
+            return None
+        final_parsed = self._command_bus.dispatch(
+            ParseReviewTurnCommand(content=final_content)
+        )
+        if final_parsed.kind is not TurnKind.VERDICT:
+            return None
+        messages.append(
+            ConversationMessage(role="assistant", content=final_content)
+        )
+        return self._finish_final_verdict(
+            final_parsed, messages, guardrails, context,
+        )
+
+    def _finish_final_verdict(
+        self,
+        parsed: TurnParseResult,
+        messages: list[ConversationMessage],
+        guardrails: ConversationGuardrails,
+        context: _FinalVerdictContext,
+    ) -> PhaseResult:
+        context = self._accumulate_verdict_metadata(parsed, context)
+        phase_result = self._build_phase_result(
+            parsed, context.repo_path, context.changed_files,
+            turn_count=guardrails.turn,
+            read_file_calls=context.read_file_count,
+            read_file_paths=tuple(sorted(context.read_file_paths)),
+            run_snippet_calls=context.run_snippet_count,
+            unread_changed_files=tuple(
+                sorted(
+                    set(context.readable_changed_files)
+                    - context.read_file_paths
+                )
+            ),
+            existing_ids=context.existing_item_ids,
+            accumulated_praise=context.accumulated_praise,
+            accumulated_suggestions=context.accumulated_suggestions,
+        )
+        self._log_conversation(
+            context.phase_name, messages, guardrails.turn, phase_result,
+            repo_path=context.repo_path, review_session=context.review_session,
+        )
+        self._publish(ConversationCompletedEvent(phase_result=phase_result))
+        logger.debug("Accepted final verdict after turn exhaustion")
+        return phase_result
+
+    @staticmethod
+    def _accumulate_verdict_metadata(
+        parsed: TurnParseResult, context: _FinalVerdictContext,
+    ) -> _FinalVerdictContext:
+        if not parsed.metadata:
+            return context
+        praise = AgentConversationService._merge_metadata_items(
+            context.accumulated_praise, parsed.metadata.get("praise")
+        )
+        suggestions = AgentConversationService._merge_metadata_items(
+            context.accumulated_suggestions, parsed.metadata.get("suggestions")
+        )
+        return replace(
+            context,
+            accumulated_praise=praise,
+            accumulated_suggestions=suggestions,
+        )
+
+    @staticmethod
+    def _merge_metadata_items(
+        existing: list[dict[str, Any]],
+        additions: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        return [
+            *existing,
+            *(item for item in additions or [] if item not in existing),
+        ]
 
     def _build_phase_result(
         self, parsed: TurnParseResult, repo_path: Path, changed_files: list[str],

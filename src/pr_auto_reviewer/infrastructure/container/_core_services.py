@@ -333,7 +333,7 @@ def wire_core_services(
             repo_path, changed_files=changed_files, base_sha=base_sha
         ),
         max_conversations=config.review_max_conversations,
-        max_retries=1,
+        max_retries=config.review_max_retries,
         max_tries=config.review_max_tries,
         advisor=advisor,
         manager=PhaseManagerService(chat_port=chat_client, command_bus=command_bus),

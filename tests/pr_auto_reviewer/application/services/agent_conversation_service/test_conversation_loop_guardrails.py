@@ -558,6 +558,150 @@ class TestConversationLoopGuardrails:
 
         assert tool_execution.execute_tool.call_count == 1
 
+    def test_large_review_replays_repeated_read_file_calls(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"path": "src/a.py"}
+        )
+        repeated = ToolCall(
+            tool_name="read_file", arguments={"file": "src/a.py"}
+        )
+        repeated_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL, tool_call=repeated,
+        )
+        mock_chat_port.send.side_effect = [
+            "first", "second", "third", "fourth", "verdict",
+        ]
+        mock_command_bus.dispatch.side_effect = [
+            repeated_parse, None,
+            repeated_parse, None,
+            repeated_parse, None,
+            repeated_parse, None,
+            _verdict_parse(), None, None,
+        ]
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=Path("/repos/owner_repo_42"),
+            changed_files=["src/a.py", "src/b.py"],
+            coverage_files=(),
+            tool_execution=tool_execution,
+            phase_name="phase",
+            review_session="test-session",
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+        assert tool_execution.execute_tool.call_count == 4
+
+    def test_turn_exhaustion_accepts_tool_free_final_verdict(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        tool_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL,
+            tool_call=ToolCall(
+                tool_name="read_file", arguments={"file": "src/a.py"}
+            ),
+        )
+        mock_chat_port.send.side_effect = (
+            [f"tool-{index}" for index in range(5)]
+            + ["final-verdict"]
+        )
+        mock_command_bus.dispatch.side_effect = (
+            [item for _ in range(5) for item in (tool_parse, None)]
+            + [_verdict_parse(), None, None]
+        )
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=Path.cwd(),
+            changed_files=[
+                "src/pr_auto_reviewer/__init__.py",
+                "src/pr_auto_reviewer/__main__.py",
+            ],
+            coverage_files=(),
+            tool_execution=tool_execution,
+            phase_name="phase",
+            review_session="test-session",
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=1,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+        assert mock_chat_port.send.call_count == 6
+
+    def test_exhaustion_without_full_coverage_still_lands_verdict(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        import itertools
+
+        from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+            ParseReviewTurnCommand,
+        )
+
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        probe_counter = itertools.count()
+
+        def fake_dispatch(command):
+            if isinstance(command, ParseReviewTurnCommand):
+                if command.content == "final-verdict":
+                    return _verdict_parse()
+                return TurnParseResult(
+                    kind=TurnKind.TOOL_CALL,
+                    tool_call=ToolCall(
+                        tool_name="search_codebase",
+                        arguments={"query": f"term-{next(probe_counter)}"},
+                    ),
+                )
+            return None
+
+        final_requests: list[str] = []
+
+        def fake_send(messages):
+            if "final review verdict" in messages[-1].content:
+                final_requests.append(messages[-1].content)
+                return "final-verdict"
+            return "tool"
+
+        mock_command_bus.dispatch.side_effect = fake_dispatch
+        mock_chat_port.send.side_effect = fake_send
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=Path.cwd(),
+            changed_files=[
+                "src/pr_auto_reviewer/__init__.py",
+                "src/pr_auto_reviewer/__main__.py",
+            ],
+            tool_execution=tool_execution,
+            phase_name="phase",
+            review_session="test-session",
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=1,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+        assert final_requests, "expected a final tool-free verdict request"
+        decisive_request = final_requests[-1].lower()
+        assert "commented" in decisive_request
+        assert "every changed file" not in decisive_request
+
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
