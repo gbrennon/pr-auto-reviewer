@@ -115,6 +115,7 @@ inconclusive, the review fails instead of publishing an unverified verdict.
 | `LLM_MODEL` | — | Model name |
 | `LLM_TIMEOUT` | `120` | Seconds before a generation request times out |
 | `LLM_MAX_RETRIES` | `5` | Max retries on transient LLM errors |
+| `REVIEW_MAX_RETRIES` | `1` | Max complete review attempts after a failed review |
 
 ## Daemon Settings
 
