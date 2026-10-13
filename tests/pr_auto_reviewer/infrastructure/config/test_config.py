@@ -293,6 +293,7 @@ class TestLoadConfig:
         )
         for var in [
             "CLONE_PROTOCOL",
+            "REVIEW_MAX_RETRIES",
             "REVIEW_MAX_TRIES",
             "ENV",
             "PLATFORM_MODE",
@@ -335,6 +336,16 @@ class TestLoadConfig:
         """Create .env so load_config detects development mode."""
         (tmp_path / ".env").touch()
 
+    def test_review_max_retries_is_configurable(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("REVIEW_MAX_RETRIES", "3")
+
+        cfg = load_config()
+
+        assert cfg.review_max_retries == 3
+
     def test_llm_call_budget_and_advisor_granularity(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
 
@@ -352,6 +363,7 @@ class TestLoadConfig:
 
         cfg = ConfigBuilderComposition().compose().build({}, env_name="test")
         assert cfg.llm_call_budget == 300
+        assert cfg.review_max_retries == 1
         assert cfg.advisor_granularity is AdvisorGranularity.PHASE
 
     def test_invalid_advisor_granularity_is_rejected(self):
