@@ -743,9 +743,14 @@ class AgentConversationService(RunAgentConversationPort):
             ConversationMessage(
                 role="user",
                 content=(
-                    "You have inspected every changed file. Do not call any "
-                    "tools. Respond with only the final review verdict in "
-                    "the required JSON format now."
+                    "The review turn budget is exhausted. Based only on the "
+                    "files you have already inspected, do not call any "
+                    "tools. Respond now with only the final review verdict "
+                    "in the required JSON format. The verdict must be "
+                    "decisive: use \"approved\" when you found no blocking "
+                    "issues, or \"changes_requested\" when you did. Do not "
+                    "answer \"commented\" \u2014 a commented verdict is "
+                    "treated as inconclusive and will be rejected."
                 ),
             )
         )
