@@ -28,6 +28,7 @@ class ReviewConfigParser:
         return ReviewSettings(
             advisor_max_blocks=advisor_max_blocks,
             review_max_conversations=review_max_conversations,
+            review_max_retries=int(source.get("REVIEW_MAX_RETRIES", "1")),
             review_max_tries=review_max_tries,
             advisor_granularity=granularity,
             poll_interval=int(source.get("POLL_INTERVAL", "60")),
