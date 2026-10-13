@@ -669,8 +669,11 @@ class TestConversationLoopGuardrails:
                 )
             return None
 
+        final_requests: list[str] = []
+
         def fake_send(messages):
             if "final review verdict" in messages[-1].content:
+                final_requests.append(messages[-1].content)
                 return "final-verdict"
             return "tool"
 
@@ -694,6 +697,10 @@ class TestConversationLoopGuardrails:
         ).execute(command)
 
         assert result.llm_verdict == "approved"
+        assert final_requests, "expected a final tool-free verdict request"
+        decisive_request = final_requests[-1].lower()
+        assert "commented" in decisive_request
+        assert "every changed file" not in decisive_request
 
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,
