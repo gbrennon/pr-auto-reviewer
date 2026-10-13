@@ -74,6 +74,7 @@ class ConfigBuilder:
             llm_max_turns=llm.max_turns,
             advisor_max_blocks=review.advisor_max_blocks,
             review_max_conversations=review.review_max_conversations,
+            review_max_retries=review.review_max_retries,
             review_max_tries=review.review_max_tries,
             llm_call_budget=llm.call_budget,
             advisor_granularity=review.advisor_granularity,
