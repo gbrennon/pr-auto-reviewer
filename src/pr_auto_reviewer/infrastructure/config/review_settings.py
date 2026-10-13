@@ -13,6 +13,7 @@ class ReviewSettings:
 
     advisor_max_blocks: int
     review_max_conversations: int
+    review_max_retries: int
     review_max_tries: int
     advisor_granularity: AdvisorGranularity
     poll_interval: int
