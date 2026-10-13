@@ -599,6 +599,48 @@ class TestConversationLoopGuardrails:
         assert result.llm_verdict == "approved"
         assert tool_execution.execute_tool.call_count == 4
 
+    def test_turn_exhaustion_accepts_tool_free_final_verdict(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        tool_parse = TurnParseResult(
+            kind=TurnKind.TOOL_CALL,
+            tool_call=ToolCall(
+                tool_name="read_file", arguments={"file": "src/a.py"}
+            ),
+        )
+        mock_chat_port.send.side_effect = (
+            [f"tool-{index}" for index in range(5)]
+            + ["final-verdict"]
+        )
+        mock_command_bus.dispatch.side_effect = (
+            [item for _ in range(5) for item in (tool_parse, None)]
+            + [_verdict_parse(), None, None]
+        )
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=Path.cwd(),
+            changed_files=[
+                "src/pr_auto_reviewer/__init__.py",
+                "src/pr_auto_reviewer/__main__.py",
+            ],
+            coverage_files=(),
+            tool_execution=tool_execution,
+            phase_name="phase",
+            review_session="test-session",
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=1,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+        assert mock_chat_port.send.call_count == 6
+
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
