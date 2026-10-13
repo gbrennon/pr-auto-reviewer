@@ -325,6 +325,7 @@ class TestLoadConfig:
             "MAX_STRUCTURE_LINES",
             "PROMPT_MODE",
             "LLM_MAX_RETRIES",
+            "LLM_MAX_TURNS",
             "RUN_ONCE",
             "REPOS_FILTER",
             "REPOS_ALLOW_LIST",
@@ -345,6 +346,18 @@ class TestLoadConfig:
         cfg = load_config()
 
         assert cfg.review_max_retries == 3
+
+    def test_llm_max_turns_is_configurable_from_environment(
+        self, monkeypatch, tmp_path: Path,
+    ):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("LLM_MAX_TURNS", "30")
+
+        cfg = load_config()
+
+        assert cfg.llm_max_turns == 30
 
     def test_llm_call_budget_and_advisor_granularity(self, monkeypatch, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config
