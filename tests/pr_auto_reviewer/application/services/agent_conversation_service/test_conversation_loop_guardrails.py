@@ -641,6 +641,60 @@ class TestConversationLoopGuardrails:
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 6
 
+    def test_exhaustion_without_full_coverage_still_lands_verdict(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        import itertools
+
+        from pr_auto_reviewer.domain.messages.commands.parse_review_turn_command import (
+            ParseReviewTurnCommand,
+        )
+
+        tool_execution = MagicMock()
+        tool_execution.execute_tool.return_value = ToolResult(
+            status="success", data={"ok": True}
+        )
+        probe_counter = itertools.count()
+
+        def fake_dispatch(command):
+            if isinstance(command, ParseReviewTurnCommand):
+                if command.content == "final-verdict":
+                    return _verdict_parse()
+                return TurnParseResult(
+                    kind=TurnKind.TOOL_CALL,
+                    tool_call=ToolCall(
+                        tool_name="search_codebase",
+                        arguments={"query": f"term-{next(probe_counter)}"},
+                    ),
+                )
+            return None
+
+        def fake_send(messages):
+            if "final review verdict" in messages[-1].content:
+                return "final-verdict"
+            return "tool"
+
+        mock_command_bus.dispatch.side_effect = fake_dispatch
+        mock_chat_port.send.side_effect = fake_send
+        command = RunAgentConversationCommand(
+            system_prompt="Review the changes.",
+            repo_path=Path.cwd(),
+            changed_files=[
+                "src/pr_auto_reviewer/__init__.py",
+                "src/pr_auto_reviewer/__main__.py",
+            ],
+            tool_execution=tool_execution,
+            phase_name="phase",
+            review_session="test-session",
+        )
+
+        result = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=1,
+        ).execute(command)
+
+        assert result.llm_verdict == "approved"
+
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
