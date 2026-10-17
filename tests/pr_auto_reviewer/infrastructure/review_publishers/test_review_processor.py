@@ -136,6 +136,7 @@ class TestReviewPublisherProcessor:
             "### Remediation audit"
         )[0]
         assert "### Remediation audit" in processed.body
+        assert "[BLOCKING]" in processed.body
         comment_body = processed.comment_body
         assert comment_body is not None
         assert "non-blocking finding" in comment_body
@@ -151,8 +152,8 @@ class TestReviewPublisherProcessor:
 
         processor = ReviewPublisherProcessor(_BODY, FakeCommentMapper())
         resolved = _item(
-            ItemSeverity.MINOR,
-            IssueCategory.STYLE,
+            ItemSeverity.MAJOR,
+            IssueCategory.BUG,
             description="old suggestion",
             status=ReviewItemStatus.RESOLVED,
             status_explanation=(
@@ -184,6 +185,7 @@ class TestReviewPublisherProcessor:
         assert "### Praise" in processed.body
         assert "clear boundary" in processed.body
         assert "### Remediation audit" in processed.body
+        assert "[BLOCKING]" in processed.body
         assert "old suggestion" in processed.body
         assert "tests passed and acceptance criteria met" in processed.body
         assert "[OPEN]" in processed.body
