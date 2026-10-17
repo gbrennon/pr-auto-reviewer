@@ -79,6 +79,7 @@ class ReviewBodyRenderer:
             {
                 "id": record.id,
                 "status": record.status,
+                "is_blocking": record.is_blocking,
                 "file_path": record.file_path,
                 "line": record.line,
                 "description": record.description,
