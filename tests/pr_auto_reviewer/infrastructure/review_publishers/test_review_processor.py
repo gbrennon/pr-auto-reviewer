@@ -143,6 +143,26 @@ class TestReviewPublisherProcessor:
         assert "active suggestion" in comment_body
         assert "resolved finding" not in comment_body
 
+    def test_dismissed_audit_records_are_not_published(self) -> None:
+        dismissed = _item(
+            ItemSeverity.INFO,
+            IssueCategory.STYLE,
+            description="dismissed suggestion",
+            status=ReviewItemStatus.DISMISSED,
+            status_explanation="Dismissed by command",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Approved",
+            summary="No active findings.",
+            suggestions=[dismissed],
+            model_used="m",
+        )
+
+        processed = _processor().process(_PR_ID, review)
+
+        assert "dismissed suggestion" not in processed.body
+
     def test_comment_path_publishes_praise_and_audit_evidence(self) -> None:
         class FakeCommentMapper:
             """Test double mapping any verdict to COMMENT."""
