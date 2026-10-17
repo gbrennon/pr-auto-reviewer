@@ -43,7 +43,9 @@ class RateLimitTracker:
             f"Rate-Limit [{self._platform}/{self._role}]: {self.current.summary()}\n"
         )
 
-    def record(self, snapshot: RateLimitSnapshot) -> None:
+    def record(
+        self, snapshot: RateLimitSnapshot, repo: str | None = None,
+    ) -> None:
         """Record a new rate-limit snapshot and persist it (throttled)."""
         self.current = snapshot
         if snapshot.exhausted():
@@ -51,19 +53,22 @@ class RateLimitTracker:
         else:
             self._store.save(snapshot)
         status = snapshot.summary()
+        request_repository = repo or "<global>"
         logger.info(
-            "Rate limit [%s/%s/%s]: %s",
+            "Rate limit [%s/%s/%s repo=%s]: %s",
             self._platform,
             self._role,
             snapshot.resource or "core",
+            request_repository,
             status,
         )
         if snapshot.exhausted():
             wait_seconds = snapshot.reset_seconds_from_now()
             logger.warning(
-                "Rate limit [%s/%s] EXHAUSTED — reset in %ds (epoch %d)",
+                "Rate limit [%s/%s repo=%s] EXHAUSTED — reset in %ds (epoch %d)",
                 self._platform,
                 self._role,
+                request_repository,
                 wait_seconds,
                 snapshot.reset,
             )

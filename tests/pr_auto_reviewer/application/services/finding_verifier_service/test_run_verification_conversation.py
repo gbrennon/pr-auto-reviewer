@@ -4,6 +4,37 @@ from ._helpers import *
 class TestRunVerificationConversation:
     """Multi-turn agentic loop with tools, retries, and abort paths."""
 
+    def test_audit_run_seeds_audit_result_schema(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        mock_chat_port.send.side_effect = [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({"results": [{
+                "finding_id": "a1",
+                "record_type": "item",
+                "status": "resolved",
+                "reasoning": "src/a.py: tests pass; acceptance met",
+            }]}),
+        ]
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+        verifier = FindingVerifierService(
+            mock_chat_port, "audit {findings}", mock_tool_factory
+        )
+
+        results, _transcript = verifier.run(
+            system_prompt="audit prompt",
+            repo_path=Path("."),
+            changed_files=["src/a.py"],
+            base_sha="",
+        )
+
+        initial_user = mock_chat_port.send.call_args_list[0].args[0][1]
+        assert "finding_id" in initial_user.content
+        assert "finding_index" not in initial_user.content
+        assert results[0]["status"] == "resolved"
+
     def test_tool_call_then_results(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:

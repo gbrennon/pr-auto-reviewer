@@ -1,1 +1,1 @@
-{% from "_schemas.j2" import tool_call_schema, verifier_schema %}Your previous response was not valid JSON. Please respond with a single JSON object containing either {{ tool_call_schema() }} or {{ verifier_schema() }}
+{% from "_schemas.j2" import tool_call_schema, verifier_schema, audit_schema %}Your previous response was not valid JSON. Please respond with a single JSON object containing either {{ tool_call_schema() }} or {% if audit | default(false, true) %}{{ audit_schema() }}{% else %}{{ verifier_schema() }}{% endif %}

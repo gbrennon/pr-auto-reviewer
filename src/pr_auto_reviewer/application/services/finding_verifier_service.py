@@ -92,9 +92,9 @@ class FindingVerifierService(VerifyFindingsPort):
         changed_files: list[str],
         base_sha: str,
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
-        """Run a verification-shaped transcript for remediation auditing."""
+        """Run a remediation-audit transcript advertising the audit schema."""
         return self._run_verification_transcript(
-            system_prompt, repo_path, changed_files, base_sha,
+            system_prompt, repo_path, changed_files, base_sha, audit=True,
         )
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
@@ -233,15 +233,21 @@ class FindingVerifierService(VerifyFindingsPort):
         repo_path: Path,
         changed_files: list[str],
         base_sha: str = "",
+        audit: bool = False,
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
-        """Run the verification conversation, returning results and transcript."""
+        """Run the verification conversation, returning results and transcript.
+
+        When *audit* is true the reprompt turns advertise the remediation-audit
+        result schema (`finding_id`/`status`/`reasoning`) instead of the
+        verifier schema, so the model's status verdict is not overridden.
+        """
         tool_service = self._tool_factory(repo_path, changed_files, base_sha)
 
         messages: list[ConversationMessage] = [
             ConversationMessage(
                 role="system", content=system_prompt
             ),
-            self._initial_user.render(repo_path=repo_path),
+            self._initial_user.render(repo_path=repo_path, audit=audit),
         ]
 
         guardrails = ConversationGuardrails(
@@ -272,7 +278,7 @@ class FindingVerifierService(VerifyFindingsPort):
                     "Empty response at verify turn %d; reprompting",
                     guardrails.turn,
                 )
-                messages.append(self._empty_user.render())
+                messages.append(self._empty_user.render(audit=audit))
                 continue
 
             parsed = self._parse_verify_turn(content)
@@ -295,7 +301,7 @@ class FindingVerifierService(VerifyFindingsPort):
                     "reprompting",
                     guardrails.turn,
                 )
-                messages.append(self._unparseable_user.render())
+                messages.append(self._unparseable_user.render(audit=audit))
                 continue
 
             guardrails = guardrails.mark_consecutive_success()

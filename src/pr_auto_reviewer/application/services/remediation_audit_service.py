@@ -114,6 +114,7 @@ class RemediationAuditService:
             )
             audited, lifecycle = self._audit_record(
                 item, result, lifecycle_by_id.get(item.id), audit_sha,
+                command.repo_path,
             )
             audited_items.append(audited)
             if lifecycle is not None:
@@ -129,6 +130,7 @@ class RemediationAuditService:
             audited, lifecycle = self._audit_record(
                 suggestion, result, lifecycle_by_id.get(suggestion.id),
                 audit_sha,
+                command.repo_path,
             )
             audited_suggestions.append(audited)
             if lifecycle is not None:
@@ -153,6 +155,7 @@ class RemediationAuditService:
         result: dict[str, Any] | None,
         lifecycle: ReviewItemLifecycle | None,
         audit_sha: str,
+        repo_path: Path,
     ) -> tuple[ReviewItem, ReviewItemLifecycle | None]:
         """Apply one fail-closed audit result and lifecycle transition."""
         prior_status = lifecycle.status if lifecycle is not None else item.status
@@ -179,7 +182,9 @@ class RemediationAuditService:
         else:
             status, explanation = self._status_from_result(result)
 
-        materialized = self._materialize_item(item, status, explanation)
+        materialized = self._materialize_item(
+            item, status, explanation, repo_path,
+        )
         projected = self._project_lifecycle(
             item.id, lifecycle, status, explanation, audit_sha,
         )
@@ -251,14 +256,34 @@ class RemediationAuditService:
         item: ReviewItem,
         status: ReviewItemStatus,
         explanation: str,
+        repo_path: Path,
     ) -> ReviewItem:
-        """Render lifecycle status and explanation onto immutable evidence."""
+        """Render lifecycle status and only current code evidence."""
         values: dict[str, Any] = {
             "status": status,
         }
         if hasattr(item, "status_explanation"):
             values["status_explanation"] = explanation
+        if not self._current_code_exists(repo_path, item):
+            values["current_code"] = ""
+            values["suggested_fix"] = ""
         return replace(item, **values)
+
+    def _current_code_exists(self, repo_path: Path, item: ReviewItem) -> bool:
+        if not item.file_path or not item.current_code:
+            return True
+        try:
+            current_file = (repo_path / item.file_path).read_text()
+        except (OSError, UnicodeDecodeError):
+            return False
+        current_lines = {
+            line.strip() for line in current_file.splitlines() if line.strip()
+        }
+        evidence_lines = {
+            line.strip() for line in item.current_code.splitlines()
+            if line.strip()
+        }
+        return bool(evidence_lines) and evidence_lines <= current_lines
 
     def _item_explanation(self, item: ReviewItem) -> str:
         """Read a materialized explanation when supported by ReviewItem."""

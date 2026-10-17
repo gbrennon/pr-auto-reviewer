@@ -1,4 +1,4 @@
-{% from "_schemas.j2" import tool_call_schema, verifier_schema %}Repository path: {{ repo_path }}
+{% from "_schemas.j2" import tool_call_schema, verifier_schema, audit_schema %}Repository path: {{ repo_path }}
 
 Verify each finding above against the ACTUAL source code:
 1. Use read_file to inspect the cited file and surrounding context.
@@ -7,4 +7,4 @@ Verify each finding above against the ACTUAL source code:
 4. You have access to read_file, search_codebase, list_directory, run_git, and run_snippet tools.
 
 {{ tool_call_schema() }}
-{{ verifier_schema() }}
+{% if audit | default(false, true) %}{{ audit_schema() }}{% else %}{{ verifier_schema() }}{% endif %}

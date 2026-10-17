@@ -1,6 +1,7 @@
 """Tests for RateLimitTracker using captured fixtures."""
 
 import io
+import logging
 import time
 from pathlib import Path
 
@@ -61,6 +62,17 @@ class TestRateLimitTracker:
         assert "Rate-Limit" in output
         assert "forgejo/owner" in output
         assert "4990/5000" in output
+
+    def test_record_logs_request_repository(self, tmp_path: Path, caplog):
+        caplog.set_level(logging.INFO)
+        tracker = RateLimitTracker(TokenSlug("token_suffix_12345678"), "github", "owner")
+        tracker._store._STORAGE_DIR = tmp_path
+        tracker._store._path = tmp_path / "github-owner-12345678.json"
+
+        snapshot = RateLimitSnapshot.from_response_headers(F.full_headers)
+        tracker.record(snapshot, repo="owner/repository")
+
+        assert "repo=owner/repository" in caplog.text
 
     def test_record_exhausted_logs_warning(self, tmp_path: Path, caplog):
         tracker = RateLimitTracker(TokenSlug("token_suffix_12345678"), "forgejo", "owner")
