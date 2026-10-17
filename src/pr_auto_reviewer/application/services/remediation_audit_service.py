@@ -269,8 +269,7 @@ class RemediationAuditService:
             values["suggested_fix"] = ""
         return replace(item, **values)
 
-    @staticmethod
-    def _current_code_exists(repo_path: Path, item: ReviewItem) -> bool:
+    def _current_code_exists(self, repo_path: Path, item: ReviewItem) -> bool:
         if not item.file_path or not item.current_code:
             return True
         try:
