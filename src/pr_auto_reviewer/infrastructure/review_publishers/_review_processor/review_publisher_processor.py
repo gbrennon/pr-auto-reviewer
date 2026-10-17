@@ -63,7 +63,10 @@ class ReviewPublisherProcessor:
             praise=review.praise,
             model_used=review.model_used,
         )
-        body = self._body_renderer.render(comment_review)
+        body = self._body_renderer.render(
+            comment_review,
+            audit_records=self._audit_records(review),
+        )
         return ProcessedReview(
             verdict_event="COMMENT",
             body=body,
@@ -85,7 +88,10 @@ class ReviewPublisherProcessor:
             praise=review.praise,
             model_used=review.model_used,
         )
-        body = self._body_renderer.render(body_review)
+        body = self._body_renderer.render(
+            body_review,
+            audit_records=self._audit_records(review),
+        )
         comment_body = self._render_non_blocking_comment(
             review, non_blocking, suggestions,
         )
@@ -114,3 +120,13 @@ class ReviewPublisherProcessor:
             model_used=review.model_used,
         )
         return self._body_renderer.render(comment_review)
+
+    @classmethod
+    def _audit_records(cls, review: CodeReview) -> list[ReviewItem]:
+        """Return historical records suitable for the remediation section."""
+        return [
+            item
+            for item in [*review.items, *review.suggestions]
+            if item.status in {ReviewItemStatus.OPEN, ReviewItemStatus.RESOLVED}
+            and item.status_explanation
+        ]

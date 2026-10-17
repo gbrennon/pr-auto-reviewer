@@ -93,6 +93,7 @@ class TestReviewPublisherProcessor:
         assert processed.is_comment_only is True
         assert processed.verdict_event == "COMMENT"
         assert processed.blocking_items == []
+
     def test_formal_path_routes_active_items_and_excludes_terminal_history(
         self,
     ) -> None:
@@ -111,24 +112,19 @@ class TestReviewPublisherProcessor:
             IssueCategory.BUG,
             description="resolved finding",
             status=ReviewItemStatus.RESOLVED,
+            status_explanation="a.py:3 verified",
         )
         active_suggestion = _item(
             ItemSeverity.INFO,
             IssueCategory.STYLE,
             description="active suggestion",
         )
-        dismissed_suggestion = _item(
-            ItemSeverity.INFO,
-            IssueCategory.STYLE,
-            description="dismissed suggestion",
-            status=ReviewItemStatus.DISMISSED,
-        )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,
             reason="test reason",
             summary="needs work",
             items=[blocking, non_blocking, resolved],
-            suggestions=[active_suggestion, dismissed_suggestion],
+            suggestions=[active_suggestion],
             model_used="m",
         )
 
@@ -136,13 +132,99 @@ class TestReviewPublisherProcessor:
 
         assert processed.blocking_items == [blocking]
         assert "blocking finding" in processed.body
-        assert "non-blocking finding" not in processed.body
-        assert "resolved finding" not in processed.body
-        assert processed.comment_body is not None
-        assert "non-blocking finding" in processed.comment_body
-        assert "active suggestion" in processed.comment_body
-        assert "resolved finding" not in processed.comment_body
-        assert "dismissed suggestion" not in processed.comment_body
+        assert "non-blocking finding" not in processed.body.partition(
+            "### Remediation audit"
+        )[0]
+        assert "### Remediation audit" in processed.body
+        assert "[BLOCKING]" in processed.body
+        comment_body = processed.comment_body
+        assert comment_body is not None
+        assert "non-blocking finding" in comment_body
+        assert "active suggestion" in comment_body
+        assert "resolved finding" not in comment_body
+
+    def test_dismissed_audit_records_are_not_published(self) -> None:
+        dismissed = _item(
+            ItemSeverity.INFO,
+            IssueCategory.STYLE,
+            description="dismissed suggestion",
+            status=ReviewItemStatus.DISMISSED,
+            status_explanation="Dismissed by command",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="Approved",
+            summary="No active findings.",
+            suggestions=[dismissed],
+            model_used="m",
+        )
+
+        processed = _processor().process(_PR_ID, review)
+
+        assert "dismissed suggestion" not in processed.body
+
+    def test_comment_path_publishes_praise_and_audit_evidence(self) -> None:
+        class FakeCommentMapper:
+            """Test double mapping any verdict to COMMENT."""
+
+            def map(self, verdict: ReviewVerdict) -> str:
+                return "COMMENT"
+
+        processor = ReviewPublisherProcessor(_BODY, FakeCommentMapper())
+        resolved = _item(
+            ItemSeverity.MAJOR,
+            IssueCategory.BUG,
+            description="old suggestion",
+            status=ReviewItemStatus.RESOLVED,
+            status_explanation=(
+                "a.py:3 was refactored; tests passed and acceptance criteria met"
+            ),
+        )
+        open_record = _item(
+            ItemSeverity.MINOR,
+            IssueCategory.BUG,
+            description="still present",
+            status_explanation="Current source still triggers the reproduction.",
+        )
+        praise = _item(
+            ItemSeverity.INFO,
+            IssueCategory.STYLE,
+            description="clear boundary",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="All checks passed.",
+            summary="Clean review.",
+            suggestions=[resolved, open_record],
+            praise=[praise],
+            model_used="test-model",
+        )
+
+        processed = processor.process(_PR_ID, review)
+
+        assert "### Praise" in processed.body
+        assert "clear boundary" in processed.body
+        assert "### Remediation audit" in processed.body
+        assert "[BLOCKING]" in processed.body
+        assert "old suggestion" in processed.body
+        assert "tests passed and acceptance criteria met" in processed.body
+        assert "[OPEN]" in processed.body
+        assert "still present" in processed.body
+        assert "Current source still triggers the reproduction." in processed.body
+
+    def test_formal_path_publishes_praise(self) -> None:
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="test reason",
+            summary="ok",
+            praise=[_item(ItemSeverity.INFO, IssueCategory.STYLE, description="clear")],
+            model_used="m",
+        )
+
+        processed = _processor().process(_PR_ID, review)
+
+        assert "### Praise" in processed.body
+        assert "clear" in processed.body
 
     def test_process_preserves_custom_model_reason(self) -> None:
         custom_reason = "Specific critical vulnerability in validator module."
@@ -162,6 +244,7 @@ def _item(
     *,
     description: str = "a finding",
     status: ReviewItemStatus = ReviewItemStatus.OPEN,
+    status_explanation: str = "",
 ) -> ReviewItem:
     return ReviewItem(
         severity=severity,
@@ -173,4 +256,5 @@ def _item(
         current_code="x",
         suggested_fix="y",
         status=status,
+        status_explanation=status_explanation,
     )
