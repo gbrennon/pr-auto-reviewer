@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -42,6 +43,36 @@ class FakeAuditTranscriptRunner:
 
 class TestRemediationAuditExecute:
     """The auditor resolves historical records only with explicit proof."""
+
+    def test_clears_stale_code_evidence_after_file_changes(
+        self, tmp_path: Path,
+    ) -> None:
+        source = tmp_path / "src" / "a.py"
+        source.parent.mkdir()
+        source.write_text("new_code()\n")
+        item = ReviewItem(
+            severity="major",
+            category="correctness",
+            file_path="src/a.py",
+            description="old finding",
+            current_code="old_code()",
+            suggested_fix="new_code()",
+            id="first",
+        )
+        command = self._command([item])
+        command = replace(command, repo_path=tmp_path)
+        service = self._build_service(
+            FakeAuditTranscriptRunner([{
+                "finding_id": "first",
+                "status": "open",
+                "reasoning": "src/a.py:1 still needs review",
+            }]),
+        )
+
+        result = service.execute(command)
+
+        assert result.items[0].current_code == ""
+        assert result.items[0].suggested_fix == ""
 
     def test_matches_results_by_finding_id(self) -> None:
         service = self._build_service(
