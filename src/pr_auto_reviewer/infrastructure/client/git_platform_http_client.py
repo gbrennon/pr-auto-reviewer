@@ -74,11 +74,11 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("GET", label, url, response)
+            self._log_response_detail("GET", label, url, response, repo=repo)
             logger.error("GET%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("GET", label, url, response)
+        self._log_response_detail("GET", label, url, response, repo=repo)
         return response.json()
 
     def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
@@ -93,11 +93,11 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("GET_RAW", label, url, response)
+            self._log_response_detail("GET_RAW", label, url, response, repo=repo)
             logger.error("GET_RAW%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("GET_RAW", label, url, response)
+        self._log_response_detail("GET_RAW", label, url, response, repo=repo)
         return response.text
 
     def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
@@ -117,11 +117,11 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("POST", label, url, response)
+            self._log_response_detail("POST", label, url, response, repo=repo)
             logger.error("POST%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("POST", label, url, response)
+        self._log_response_detail("POST", label, url, response, repo=repo)
         return response.json()
 
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
@@ -160,11 +160,13 @@ class GitPlatformHttpClient:
             token_source=source_key,
         )
 
-    def _capture_rate_limit(self, headers: dict[str, str]) -> None:
+    def _capture_rate_limit(
+        self, headers: dict[str, str], repo: str | None = None,
+    ) -> None:
         if "x-ratelimit-limit" not in headers:
             return
         snapshot = RateLimitSnapshot.from_response_headers(headers)
-        self._rate_tracker.record(snapshot)
+        self._rate_tracker.record(snapshot, repo=repo)
 
     def _get_auth_header(self, repo: str | None = None) -> dict[str, str]:
         token = self._resolve_token_for_repo(repo)
@@ -190,8 +192,15 @@ class GitPlatformHttpClient:
             logger.warning("Failed to load verified token cache: %s", exc)
             return set()
 
-    def _log_response_detail(self, method: str, label: str, url: str, response) -> None:
-        self._capture_rate_limit(getattr(response, "headers", {}))
+    def _log_response_detail(
+        self,
+        method: str,
+        label: str,
+        url: str,
+        response: Any,
+        repo: str | None = None,
+    ) -> None:
+        self._capture_rate_limit(getattr(response, "headers", {}), repo=repo)
         self._write_http_log(method, label, url, response)
         HttpRequestCounter.instance().record(self._base_url)
 
