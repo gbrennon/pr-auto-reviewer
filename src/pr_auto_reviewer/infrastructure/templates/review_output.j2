@@ -68,6 +68,16 @@ No notable patterns or practices to highlight.
 No suggestions to apply.
 {% endif %}
 
+{% if audit_records %}
+### Remediation audit
+{% for record in audit_records %}
+`{{ record.id }}`.{% if record.status == 'resolved' %} [RESOLVED]{% else %} [OPEN]{% endif %}{% if record.file_path %} {{ record.file_path }}{% endif %}{% if record.line %}:{{ record.line }}{% endif %}
+
+**Original request:** {{ record.description }}
+
+**Audit evidence:** {{ record.status_explanation }}
+{% endfor %}
+{% endif %}
 {% if review.model_used %}
 ---
 *Reviewed by {{ review.model_used }}*
