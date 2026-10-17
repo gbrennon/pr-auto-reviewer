@@ -71,7 +71,7 @@ No suggestions to apply.
 {% if audit_records %}
 ### Remediation audit
 {% for record in audit_records %}
-`{{ record.id }}`.{% if record.status == 'resolved' %} [RESOLVED]{% else %} [OPEN]{% endif %}{% if record.file_path %} {{ record.file_path }}{% endif %}{% if record.line %}:{{ record.line }}{% endif %}
+`{{ record.id }}`.{% if record.status == 'resolved' %} [RESOLVED]{% else %} [OPEN]{% endif %}{% if record.is_blocking %} [BLOCKING]{% endif %}{% if record.file_path %} {{ record.file_path }}{% endif %}{% if record.line %}:{{ record.line }}{% endif %}
 
 **Original request:** {{ record.description }}
 
