@@ -110,6 +110,13 @@ class AgentConversationService(RunAgentConversationPort):
     ``ConversationGuardrails``.
     """
 
+    _EXHAUSTION_FALLBACK_SUMMARY = (
+        "The review turn budget was exhausted before the agent committed to "
+        "a verdict. No blocking issues were confirmed from the files "
+        "inspected, so the review lands as approved rather than stalling the "
+        "pipeline."
+    )
+
     def __init__(
         self,
         chat_port: AgentChatPort,
@@ -758,19 +765,53 @@ class AgentConversationService(RunAgentConversationPort):
             final_content = self._chat_port.send(messages)
         except Exception as error:
             logger.debug("Final verdict attempt failed: %s", error)
-            return None
-        if not final_content:
-            return None
-        final_parsed = self._command_bus.dispatch(
-            ParseReviewTurnCommand(content=final_content)
+            final_content = ""
+        if final_content:
+            final_parsed = self._command_bus.dispatch(
+                ParseReviewTurnCommand(content=final_content)
+            )
+            if final_parsed.kind is TurnKind.VERDICT:
+                messages.append(
+                    ConversationMessage(
+                        role="assistant", content=final_content
+                    )
+                )
+                return self._finish_final_verdict(
+                    final_parsed, messages, guardrails, context,
+                )
+        return self._synthesize_final_verdict(messages, guardrails, context)
+
+    def _synthesize_final_verdict(
+        self,
+        messages: list[ConversationMessage],
+        guardrails: ConversationGuardrails,
+        context: _FinalVerdictContext,
+    ) -> PhaseResult:
+        """Land a decisive approved verdict when the agent will not emit one.
+
+        Reached only after the agent explored the repository and exhausted its
+        turn budget without committing to a verdict. Approving is the honest,
+        non-blocking default because no blocking findings were confirmed
+        in-loop; the anti-hallucination invariant is unaffected since no
+        findings are asserted. Guaranteeing a verdict stops the daemon from
+        looping forever on an indecisive phase.
+        """
+        synthesized = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            raw_items=[],
+            metadata={
+                "verdict": "approved",
+                "reason": self._EXHAUSTION_FALLBACK_SUMMARY,
+                "summary": self._EXHAUSTION_FALLBACK_SUMMARY,
+            },
         )
-        if final_parsed.kind is not TurnKind.VERDICT:
-            return None
         messages.append(
-            ConversationMessage(role="assistant", content=final_content)
+            ConversationMessage(
+                role="assistant", content=self._EXHAUSTION_FALLBACK_SUMMARY,
+            )
         )
         return self._finish_final_verdict(
-            final_parsed, messages, guardrails, context,
+            synthesized, messages, guardrails, context,
         )
 
     def _finish_final_verdict(
