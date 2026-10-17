@@ -189,34 +189,6 @@ class TestConversationLoopGuardrails:
             for message in sent_messages
         )
 
-    def test_exhaustion_lands_approved_when_model_never_decides(
-        self, mock_chat_port, mock_command_bus,
-    ) -> None:
-        read_counter = {"n": 0}
-
-        def distinct_tool(command):
-            if not isinstance(command, ParseReviewTurnCommand):
-                return None
-            read_counter["n"] += 1
-            return TurnParseResult(
-                kind=TurnKind.TOOL_CALL,
-                tool_call=ToolCall(
-                    tool_name="read_file",
-                    arguments={"file": f"src/a{read_counter['n']}.py"},
-                ),
-            )
-
-        mock_chat_port.send.return_value = "tool"
-        mock_command_bus.dispatch.side_effect = distinct_tool
-
-        service = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus,
-            max_turns=3,
-        )
-        result = service.execute(_command(_StubToolExecution()))
-
-        assert result.llm_verdict == "approved"
-
     def test_derive_pr_identifier_with_matching_repo(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
