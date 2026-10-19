@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -44,7 +45,7 @@ class BaseChatClient(AgentChatPort, ABC):
         self._max_llm_calls = settings.max_llm_calls
         self._max_context_tokens = settings.max_context_tokens
         self._calls_started = ContextVar(
-            "llm_calls_started", default=0
+            "llm_calls_started", default=itertools.count(1)
         )
 
     @property
@@ -174,10 +175,8 @@ class BaseChatClient(AgentChatPort, ABC):
 
     def send(self, messages: list[ConversationMessage]) -> str:
         """Send messages to the LLM backend with retry loop and budget tracking."""
-        self._assert_budget_available()
         bounded_messages = self._bound_context(messages)
-        call_index = self._calls_started.get() + 1
-        self._calls_started.set(call_index)
+        call_index = self._reserve_call()
         started_at = time.monotonic()
         logger.info(
             "LLM chat call %s starting (%d messages in history)",
@@ -203,18 +202,20 @@ class BaseChatClient(AgentChatPort, ABC):
 
     def reset_budget(self) -> None:
         """Reset the per-review call counter so a new review starts fresh."""
-        self._calls_started.set(0)
+        self._calls_started.set(itertools.count(1))
 
-    def _assert_budget_available(self) -> None:
-        """Raise when the configured LLM call budget is fully consumed."""
+    def _reserve_call(self) -> int:
+        """Reserve one aggregate call slot and return its one-based index."""
+        call_index = next(self._calls_started.get())
         if (
             self._max_llm_calls is not None
-            and self._calls_started.get() >= self._max_llm_calls
+            and call_index > self._max_llm_calls
         ):
             raise ReviewBudgetExhaustedError(
                 f"LLM call budget of {self._max_llm_calls} exhausted; "
                 "refusing to send another chat request"
             )
+        return call_index
 
     def _describe_call(self, call_index: int) -> str:
         """Render the budget-aware label used in call log lines."""
