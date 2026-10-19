@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import requests
@@ -13,6 +15,9 @@ from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
 from pr_auto_reviewer.infrastructure.llm.base_chat_client import BaseChatClient
+from pr_auto_reviewer.infrastructure.llm.chat_client_settings import (
+    ChatClientSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,21 +27,14 @@ class OpenAiCompatibleChatClient(BaseChatClient):
 
     def __init__(
         self,
-        model: str = "default",
-        host: str = "http://localhost:11434",
-        timeout: int = 120,
-        max_retries: int = 5,
-        max_llm_calls: int | None = None,
+        settings: ChatClientSettings,
         http_post: Callable[..., Any] | None = None,
     ) -> None:
         """Initialize a client whose host may optionally include the `/v1` path."""
-        super().__init__(
-            model=model,
-            host=self._normalize_api_base(host),
-            timeout=timeout,
-            max_retries=max_retries,
-            max_llm_calls=max_llm_calls,
+        normalized_settings = replace(
+            settings, host=self._normalize_api_base(settings.host)
         )
+        super().__init__(normalized_settings)
         self._http_post = http_post
 
     def _normalize_api_base(self, host: str) -> str:
@@ -102,16 +100,24 @@ class OpenAiCompatibleChatClient(BaseChatClient):
     def _extract_delta(self, chunk: dict[str, Any]) -> dict[str, Any]:
         """Extract the first streamed delta or complete message object."""
         choices = chunk.get("choices")
-        if not isinstance(choices, list) or not choices:
+        if not isinstance(choices, list):
             return {}
-        first_choice = choices[0]
-        if not isinstance(first_choice, dict):
-            return {}
+        first_choice = next(
+            (choice for choice in choices if isinstance(choice, dict)), {}
+        )
         delta = first_choice.get("delta")
-        if isinstance(delta, dict):
-            return delta
         message = first_choice.get("message")
-        return message if isinstance(message, dict) else {}
+        return self._mapping_or_empty(delta or message)
+
+    @staticmethod
+    def _mapping_or_empty(value: Any) -> dict[str, Any]:
+        """Return a mapping value or an empty mapping."""
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _append_fragment(value: Any, parts: list[str]) -> None:
+        if isinstance(value, str) and value:
+            parts.append(value)
 
     def _append_text(
         self,
@@ -120,12 +126,27 @@ class OpenAiCompatibleChatClient(BaseChatClient):
         reasoning_parts: list[str],
     ) -> None:
         """Append content or reasoning text from one streamed delta."""
-        content = delta.get("content")
-        if isinstance(content, str) and content:
-            content_parts.append(content)
+        self._append_fragment(delta.get("content"), content_parts)
         reasoning = delta.get("reasoning_content") or delta.get("thinking")
-        if isinstance(reasoning, str) and reasoning:
-            reasoning_parts.append(reasoning)
+        self._append_fragment(reasoning, reasoning_parts)
+
+    def _stream_timed_out(self, started_at: float) -> bool:
+        return self._timeout > 0 and time.monotonic() - started_at >= self._timeout
+
+    def _append_stream_line(
+        self,
+        line: str | bytes,
+        attempt: int,
+        content_parts: list[str],
+        reasoning_parts: list[str],
+    ) -> None:
+        if not line:
+            return
+        chunk = self._parse_stream_chunk(line, attempt)
+        if chunk is not None:
+            self._append_text(
+                self._extract_delta(chunk), content_parts, reasoning_parts
+            )
 
     def _accumulate_stream(
         self, response: requests.Response, attempt: int
@@ -133,14 +154,15 @@ class OpenAiCompatibleChatClient(BaseChatClient):
         """Accumulate content from an SSE response, falling back to reasoning."""
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
+        started_at = time.monotonic()
         for line in response.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            chunk = self._parse_stream_chunk(line, attempt)
-            if chunk is not None:
-                self._append_text(
-                    self._extract_delta(chunk), content_parts, reasoning_parts
+            if self._stream_timed_out(started_at):
+                raise requests.Timeout(
+                    f"Streaming response exceeded {self._timeout}-second deadline"
                 )
+            self._append_stream_line(
+                line, attempt, content_parts, reasoning_parts
+            )
         return "".join(content_parts) or "".join(reasoning_parts)
 
     def _send_attempt(

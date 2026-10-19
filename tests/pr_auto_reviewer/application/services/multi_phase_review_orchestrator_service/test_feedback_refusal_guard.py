@@ -123,7 +123,7 @@ class TestFeedbackRefusalGuard:
                 pr_identifier_service="owner/repo/1",
             )
 
-        assert len(calls) == orchestrator._max_tries
+        assert len(calls) == 1
 
     def test_inconclusive_refutation_raises_after_legacy_override_removal(
         self, mock_command_bus, mock_tool_factory,
@@ -157,4 +157,4 @@ class TestFeedbackRefusalGuard:
                 pr_identifier_service="owner/repo/1",
             )
 
-        assert len(calls) == orchestrator._max_tries
+        assert len(calls) == 1

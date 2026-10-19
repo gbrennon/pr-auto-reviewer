@@ -54,8 +54,8 @@ with the Git host.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (set for Enterprise) |
-| `FORGEJO_API_URL` | `https://codeberg.org` | Forgejo/Codeberg API base URL (`/api/v1` appended automatically) |
+| `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL |
+| `FORGEJO_API_URL` | `https://codeberg.org` | Forgejo API base URL; `/api/v1` is appended |
 | `FORGEJO_HOST` | — | Legacy alias for `FORGEJO_API_URL` |
 | `LOCAL_CLONE_BASE_DIR` | `~/.cache/pr-auto-reviewer/repos` | Where clones are stored |
 | `CLONE_PROTOCOL` | `https` | Protocol for local clones: `https` or `ssh` |
@@ -114,8 +114,33 @@ inconclusive, the review fails instead of publishing an unverified verdict.
 | `LLM_HOST` | — | LLM API endpoint; must be explicitly configured |
 | `LLM_MODEL` | — | Model name |
 | `LLM_TIMEOUT` | `120` | Seconds before a generation request times out |
+| `MAX_CONTEXT_TOKENS` | `24000` | Maximum chat history tokens sent to the LLM |
 | `LLM_MAX_RETRIES` | `5` | Max retries on transient LLM errors |
 | `REVIEW_MAX_RETRIES` | `1` | Max complete review attempts after a failed review |
+
+`MAX_CONTEXT_TOKENS` limits the conversation history sent with each LLM request.
+The default is `24000`, which is a conservative value for local model servers.
+It is separate from the model server's advertised context window: a larger
+server window does not guarantee that the host has enough memory to process a
+large request safely.
+
+Set the value in `~/.config/pr-auto-reviewer/config`, the project `.env`, or the
+shell environment:
+
+```bash
+MAX_CONTEXT_TOKENS=131072
+```
+
+The shell environment has the highest precedence. Restart the daemon after
+changing the setting so it reloads configuration:
+
+```bash
+pr-auto-reviewer restart
+```
+
+Use a lower value if the model server becomes slow or unavailable during long
+reviews. Use a higher value only when the server has sufficient memory and the
+review needs more conversation history.
 
 ## Daemon Settings
 
@@ -172,13 +197,16 @@ and platform-specific details, see `docs/tokens/ <tokens/>`_.
 ### GitHub
 
 **Classic PAT:**
-1. Go to **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)** (https://github.com/settings/tokens).
+1. Go to **Settings** → **Developer settings** → **Personal access tokens** →
+   **Tokens (classic)**.
 2. Create a new token with scopes: `repo` (all) and `read:user`.
 3. Copy to `GITHUB_OWNER_TOKEN`.
 
-**Fine-grained PAT:** Requires explicit org/repo assignment — even for **public** repos. If the org doesn't appear under "Resource owner", use a classic PAT instead.
+**Fine-grained PAT:** Requires explicit org/repo assignment, even for public
+repos. If the org does not appear under "Resource owner", use a classic PAT.
 
-1. Go to **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** (https://github.com/settings/tokens?type=beta).
+1. Go to **Settings** → **Developer settings** → **Personal access tokens** →
+   **Fine-grained tokens**.
 2. Set **Resource owner** to the target org.
 3. Grant repository access: **Selected repositories** → choose the repos.
 4. Set permissions:
@@ -196,7 +224,9 @@ and platform-specific details, see `docs/tokens/ <tokens/>`_.
 
 ### Reviewer Tokens
 
-For both platforms, create a separate account for the bot and generate a token with `repo` scope. Copy this to `FORGEJO_REVIEWER_TOKEN` / `GITHUB_REVIEWER_TOKEN` and set the corresponding `_USERNAME` to the bot's username.
+For both platforms, create a separate account for the bot and generate a token
+with `repo` scope. Copy it to `FORGEJO_REVIEWER_TOKEN` or
+`GITHUB_REVIEWER_TOKEN` and set the corresponding `_USERNAME` to the bot.
 
 ## Example .env
 
@@ -235,5 +265,7 @@ POLL_INTERVAL=60
 
 ### Feature Flags
 
-- `USE_STRICT_FRAGMENT_SELECTION` (default: `false`) — Set to `true` to only include fragments strictly related to files changed in the PR.
-- `USE_COMPACT_TEMPLATE` (default: `false`) — Use the shorter prompt template for smaller models.
+- `USE_STRICT_FRAGMENT_SELECTION` (default: `false`) — Set to `true` to only
+  include fragments related to files changed in the PR.
+- `USE_COMPACT_TEMPLATE` (default: `false`) — Use the shorter prompt template
+  for smaller models.

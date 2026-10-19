@@ -12,6 +12,7 @@ class LlmSettings:
     host: str
     model: str
     timeout: int
+    context_tokens: int
     max_retries: int
     max_turns: int
     call_budget: int

@@ -9,3 +9,4 @@ class LlmDefaults:
     host: str = "http://localhost:11434"
     model: str = "code-review:latest"
     timeout: int = 120
+    context_tokens: int = 24_000

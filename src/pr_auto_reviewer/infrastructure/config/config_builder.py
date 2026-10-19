@@ -70,6 +70,7 @@ class ConfigBuilder:
             llm_host=llm.host,
             llm_model=llm.model,
             llm_timeout=llm.timeout,
+            llm_context_tokens=llm.context_tokens,
             llm_max_retries=llm.max_retries,
             llm_max_turns=llm.max_turns,
             advisor_max_blocks=review.advisor_max_blocks,

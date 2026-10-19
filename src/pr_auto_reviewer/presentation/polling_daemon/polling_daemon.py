@@ -56,6 +56,7 @@ from pr_auto_reviewer.presentation.ports import (
 
 logger = logging.getLogger(__name__)
 COMMAND_LOOKBACK_DAYS = 7
+_LLM_FAILURE_COOLDOWN_SECONDS = 300
 
 
 class PollingDaemon:
@@ -86,6 +87,7 @@ class PollingDaemon:
         self._process_commands_service = process_commands_service
         self._pr_repository = pr_repository
         self._force_pr = getattr(config, "force_pr", None)
+        self._llm_retry_at = 0.0
         self._setup_signal_handlers()
 
     def start(self) -> None:
@@ -126,6 +128,13 @@ class PollingDaemon:
 
     def _process_pr(self, pr: OpenPullRequest) -> None:
         """Process a single PR - dispatch review command."""
+        if time.monotonic() < self._llm_retry_at:
+            logger.info(
+                "Skipping PR #%d in %s while LLM failure cooldown is active",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
+            return
         force = self._force_pr == pr.pr_id.number
         logger.info(
             "Reviewing PR #%d in %s (title=%r, sha=%s)",
@@ -174,7 +183,10 @@ class PollingDaemon:
                 pr.pr_id.number, pr.pr_id.repository, e,
             )
         except LlmUnavailableError as e:
-            logger.error("LLM unavailable, will retry next cycle")
+            self._llm_retry_at = (
+                time.monotonic() + _LLM_FAILURE_COOLDOWN_SECONDS
+            )
+            logger.error("LLM unavailable, will retry after cooldown")
             if self._notifier:
                 self._notifier.notify_error(
                     f"LLM unavailable for PR #{pr.pr_id.number} in {pr.pr_id.repository}",

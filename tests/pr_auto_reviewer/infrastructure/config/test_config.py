@@ -95,6 +95,24 @@ class TestLoadConfig:
         assert cfg.llm_host == "http://llm:8080"
         assert cfg.llm_model == "gpt-4"
 
+    def test_llm_context_tokens_from_env(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("MAX_CONTEXT_TOKENS", "131072")
+
+        cfg = load_config()
+
+        assert cfg.llm_context_tokens == 131072
+
+    def test_llm_context_tokens_default(self, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+
+        cfg = load_config()
+
+        assert cfg.llm_context_tokens == 24_000
 
     def test_llm_defaults_are_used_when_unconfigured(self, tmp_path: Path):
         from pr_auto_reviewer.infrastructure.config.config import load_config

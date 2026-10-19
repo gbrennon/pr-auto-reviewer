@@ -9,6 +9,7 @@ from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.llm_defaults import LlmDefaults
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
 )
@@ -38,6 +39,7 @@ class Config:
     llm_host: str = ""
     llm_model: str | None = None
     llm_timeout: int = 120
+    llm_context_tokens: int = LlmDefaults.context_tokens
     llm_max_retries: int = 5
     llm_max_turns: int = 10
     advisor_max_blocks: int = 2

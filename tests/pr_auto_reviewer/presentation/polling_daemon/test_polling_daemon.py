@@ -703,6 +703,31 @@ class TestPollingDaemon:
 
         tracker.mark_seen.assert_not_called()
 
+    def test_llm_failure_cools_down_subsequent_review_cycles(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
+            LlmUnavailableError,
+        )
+
+        open_pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=1),
+            head_sha=CommitSha("abc123"),
+            title="Fix bug",
+        )
+        mock_review_service.execute.side_effect = LlmUnavailableError("offline")
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1")]),
+            pr_lister=MockPrLister([open_pr]),
+            review_service=mock_review_service,
+        )
+
+        daemon._run_cycle()
+        daemon._run_cycle()
+
+        mock_review_service.execute.assert_called_once()
+
     def test_unchanged_repo_skips_open_pr_without_review_request(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:
