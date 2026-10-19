@@ -13,42 +13,10 @@ from pr_auto_reviewer.presentation.polling_daemon import (
     PollingDaemon,
     PollingDaemonConfig,
 )
-from pr_auto_reviewer.presentation.ports import (
-    OpenPullRequest,
-    PrListerPort,
-    RepoInfo,
-    RepoListerPort,
-)
-from tests.e2e.scenarios import ReviewScenario, _get_normalized_scenarios
+from tests.e2e.scenario_pr_lister import ScenarioPrLister
+from tests.e2e.scenario_repo_lister import ScenarioRepoLister
+from tests.e2e.scenarios import ReviewScenario, get_normalized_scenarios
 from tests.fakes.fake_notifier import FakeNotifier
-
-
-class ScenarioRepoLister(RepoListerPort):
-    def __init__(self, repository: str) -> None:
-        self._repository = repository
-
-    def list_repos(self) -> list[RepoInfo]:
-        return [RepoInfo(self._repository)]
-
-
-class ScenarioPrLister(PrListerPort):
-    def __init__(self, delegate: PrListerPort, pr_number: int) -> None:
-        self._delegate = delegate
-        self._pr_number = pr_number
-
-    def list_recent(
-        self, repository: str, since: str,
-    ) -> list[OpenPullRequest]:
-        return []
-
-    def list_open(self, repository: str) -> list[OpenPullRequest]:
-        pull_request = self._delegate.get_pr(repository, self._pr_number)
-        return [pull_request] if pull_request is not None else []
-
-    def get_pr(
-        self, repository: str, pr_number: int,
-    ) -> OpenPullRequest | None:
-        return self._delegate.get_pr(repository, pr_number)
 
 
 def _cassette_name(scenario: ReviewScenario) -> str:
@@ -71,6 +39,7 @@ def vcr_config(scenario: ReviewScenario):
     return {
         "cassette_library_dir": "tests/e2e/cassettes/review_vcr",
         "match_on": ["method", "scheme", "host", "port", "path", "query"],
+        "filter_headers": ["authorization"],
         "cassette_name": _cassette_name(scenario),
     }
 
@@ -152,7 +121,7 @@ class TestReviewFlowVCR:
 
     @pytest.mark.parametrize(
         "scenario",
-        _get_normalized_scenarios(),
+        get_normalized_scenarios(),
         ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
     )
     def test_review_flow(
@@ -205,7 +174,7 @@ class TestReviewFlowVCR:
 
     @pytest.mark.parametrize(
         "scenario",
-        _get_normalized_scenarios(),
+        get_normalized_scenarios(),
         ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
     )
     def test_daemon_review_flow_notifies_success(

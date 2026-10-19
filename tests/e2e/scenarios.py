@@ -20,24 +20,8 @@ over :data:`E2E_REVIEW_SCENARIOS` — no other code change needed.
 
 from __future__ import annotations
 
-from typing import Required, TypedDict
-
-
-class ReviewScenarioInput(TypedDict, total=False):
-    """Input scenario — only required params."""
-
-    platform: Required[str]
-    owner: Required[str]
-    repo: Required[str]
-    pr_id: Required[int]
-    expected_items: int
-    output_path: str
-
-
-class ReviewScenario(ReviewScenarioInput):
-    """Normalized scenario — includes auto-generated review_output."""
-
-    review_output: Required[str]
+from tests.e2e.review_scenario import ReviewScenario
+from tests.e2e.review_scenario_input import ReviewScenarioInput
 
 
 def _review_output(scenario: ReviewScenarioInput) -> str:
@@ -60,7 +44,7 @@ def _normalize_scenario(scenario: ReviewScenarioInput) -> ReviewScenario:
     return normalized
 
 
-def _get_normalized_scenarios() -> list[ReviewScenario]:
+def get_normalized_scenarios() -> list[ReviewScenario]:
     return [_normalize_scenario(s) for s in E2E_REVIEW_SCENARIOS]
 
 
