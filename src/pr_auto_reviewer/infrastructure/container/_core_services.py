@@ -111,8 +111,8 @@ from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
 from pr_auto_reviewer.infrastructure.llm.llm_agent_adapter import (
     LlmAgentAdapter,
 )
-from pr_auto_reviewer.infrastructure.llm.openai_compatible_chat_client import (
-    OpenAiCompatibleChatClient,
+from pr_auto_reviewer.infrastructure.container.chat_client_factory import (
+    ChatClientFactory,
 )
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
@@ -250,22 +250,6 @@ class CoreServices:
 
 
 
-class _ChatClientFactory:
-    """Instantiate the configured OpenAI-compatible chat client."""
-
-    @staticmethod
-    def create(config: Config) -> AgentChatPort:
-        """Create the OpenAI-compatible chat client from resolved configuration."""
-        return OpenAiCompatibleChatClient(
-            model=config.llm_model or "",
-            host=config.llm_host,
-            timeout=config.llm_timeout,
-            max_retries=config.llm_max_retries,
-            max_llm_calls=config.llm_call_budget,
-        )
-
-
-
 def wire_core_services(
     config: Config,
     repository_context: RepositoryContextPort,
@@ -282,7 +266,7 @@ def wire_core_services(
     pr_repository = JsonFilePullRequestRepository(
         artifact_root / "state.json"
     )
-    chat_client = _ChatClientFactory.create(config)
+    chat_client = ChatClientFactory.create(config)
     command_bus = InMemoryCommandBus()
     conversation_logger = MarkdownConversationLogger(
         base_dir=artifact_root / "conversations"

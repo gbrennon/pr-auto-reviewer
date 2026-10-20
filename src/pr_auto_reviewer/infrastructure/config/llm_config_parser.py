@@ -18,6 +18,9 @@ class LlmConfigParser:
             host=self._normalize_host(source.get("LLM_HOST", self._defaults.host)),
             model=source.get("LLM_MODEL", self._defaults.model).strip(),
             timeout=int(source.get("LLM_TIMEOUT", str(self._defaults.timeout))),
+            context_tokens=int(
+                source.get("MAX_CONTEXT_TOKENS", str(self._defaults.context_tokens))
+            ),
             max_retries=max_retries,
             max_turns=max_turns,
             call_budget=call_budget,

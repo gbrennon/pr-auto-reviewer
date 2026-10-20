@@ -222,11 +222,12 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         """
         evidence: list[dict[str, Any]] = []
         best = previous_result
-        for attempt in range(self._max_tries):
+        max_feedback_attempts = 1 if not previous_result.items else self._max_tries
+        for attempt in range(max_feedback_attempts):
             logger.info(
                 "Re-run attempt %d/%d: improving prompt with prior results",
                 attempt + 1,
-                self._max_tries,
+                max_feedback_attempts,
             )
             context = self._build_feedback_context(
                 previous_result, attempt + 1, evidence
@@ -281,7 +282,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 best = result
         logger.warning(
             "All %d re-run attempts inconclusive; %s",
-            self._max_tries,
+            max_feedback_attempts,
             self._inconclusive_disposition(),
         )
         return self._resolve_inconclusive(best)
