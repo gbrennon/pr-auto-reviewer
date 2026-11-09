@@ -127,6 +127,27 @@ class TestLocalChangesetFetcher:
         assert "src/foo.py" in result.file_contents
         assert result.file_contents["src/foo.py"] == "print('hello')"
 
+    def test_fetch_skips_binary_decode_error_files(self) -> None:
+        """Files that raise UnicodeDecodeError on read are skipped with a warning."""
+        repo = self._make_repo()
+        repo.read_file_return = [
+            UnicodeDecodeError("utf-8", b"\x97", 6, 7, "invalid start byte"),
+            "print('hello')",
+        ]
+        pr_id = PullRequestId("test-org/test-repo", 42)
+        sha = CommitSha("def456")
+
+        fetcher = LocalChangesetFetcher(
+            local_repository=repo,
+            url_resolver=FakeCloneUrlResolver("codeberg"),
+        )
+
+        result = fetcher.fetch(pr_id, sha)
+
+        assert "src/bar.py" not in result.file_contents
+        assert "src/foo.py" in result.file_contents
+        assert result.file_contents["src/foo.py"] == "print('hello')"
+
     def test_fetch_platform_mode_affects_clone_url(self) -> None:
         """The url_resolver controls which clone URL template is used."""
         repo_codeberg = self._make_repo()

@@ -71,7 +71,7 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
                 file_contents[file_path] = self._local_repo.read_file(
                     repo_path, file_path, ref=pr_head_ref,
                 )
-            except RuntimeError:
+            except (RuntimeError, UnicodeDecodeError):
                 logger.warning(
                     "Could not read file %s at ref %s", file_path, pr_head_ref,
                 )

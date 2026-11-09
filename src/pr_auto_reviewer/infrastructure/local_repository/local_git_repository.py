@@ -101,6 +101,7 @@ class LocalGitRepository(LocalRepositoryPort):
                     ["git", "clone", clone_url, str(dest)],
                     capture_output=True,
                     text=True,
+                    errors="replace",
                     check=True,
                     timeout=300,
                     env=self._auth_env(),
@@ -163,7 +164,19 @@ class LocalGitRepository(LocalRepositoryPort):
 
     def read_file(self, repo_path: Path, file_path: str, ref: str = "HEAD") -> str:
         effective_ref = self._pr_refs.get(repo_path, ref)
-        return self._run_git(repo_path, "show", f"{effective_ref}:{file_path}")
+        raw = self._run_git_bytes(
+            repo_path, "show", f"{effective_ref}:{file_path}",
+        )
+        if b"\x00" in raw[:8192]:
+            raise RuntimeError(
+                f"Binary file cannot be read as text: {file_path}"
+            )
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError(
+                f"Binary or non-UTF-8 file cannot be read as text: {file_path}"
+            ) from exc
 
     def list_tree(self, repo_path: Path, ref: str = "HEAD") -> list[str]:
         effective_ref = self._pr_refs.get(repo_path, ref)
@@ -197,24 +210,33 @@ class LocalGitRepository(LocalRepositoryPort):
                 "origin/HEAD",
             ).strip()
 
+    def _run_git_bytes(
+        self,
+        repo_path: Path,
+        *args: str,
+        timeout: int = 120,
+    ) -> bytes:
+        cmd = ["git", "-C", str(repo_path), *args]
+        logger.debug("Running git: %s", " ".join(cmd))
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            env=self._auth_env(),
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                f"git {' '.join(args)} failed: {stderr}"
+            )
+        return result.stdout
+
     def _run_git(
         self,
         repo_path: Path,
         *args: str,
         timeout: int = 120,
     ) -> str:
-        cmd = ["git", "-C", str(repo_path), *args]
-        logger.debug("Running git: %s", " ".join(cmd))
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=self._auth_env(),
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"git {' '.join(args)} failed: {result.stderr.strip()}"
-            )
-        return result.stdout
+        raw = self._run_git_bytes(repo_path, *args, timeout=timeout)
+        return raw.decode("utf-8", errors="replace")
