@@ -174,16 +174,33 @@ class AgentConversationService(RunAgentConversationPort):
             max_turns=max(self._guardrails.max_turns, required_reads + 5),
         )
 
-    @staticmethod
+    @classmethod
+    def _is_text_file(cls, candidate: Path) -> bool:
+        """Return whether candidate is a text file that can be read."""
+        try:
+            with candidate.open("rb") as handle:
+                chunk = handle.read(8192)
+            if b"\x00" in chunk:
+                return False
+            chunk.decode("utf-8")
+            return True
+        except (OSError, UnicodeDecodeError):
+            return False
+
+    @classmethod
     def _readable_changed_files(
-        repo_path: Path, changed_files: list[str],
+        cls, repo_path: Path, changed_files: list[str],
     ) -> tuple[str, ...]:
         """Return changed files that can be inspected in the checked-out tree."""
         root = repo_path.resolve()
         readable: list[str] = []
         for file_path in changed_files:
             candidate = (root / file_path).resolve()
-            if candidate.is_relative_to(root) and candidate.is_file():
+            if (
+                candidate.is_relative_to(root)
+                and candidate.is_file()
+                and cls._is_text_file(candidate)
+            ):
                 readable.append(file_path)
         return tuple(readable)
 
