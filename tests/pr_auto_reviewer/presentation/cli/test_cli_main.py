@@ -16,7 +16,6 @@ class TestCliServiceCommands:
         [
             ("start", "start"),
             ("stop", "stop"),
-            ("status", "status"),
             ("restart", "restart"),
         ],
     )
@@ -42,6 +41,17 @@ class TestCliServiceCommands:
             call(["systemctl", "--user", expected_action, SERVICE_NAME], check=False)
         )
         assert mock_run.call_args_list == expected_calls
+
+    def test_status_command_calls_show_status(self) -> None:
+        with (
+            patch("sys.argv", ["pr-auto-reviewer", "status"]),
+            patch("pr_auto_reviewer.cli.show_status", return_value="Status output") as mock_status,
+            patch("builtins.print") as mock_print,
+        ):
+            main()
+
+        assert mock_status.called
+        mock_print.assert_called_with("Status output")
 
     def test_logs_command_dispatches_journalctl(self) -> None:
         with (
