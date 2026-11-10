@@ -4,6 +4,7 @@ from .command_bus_port import CommandBusPort
 from .comment_publisher_port import CommentPublisherPort
 from .comment_reader_port import CommentReaderPort
 from .compose_review_prompt_port import ComposeReviewPromptPort
+from .daemon_runtime_state_port import DaemonRuntimeStatePort
 from .fragment_repository_port import FragmentRepositoryPort
 from .issue_tracker_port import IssueTrackerPort
 from .llm_review_port import LlmReviewPort
@@ -26,6 +27,7 @@ __all__ = [
     "CommentPublisherPort",
     "CommentReaderPort",
     "ComposeReviewPromptPort",
+    "DaemonRuntimeStatePort",
     "FragmentRepositoryPort",
     "IssueTrackerPort",
     "LlmReviewPort",
