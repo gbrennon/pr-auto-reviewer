@@ -5,7 +5,7 @@ from unittest.mock import call, patch
 
 import pytest
 
-from pr_auto_reviewer.cli import SERVICE_NAME, main
+from pr_auto_reviewer.presentation.cli.cli import SERVICE_NAME, main
 
 
 class TestCliServiceCommands:
@@ -45,7 +45,7 @@ class TestCliServiceCommands:
     def test_status_command_calls_show_status(self) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", "status"]),
-            patch("pr_auto_reviewer.cli.show_status", return_value="Status output") as mock_status,
+            patch("pr_auto_reviewer.presentation.cli.cli.show_status", return_value="Status output") as mock_status,
             patch("builtins.print") as mock_print,
         ):
             main()
@@ -73,8 +73,8 @@ class TestCliServiceCommands:
     def test_watch_mode_clears_stale_once_flag(self) -> None:
         with (
             patch.dict(os.environ, {}, clear=True),
-            patch("pr_auto_reviewer.cli.bootstrap", return_value=object()),
-            patch("pr_auto_reviewer.cli.run_daemon"),
+            patch("pr_auto_reviewer.presentation.cli.cli.bootstrap", return_value=object()),
+            patch("pr_auto_reviewer.presentation.cli.cli.run_daemon"),
             patch("sys.argv", ["pr-auto-reviewer", "watch-prs", "--once"]),
         ):
             main()
