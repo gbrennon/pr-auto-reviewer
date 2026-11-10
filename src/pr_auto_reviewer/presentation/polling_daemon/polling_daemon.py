@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import time
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+
+from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
+    DaemonRuntimeStatePort,
+)
+from pr_auto_reviewer.domain.value_objects.active_review_progress import (
+    ActiveReviewProgress,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
+    DaemonRuntimeStatus,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
+from pr_auto_reviewer.presentation.ports.config_reloader_port import (
+    ConfigReloaderPort,
+)
 
 from pr_auto_reviewer.application.services.pr_identifier_service import (
     PRIdentifierService,
@@ -67,11 +83,14 @@ class PollingDaemon:
         repo_lister: RepoListerPort,
         pr_lister: PrListerPort,
         review_service: ReviewPullRequestPort,
+        *,
         notifier: NotifierPort | None = None,
         update_tracker: RepoUpdateTracker | None = None,
         repository_allow_list: RepositoryAllowList | None = None,
         process_commands_service: ProcessIssueCommandsPort | None = None,
         pr_repository: PullRequestRepositoryPort | None = None,
+        runtime_state: DaemonRuntimeStatePort | None = None,
+        config_reloader: ConfigReloaderPort | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
@@ -86,6 +105,8 @@ class PollingDaemon:
         )
         self._process_commands_service = process_commands_service
         self._pr_repository = pr_repository
+        self._runtime_state = runtime_state
+        self._config_reloader = config_reloader
         self._force_pr = getattr(config, "force_pr", None)
         self._llm_retry_at = 0.0
         self._setup_signal_handlers()
@@ -104,19 +125,74 @@ class PollingDaemon:
             logger.warning("Temp file cleanup failed, continuing", exc_info=True)
 
         cycle = 0
+        self._record_runtime_status(DaemonState.IDLE, cycle=0)
         try:
             while True:
                 cycle += 1
+                self._check_config_reload()
                 self._run_cycle()
 
                 if self._config.run_once:
                     break
 
-                time.sleep(self._config.poll_interval_seconds)
+                interval = self._config.poll_interval_seconds
+                next_at = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
+                self._record_runtime_status(
+                    DaemonState.IDLE, next_cycle_at=next_at, cycle=cycle
+                )
+                time.sleep(interval)
         except KeyboardInterrupt:
             pass
+        finally:
+            self._record_runtime_status(DaemonState.STOPPED, cycle=cycle)
 
         logger.info(f"PollingDaemon stopped after {cycle} cycle(s)")
+
+    def _check_config_reload(self) -> None:
+        if self._config_reloader is None:
+            return
+        new_config = self._config_reloader.check_for_reload()
+        if new_config is None:
+            return
+        new_daemon_config = replace(
+            self._config,
+            poll_interval_seconds=new_config.poll_interval,
+            repos_allow_list=new_config.repos_allow_list,
+            repos_filter=new_config.repos_filter or None,
+        )
+        holder = self.__dict__
+        holder["_config"] = new_daemon_config
+        holder["_repository_allow_list"] = RepositoryAllowList.from_entries(
+            new_config.repos_allow_list
+        )
+        self._record_runtime_status(DaemonState.IDLE)
+
+    def _record_runtime_status(
+        self,
+        state: DaemonState,
+        *,
+        current_review: ActiveReviewProgress | None = None,
+        next_cycle_at: str | None = None,
+        cycle: int = 0,
+        error: str | None = None,
+    ) -> None:
+        if self._runtime_state is None:
+            return
+        now_str = datetime.now(UTC).isoformat()
+        status = DaemonRuntimeStatus(
+            pid=os.getpid(),
+            daemon_mode=not self._config.run_once,
+            state=state,
+            updated_at=now_str,
+            poll_interval_seconds=self._config.poll_interval_seconds,
+            allowed_repositories=self._config.repos_allow_list,
+            current_cycle=cycle,
+            next_cycle_at=next_cycle_at,
+            current_review=current_review,
+            last_error=error,
+            last_error_at=now_str if error else None,
+        )
+        self._runtime_state.record_status(status)
 
     def _setup_signal_handlers(self) -> None:
         def handle_signal(signum: int, frame: object) -> None:
@@ -141,6 +217,15 @@ class PollingDaemon:
             pr.pr_id.number, pr.pr_id.repository, pr.title,
             str(pr.head_sha)[:7],
         )
+
+        active = ActiveReviewProgress(
+            repository=pr.pr_id.repository,
+            pr_number=pr.pr_id.number,
+            pr_title=pr.title,
+            head_sha=str(pr.head_sha),
+            started_at=datetime.now(UTC).isoformat(),
+        )
+        self._record_runtime_status(DaemonState.REVIEWING, current_review=active)
 
         command = ReviewPullRequestCommand(
             pr_id=pr.pr_id,
@@ -201,9 +286,11 @@ class PollingDaemon:
                 pr.pr_id.number,
                 pr.pr_id.repository,
             )
-        except Exception as _:
+        except Exception as e:
+            self._record_runtime_status(DaemonState.ERROR, error=str(e))
             logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:
+            self._record_runtime_status(DaemonState.IDLE)
             HttpRequestCounter.instance().log_summary()
 
     @staticmethod

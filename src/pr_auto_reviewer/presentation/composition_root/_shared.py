@@ -70,13 +70,14 @@ def bootstrap(*, notifier: NotifierPort | None = None) -> ApplicationComponents:
 
 def run_daemon(components: ApplicationComponents | None = None) -> None:
     """Backward-compatible daemon runner."""
-    if components is None:
-        root = CompositionRoot()
-        root.run_daemon()
-    else:
-        root = CompositionRoot()
-        root._components = components
-        root.run_daemon()
+    root = CompositionRoot()
+    root.run_daemon(components=components)
 
 
-__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'ListAllowedRepositories', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon']
+def show_status() -> str:
+    """Render human-readable runtime telemetry from the daemon state store."""
+    root = CompositionRoot()
+    return root.show_status()
+
+
+__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'ListAllowedRepositories', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon', 'show_status']
