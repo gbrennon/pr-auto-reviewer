@@ -8,7 +8,11 @@ import subprocess
 import sys
 from typing import Any
 
-from .presentation.composition_root import bootstrap, run_daemon, show_status
+from pr_auto_reviewer.presentation.composition_root import (
+    bootstrap,
+    run_daemon,
+    show_status,
+)
 
 SERVICE_NAME = "pr-auto-reviewer.service"
 
