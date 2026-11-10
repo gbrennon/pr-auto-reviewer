@@ -2,6 +2,7 @@ from .review_audit_result import ReviewAuditResult
 from .review_execution_result import ReviewExecutionResult
 from .review_item_lifecycle import ReviewItemLifecycle
 from .review_item_transition import ReviewItemTransition
+from .active_review_progress import ActiveReviewProgress
 from .advisor_directive import AdvisorDirective
 from .clone_protocol import CloneProtocol
 from .code_review import CodeReview
@@ -11,6 +12,8 @@ from .conversation import Conversation
 from .conversation_decision import ConversationDecision
 from .conversation_guardrails import ConversationGuardrails
 from .conversation_message import ConversationMessage
+from .daemon_runtime_status import DaemonRuntimeStatus
+from .daemon_state import DaemonState
 from .git_credentials import GitCredentials
 from .issue_category import IssueCategory
 from .issue_command import IssueCommand
@@ -36,6 +39,7 @@ from .tool_result import ToolResult
 from .turn_parse_result import TurnParseResult
 
 __all__ = [
+    "ActiveReviewProgress",
     "AdvisorDirective",
     "CloneProtocol",
     "CodeReview",
@@ -45,6 +49,8 @@ __all__ = [
     "ConversationDecision",
     "ConversationGuardrails",
     "ConversationMessage",
+    "DaemonRuntimeStatus",
+    "DaemonState",
     "GitCredentials",
     "IssueCategory",
     "IssueCommand",
