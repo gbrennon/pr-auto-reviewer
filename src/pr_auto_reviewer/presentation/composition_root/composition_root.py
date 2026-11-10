@@ -1,7 +1,12 @@
 import logging
+import os
+from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.git_credential_provider_port import (
     GitCredentialProviderPort,
+)
+from pr_auto_reviewer.application.services.daemon_runtime_state_event_handler import (
+    DaemonRuntimeStateEventHandler,
 )
 from pr_auto_reviewer.application.services.issue_content_preparer_service import (
     IssueContentPreparerService,
@@ -12,11 +17,25 @@ from pr_auto_reviewer.application.services.list_allowed_repositories_service imp
 from pr_auto_reviewer.application.services.register_issue_service import (
     RegisterIssueService,
 )
+from pr_auto_reviewer.application.services.show_status_service import (
+    ShowStatusService,
+)
 from pr_auto_reviewer.domain.messages.commands.register_issue_command import (
     RegisterIssueCommand,
 )
+from pr_auto_reviewer.domain.messages.events.phase_completed_event import (
+    PhaseCompletedEvent,
+)
+from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
+    ReviewTurnParsedEvent,
+)
 from pr_auto_reviewer.domain.services.repository_allow_list import (
     RepositoryAllowList,
+)
+from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+from pr_auto_reviewer.infrastructure.config.config import ConfigLoader
+from pr_auto_reviewer.infrastructure.config.sha_config_reloader import (
+    ShaConfigReloader,
 )
 from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
@@ -24,6 +43,9 @@ from pr_auto_reviewer.infrastructure.git_credentials import (
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.config.repository_allow_list_entries import (
     ConfiguredRepositoryAllowListEntries,
+)
+from pr_auto_reviewer.infrastructure.persistence.json_daemon_runtime_state_store import (
+    JsonDaemonRuntimeStateStore,
 )
 
 from ._shared import *
@@ -62,8 +84,11 @@ class CompositionRoot:
     def container(self) -> Container:
         return self._container
 
-    def run_daemon(self) -> None:
+    def run_daemon(
+        self, components: ApplicationComponents | None = None,
+    ) -> None:
         config = self._container.config if hasattr(self, '_container') else load_config()
+        active = components or self._components
 
         daemon_config = PollingDaemonConfig(
             poll_interval_seconds=config.poll_interval,
@@ -74,22 +99,60 @@ class CompositionRoot:
             force_pr=config.force_pr,
         )
 
+        state_path = AppPaths.state_dir() / "daemon-status.json"
+        runtime_state = JsonDaemonRuntimeStateStore(state_path)
+
+        user_cfg_path = Path(AppPaths.config_dir() / "config")
+        config_reloader = ShaConfigReloader(user_cfg_path, ConfigLoader())
+
+        event_handler = DaemonRuntimeStateEventHandler(runtime_state)
+        self._container.command_bus.register(
+            PhaseCompletedEvent, event_handler.handle_phase_completed
+        )
+        self._container.command_bus.register(
+            ReviewTurnParsedEvent, event_handler.handle_turn_parsed
+        )
+
         daemon = PollingDaemon(
             config=daemon_config,
-            repo_lister=self._components.repo_lister,
-            pr_lister=self._components.pr_lister,
-            review_service=self._components.review_service,
-            notifier=self._components.notifier,
+            repo_lister=active.repo_lister,
+            pr_lister=active.pr_lister,
+            review_service=active.review_service,
+            notifier=active.notifier,
             update_tracker=RepoUpdateTracker(),
             repository_allow_list=RepositoryAllowList.from_entries(
                 config.repos_allow_list
             ),
-            process_commands_service=self._components.process_commands_service,
+            process_commands_service=active.process_commands_service,
             pr_repository=self._container.pr_repository,
+            runtime_state=runtime_state,
+            config_reloader=config_reloader,
         )
 
         self._authenticate_for_git_host(config)
         daemon.start()
+
+    def show_status(self) -> str:
+        """Render human-readable runtime telemetry from the daemon state store."""
+        state_path = AppPaths.state_dir() / "daemon-status.json"
+        runtime_state = JsonDaemonRuntimeStateStore(state_path)
+        config = self._container.config if hasattr(self, '_container') else load_config()
+        service = ShowStatusService(
+            runtime_state=runtime_state,
+            process_checker=self._is_pid_alive,
+            allowed_repositories=config.repos_allow_list,
+        )
+        return service.show_status()
+
+    @staticmethod
+    def _is_pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
 
     def _setup_logging(self, debug: bool) -> None:
         log_level = logging.DEBUG if debug else logging.INFO
@@ -132,6 +195,26 @@ class CompositionRoot:
             return
         self._container.local_repository.credentials = credentials
 
+    def _wire_issue_services(self) -> ProcessIssueCommandsService:
+        c = self._container
+        preparer = IssueContentPreparerService(
+            chat_port=c.chat_client,
+            issue_body_builder=IssueBodyBuilder(),
+        )
+        register_svc = RegisterIssueService(
+            pr_repository=c.pr_repository,
+            issue_content_preparer=preparer,
+            issue_tracker=c.issue_tracker,
+        )
+        c.command_bus.register(RegisterIssueCommand, register_svc.execute)
+        return ProcessIssueCommandsService(
+            pr_repository=c.pr_repository,
+            comment_reader=c.comment_reader,
+            comment_publisher=c.comment_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=c.command_bus,
+        )
+
     def _wire_components(self) -> ApplicationComponents:
         c = self._container
         notifier = (
@@ -139,7 +222,6 @@ class CompositionRoot:
             if self._notifier_override is not None
             else c.notifier
         )
-
         review_service = ReviewPullRequestService(
             pr_repository=c.pr_repository,
             changeset_fetcher=c.changeset_fetcher,
@@ -151,57 +233,32 @@ class CompositionRoot:
             conversation_logger=c.conversation_logger,
             plan=c.review_plan,
         )
-
-        review_item_parser = ReviewItemParser()
-        issue_command_parser = IssueCommandParser()
-        issue_body_builder = IssueBodyBuilder()
-        list_allowed_repositories = ListAllowedRepositoriesService(
+        process_commands_service = self._wire_issue_services()
+        item_parser = ReviewItemParser()
+        list_allowed_repos = ListAllowedRepositoriesService(
             ConfiguredRepositoryAllowListEntries(c.config.repos_allow_list)
         )
-
-        issue_content_preparer = IssueContentPreparerService(
-            chat_port=c.chat_client,
-            issue_body_builder=issue_body_builder,
-        )
-        register_issue_service = RegisterIssueService(
-            pr_repository=c.pr_repository,
-            issue_content_preparer=issue_content_preparer,
-            issue_tracker=c.issue_tracker,
-        )
-        c.command_bus.register(
-            RegisterIssueCommand, register_issue_service.execute
-        )
-
-        process_commands_service = ProcessIssueCommandsService(
-            pr_repository=c.pr_repository,
-            comment_reader=c.comment_reader,
-            comment_publisher=c.comment_publisher,
-            issue_command_parser=issue_command_parser,
-            command_bus=c.command_bus,
-        )
-
         cli_runner = CliRunner(
             review_service=review_service,
             process_commands_service=process_commands_service,
             review_reader=c.review_reader,
             pr_lister=c.pr_lister,
-            review_item_parser=review_item_parser,
+            review_item_parser=item_parser,
             pr_repository=c.pr_repository,
             notifier=notifier,
             token_verifier=c.token_verifier,
             output_mode=c.config.output_mode,
-            list_allowed_repositories=list_allowed_repositories,
+            list_allowed_repositories=list_allowed_repos,
         )
-
         return ApplicationComponents(
             review_service=review_service,
             process_commands_service=process_commands_service,
             review_reader=c.review_reader,
             pr_lister=c.pr_lister,
             repo_lister=c.repo_lister,
-            review_item_parser=review_item_parser,
+            review_item_parser=item_parser,
             cli_runner=cli_runner,
-            list_allowed_repositories=list_allowed_repositories,
+            list_allowed_repositories=list_allowed_repos,
             notifier=notifier,
             token_verifier=c.token_verifier,
         )
