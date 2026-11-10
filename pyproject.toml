@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pr-auto-reviewer = "pr_auto_reviewer.cli:main"
+pr-auto-reviewer = "pr_auto_reviewer.presentation.cli.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
