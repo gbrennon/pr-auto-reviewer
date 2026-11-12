@@ -49,7 +49,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 
 logger = logging.getLogger(__name__)
 
-_VERIFY_MAX_TURNS = 5
+_VERIFY_MAX_TURNS = 15
 _MAX_EMPTY_RESPONSES = 3
 _MAX_UNPARSEABLE_RESPONSES = 3
 
