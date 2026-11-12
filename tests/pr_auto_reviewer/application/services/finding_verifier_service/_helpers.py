@@ -18,7 +18,6 @@ def _item(
     item_id: str = "id-1",
     *,
     severity: ItemSeverity = ItemSeverity.MAJOR,
-    category: IssueCategory = IssueCategory.BUG,
     file_path: str | None = "src/a.py",
     current_code: str = "bad",
     suggested_fix: str = "good",
@@ -26,7 +25,7 @@ def _item(
     return ReviewItem(
         id=item_id,
         severity=severity,
-        category=category,
+        category=IssueCategory.BUG,
         file_path=file_path,
         description=f"finding {item_id}",
         line="42",
@@ -41,7 +40,8 @@ def _verifier(
     if responses is not None:
         mock_chat_port.send.side_effect = responses
     return FindingVerifierService(
-        mock_chat_port, "verify {findings}", mock_tool_factory
+        mock_chat_port, "verify {findings}", mock_tool_factory,
+        max_turns=5,
     )
 
 
