@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ReviewResponseParser:
     """Parse the raw LLM text into a CodeReview domain object."""
 
-    _STOP_TOKENS = ("<|im_end|>", "<｜end▁of▁thinking｜>")
+    _STOP_TOKENS = ("<｜end▁of▁thinking｜>",)
     @classmethod
     def _new_suggestion_id(cls) -> str:
         """Return a six-character lowercase hexadecimal suggestion ID."""
