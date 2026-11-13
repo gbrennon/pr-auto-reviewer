@@ -67,33 +67,36 @@ class TokenVerifier(TokenVerifierPort):
             if _store_path is not None
             else AppPaths.cache_dir() / "verified-tokens.json"
         )
-        self._verified: set[tuple[str, str]] = self._load() if persist else set()
+
+    def can_review(self, pr_id: PullRequestId) -> bool:
+        """Return whether both required API capabilities are available."""
+        owner_client, reviewer_client = self._clients_for(pr_id)
+        return owner_client.is_capability_available(pr_id.repository) and reviewer_client.is_capability_available(
+            pr_id.repository
+        )
 
     def verify(self, pr_id: PullRequestId) -> None:
         org = pr_id.repository.split("/", 1)[0]
         if not org:
             return
 
-        owner_client = self._owner_client
-        reviewer_client = self._reviewer_client
-        if org.startswith("forgejo:") and self._forgejo_owner_client is not None:
-            org = org.split(":", 1)[1]  # strip prefix for cache key
-            owner_client = self._forgejo_owner_client
-            reviewer_client = self._forgejo_reviewer_client
+        owner_client, reviewer_client = self._clients_for(pr_id)
+        if org.startswith("forgejo:"):
+            org = org.split(":", 1)[1]
 
         for role, client in [
             ("owner", owner_client),
             ("reviewer", reviewer_client),
         ]:
-            cache_key = (org, role)
-            if cache_key in self._verified:
-                continue
-
             client.verify_token_for_pr(pr_id)
-            self._verified.add(cache_key)
-            if self._persist:
-                self._save()
             logger.info("TokenVerifier: %s/%s verified and cached", org, role)
+
+    def _clients_for(
+        self, pr_id: PullRequestId,
+    ) -> tuple[GitPlatformHttpClient, GitPlatformHttpClient]:
+        if pr_id.repository.startswith("forgejo:") and self._forgejo_owner_client is not None:
+            return self._forgejo_owner_client, self._forgejo_reviewer_client
+        return self._owner_client, self._reviewer_client
 
     def _load(self) -> set[tuple[str, str]]:
         if not self._store_path.exists():
@@ -103,7 +106,3 @@ class TokenVerifier(TokenVerifierPort):
             return {tuple(pair) for pair in data}
         except (json.JSONDecodeError, OSError):
             return set()
-
-    def _save(self) -> None:
-        self._store_path.parent.mkdir(parents=True, exist_ok=True)
-        self._store_path.write_text(json.dumps(sorted(self._verified)))
