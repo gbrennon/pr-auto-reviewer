@@ -30,7 +30,20 @@ class ApiAccessCapabilityRegistry:
             for item in self.capabilities
             if item.global_key != capability.global_key or item.scope != capability.scope
         )
-        return replace(self, capabilities=(*retained, capability))
+        existing = next(
+            (
+                item
+                for item in self.capabilities
+                if item.global_key == capability.global_key and item.scope == capability.scope
+            ),
+            None,
+        )
+        registered = (
+            capability
+            if capability.suspension is not None or existing is None
+            else replace(capability, suspension=existing.suspension)
+        )
+        return replace(self, capabilities=(*retained, registered))
 
     def suspend(
         self,
