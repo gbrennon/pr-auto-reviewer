@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.services.show_status_service import (
     ShowStatusService,
 )
+from pr_auto_reviewer.domain.entities.api_access_capability import (
+    ApiAccessCapability,
+)
 from pr_auto_reviewer.domain.value_objects.active_review_progress import (
     ActiveReviewProgress,
+)
+from pr_auto_reviewer.domain.value_objects.capability_suspension import (
+    CapabilitySuspension,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
     DaemonRuntimeStatus,
@@ -15,6 +22,36 @@ from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 
 
 class TestShowStatusService:
+    def test_shows_suspended_api_capability_without_secret_value(self) -> None:
+        state_port = MagicMock()
+        state_port.read_status.return_value = None
+        capability = ApiAccessCapability(
+            platform="github",
+            role="reviewer",
+            source_name="GITHUB_TOKEN_acme_REVIEWER",
+            scope="acme/widgets",
+            suspension=CapabilitySuspension(
+                suspended_until=time.time() + 3_600,
+                resource="core",
+                remaining=0,
+                limit=5_000,
+                reason="rate_limit_exhausted",
+            ),
+        )
+        service = ShowStatusService(
+            runtime_state=state_port,
+            process_checker=lambda pid: False,
+            allowed_repositories=(),
+            capability_statuses=lambda: (capability,),
+        )
+
+        output = service.show_status()
+
+        assert "API Access Capabilities" in output
+        assert "GITHUB_TOKEN_acme_REVIEWER" in output
+        assert "1h" in output
+        assert "rate-limit-secret" not in output
+
     """Verifies human-readable status formatting across daemon lifecycle states."""
 
     def test_shows_idle_waiting_status(self) -> None:

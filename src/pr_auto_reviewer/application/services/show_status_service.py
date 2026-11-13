@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import math
+import time
 from collections.abc import Callable
 
 from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
     DaemonRuntimeStatePort,
+)
+from pr_auto_reviewer.domain.entities.api_access_capability import (
+    ApiAccessCapability,
 )
 from pr_auto_reviewer.domain.value_objects.active_review_progress import (
     ActiveReviewProgress,
@@ -24,10 +29,12 @@ class ShowStatusService:
         runtime_state: DaemonRuntimeStatePort,
         process_checker: Callable[[int], bool],
         allowed_repositories: tuple[str, ...],
+        capability_statuses: Callable[[], tuple[ApiAccessCapability, ...]] = lambda: (),
     ) -> None:
         self._runtime_state = runtime_state
         self._process_checker = process_checker
         self._allowed_repositories = allowed_repositories
+        self._capability_statuses = capability_statuses
 
     def show_status(self) -> str:
         """Return formatted summary of current daemon runtime status."""
@@ -43,6 +50,7 @@ class ShowStatusService:
             self._format_header(status),
             self._format_state_body(status),
             self._format_allowed_repos(status),
+            self._format_capabilities(),
         ]
         if status.last_error:
             sections.append(f"Last Error: {status.last_error}")
@@ -54,7 +62,8 @@ class ShowStatusService:
             "PR Auto-Reviewer Status\n"
             "=======================\n"
             "Daemon: STOPPED (no status file found)\n\n"
-            f"{repos}"
+            f"{repos}\n\n"
+            f"{self._format_capabilities()}"
         )
 
     def _format_stopped(self, status: DaemonRuntimeStatus) -> str:
@@ -64,7 +73,8 @@ class ShowStatusService:
             "=======================\n"
             f"Daemon: STOPPED (PID {status.pid} is not running)\n"
             f"Last active state: {status.state.value.upper()} (cycle {status.current_cycle})\n\n"
-            f"{repos}"
+            f"{repos}\n\n"
+            f"{self._format_capabilities()}"
         )
 
     def _format_header(self, status: DaemonRuntimeStatus) -> str:
@@ -102,6 +112,35 @@ class ShowStatusService:
             f"Phase: {review.phase_name} [{review.subagent_role or 'agent'}]\n"
             f"Progress: Turn {review.current_turn}/{review.max_turns} | Action: {action}"
         )
+
+    def _format_capabilities(self) -> str:
+        capabilities = self._capability_statuses()
+        if not capabilities:
+            return "API Access Capabilities: (none recorded)"
+        lines = ["API Access Capabilities"]
+        for capability in capabilities:
+            suspension = capability.suspension
+            if suspension is None or not suspension.is_active(time.time()):
+                state = "available"
+            else:
+                remaining = self._format_remaining(
+                    suspension.remaining_seconds(time.time())
+                )
+                state = f"suspended ({remaining} remaining)"
+            lines.append(
+                f"  - {capability.platform} / {capability.role} / "
+                f"{capability.source_name} / "
+                f"{capability.scope or 'all scopes'}: {state}"
+            )
+        return "\\n".join(lines)
+
+    @staticmethod
+    def _format_remaining(seconds: int) -> str:
+        minutes = max(1, math.ceil(seconds / 60))
+        hours, remaining_minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}h {remaining_minutes:02d}m"
+        return f"{minutes}m"
 
     def _format_allowed_repos(self, status: DaemonRuntimeStatus | None) -> str:
         repos = (

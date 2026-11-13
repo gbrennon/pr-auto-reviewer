@@ -24,7 +24,7 @@ class ConfigLoaderStubFake:
 class TestShaConfigReloader:
     """Verifies that config is only reloaded when its file hash changes."""
 
-    def test_returns_none_when_hash_is_unchanged(self, tmp_path: Path) -> None:
+    def test_returns_current_config_when_hash_is_unchanged(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "config"
         cfg_file.write_text("POLL_INTERVAL=60\n")
         loader = ConfigLoaderStubFake()
@@ -32,7 +32,8 @@ class TestShaConfigReloader:
 
         reloaded = reloader.check_for_reload()
 
-        assert reloaded is None
+        assert reloaded is not None
+        assert reloaded.poll_interval == 61
 
     def test_reloads_when_file_content_changes(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "config"
@@ -46,7 +47,7 @@ class TestShaConfigReloader:
         assert reloaded is not None
         assert reloaded.poll_interval == 61
 
-    def test_subsequent_call_without_change_returns_none(
+    def test_subsequent_call_without_change_reads_current_config(
         self, tmp_path: Path,
     ) -> None:
         cfg_file = tmp_path / "config"
@@ -58,4 +59,5 @@ class TestShaConfigReloader:
 
         reloaded_again = reloader.check_for_reload()
 
-        assert reloaded_again is None
+        assert reloaded_again is not None
+        assert reloaded_again.poll_interval == 61

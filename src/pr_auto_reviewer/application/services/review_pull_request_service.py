@@ -9,22 +9,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
+    AuditRemediationCommand,
+)
 from pr_auto_reviewer.domain.messages.commands.review_pull_request_command import (
     ReviewPullRequestCommand,
 )
 from pr_auto_reviewer.domain.messages.commands.run_multi_phase_review_command import (
     RunMultiPhaseReviewCommand,
 )
-from pr_auto_reviewer.domain.messages.commands.audit_remediation_command import (
-    AuditRemediationCommand,
-)
 from pr_auto_reviewer.domain.value_objects.review_audit_result import (
     ReviewAuditResult,
 )
-from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.domain.value_objects.review_execution_result import (
     ReviewExecutionResult,
 )
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
@@ -37,9 +37,9 @@ from ...domain.value_objects.issue_category import IssueCategory
 from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_diff import PullRequestDiff
 from ...domain.value_objects.pull_request_id import PullRequestId
+from ...domain.value_objects.review_item_lifecycle import ReviewItemLifecycle
 from ...domain.value_objects.review_item_status import ReviewItemStatus
 from ...domain.value_objects.review_verdict import ReviewVerdict
-from ...domain.value_objects.review_item_lifecycle import ReviewItemLifecycle
 from ...domain.value_objects.sub_review_guardrails import SubReviewGuardrails
 from ..ports.inbound.review_pull_request_port import ReviewPullRequestPort
 from ..ports.outbound.changeset_fetcher_port import ChangesetFetcherPort
@@ -81,6 +81,13 @@ class ReviewPullRequestService(ReviewPullRequestPort):
 
     def execute(self, command: ReviewPullRequestCommand) -> ReviewExecutionResult:
         self._log_start(command)
+
+        if self._token_verifier and not self._token_verifier.can_review(command.pr_id):
+            logger.info(
+                "Skipping review for %s because a required API capability is suspended",
+                command.pr_id.repository,
+            )
+            return ReviewExecutionResult(reviewed=False, duration_seconds=None)
 
         pr = self._load_or_create_pull_request(command)
 

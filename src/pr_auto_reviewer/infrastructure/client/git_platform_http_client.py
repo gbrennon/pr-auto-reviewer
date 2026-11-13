@@ -3,19 +3,29 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import requests
 
+from pr_auto_reviewer.domain.entities.api_access_capability import (
+    ApiAccessCapability,
+)
+from pr_auto_reviewer.domain.value_objects.capability_suspension import (
+    CapabilitySuspension,
+)
+from pr_auto_reviewer.infrastructure.client.api_access_capability_state import (
+    ApiAccessCapabilityState,
+)
+from pr_auto_reviewer.infrastructure.client.api_access_capability_store import (
+    ApiAccessCapabilityStore,
+)
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
 )
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
     RateLimitSnapshot,
-)
-from pr_auto_reviewer.infrastructure.client.rate_limit_tracker import (
-    RateLimitTracker,
 )
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 
@@ -25,8 +35,6 @@ if TYPE_CHECKING:
         PreflightVerifier,
     )
     from pr_auto_reviewer.infrastructure.client.token_resolver import TokenResolver
-from pr_auto_reviewer.domain.value_objects.token_slug import TokenSlug
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +52,8 @@ class GitPlatformHttpClient:
         *,
         token_resolver: TokenResolver | None = None,
         preflight_verifier: PreflightVerifier | None = None,
-        _verified_cache_path: Path | None = None
+        _verified_cache_path: Path | None = None,
+        capability_state: ApiAccessCapabilityState | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = token
@@ -55,18 +64,19 @@ class GitPlatformHttpClient:
         self._verified_cache_path = (
             _verified_cache_path or AppPaths.cache_dir() / "verified-tokens.json"
         )
-        self._verified_orgs: set[tuple[str, str]] = self._load_verified_cache()
-        self._rate_tracker = RateLimitTracker(TokenSlug(token), platform_mode, client_label or "default")
+        self._capability_state = capability_state or ApiAccessCapabilityState(
+            ApiAccessCapabilityStore(AppPaths.state_dir() / "api-capabilities.json")
+        )
 
     @property
     def base_url(self) -> str:
         return self._base_url
 
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> dict[str, Any]:
-        self._rate_tracker.wait()
+        token, capability = self._request_credentials(repo)
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        request_headers = self._get_auth_header(repo)
+        request_headers = self._auth_header(token)
         if headers:
             request_headers.update(headers)
 
@@ -74,18 +84,18 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("GET", label, url, response, repo=repo)
+            self._log_response_detail("GET", label, url, response, repo=repo, capability=capability)
             logger.error("GET%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("GET", label, url, response, repo=repo)
+        self._log_response_detail("GET", label, url, response, repo=repo, capability=capability)
         return response.json()
 
     def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
-        self._rate_tracker.wait()
+        token, capability = self._request_credentials(repo)
         url = f"{self._base_url}{path}"
         label = self._label("read")
-        request_headers = self._get_auth_header(repo)
+        request_headers = self._auth_header(token)
         if headers:
             request_headers.update(headers)
 
@@ -93,21 +103,21 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("GET_RAW", label, url, response, repo=repo)
+            self._log_response_detail("GET_RAW", label, url, response, repo=repo, capability=capability)
             logger.error("GET_RAW%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("GET_RAW", label, url, response, repo=repo)
+        self._log_response_detail("GET_RAW", label, url, response, repo=repo, capability=capability)
         return response.text
 
     def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
-        self._rate_tracker.wait()
+        token, capability = self._request_credentials(repo)
         url = f"{self._base_url}{path}"
         label = self._label("write")
         response = requests.post(
             url,
             headers={
-                **self._get_auth_header(repo),
+                **self._auth_header(token),
                 "Content-Type": "application/json",
                 "User-Agent": "pr-auto-reviewer",
             },
@@ -117,12 +127,22 @@ class GitPlatformHttpClient:
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
-            self._log_response_detail("POST", label, url, response, repo=repo)
+            self._log_response_detail("POST", label, url, response, repo=repo, capability=capability)
             logger.error("POST%s %s failed with %s: %s", label, url, response.status_code, response.text)
             raise
 
-        self._log_response_detail("POST", label, url, response, repo=repo)
+        self._log_response_detail("POST", label, url, response, repo=repo, capability=capability)
         return response.json()
+
+    def is_capability_available(self, repo: str) -> bool:
+        """Return whether the resolved API capability can serve *repo*."""
+        source_name = self._resolve_token_source_for_repo(repo)[1]
+        return self._capability_state.is_available(
+            self._platform_mode,
+            self._role or "default",
+            source_name,
+            repo,
+        )
 
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for the per-org token this client
@@ -142,15 +162,14 @@ class GitPlatformHttpClient:
             org = org.split(":", 1)[1]
         role = "owner" if self._role == "owner" else "reviewer"
         cache_key = (org, role)
-        if cache_key in self._verified_orgs:
+        if cache_key in self._load_verified_cache():
             return
         token, source_key = self._token_resolver.resolve_source(
             self._role, pr_id.repository
         )
         if not token:
             return
-        self._verified_orgs.add(cache_key)
-        self._save_verified_cache()
+        self._save_verified_cache(cache_key)
         self._preflight_verifier.verify(
             token=token,
             org=org,
@@ -161,15 +180,44 @@ class GitPlatformHttpClient:
         )
 
     def _capture_rate_limit(
-        self, headers: dict[str, str], repo: str | None = None,
+        self,
+        headers: dict[str, str],
+        capability: ApiAccessCapability,
     ) -> None:
         if "x-ratelimit-limit" not in headers:
             return
         snapshot = RateLimitSnapshot.from_response_headers(headers)
-        self._rate_tracker.record(snapshot, repo=repo)
+        if not snapshot.exhausted():
+            return
+        wait_seconds = max(60, snapshot.reset_seconds_from_now())
+        self._capability_state.suspend(
+            capability,
+            CapabilitySuspension(
+                suspended_until=time.time() + wait_seconds,
+                resource=snapshot.resource,
+                remaining=snapshot.remaining,
+                limit=snapshot.limit,
+                reason="rate_limit_exhausted",
+            ),
+        )
 
     def _get_auth_header(self, repo: str | None = None) -> dict[str, str]:
         token = self._resolve_token_for_repo(repo)
+        return self._auth_header(token)
+
+    def _request_credentials(
+        self, repo: str | None,
+    ) -> tuple[str, ApiAccessCapability]:
+        token, source_name = self._resolve_token_source_for_repo(repo)
+        capability = self._capability_state.require_available(
+            self._platform_mode,
+            self._role or "default",
+            source_name,
+            repo or "",
+        )
+        return token, capability
+
+    def _auth_header(self, token: str) -> dict[str, str]:
         if self._platform_mode == "github":
             return {"Authorization": f"Bearer {token}"}
         return {"Authorization": f"token {token}"}
@@ -199,19 +247,31 @@ class GitPlatformHttpClient:
         url: str,
         response: Any,
         repo: str | None = None,
+        capability: ApiAccessCapability | None = None,
     ) -> None:
-        self._capture_rate_limit(getattr(response, "headers", {}), repo=repo)
+        if capability is not None:
+            self._capture_rate_limit(getattr(response, "headers", {}), capability)
         self._write_http_log(method, label, url, response)
         HttpRequestCounter.instance().record(self._base_url)
 
     def _resolve_token_for_repo(self, repo: str | None) -> str:
-        """Return the token that should be used for requests scoped to
-        *repo*, resolving a per-org override when one is configured."""
-        if not repo or not self._token_resolver:
-            return self._token
-        return self._token_resolver.resolve(self._role, repo) or self._token
+        """Return the token that should be used for requests scoped to *repo*."""
+        token, _ = self._resolve_token_source_for_repo(repo)
+        return token
 
-    def _save_verified_cache(self) -> None:
+    def _resolve_token_source_for_repo(
+        self, repo: str | None,
+    ) -> tuple[str, str]:
+        if repo and self._token_resolver:
+            token, source_name = self._token_resolver.resolve_source(
+                self._role, repo
+            )
+            if token:
+                return token, source_name
+        role = self._role.upper() if self._role else "DEFAULT"
+        return self._token, f"{self._platform_mode.upper()}_{role}_TOKEN"
+
+    def _save_verified_cache(self, cache_key: tuple[str, str]) -> None:
         """Persist the current ``_verified_orgs`` set to disk, merged with
         existing file contents so that writes from different client instances
         (owner/reviewer) accumulate rather than overwrite each other.
@@ -222,7 +282,7 @@ class GitPlatformHttpClient:
 
         try:
             existing = self._load_verified_cache()
-            merged = existing | self._verified_orgs
+            merged = existing | {cache_key}
             self._verified_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self._verified_cache_path.write_text(
                 json.dumps(sorted(merged))

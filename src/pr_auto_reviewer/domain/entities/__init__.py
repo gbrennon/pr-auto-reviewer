@@ -1,4 +1,6 @@
 from .advisor_agent import AdvisorAgent
+from .api_access_capability import ApiAccessCapability
+from .api_access_capability_registry import ApiAccessCapabilityRegistry
 from .architect_agent import ArchitectAgent
 from .engineer_agent import EngineerAgent
 from .explorer_agent import ExplorerAgent
@@ -11,6 +13,8 @@ from .sub_agent import SubAgent
 
 __all__ = [
     "AdvisorAgent",
+    "ApiAccessCapability",
+    "ApiAccessCapabilityRegistry",
     "ArchitectAgent",
     "EngineerAgent",
     "ExplorerAgent",
