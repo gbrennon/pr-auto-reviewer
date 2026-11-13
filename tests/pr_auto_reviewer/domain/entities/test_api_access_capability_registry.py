@@ -104,4 +104,4 @@ class TestApiAccessCapabilityRegistry:
         )
 
         with pytest.raises(FrozenInstanceError):
-            capability.role = "reviewer"
+            capability.__setattr__("role", "reviewer")
