@@ -64,7 +64,6 @@ class GitPlatformHttpClient:
         self._verified_cache_path = (
             _verified_cache_path or AppPaths.cache_dir() / "verified-tokens.json"
         )
-        self._verified_orgs: set[tuple[str, str]] = self._load_verified_cache()
         self._capability_state = capability_state or ApiAccessCapabilityState(
             ApiAccessCapabilityStore(AppPaths.state_dir() / "api-capabilities.json")
         )
@@ -135,6 +134,16 @@ class GitPlatformHttpClient:
         self._log_response_detail("POST", label, url, response, repo=repo, capability=capability)
         return response.json()
 
+    def is_capability_available(self, repo: str) -> bool:
+        """Return whether the resolved API capability can serve *repo*."""
+        source_name = self._resolve_token_source_for_repo(repo)[1]
+        return self._capability_state.is_available(
+            self._platform_mode,
+            self._role or "default",
+            source_name,
+            repo,
+        )
+
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for the per-org token this client
         would use for *pr_id*.  No-op when no ``preflight_verifier`` is set,
@@ -153,15 +162,14 @@ class GitPlatformHttpClient:
             org = org.split(":", 1)[1]
         role = "owner" if self._role == "owner" else "reviewer"
         cache_key = (org, role)
-        if cache_key in self._verified_orgs:
+        if cache_key in self._load_verified_cache():
             return
         token, source_key = self._token_resolver.resolve_source(
             self._role, pr_id.repository
         )
         if not token:
             return
-        self._verified_orgs.add(cache_key)
-        self._save_verified_cache()
+        self._save_verified_cache(cache_key)
         self._preflight_verifier.verify(
             token=token,
             org=org,
@@ -263,7 +271,7 @@ class GitPlatformHttpClient:
         role = self._role.upper() if self._role else "DEFAULT"
         return self._token, f"{self._platform_mode.upper()}_{role}_TOKEN"
 
-    def _save_verified_cache(self) -> None:
+    def _save_verified_cache(self, cache_key: tuple[str, str]) -> None:
         """Persist the current ``_verified_orgs`` set to disk, merged with
         existing file contents so that writes from different client instances
         (owner/reviewer) accumulate rather than overwrite each other.
@@ -274,7 +282,7 @@ class GitPlatformHttpClient:
 
         try:
             existing = self._load_verified_cache()
-            merged = existing | self._verified_orgs
+            merged = existing | {cache_key}
             self._verified_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self._verified_cache_path.write_text(
                 json.dumps(sorted(merged))
