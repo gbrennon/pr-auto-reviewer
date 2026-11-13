@@ -64,9 +64,14 @@ class TestShowStatusService:
         assert "API Access Capabilities" in output
         assert "GITHUB_TOKEN_acme_REVIEWER" in output
         assert "\\n" not in output
-        assert "API Access Capabilities\n  - github" in output
-        assert "  - forgejo / owner / FORGEJO_OWNER_TOKEN" in output
-        assert "1h" in output
+        assert "API Access Capabilities" in output
+        assert "  - forgejo:" in output
+        assert "    - owner / FORGEJO_OWNER_TOKEN:" in output
+        assert "available" not in output
+        assert "      - gbrennon/example" in output
+        assert "  - github:" in output
+        assert "    - reviewer / GITHUB_TOKEN_acme_REVIEWER: suspended (1h 00m remaining)" in output
+        assert "      - acme/widgets" in output
         assert "rate-limit-secret" not in output
 
     """Verifies human-readable status formatting across daemon lifecycle states."""
@@ -94,9 +99,27 @@ class TestShowStatusService:
 
         assert "Daemon: RUNNING (PID 1234)" in output
         assert "Status: IDLE / WAITING" in output
-        assert "owner/repo-a" in output
-        assert "owner/repo-b" in output
+        assert "  - unscoped:\n    - owner:\n      - repo-a\n      - repo-b" in output
         assert "Next cycle" in output
+
+    def test_groups_allowed_repositories_by_platform_and_organization(self) -> None:
+        state_port = MagicMock()
+        state_port.read_status.return_value = None
+        service = ShowStatusService(
+            runtime_state=state_port,
+            process_checker=lambda pid: False,
+            allowed_repositories=(
+                "forgejo:gbrennon/ephact",
+                "github:forging-blocks-org/forging-blocks",
+                "forgejo:gbrennon/LocalNar",
+            ),
+        )
+
+        output = service.show_status()
+
+        assert "Allowed Repositories (3):\n  - forgejo:" in output
+        assert "    - gbrennon:\n      - LocalNar\n      - ephact" in output
+        assert "  - github:\n    - forging-blocks-org:\n      - forging-blocks" in output
 
     def test_shows_reviewing_status_with_phase_and_subagent(self) -> None:
         state_port = MagicMock()
