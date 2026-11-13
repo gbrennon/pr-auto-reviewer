@@ -21,6 +21,14 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 
 
+class CapabilityQuery:
+    def __init__(self, capabilities: tuple[ApiAccessCapability, ...]) -> None:
+        self._capabilities = capabilities
+
+    def statuses(self) -> tuple[ApiAccessCapability, ...]:
+        return self._capabilities
+
+
 class TestShowStatusService:
     def test_shows_suspended_api_capability_without_secret_value(self) -> None:
         state_port = MagicMock()
@@ -38,17 +46,26 @@ class TestShowStatusService:
                 reason="rate_limit_exhausted",
             ),
         )
+        additional_capability = ApiAccessCapability(
+            platform="forgejo",
+            role="owner",
+            source_name="FORGEJO_OWNER_TOKEN",
+            scope="gbrennon/example",
+        )
         service = ShowStatusService(
             runtime_state=state_port,
             process_checker=lambda pid: False,
             allowed_repositories=(),
-            capability_statuses=lambda: (capability,),
+            capability_query=CapabilityQuery((capability, additional_capability)),
         )
 
         output = service.show_status()
 
         assert "API Access Capabilities" in output
         assert "GITHUB_TOKEN_acme_REVIEWER" in output
+        assert "\\n" not in output
+        assert "API Access Capabilities\n  - github" in output
+        assert "  - forgejo / owner / FORGEJO_OWNER_TOKEN" in output
         assert "1h" in output
         assert "rate-limit-secret" not in output
 

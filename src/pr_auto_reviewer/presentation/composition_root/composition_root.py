@@ -150,7 +150,7 @@ class CompositionRoot:
             runtime_state=runtime_state,
             process_checker=self._is_pid_alive,
             allowed_repositories=config.repos_allow_list,
-            capability_statuses=capability_state.statuses,
+            capability_query=capability_state,
         )
         return service.show_status()
 
