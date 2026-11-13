@@ -1,3 +1,6 @@
+from .api_access_capability_suspended_error import (
+    ApiAccessCapabilitySuspendedError,
+)
 from .domain_error import DomainError
 from .empty_diff_error import EmptyDiffError
 from .invalid_comment_id_error import InvalidCommentIdError
@@ -16,6 +19,7 @@ from .review_publish_error import ReviewPublishError
 from .review_verdict_error import ReviewVerdictError
 
 __all__ = [
+    "ApiAccessCapabilitySuspendedError",
     "DomainError",
     "EmptyDiffError",
     "InvalidCommentIdError",
