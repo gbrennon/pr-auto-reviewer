@@ -1,4 +1,5 @@
 from .agent_chat_port import AgentChatPort
+from .api_access_capability_store_port import ApiAccessCapabilityStorePort
 from .changeset_fetcher_port import ChangesetFetcherPort
 from .command_bus_port import CommandBusPort
 from .comment_publisher_port import CommentPublisherPort
@@ -22,6 +23,7 @@ from .verdict_event_mapper_port import VerdictEventMapperPort
 
 __all__ = [
     "AgentChatPort",
+    "ApiAccessCapabilityStorePort",
     "ChangesetFetcherPort",
     "CommandBusPort",
     "CommentPublisherPort",

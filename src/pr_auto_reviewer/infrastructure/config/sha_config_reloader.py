@@ -34,18 +34,16 @@ class ShaConfigReloader(ConfigReloaderPort):
         except OSError:
             return ""
 
-    def check_for_reload(self) -> Config | None:
-        """Return new Config if file hash differs from cached hash."""
+    def check_for_reload(self) -> Config:
+        """Read current configuration settings for the next daemon loop."""
         new_hash = self._compute_hash(self._config_path)
         state_dict = self._state
         current_hash = state_dict.get("hash", "")
-        if new_hash == current_hash:
-            return None
-
-        state_dict["hash"] = new_hash
-        logger.info(
-            "Config file change detected (%s -> %s), reloading configuration",
-            current_hash[:8] or "(empty)",
-            new_hash[:8],
-        )
+        if new_hash != current_hash:
+            state_dict["hash"] = new_hash
+            logger.info(
+                "Config file change detected (%s -> %s), reloading configuration",
+                current_hash[:8] or "(empty)",
+                new_hash[:8],
+            )
         return self._config_loader.load()
