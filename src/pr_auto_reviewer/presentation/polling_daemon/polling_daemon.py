@@ -9,32 +9,21 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
-    DaemonRuntimeStatePort,
-)
-from pr_auto_reviewer.domain.value_objects.active_review_progress import (
-    ActiveReviewProgress,
-)
-from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
-    DaemonRuntimeStatus,
-)
-from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
-from pr_auto_reviewer.presentation.ports.config_reloader_port import (
-    ConfigReloaderPort,
-)
-
-from pr_auto_reviewer.application.services.pr_identifier_service import (
-    PRIdentifierService,
-)
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
 from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import (
     ReviewPullRequestPort,
 )
+from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
+    DaemonRuntimeStatePort,
+)
 from pr_auto_reviewer.application.ports.outbound.notifier_port import NotifierPort
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
     PullRequestRepositoryPort,
+)
+from pr_auto_reviewer.application.services.pr_identifier_service import (
+    PRIdentifierService,
 )
 from pr_auto_reviewer.domain.entities.pull_request import PullRequest
 from pr_auto_reviewer.domain.exceptions.empty_diff_error import EmptyDiffError
@@ -55,6 +44,13 @@ from pr_auto_reviewer.domain.messages.commands.review_pull_request_command impor
 from pr_auto_reviewer.domain.services.repository_allow_list import (
     RepositoryAllowList,
 )
+from pr_auto_reviewer.domain.value_objects.active_review_progress import (
+    ActiveReviewProgress,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
+    DaemonRuntimeStatus,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
 )
@@ -68,6 +64,9 @@ from pr_auto_reviewer.presentation.ports import (
     PrListerPort,
     RepoInfo,
     RepoListerPort,
+)
+from pr_auto_reviewer.presentation.ports.config_reloader_port import (
+    ConfigReloaderPort,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,8 +151,6 @@ class PollingDaemon:
         if self._config_reloader is None:
             return
         new_config = self._config_reloader.check_for_reload()
-        if new_config is None:
-            return
         new_daemon_config = replace(
             self._config,
             poll_interval_seconds=new_config.poll_interval,
