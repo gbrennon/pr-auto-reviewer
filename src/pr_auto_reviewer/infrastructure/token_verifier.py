@@ -94,7 +94,11 @@ class TokenVerifier(TokenVerifierPort):
     def _clients_for(
         self, pr_id: PullRequestId,
     ) -> tuple[GitPlatformHttpClient, GitPlatformHttpClient]:
-        if pr_id.repository.startswith("forgejo:") and self._forgejo_owner_client is not None:
+        if (
+            pr_id.repository.startswith("forgejo:")
+            and self._forgejo_owner_client is not None
+            and self._forgejo_reviewer_client is not None
+        ):
             return self._forgejo_owner_client, self._forgejo_reviewer_client
         return self._owner_client, self._reviewer_client
 
