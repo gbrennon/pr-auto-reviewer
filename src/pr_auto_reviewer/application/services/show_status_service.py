@@ -6,11 +6,11 @@ import math
 import time
 from collections.abc import Callable
 
+from pr_auto_reviewer.application.ports.outbound.api_access_capability_query_port import (
+    ApiAccessCapabilityQueryPort,
+)
 from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
     DaemonRuntimeStatePort,
-)
-from pr_auto_reviewer.domain.entities.api_access_capability import (
-    ApiAccessCapability,
 )
 from pr_auto_reviewer.domain.value_objects.active_review_progress import (
     ActiveReviewProgress,
@@ -29,12 +29,12 @@ class ShowStatusService:
         runtime_state: DaemonRuntimeStatePort,
         process_checker: Callable[[int], bool],
         allowed_repositories: tuple[str, ...],
-        capability_statuses: Callable[[], tuple[ApiAccessCapability, ...]] = lambda: (),
+        capability_query: ApiAccessCapabilityQueryPort | None = None,
     ) -> None:
         self._runtime_state = runtime_state
         self._process_checker = process_checker
         self._allowed_repositories = allowed_repositories
-        self._capability_statuses = capability_statuses
+        self._capability_query = capability_query
 
     def show_status(self) -> str:
         """Return formatted summary of current daemon runtime status."""
@@ -114,7 +114,11 @@ class ShowStatusService:
         )
 
     def _format_capabilities(self) -> str:
-        capabilities = self._capability_statuses()
+        capabilities = (
+            self._capability_query.statuses()
+            if self._capability_query is not None
+            else ()
+        )
         if not capabilities:
             return "API Access Capabilities: (none recorded)"
         lines = ["API Access Capabilities"]
@@ -132,7 +136,7 @@ class ShowStatusService:
                 f"{capability.source_name} / "
                 f"{capability.scope or 'all scopes'}: {state}"
             )
-        return "\\n".join(lines)
+        return "\n".join(lines)
 
     @staticmethod
     def _format_remaining(seconds: int) -> str:
