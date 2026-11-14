@@ -45,7 +45,11 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
     def publish(self, pr_id: PullRequestId, review: CodeReview, diff: PullRequestDiff | None = None) -> None:
         self._publishing.verify_tokens(pr_id)
 
-        processed = self._processor.process(pr_id, review)
+        processed = self._processor.process(
+            pr_id,
+            review,
+            include_non_blocking_in_formal_body=True,
+        )
 
         logger.info(
             "Publishing review for PR %s: verdict=%s, event=%s, "
@@ -71,6 +75,4 @@ class ForgejoReviewPublisher(ReviewPublisherPort):
             diff_headers=None,
             diff=diff,
         )
-        if processed.comment_body is not None:
-            self._publishing.publish_comment(pr_id, processed.comment_body)
 
