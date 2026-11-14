@@ -32,8 +32,17 @@ from pr_auto_reviewer.domain.messages.events.review_turn_parsed_event import (
 from pr_auto_reviewer.domain.services.repository_allow_list import (
     RepositoryAllowList,
 )
+from pr_auto_reviewer.infrastructure.client.api_access_capability_state import (
+    ApiAccessCapabilityState,
+)
+from pr_auto_reviewer.infrastructure.client.api_access_capability_store import (
+    ApiAccessCapabilityStore,
+)
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.config.config import ConfigLoader
+from pr_auto_reviewer.infrastructure.config.repository_allow_list_entries import (
+    ConfiguredRepositoryAllowListEntries,
+)
 from pr_auto_reviewer.infrastructure.config.sha_config_reloader import (
     ShaConfigReloader,
 )
@@ -41,9 +50,6 @@ from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
-from pr_auto_reviewer.infrastructure.config.repository_allow_list_entries import (
-    ConfiguredRepositoryAllowListEntries,
-)
 from pr_auto_reviewer.infrastructure.persistence.json_daemon_runtime_state_store import (
     JsonDaemonRuntimeStateStore,
 )
@@ -137,10 +143,14 @@ class CompositionRoot:
         state_path = AppPaths.state_dir() / "daemon-status.json"
         runtime_state = JsonDaemonRuntimeStateStore(state_path)
         config = self._container.config if hasattr(self, '_container') else load_config()
+        capability_state = ApiAccessCapabilityState(
+            ApiAccessCapabilityStore(AppPaths.state_dir() / "api-capabilities.json")
+        )
         service = ShowStatusService(
             runtime_state=runtime_state,
             process_checker=self._is_pid_alive,
             allowed_repositories=config.repos_allow_list,
+            capability_query=capability_state,
         )
         return service.show_status()
 

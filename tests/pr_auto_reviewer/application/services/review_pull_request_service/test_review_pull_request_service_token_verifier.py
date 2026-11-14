@@ -77,6 +77,38 @@ class TestReviewPullRequestServiceTokenVerifier:
 
 
 
+class TestReviewSuspension:
+    def test_suspended_required_capability_skips_before_review_work(
+        self, request,
+    ):
+        mock_token_verifier = request.getfixturevalue("mock_token_verifier")
+        mock_pr_repository = request.getfixturevalue("mock_pr_repository")
+        mock_changeset_fetcher = request.getfixturevalue("mock_changeset_fetcher")
+        mock_review_context_factory = request.getfixturevalue("mock_review_context_factory")
+        mock_llm_review = request.getfixturevalue("mock_llm_review")
+        mock_review_publisher = request.getfixturevalue("mock_review_publisher")
+        mock_token_verifier.can_review.return_value = False
+        cmd = _cmd()
+
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            token_verifier=mock_token_verifier,
+        )
+
+        result = service.execute(cmd)
+
+        assert result.reviewed is False
+        mock_pr_repository.find.assert_not_called()
+        mock_changeset_fetcher.fetch.assert_not_called()
+        mock_llm_review.review_prompt.assert_not_called()
+        mock_review_publisher.publish.assert_not_called()
+        mock_pr_repository.save.assert_not_called()
+
+
 class TestSingleTurnFallback:
     def test_multi_phase_without_plan_falls_back_to_single_turn(
             self, request,

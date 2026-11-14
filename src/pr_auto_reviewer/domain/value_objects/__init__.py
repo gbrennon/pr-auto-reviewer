@@ -1,9 +1,6 @@
-from .review_audit_result import ReviewAuditResult
-from .review_execution_result import ReviewExecutionResult
-from .review_item_lifecycle import ReviewItemLifecycle
-from .review_item_transition import ReviewItemTransition
 from .active_review_progress import ActiveReviewProgress
 from .advisor_directive import AdvisorDirective
+from .capability_suspension import CapabilitySuspension
 from .clone_protocol import CloneProtocol
 from .code_review import CodeReview
 from .comment_id import CommentId
@@ -19,14 +16,18 @@ from .issue_category import IssueCategory
 from .issue_command import IssueCommand
 from .issue_command_action import IssueCommandAction
 from .issue_content import IssueContent
-from .phase_result import PhaseResult
 from .item_severity import ItemSeverity
-from .review_item_status import ReviewItemStatus
+from .phase_result import PhaseResult
 from .pr_comment import PrComment
 from .pull_request_diff import PullRequestDiff
 from .pull_request_id import PullRequestId
 from .repository_context import RepositoryContext
+from .review_audit_result import ReviewAuditResult
 from .review_execution_context import ReviewExecutionContext
+from .review_execution_result import ReviewExecutionResult
+from .review_item_lifecycle import ReviewItemLifecycle
+from .review_item_status import ReviewItemStatus
+from .review_item_transition import ReviewItemTransition
 from .review_phase import ReviewPhase
 from .review_plan import ReviewPlan
 from .review_verdict import ReviewVerdict
@@ -41,6 +42,7 @@ from .turn_parse_result import TurnParseResult
 __all__ = [
     "ActiveReviewProgress",
     "AdvisorDirective",
+    "CapabilitySuspension",
     "CloneProtocol",
     "CodeReview",
     "CommentId",
@@ -57,17 +59,17 @@ __all__ = [
     "IssueCommandAction",
     "IssueContent",
     "ItemSeverity",
-    "ReviewAuditResult",
-    "ReviewExecutionResult",
-    "ReviewItemLifecycle",
-    "ReviewItemStatus",
-    "ReviewItemTransition",
     "PhaseResult",
     "PrComment",
     "PullRequestDiff",
     "PullRequestId",
     "RepositoryContext",
+    "ReviewAuditResult",
     "ReviewExecutionContext",
+    "ReviewExecutionResult",
+    "ReviewItemLifecycle",
+    "ReviewItemStatus",
+    "ReviewItemTransition",
     "ReviewPhase",
     "ReviewPlan",
     "ReviewVerdict",

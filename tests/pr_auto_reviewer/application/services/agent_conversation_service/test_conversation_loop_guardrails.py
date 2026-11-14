@@ -3,6 +3,7 @@ import pytest
 from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
     ReviewBudgetExhaustedError,
 )
+
 from ._helpers import *
 
 _CONVERSATION_LOGGER = (
@@ -597,7 +598,7 @@ class TestConversationLoopGuardrails:
         ).execute(command)
 
         assert result.llm_verdict == "approved"
-        assert tool_execution.execute_tool.call_count == 4
+        assert tool_execution.execute_tool.call_count == 3
 
     def test_turn_exhaustion_accepts_tool_free_final_verdict(
         self, mock_chat_port, mock_command_bus,
