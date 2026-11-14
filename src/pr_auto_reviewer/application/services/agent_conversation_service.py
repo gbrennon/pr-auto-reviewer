@@ -82,6 +82,7 @@ from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
 
 logger = logging.getLogger(__name__)
 _MAX_REPEATED_TOOL_CALLS = 3
+_MAX_READ_FILE_REPLAYS = 2
 _MIN_READ_FILE_REPLAY_FILES = 2
 
 
@@ -453,6 +454,7 @@ class AgentConversationService(RunAgentConversationPort):
         read_file_count = 0
         run_snippet_count = 0
         repeated_tool_call_streak = 0
+        read_file_replays: dict[tuple[str, str], int] = {}
 
         while guardrails.has_turns_remaining():
             logger.debug(
@@ -552,9 +554,15 @@ class AgentConversationService(RunAgentConversationPort):
                         tool_call.arguments, sort_keys=True, default=str
                     ),
                 )
-                allow_read_file_replay = (
+                is_read_file_replay = (
                     tool_call.tool_name == "read_file"
+                    and call_key in seen_tool_calls
+                )
+                allow_read_file_replay = (
+                    is_read_file_replay
                     and len(changed_files) >= _MIN_READ_FILE_REPLAY_FILES
+                    and read_file_replays.get(call_key, 0)
+                    < _MAX_READ_FILE_REPLAYS
                 )
                 if call_key in seen_tool_calls and not allow_read_file_replay:
                     repeated_tool_call_streak += 1
@@ -573,6 +581,10 @@ class AgentConversationService(RunAgentConversationPort):
                     messages.append(self._repeated_tool_message.render())
                     continue
                 repeated_tool_call_streak = 0
+                if is_read_file_replay:
+                    read_file_replays[call_key] = (
+                        read_file_replays.get(call_key, 0) + 1
+                    )
                 seen_tool_calls.add(call_key)
                 result = tool_execution.execute_tool(tool_call)
                 guardrails = guardrails.record_tool_call()
@@ -626,8 +638,10 @@ class AgentConversationService(RunAgentConversationPort):
                         guardrails = guardrails.advance_turn()
                         try:
                             sp_content = self._chat_port.send(messages)
-                        except (StopIteration, Exception) as e:
-                            logger.debug("Suggestions/praise turn skipped: %s", e)
+                        except (StopIteration, LlmUnavailableError) as error:
+                            logger.debug(
+                                "Suggestions/praise turn skipped: %s", error
+                            )
                             sp_content = None
                         if sp_content:
                             messages.append(ConversationMessage(
@@ -773,7 +787,7 @@ class AgentConversationService(RunAgentConversationPort):
         )
         try:
             final_content = self._chat_port.send(messages)
-        except Exception as error:
+        except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
             return None
         if not final_content:
