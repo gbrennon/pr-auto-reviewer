@@ -182,19 +182,33 @@ class ShowStatusService:
         )
         if not repos:
             return "Allowed Repositories: (all repositories permitted)"
-        grouped: dict[str, dict[str, set[str]]] = {}
+        grouped: dict[str, dict[str, dict[str, str]]] = {}
+        display_organizations: dict[tuple[str, str], str] = {}
         for entry in repos:
             platform, repository = self._split_platform(entry)
             organization, name = self._split_repository(repository)
-            grouped.setdefault(platform, {}).setdefault(organization, set()).add(name)
-        lines = [f"Allowed Repositories ({len(repos)}):"]
+            platform = self._normalize_platform(platform)
+            organization_key = organization.casefold()
+            organizations = grouped.setdefault(platform, {})
+            repositories = organizations.setdefault(organization_key, {})
+            repositories.setdefault(name.casefold(), name)
+            display_organizations.setdefault(
+                (platform, organization_key), organization
+            )
+        repository_count = sum(
+            len(repositories)
+            for organizations in grouped.values()
+            for repositories in organizations.values()
+        )
+        lines = [f"Allowed Repositories ({repository_count}):"]
         for platform in sorted(grouped):
             lines.append(f"  - {platform}:")
             for organization in sorted(grouped[platform]):
-                lines.append(f"    - {organization}:")
+                names = grouped[platform][organization]
+                display_organization = display_organizations[(platform, organization)]
+                lines.append(f"    - {display_organization}:")
                 lines.extend(
-                    f"      - {name}"
-                    for name in sorted(grouped[platform][organization])
+                    f"      - {names[name]}" for name in sorted(names)
                 )
         return "\n".join(lines)
 
@@ -211,3 +225,8 @@ class ShowStatusService:
             return repository, ""
         organization, name = repository.split("/", 1)
         return organization, name
+
+    @staticmethod
+    def _normalize_platform(platform: str) -> str:
+        normalized = platform.casefold()
+        return "forgejo" if normalized == "codeberg" else normalized

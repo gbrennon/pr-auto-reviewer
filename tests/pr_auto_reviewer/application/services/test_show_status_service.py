@@ -118,8 +118,27 @@ class TestShowStatusService:
         output = service.show_status()
 
         assert "Allowed Repositories (3):\n  - forgejo:" in output
-        assert "    - gbrennon:\n      - LocalNar\n      - ephact" in output
+        assert "    - gbrennon:\n      - ephact\n      - LocalNar" in output
         assert "  - github:\n    - forging-blocks-org:\n      - forging-blocks" in output
+
+    def test_normalizes_codeberg_and_deduplicates_repository_count(self) -> None:
+        state_port = MagicMock()
+        state_port.read_status.return_value = None
+        service = ShowStatusService(
+            runtime_state=state_port,
+            process_checker=lambda pid: False,
+            allowed_repositories=(
+                "codeberg:gbrennon/ephact",
+                "forgejo:gbrennon/ephact",
+            ),
+        )
+
+        output = service.show_status()
+
+        assert "Allowed Repositories (1):" in output
+        assert "  - forgejo:" in output
+        assert "      - ephact" in output
+        assert "  - codeberg:" not in output
 
     def test_shows_reviewing_status_with_phase_and_subagent(self) -> None:
         state_port = MagicMock()
