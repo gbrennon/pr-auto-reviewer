@@ -12,6 +12,9 @@ from pr_auto_reviewer.application.ports.outbound.api_access_capability_query_por
 from pr_auto_reviewer.application.ports.outbound.daemon_runtime_state_port import (
     DaemonRuntimeStatePort,
 )
+from pr_auto_reviewer.domain.entities.api_access_capability import (
+    ApiAccessCapability,
+)
 from pr_auto_reviewer.domain.value_objects.active_review_progress import (
     ActiveReviewProgress,
 )
@@ -121,22 +124,47 @@ class ShowStatusService:
         )
         if not capabilities:
             return "API Access Capabilities: (none recorded)"
-        lines = ["API Access Capabilities"]
+        now = time.time()
+        grouped: dict[
+            str, dict[tuple[str, str], list[ApiAccessCapability]]
+        ] = {}
         for capability in capabilities:
-            suspension = capability.suspension
-            if suspension is None or not suspension.is_active(time.time()):
-                state = "available"
-            else:
-                remaining = self._format_remaining(
-                    suspension.remaining_seconds(time.time())
+            grouped.setdefault(capability.platform, {}).setdefault(
+                (capability.role, capability.source_name), []
+            ).append(capability)
+        lines = ["API Access Capabilities"]
+        for platform in sorted(grouped):
+            lines.append(f"  - {platform}:")
+            for role, source_name in sorted(grouped[platform]):
+                entries = grouped[platform][(role, source_name)]
+                state = self._capability_state(entries, now)
+                suffix = f": {state}" if state else ":"
+                lines.append(f"    - {role} / {source_name}{suffix}")
+                lines.extend(
+                    f"      - {entry.scope or 'all scopes'}"
+                    for entry in sorted(entries, key=lambda item: item.scope)
                 )
-                state = f"suspended ({remaining} remaining)"
-            lines.append(
-                f"  - {capability.platform} / {capability.role} / "
-                f"{capability.source_name} / "
-                f"{capability.scope or 'all scopes'}: {state}"
-            )
         return "\n".join(lines)
+
+    @staticmethod
+    def _capability_state(
+        capabilities: list[ApiAccessCapability], now: float,
+    ) -> str:
+        suspended = next(
+            (
+                capability.suspension
+                for capability in capabilities
+                if capability.suspension is not None
+                and capability.suspension.is_active(now)
+            ),
+            None,
+        )
+        if suspended is None:
+            return ""
+        remaining = ShowStatusService._format_remaining(
+            suspended.remaining_seconds(now)
+        )
+        return f"suspended ({remaining} remaining)"
 
     @staticmethod
     def _format_remaining(seconds: int) -> str:
@@ -154,5 +182,32 @@ class ShowStatusService:
         )
         if not repos:
             return "Allowed Repositories: (all repositories permitted)"
-        lines = "\n".join(f"  - {repo}" for repo in repos)
-        return f"Allowed Repositories ({len(repos)}):\n{lines}"
+        grouped: dict[str, dict[str, set[str]]] = {}
+        for entry in repos:
+            platform, repository = self._split_platform(entry)
+            organization, name = self._split_repository(repository)
+            grouped.setdefault(platform, {}).setdefault(organization, set()).add(name)
+        lines = [f"Allowed Repositories ({len(repos)}):"]
+        for platform in sorted(grouped):
+            lines.append(f"  - {platform}:")
+            for organization in sorted(grouped[platform]):
+                lines.append(f"    - {organization}:")
+                lines.extend(
+                    f"      - {name}"
+                    for name in sorted(grouped[platform][organization])
+                )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _split_platform(entry: str) -> tuple[str, str]:
+        if ":" not in entry:
+            return "unscoped", entry
+        platform, repository = entry.split(":", 1)
+        return platform, repository
+
+    @staticmethod
+    def _split_repository(repository: str) -> tuple[str, str]:
+        if "/" not in repository:
+            return repository, ""
+        organization, name = repository.split("/", 1)
+        return organization, name
