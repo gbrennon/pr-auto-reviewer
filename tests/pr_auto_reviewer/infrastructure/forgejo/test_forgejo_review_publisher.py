@@ -48,7 +48,7 @@ class TestForgejoReviewPublisher:
 
         assert reviewer.verify_calls == [pr_id]
         assert any("/reviews" in path for path, _ in reviewer.post_calls)
-    def test_publish_mixed_review_splits_formal_and_comment_items(
+    def test_publish_mixed_review_posts_one_formal_review(
         self, integration_data: dict, monkeypatch,
     ) -> None:
         post_payloads = []
@@ -113,10 +113,8 @@ class TestForgejoReviewPublisher:
             body for path, body in post_payloads if "/comments" in path
         ]
         assert len(review_payloads) == 1
-        assert len(comment_payloads) == 1
+        assert comment_payloads == []
         assert "Blocking finding" in review_payloads[0]["body"]
-        assert "Non-blocking finding" not in review_payloads[0]["body"]
-        assert "Active suggestion" not in review_payloads[0]["body"]
-        assert "Non-blocking finding" in comment_payloads[0]["body"]
-        assert "Active suggestion" in comment_payloads[0]["body"]
+        assert "Non-blocking finding" in review_payloads[0]["body"]
+        assert "Active suggestion" in review_payloads[0]["body"]
 
