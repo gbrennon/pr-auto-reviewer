@@ -39,7 +39,11 @@ class ReviewPublisherProcessor:
         return [item for item in items if item.is_active]
 
     def process(
-        self, pr_id: PullRequestId, review: CodeReview,
+        self,
+        pr_id: PullRequestId,
+        review: CodeReview,
+        *,
+        include_non_blocking_in_formal_body: bool = False,
     ) -> ProcessedReview:
         """Convert *review* into a ``ProcessedReview`` ready for platform dispatch."""
         verdict_event = self._verdict_mapper.map(review.verdict)
@@ -47,7 +51,12 @@ class ReviewPublisherProcessor:
         if verdict_event == "COMMENT":
             return self._build_comment_path(pr_id, review)
 
-        return self._build_formal_path(pr_id, review, verdict_event)
+        return self._build_formal_path(
+            pr_id,
+            review,
+            verdict_event,
+            include_non_blocking_in_formal_body,
+        )
 
     def _build_comment_path(
         self, pr_id: PullRequestId, review: CodeReview,
@@ -75,7 +84,11 @@ class ReviewPublisherProcessor:
         )
 
     def _build_formal_path(
-        self, pr_id: PullRequestId, review: CodeReview, verdict_event: str,
+        self,
+        pr_id: PullRequestId,
+        review: CodeReview,
+        verdict_event: str,
+        include_non_blocking_in_formal_body: bool,
     ) -> ProcessedReview:
         blocking_items = self._active_blocking(review.items)
         non_blocking = self._active_non_blocking(review.items)
@@ -84,7 +97,12 @@ class ReviewPublisherProcessor:
             verdict=review.verdict,
             reason=review.reason or self._reason_factory.make(blocking_items),
             summary=review.summary,
-            items=blocking_items,
+            items=(
+                self._active_items(review.items)
+                if include_non_blocking_in_formal_body
+                else blocking_items
+            ),
+            suggestions=suggestions if include_non_blocking_in_formal_body else [],
             praise=review.praise,
             model_used=review.model_used,
         )
