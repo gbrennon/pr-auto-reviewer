@@ -26,7 +26,7 @@ from pr_auto_reviewer.infrastructure.config.repo_root import RepoRoot
 logger = logging.getLogger(__name__)
 
 _COMMAND_LINE_KEYS = {
-    "PLATFORM_MODE", "FORGEJO_MODE",
+    "PLATFORM_MODE", "FORGEJO_MODE", "PLATFORM_TRANSPORT",
     "REVIEW_OUTPUT", "DEBUG", "PROMPT_MODE",
     "LLM_HOST", "LLM_MODEL",
     "POLL_INTERVAL", "MAX_PROMPT_TOKENS",
