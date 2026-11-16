@@ -22,6 +22,7 @@ from pr_auto_reviewer.infrastructure.config.environment_detector import (
     EnvironmentDetector,
 )
 from pr_auto_reviewer.infrastructure.config.repo_root import RepoRoot
+from pr_auto_reviewer.infrastructure.config.toml_settings_store import TomlSettingsStore
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,10 @@ class ConfigLoader:
             if key in os.environ:
                 values[key] = os.environ[key]
 
+    def _load_toml_values(self) -> dict[str, str]:
+        settings = TomlSettingsStore(AppPaths.config_dir() / "settings.toml")
+        return {name.upper(): str(value) for name, value in settings.all().items()}
+
     def _load_values(self, path: Path) -> dict[str, str]:
         return {
             key: value
@@ -103,14 +108,15 @@ class ConfigLoader:
 
     def _load_production(self, config_path: str) -> Config:
         if Path(config_path).exists():
-            values = self._load_values(Path(config_path))
+            values = self._load_toml_values()
+            values.update(self._load_values(Path(config_path)))
             logger.info("Loading production config from %s", config_path)
         else:
+            values = self._load_toml_values()
             logger.warning(
                 "Production config not found at %s; using defaults.",
                 config_path,
             )
-            values = {}
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
@@ -140,7 +146,7 @@ class ConfigLoader:
     def _load_development(
         self, user_config_path: str, repo_env_path: Path, env: str
     ) -> Config:
-        values: dict[str, str] = {}
+        values: dict[str, str] = self._load_toml_values()
 
         user_cfg = Path(user_config_path)
         if user_cfg.exists():

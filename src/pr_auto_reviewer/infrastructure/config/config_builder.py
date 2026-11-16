@@ -58,6 +58,7 @@ class ConfigBuilder:
             env=env_name,
             platform_mode=platform.mode,
             platform_transport=platform.transport,
+            storage_encryption_key=source.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", ""),
             github_api_url=platform.github_api_url,
             forgejo_api_url=platform.forgejo_api_url,
             github_owner_token=platform.github_owner_token,

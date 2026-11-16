@@ -248,7 +248,7 @@ class TestWireCoreServices:
         assert isinstance(result.fragment_repository, FileSystemFragmentRepository)
         assert result.fragment_repository.base_path == custom_dir
 
-    def test_pr_repository_state_file_is_in_config_dir(
+    def test_pr_repository_database_is_in_config_dir(
         self,
         forgejo_config: Config,
         repo_context,
@@ -256,10 +256,10 @@ class TestWireCoreServices:
     ) -> None:
         result = wire_core_services(forgejo_config, repo_context, _config_dir=tmp_path)
 
-        assert isinstance(result.pr_repository, JsonFilePullRequestRepository)
+        assert isinstance(result.pr_repository, SqlitePullRequestRepository)
         state_path = getattr(result.pr_repository, "_file_path")
         assert str(state_path).startswith(str(tmp_path))
-        assert str(state_path).endswith("state.json")
+        assert str(state_path).endswith("state.sqlite3")
 
     def test_conversation_logger_transcripts_are_in_config_dir(
         self,
@@ -285,5 +285,5 @@ class TestWireCoreServices:
         result = wire_core_services(forgejo_config, repo_context)
 
         expected_state_dir = tmp_path / "pr-auto-reviewer"
-        assert getattr(result.pr_repository, "_file_path") == expected_state_dir / "state.json"
+        assert getattr(result.pr_repository, "_file_path") == expected_state_dir / "state.sqlite3"
         assert result.conversation_logger._base_dir == expected_state_dir / "conversations"
