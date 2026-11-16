@@ -11,7 +11,11 @@ from .github.github_review_publisher import (
 from .github.issue_tracker import GithubIssueTracker as GitIssueTrackerAdapter
 from .github.review_reader import GithubReviewReader as GitReviewReaderAdapter
 from .notifier import LinuxNotifier
-from .persistence import JsonFilePullRequestRepository
+from .persistence import (
+    EncryptedSqliteSecretStore,
+    JsonFilePullRequestRepository,
+    SqlitePullRequestRepository,
+)
 
 __all__ = [
     "ArchitectureDetector",
@@ -22,6 +26,8 @@ __all__ = [
     "GitReviewPublisherAdapter",
     "GitReviewReaderAdapter",
     "InMemoryCommandBus",
+    "EncryptedSqliteSecretStore",
     "JsonFilePullRequestRepository",
+    "SqlitePullRequestRepository",
     "LinuxNotifier",
 ]
