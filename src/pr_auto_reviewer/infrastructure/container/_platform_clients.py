@@ -29,6 +29,7 @@ from pr_auto_reviewer.infrastructure.client.token_resolver import (
     TokenResolver,
 )
 from pr_auto_reviewer.infrastructure.config import Config
+from pr_auto_reviewer.infrastructure.github.gh_cli_client import GhCliClient
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
 from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
 
@@ -88,24 +89,28 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
             "forgejo",
         )
 
-        gb_owner = GitPlatformHttpClient(
-            config.github_api_url,
-            config.github_owner_token,
-            platform_mode="github",
-            client_label="owner",
-            preflight_verifier=github_preflight,
-            token_resolver=github_resolver,
-            _verified_cache_path=_verified_cache_path,
-        )
-        gb_reviewer = GitPlatformHttpClient(
-            config.github_api_url,
-            config.github_reviewer_token,
-            platform_mode="github",
-            client_label="reviewer",
-            preflight_verifier=github_preflight,
-            token_resolver=github_resolver,
-            _verified_cache_path=_verified_cache_path,
-        )
+        if config.platform_transport == "cli":
+            gb_owner = GhCliClient(client_label="owner")
+            gb_reviewer = GhCliClient(client_label="reviewer")
+        else:
+            gb_owner = GitPlatformHttpClient(
+                config.github_api_url,
+                config.github_owner_token,
+                platform_mode="github",
+                client_label="owner",
+                preflight_verifier=github_preflight,
+                token_resolver=github_resolver,
+                _verified_cache_path=_verified_cache_path,
+            )
+            gb_reviewer = GitPlatformHttpClient(
+                config.github_api_url,
+                config.github_reviewer_token,
+                platform_mode="github",
+                client_label="reviewer",
+                preflight_verifier=github_preflight,
+                token_resolver=github_resolver,
+                _verified_cache_path=_verified_cache_path,
+            )
         fj_owner = GitPlatformHttpClient(
             config.forgejo_api_url,
             config.forgejo_owner_token,
@@ -181,24 +186,28 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
         "github" if is_github else "forgejo",
     )
 
-    http_client = GitPlatformHttpClient(
-        api_url,
-        owner_token,
-        platform_mode=platform_value,
-        client_label="owner",
-        preflight_verifier=preflight,
-        token_resolver=resolver,
-        _verified_cache_path=_verified_cache_path,
-    )
-    reviewer_client = GitPlatformHttpClient(
-        api_url,
-        reviewer_token,
-        platform_mode=platform_value,
-        client_label="reviewer",
-        preflight_verifier=preflight,
-        token_resolver=resolver,
-        _verified_cache_path=_verified_cache_path,
-    )
+    if is_github and config.platform_transport == "cli":
+        http_client = GhCliClient(client_label="owner")
+        reviewer_client = GhCliClient(client_label="reviewer")
+    else:
+        http_client = GitPlatformHttpClient(
+            api_url,
+            owner_token,
+            platform_mode=platform_value,
+            client_label="owner",
+            preflight_verifier=preflight,
+            token_resolver=resolver,
+            _verified_cache_path=_verified_cache_path,
+        )
+        reviewer_client = GitPlatformHttpClient(
+            api_url,
+            reviewer_token,
+            platform_mode=platform_value,
+            client_label="reviewer",
+            preflight_verifier=preflight,
+            token_resolver=resolver,
+            _verified_cache_path=_verified_cache_path,
+        )
 
     return PlatformClients(
         http_client=http_client,

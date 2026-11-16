@@ -16,6 +16,7 @@ class PlatformConfigParser:
         forgejo_url = source.get("FORGEJO_API_URL", source.get("FORGEJO_HOST", "https://codeberg.org"))
         return PlatformSettings(
             mode=GitProvider.parse(mode.strip()),
+            transport=source.get("PLATFORM_TRANSPORT", "http").strip().lower(),
             github_api_url=source.get("GITHUB_API_URL", "https://api.github.com").strip(),
             forgejo_api_url=ForgejoApiUrlNormalizer.normalize(forgejo_url.strip()),
             github_owner_token=source.get("GITHUB_OWNER_TOKEN", "").strip(),

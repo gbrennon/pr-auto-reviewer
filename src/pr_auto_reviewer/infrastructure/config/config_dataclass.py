@@ -20,6 +20,7 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 class Config:
     env: str
     platform_mode: GitProvider = GitProvider.FORGEJO
+    platform_transport: str = "http"
     clone_protocol: CloneProtocol = CloneProtocol.HTTPS
 
     github_api_url: str = "https://api.github.com"

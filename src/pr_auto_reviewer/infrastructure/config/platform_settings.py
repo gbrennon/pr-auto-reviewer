@@ -21,3 +21,4 @@ class PlatformSettings:
     forgejo_owner_token: str
     forgejo_reviewer_token: str
     forgejo_reviewer_username: str
+    transport: str = "http"
