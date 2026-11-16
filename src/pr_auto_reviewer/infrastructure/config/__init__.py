@@ -9,6 +9,9 @@ from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
 from pr_auto_reviewer.infrastructure.config.role_suffix_parser import (
     RoleSuffixParser,
 )
+from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
+    TomlSettingsStore,
+)
 
 __all__ = [
     "Config",
@@ -16,5 +19,6 @@ __all__ = [
     "OrgTokenEntry",
     "OrgTokenOverrides",
     "RoleSuffixParser",
+    "TomlSettingsStore",
     "load_config",
 ]
