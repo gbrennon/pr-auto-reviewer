@@ -8,6 +8,7 @@ import subprocess
 import sys
 from typing import Any
 
+from .presentation.cli.settings_cli import SettingsCli
 from .presentation.composition_root import bootstrap, run_daemon, show_status
 
 SERVICE_NAME = "pr-auto-reviewer.service"
@@ -41,6 +42,10 @@ class CommandLineInterface:
             "list-allowed-repositories",
             help="List repositories permitted by the allowlist",
         )
+        config_parser = subparsers.add_parser(
+            "config", help="Read and write application settings"
+        )
+        config_parser.add_argument("config_args", nargs=argparse.REMAINDER)
 
     def _add_action_parsers(self, subparsers: Any) -> None:
         watch_parser = subparsers.add_parser("watch-prs", help="Watch PRs for reviews")
@@ -72,6 +77,8 @@ class CommandLineInterface:
         if args.command == "watch-prs":
             self._handle_watch(args)
             return
+        if args.command == "config":
+            raise SystemExit(SettingsCli().run(args.config_args))
         self._handle_runner_command(args)
 
     def _handle_lifecycle(self, command: str) -> bool:
