@@ -4,37 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
-from typing import Any, Protocol
+from typing import Any
 
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
-
-
-class CommandRunner(Protocol):
-    """Run an authenticated command and return stdout."""
-
-    def run(self, command: list[str], input_text: str | None = None) -> str:
-        """Execute a command."""
-        ...
-
-
-class SubprocessCommandRunner:
-    """Run commands through the local process environment."""
-
-    def run(self, command: list[str], input_text: str | None = None) -> str:
-        """Execute a command and raise when the CLI reports failure."""
-        result = subprocess.run(
-            command,
-            input=input_text,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip() or "Forgejo CLI command failed")
-        return result.stdout
+from .command_runner import CommandRunner
+from .subprocess_command_runner import SubprocessCommandRunner
 
 
 class FjCliClient(GitPlatformHttpClient):
@@ -57,8 +33,7 @@ class FjCliClient(GitPlatformHttpClient):
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> Any:
         """Read a supported Forgejo resource through ``fj``."""
         del headers, repo, params
-        command = self._view_command(path)
-        output = self._runner.run(command)
+        output = self._runner.run(self._view_command(path))
         try:
             return json.loads(output)
         except json.JSONDecodeError as exc:
@@ -77,27 +52,14 @@ class FjCliClient(GitPlatformHttpClient):
         if match:
             repository, number = match.groups()
             self._runner.run(
-                [
-                    "fj",
-                    "pr",
-                    "comment",
-                    f"{repository}#{number}",
-                    str(body.get("body", "")),
-                ]
+                ["fj", "pr", "comment", f"{repository}#{number}", str(body.get("body", ""))]
             )
             return {}
         if path.endswith("/issues") and repo:
             self._runner.run(
                 [
-                    "fj",
-                    "issue",
-                    "create",
-                    "--repo",
-                    repo,
-                    "--no-template",
-                    str(body.get("title", "")),
-                    "--body",
-                    str(body.get("body", "")),
+                    "fj", "issue", "create", "--repo", repo, "--no-template",
+                    str(body.get("title", "")), "--body", str(body.get("body", "")),
                 ]
             )
             return {}

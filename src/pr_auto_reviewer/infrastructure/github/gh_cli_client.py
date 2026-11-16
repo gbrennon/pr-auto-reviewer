@@ -3,38 +3,14 @@
 from __future__ import annotations
 
 import json
-import subprocess
-from typing import Any, Protocol
+from typing import Any
 from urllib.parse import urlencode
 
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
-
-
-class CommandRunner(Protocol):
-    """Run an authenticated command and return stdout."""
-
-    def run(self, command: list[str], input_text: str | None = None) -> str:
-        """Execute a command."""
-        ...
-
-
-class SubprocessCommandRunner:
-    """Run commands through the local process environment."""
-
-    def run(self, command: list[str], input_text: str | None = None) -> str:
-        """Execute a command and raise when the CLI reports failure."""
-        result = subprocess.run(
-            command,
-            input=input_text,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip() or "GitHub CLI command failed")
-        return result.stdout
+from .command_runner import CommandRunner
+from .subprocess_command_runner import SubprocessCommandRunner
 
 
 class GhCliClient(GitPlatformHttpClient):
