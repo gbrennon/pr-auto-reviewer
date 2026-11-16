@@ -20,6 +20,12 @@ class TomlSettingsStore:
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
 
+    @staticmethod
+    def is_secret_name(name: str) -> bool:
+        """Return whether a setting name denotes a secret credential."""
+        normalized = name.upper()
+        return any(marker in normalized for marker in _SECRET_KEY_MARKERS)
+
     def get(self, name: str, default: TomlValue | None = None) -> TomlValue | None:
         """Return one setting without exposing secret values."""
         return self.all().get(name, default)
@@ -47,7 +53,7 @@ class TomlSettingsStore:
 
     def _validate_name(self, name: str) -> None:
         normalized = name.upper()
-        if any(marker in normalized for marker in _SECRET_KEY_MARKERS):
+        if self.is_secret_name(name):
             raise ValueError("secret settings must be stored in encrypted persistence")
         if not name or any(character in name for character in " \t\n="):
             raise ValueError("Setting name must be a non-empty TOML key")
