@@ -120,8 +120,8 @@ from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
 from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
     LinuxNotifier,
 )
-from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
-    JsonFilePullRequestRepository,
+from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+    SqlitePullRequestRepository,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
     ReasonFactory,
@@ -263,8 +263,9 @@ def wire_core_services(
     else:
         artifact_root = AppPaths.state_dir()
     os.makedirs(artifact_root, exist_ok=True)
-    pr_repository = JsonFilePullRequestRepository(
-        artifact_root / "state.json"
+    encryption_key = config.storage_encryption_key or "pr-auto-reviewer-local-key"
+    pr_repository = SqlitePullRequestRepository(
+        artifact_root / "state.sqlite3", encryption_key
     )
     chat_client = ChatClientFactory.create(config)
     command_bus = InMemoryCommandBus()

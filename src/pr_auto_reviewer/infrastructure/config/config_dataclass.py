@@ -21,6 +21,7 @@ class Config:
     env: str
     platform_mode: GitProvider = GitProvider.FORGEJO
     platform_transport: str = "http"
+    storage_encryption_key: str = ""
     clone_protocol: CloneProtocol = CloneProtocol.HTTPS
 
     github_api_url: str = "https://api.github.com"

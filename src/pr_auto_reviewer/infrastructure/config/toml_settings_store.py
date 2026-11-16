@@ -32,10 +32,11 @@ class TomlSettingsStore:
 
     def all(self) -> dict[str, TomlValue]:
         """Return all persisted non-secret settings."""
-        if not self._path.exists():
+        try:
+            with self._path.open("rb") as stream:
+                values = tomllib.load(stream)
+        except FileNotFoundError:
             return {}
-        with self._path.open("rb") as stream:
-            values = tomllib.load(stream)
         return values
 
     def set(self, name: str, value: TomlValue) -> None:
