@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
@@ -34,19 +34,7 @@ from pr_auto_reviewer.domain.value_objects.review_item_status import (
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 
-
-class AuditTranscriptRunner(Protocol):
-    """Seam that runs the auditor conversation and returns its results."""
-
-    def run(
-        self,
-        system_prompt: str,
-        repo_path: Path,
-        changed_files: list[str],
-        base_sha: str,
-    ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
-        """Return parsed audit results and the full transcript."""
-        ...
+from .audit_transcript_runner import AuditTranscriptRunner
 
 
 class RemediationAuditService:
