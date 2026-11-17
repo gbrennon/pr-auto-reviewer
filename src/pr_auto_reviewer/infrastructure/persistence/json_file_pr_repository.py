@@ -16,180 +16,23 @@ from ...application.ports.outbound.pull_request_repository_port import (
     PullRequestRepositoryPort,
 )
 from ...domain.entities.pull_request import PullRequest
-from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions import RepositoryCorruptedError
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.comment_id import CommentId
 from ...domain.value_objects.commit_sha import CommitSha
-from ...domain.value_objects.issue_category import IssueCategory
-from ...domain.value_objects.item_severity import ItemSeverity
 from ...domain.value_objects.pull_request_id import PullRequestId
 from ...domain.value_objects.review_item_lifecycle import ReviewItemLifecycle
-from ...domain.value_objects.review_item_status import ReviewItemStatus
-from ...domain.value_objects.review_item_transition import ReviewItemTransition
-from ...domain.value_objects.review_verdict import ReviewVerdict
 
 logger = logging.getLogger(__name__)
 
 _STATE_KEY_SEPARATOR = "/"
 
-class StateKey:
-    """Build the composite storage key for a pull request."""
 
-    @staticmethod
-    def of(pr_id: PullRequestId) -> str:
-        return f"{pr_id.repository}{_STATE_KEY_SEPARATOR}{pr_id.number}"
+from .code_review_codec import CodeReviewCodec
+from .review_item_codec import ReviewItemCodec
+from .review_item_lifecycle_codec import ReviewItemLifecycleCodec
+from .state_key import StateKey
 
-
-class ReviewItemCodec:
-    """Serialize and deserialize ``ReviewItem`` to and from JSON dicts."""
-
-    @staticmethod
-    def serialize(item: ReviewItem) -> dict:
-        return {
-            "id": item.id,
-            "severity": item.severity.value,
-            "category": item.category.value,
-            "file_path": item.file_path,
-            "description": item.description,
-            "line": item.line,
-            "current_code": item.current_code,
-            "suggested_fix": item.suggested_fix,
-            "root_cause": item.root_cause,
-            "reproduction": item.reproduction,
-            "acceptance_criteria": item.acceptance_criteria,
-            "detection_method": item.detection_method,
-            "status": item.status.value,
-            "status_explanation": item.status_explanation,
-        }
-
-    @staticmethod
-    def deserialize(raw_item: dict) -> ReviewItem:
-        return ReviewItem(
-            severity=ItemSeverity.from_value(raw_item.get("severity")),
-            category=IssueCategory.from_value(raw_item.get("category")),
-            file_path=raw_item.get("file_path"),
-            description=raw_item.get("description", ""),
-            id=raw_item.get("id", ""),
-            line=raw_item.get("line", ""),
-            current_code=raw_item.get("current_code", ""),
-            suggested_fix=raw_item.get("suggested_fix", ""),
-            root_cause=raw_item.get("root_cause", ""),
-            reproduction=raw_item.get("reproduction", ""),
-            acceptance_criteria=raw_item.get("acceptance_criteria", ""),
-            detection_method=raw_item.get("detection_method", ""),
-            status=raw_item.get("status", "open"),
-            status_explanation=raw_item.get("status_explanation", ""),
-        )
-
-
-class ReviewItemLifecycleCodec:
-    """Serialize and deserialize review-item lifecycle projections."""
-
-    @staticmethod
-    def serialize(lifecycle: ReviewItemLifecycle) -> dict:
-        """Serialize a lifecycle projection into JSON-compatible data."""
-        return {
-            "item_id": lifecycle.item_id,
-            "status": lifecycle.status.value,
-            "first_seen_sha": lifecycle.first_seen_sha,
-            "last_audited_sha": lifecycle.last_audited_sha,
-            "status_explanation": lifecycle.status_explanation,
-            "transitions": [
-                {
-                    "from_status": (
-                        transition.from_status.value
-                        if transition.from_status is not None
-                        else None
-                    ),
-                    "to_status": transition.to_status.value,
-                    "commit_sha": transition.commit_sha,
-                    "explanation": transition.explanation,
-                }
-                for transition in lifecycle.transitions
-            ],
-        }
-
-    @staticmethod
-    def deserialize(raw_lifecycle: dict) -> ReviewItemLifecycle:
-        """Deserialize a lifecycle projection from persisted JSON data."""
-        transitions = tuple(
-            ReviewItemTransition(
-                from_status=(
-                    ReviewItemStatus(raw_transition["from_status"])
-                    if raw_transition.get("from_status") is not None
-                    else None
-                ),
-                to_status=ReviewItemStatus(raw_transition["to_status"]),
-                commit_sha=raw_transition.get("commit_sha", ""),
-                explanation=raw_transition.get("explanation", ""),
-            )
-            for raw_transition in raw_lifecycle.get("transitions", [])
-        )
-        return ReviewItemLifecycle(
-            item_id=raw_lifecycle.get("item_id", ""),
-            status=ReviewItemStatus(raw_lifecycle.get("status", "created")),
-            first_seen_sha=raw_lifecycle.get("first_seen_sha", ""),
-            last_audited_sha=raw_lifecycle.get("last_audited_sha", ""),
-            status_explanation=raw_lifecycle.get("status_explanation", ""),
-            transitions=transitions,
-        )
-
-
-class CodeReviewCodec:
-    """Serialize and deserialize ``CodeReview`` to and from JSON dicts."""
-
-    @staticmethod
-    def serialize(review: CodeReview) -> dict:
-        return {
-            "verdict": review.verdict.value,
-            "summary": review.summary,
-            "reason": review.reason,
-            "model_used": review.model_used,
-            "items": [ReviewItemCodec.serialize(i) for i in review.items],
-            "suggestions": [
-                ReviewItemCodec.serialize(s) for s in review.suggestions
-            ],
-            "praise": [ReviewItemCodec.serialize(p) for p in review.praise],
-        }
-
-    @classmethod
-    def deserialize(cls, raw: dict) -> CodeReview:
-        items = [ReviewItemCodec.deserialize(i) for i in raw.get("items", [])]
-        suggestions = [
-            ReviewItemCodec.deserialize(s) for s in raw.get("suggestions", [])
-        ]
-        praise = [ReviewItemCodec.deserialize(p) for p in raw.get("praise", [])]
-        verdict = cls._resolve_verdict(str(raw.get("verdict", "")), items)
-        summary, reason, model_used = cls._resolve_strings(raw, items)
-        return CodeReview(
-            verdict=verdict,
-            reason=reason,
-            summary=summary,
-            model_used=model_used,
-            items=items,
-            suggestions=suggestions,
-            praise=praise,
-        )
-
-    @staticmethod
-    def _resolve_verdict(raw_verdict: str, items: list[ReviewItem]) -> ReviewVerdict:
-        verdict = ReviewVerdict(raw_verdict.strip().lower())
-        if verdict is ReviewVerdict.COMMENTED:
-            return (
-                ReviewVerdict.CHANGES_REQUESTED if items else ReviewVerdict.APPROVED
-            )
-        return verdict
-
-    @staticmethod
-    def _resolve_strings(raw: dict, items: list[ReviewItem]) -> tuple[str, str, str]:
-        summary = (
-            raw.get("summary", "")
-            or f"Found {len(items)} issue(s) in persisted review."
-        )
-        reason = raw.get("reason", "") or summary
-        model_used = raw.get("model_used", "") or "unknown"
-        return summary, reason, model_used
 
 class JsonFilePullRequestRepository(PullRequestRepositoryPort):
     """Serialize and deserialize the PullRequest aggregate to a local JSON file.
