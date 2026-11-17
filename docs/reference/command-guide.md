@@ -250,7 +250,7 @@ Sections `### Current Code` and `### Suggested Fix` are included whenever presen
 
 ## Required Platform Permissions
 
-Processing commands and creating issues requires appropriate token permissions. For detailed token configuration instructions, refer to the [Token Setup Documentation](tokens/README.md).
+Processing commands and creating issues requires appropriate token permissions. For detailed token configuration instructions, refer to the [Token Setup Documentation](../tokens/README.md).
 
 ### GitHub Permissions
 

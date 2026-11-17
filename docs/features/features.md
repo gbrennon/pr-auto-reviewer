@@ -18,7 +18,7 @@ This document outlines what is currently implemented and what is planned.
 
 ### Configuration
 
-- **Environment-based Config** — All settings in `.env` or user config; see [Configuration](configuration.md) for the full variable reference
+- **Environment-based Config** — All settings in `.env` or user config; see [Configuration](../configuration/configuration.md) for the full variable reference
 - **Configurable Poll Interval** — Set via `POLL_INTERVAL` env var
 - **Configurable LLM** — Host and model configurable via `LLM_HOST` / `LLM_MODEL` env vars
 - **Configurable Clone Protocol** — HTTPS or SSH for local git clones via `CLONE_PROTOCOL`

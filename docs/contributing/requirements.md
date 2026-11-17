@@ -32,7 +32,7 @@ Requires two accounts or one account with two tokens:
 
 ## Tokens
 
-See [docs/tokens/](tokens/README.md) for full instructions on token types, required permissions, and verification.
+See [docs/tokens/](../tokens/README.md) for full instructions on token types, required permissions, and verification.
 
 ## Model
 

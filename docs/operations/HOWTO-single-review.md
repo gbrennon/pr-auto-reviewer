@@ -11,7 +11,7 @@ uv run python -m pr_auto_reviewer review --repo owner/repo --pr <number>
 
 ## Environment
 
-The application loads settings from `.env`. See [Configuration](configuration.md).
+The application loads settings from `.env`. See [Configuration](../configuration/configuration.md).
 
 ### GitHub
 
@@ -61,7 +61,7 @@ LLM_MODEL=code-review:latest
 
 | Command | Description |
 |---------|-------------|
-| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments (see [docs/command-guide.md](command-guide.md)) |
+| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments (see [command-guide.md](../reference/command-guide.md)) |
 | `list-items --repo owner/repo --pr N [-v]` | List parsed review items from latest review |
 | `clean` | Reset all reviewed-PR tracking state |
 | `bootstrap` | Initialize config and verify tokens |
@@ -93,7 +93,7 @@ Use `terminal` or `file:` for testing without touching the PR.
 
 ## Token Setup
 
-See [docs/tokens/](tokens/README.md) for full instructions on creating tokens and setting required permissions.
+See [docs/tokens/](../tokens/README.md) for full instructions on creating tokens and setting required permissions.
 
 ## Troubleshooting
 
