@@ -3,7 +3,7 @@
 Durable architecture reference for the pr-auto-reviewer application.
 This document describes *rules* — layer responsibilities, dependency
 direction, and invariants that hold regardless of feature details.
-Companion documents: `review-flow-architecture.md` (runtime flow and
+Companion documents: `review-flow/review-flow-architecture.md` (runtime flow and
 adapter wiring) and `verdict-event-mapping.md` (verdict-to-platform
 event mapping).
 
@@ -213,7 +213,7 @@ The role team is documented per page in [docs/sub-agents/](../sub-agents/README.
 9. **External contracts are verified upstream.** Platform API behavior
    (endpoints, headers, review payloads, rate-limit headers) matches the
    official docs; quirks the hosts actually exhibit are preserved, not
-   "fixed" — documented in `review-flow-architecture.md`.
+   "fixed" — documented in `review-flow/review-flow-architecture.md`.
 
 ---
 
