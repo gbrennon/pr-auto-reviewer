@@ -166,21 +166,21 @@ never replays a failed prompt.
 
 The **teacher** role is the coaching layer formed by those manager tasks
 and advisor feedback plus this documentation set; see
-[sub-agents/teacher.md](sub-agents/teacher.md).
+[teacher.md](../sub-agents/teacher.md).
 
 To change what a sub-agent does, edit the phase fragment or the role's
 page in `docs/sub-agents/`; to change which phase produces what, edit
 the plan builder in `infrastructure/container/_core_services.py`.
 
-The role team is documented per page in [docs/sub-agents/](sub-agents/README.md):
+The role team is documented per page in [docs/sub-agents/](../sub-agents/README.md):
 
-- [manager](sub-agents/manager.md) — plans, assigns, owns technical context
-- [advisor](sub-agents/advisor.md) — watches every turn, grades S/A/B/C/D/F,
+- [manager](../sub-agents/manager.md) — plans, assigns, owns technical context
+- [advisor](../sub-agents/advisor.md) — watches every turn, grades S/A/B/C/D/F,
   hands blockers to the manager
-- [engineer](sub-agents/engineer.md) — principal-engineer bug/security review
+- [engineer](../sub-agents/engineer.md) — principal-engineer bug/security review
   incl. indirect callers; audits tests for bias
-- [architect](sub-agents/architect.md) — structure, coupling, anti-patterns
-- [teacher](sub-agents/teacher.md) — the coaching tone; expressed through
+- [architect](../sub-agents/architect.md) — structure, coupling, anti-patterns
+- [teacher](../sub-agents/teacher.md) — the coaching tone; expressed through
   manager tasks, advisor feedback, and transcripts
 
 ---

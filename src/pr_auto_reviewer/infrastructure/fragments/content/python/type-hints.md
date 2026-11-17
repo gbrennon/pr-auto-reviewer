@@ -16,7 +16,7 @@ Check the following code for proper type annotation usage:
 ## Checks
 
 {% if 'def ' in code and ':' not in code.split('def ')[-1].split(')')[0] + ')' %}
-⚠️ **Missing type hints** — function signatures should include parameter and return types
+**Warning: Missing type hints** — function signatures should include parameter and return types
 {% endif %}
 
 - Missing parameter type annotations

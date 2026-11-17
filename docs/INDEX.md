@@ -4,7 +4,7 @@ Navigation hub for all project documentation.
 
 ---
 
-## 📁 By Category
+## By Category
 
 ### Architecture & Design
 | Document | Purpose |
@@ -66,7 +66,7 @@ Navigation hub for all project documentation.
 
 ---
 
-## 🎯 Quick Start Paths
+## Quick Start Paths
 
 | Goal | Start Here |
 |---|---|
@@ -79,9 +79,9 @@ Navigation hub for all project documentation.
 
 ---
 
-## 🔗 Cross-References
+## Cross-References
 
 - **README.md** → [Project README](../README.md) (entry point, quick start)
 - **AGENTS.md** → [Agent Rules](../AGENTS.md) (coding conventions, test rules)
-- **CLAUDE.md** → [Claude Context](../CLAUDE.md) (project context for AI)
+
 - **Makefile** → [Makefile](../Makefile) (available commands: `make help`)
