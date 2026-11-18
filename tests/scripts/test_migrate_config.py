@@ -1,5 +1,6 @@
 """Tests for the temporary legacy configuration migration script."""
 
+import tomllib
 from pathlib import Path
 
 from scripts.migrate_config import ConfigMigration
@@ -40,6 +41,11 @@ class TestConfigMigration:
             "GITHUB_OWNER_TOKEN=sometoken\n"
             "GITHUB_TOKEN_org_OWNER=sometoken\n"
         )
+        with (config_dir / "settings.toml").open("rb") as stream:
+            assert tomllib.load(stream) == {
+                "PLATFORM_MODE": "both",
+                "USE_STRICT_FRAGMENT_SELECTION": False,
+            }
         assert TomlSettingsStore(config_dir / "settings.toml").all() == {
             "PLATFORM_MODE": "both",
             "USE_STRICT_FRAGMENT_SELECTION": False,

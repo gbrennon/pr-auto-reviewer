@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tomllib
 from pathlib import Path
 from typing import Sequence
-
-from dotenv import dotenv_values
 
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import TomlSettingsStore
@@ -47,17 +46,23 @@ class ConfigMigration:
     def _read_source(self) -> dict[str, str]:
         if not self._source.is_file():
             raise ValueError(f"Source config does not exist: {self._source}")
-        values = dotenv_values(self._source)
-        return {
-            name: value
-            for name, value in values.items()
-            if value is not None
-        }
+        values: dict[str, str] = {}
+        for line in self._source.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            name, separator, value = stripped.partition("=")
+            if not separator or not name.strip():
+                raise ValueError(f"Invalid legacy config line: {line}")
+            values[name.strip()] = value.strip().strip('"').strip("'")
+        return values
 
     def _write_settings(self, values: dict[str, str], names: tuple[str, ...]) -> None:
         store = TomlSettingsStore(self._config_dir / "settings.toml")
         for name in names:
             store.set(name, self._parse_value(values[name]))
+        with (self._config_dir / "settings.toml").open("rb") as stream:
+            tomllib.load(stream)
 
     def _write_secrets(self, values: dict[str, str], names: tuple[str, ...]) -> None:
         if names and not self._encryption_key:
