@@ -1,15 +1,22 @@
 # Configuration
 
-All configuration via environment variables, loaded from three sources
-(lower number = higher priority):
+Configuration is loaded from these sources, in precedence order (highest first):
 
 1. **Shell environment** — direct exports
-2. **Project `.env`** — repo root for dev/manual mode
-3. **User config** — `~/.config/pr-auto-reviewer/config` for production/service mode
+2. **Project `.env`** — repository root during development
+3. **User config** — `~/.config/pr-auto-reviewer/config`
+4. **TOML settings** — `~/.config/pr-auto-reviewer/settings.toml`
 
-Application detects `ENV` to choose the load path.
-Set `ENV=production` to use the user config file;
-omit or set `ENV=development` to use the project `.env`.
+The settings CLI writes non-secret values to the TOML file:
+
+```bash
+uv run python -m pr_auto_reviewer config set POLL_INTERVAL 600
+uv run python -m pr_auto_reviewer config get POLL_INTERVAL
+```
+
+Legacy `.env` and user-config values override TOML values when the same key exists.
+Application detects `ENV` to choose the load path. Set `ENV=production` to use
+user configuration; omit it or set `ENV=development` to use the project `.env`.
 
 ## Contents
 
