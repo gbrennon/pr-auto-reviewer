@@ -16,6 +16,7 @@ from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
+_MAX_READ_PREVIEW_CHARS = 12 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
 _ARGUMENT_KEY_ALIASES = (
@@ -155,6 +156,33 @@ class ExplorationToolService:
             return strings[0]
         return ""
 
+    @staticmethod
+    def _read_content(
+        content: str, start_line: int | None, end_line: int | None,
+    ) -> tuple[str, bool, int, int, int]:
+        """Return bounded content and its source-size metadata."""
+        lines = content.splitlines()
+        total_chars = len(content)
+        total_lines = len(lines)
+        if start_line is not None:
+            end = min(end_line or total_lines, total_lines)
+            if start_line < 1 or start_line > total_lines:
+                raise ValueError(
+                    f"Line {start_line} out of range (file has {total_lines} lines)"
+                )
+            selected = "\n".join(lines[start_line - 1 : end])
+            return selected, False, total_chars, total_lines, len(selected.splitlines())
+        if len(content) <= _MAX_READ_PREVIEW_CHARS:
+            return content, False, total_chars, total_lines, total_lines
+        preview = content[:_MAX_READ_PREVIEW_CHARS]
+        preview = preview[:preview.rfind("\n")]
+        returned_lines = len(preview.splitlines())
+        bounded = (
+            f"{preview}\n\n... (file truncated after {returned_lines} lines; "
+            "Use read_file with a line range to inspect the remainder.)"
+        )
+        return bounded, True, total_chars, total_lines, returned_lines
+
     def read_file(self, args: str) -> dict[str, Any]:
         """Read a file (or line range) relative to the repo root.
 
@@ -172,22 +200,22 @@ class ExplorationToolService:
                 "error": f"File exceeds {_MAX_FILE_BYTES} byte limit",
             }
         try:
-            content = resolved.read_text(encoding="utf-8")
+            raw_content = resolved.read_text(encoding="utf-8")
+            content, truncated, total_chars, total_lines, returned_lines = (
+                self._read_content(raw_content, start_line, end_line)
+            )
         except UnicodeDecodeError:
             return {"status": "error", "error": "Binary file — cannot read as text"}
-        if start_line is not None:
-            lines = content.splitlines()
-            end = min(end_line or len(lines), len(lines))
-            if start_line < 1 or start_line > len(lines):
-                return {
-                    "status": "error",
-                    "error": f"Line {start_line} out of range (file has {len(lines)} lines)",
-                }
-            content = "\n".join(lines[start_line - 1 : end])
+        except ValueError as error:
+            return {"status": "error", "error": str(error)}
         return {
             "status": "ok",
             "path": path_str,
             "content": content,
+            "truncated": truncated,
+            "total_chars": total_chars,
+            "total_lines": total_lines,
+            "returned_lines": returned_lines,
         }
 
     def search_codebase(self, args: str) -> dict[str, Any]:
