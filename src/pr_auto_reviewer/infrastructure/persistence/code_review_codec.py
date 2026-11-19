@@ -11,6 +11,7 @@ import logging
 from ...domain.entities.review_item import ReviewItem
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.review_verdict import ReviewVerdict
+from .review_item_codec import ReviewItemCodec
 
 logger = logging.getLogger(__name__)
 
