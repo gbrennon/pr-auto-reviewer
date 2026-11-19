@@ -22,7 +22,7 @@ object containing these keys:
       "line": "12",
       "severity": "critical" | "major" | "minor",
       "category": "<issue category>",
-      "description": "specific description of the issue",
+      "description": "specific, evidence-based description; for a confirmed implementation gap, state the intended behavior, observed behavior, missing connection, and user-visible impact",
       "current_code": "the problematic code snippet",
       "suggested_fix": "the corrected code showing the fix"
     }
@@ -41,7 +41,7 @@ object containing these keys:
   ]
 }
 ```
-If there are no actionable issues, suggestions, or praise, emit empty arrays: "items": [], "suggestions": [], "praise": []. Never include placeholder paths (e.g. path/to/file, src/main.py). Only include findings you can confirm from the files you actually read.
+If there are no actionable issues, suggestions, or praise, emit empty arrays: "items": [], "suggestions": [], "praise": []. Never include placeholder paths (e.g. path/to/file, src/main.py). Only include findings you can confirm from the files you actually read. Treat explicit implementation gaps as findings only when the intended behavior is unambiguous; treat ambiguous gaps as non-blocking suggestions or omit them. Use a direct, calm, evidence-based tone and never claim a standard-library or framework operation is unsafe without verifying its semantics.
 {% endmacro %}
 
 {% macro advisor_turn_grade_schema() %}Respond with a single JSON object:
