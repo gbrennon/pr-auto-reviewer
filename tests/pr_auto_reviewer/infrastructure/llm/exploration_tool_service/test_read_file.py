@@ -49,6 +49,19 @@ class TestReadFile:
         assert result["status"] == "error"
         assert "out of range" in result["error"]
 
+    def test_read_when_full_file_is_large_then_returns_bounded_preview(self, repo) -> None:
+        content = "\n".join(f"line{i}" for i in range(1, 5000))
+        (repo / "large.py").write_text(content)
+
+        result = _service(repo).read_file("large.py")
+
+        assert result["status"] == "ok"
+        assert result["truncated"] is True
+        assert result["total_chars"] == len(content)
+        assert result["returned_lines"] < result["total_lines"]
+        assert result["content"].startswith("line1")
+        assert "Use read_file with a line range" in result["content"]
+
     def test_read_when_oversized_then_error(self, repo) -> None:
         (repo / "big.py").write_bytes(b"x" * (100 * 1024 + 1))
 
