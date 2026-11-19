@@ -134,6 +134,36 @@ class TestFindingVerifierExecute:
 
         assert result == []
 
+    def test_verifier_drops_result_that_admits_no_defect(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        item = _item(item_id="safe-fallback")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({
+                "results": [{
+                    "finding_index": 0,
+                    "verified": True,
+                    "reasoning": (
+                        "The code is actually safe; this is not strictly a bug, "
+                        "only a defensive programming consideration."
+                    ),
+                }]
+            }),
+        ])
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[item], repo_path=Path("."), changed_files=[],
+                review_session="test-session",
+            )
+        )
+
+        assert result == []
+
     def test_s4_noop_fix_dropped_before_llm_spend(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
