@@ -55,6 +55,39 @@ To execute a Python snippet:
 
 Emit exactly ONE JSON object per message. Each tool call gets a result back. Explore thoroughly, one step at a time.
 
+## IMPLEMENTATION COMPLETENESS — FIND THE MISSING CONNECTION
+
+After the bug hunts, compare the pull request's stated intent with the behavior
+that is actually reachable from its public entry points. Trace the complete
+path through command or UI dispatch, application services, ports, adapters,
+persistence, and tests. Look specifically for implementation gaps such as:
+
+- a new command, screen, or API that is not wired into its entry point
+- data that is loaded or displayed but cannot be written, persisted, or applied
+- a port or adapter added without a caller, registration, or dependency wiring
+- a success path that omits required error handling or state transitions
+- tests that cover formatting or isolated helpers but not the promised end-to-end behavior
+
+Report a gap only when the intended behavior is supported by the PR description,
+acceptance criteria, user-facing command, or an explicitly stated invariant.
+Separate the following cases:
+
+- **Confirmed implementation gap** — the intended behavior is explicit and the traced code does not implement it; this may be a blocking issue.
+- **Likely gap** — the code suggests a missing connection, but the intended behavior is ambiguous; make it a non-blocking question or suggestion.
+- **Unconfirmed observation** — insufficient evidence; do not publish it.
+
+Use this finding tone: direct, calm, and evidence-based. Explain the intent,
+what the implementation actually does, the missing connection, and the user-visible
+impact. Prefer a heading such as `Implementation gap — <missing connection>`.
+Include concrete evidence from the files and symbols you read. Do not use
+speculative language as if it were a defect.
+
+Before calling a standard-library or framework expression unsafe, verify its
+actual semantics in the source, language documentation available in the
+repository, or a minimal executable probe. Safe fallbacks such as
+`unwrap_or_default()` must not be described as panics merely because a lookup
+can return `None`.
+
 ## VERDICT — WHEN READY
 
 When you have done sufficient exploration to form a complete review, emit your verdict as a JSON object — no surrounding text:
