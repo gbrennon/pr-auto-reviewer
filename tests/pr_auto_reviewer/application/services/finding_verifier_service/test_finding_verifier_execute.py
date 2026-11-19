@@ -31,7 +31,7 @@ class TestFindingVerifierExecute:
 
         assert result == items
 
-    def test_drops_blocking_when_verification_aborts_on_empty_responses(
+    def test_preserves_blocking_when_verification_aborts_on_empty_responses(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
         minor = _item(item_id="minor", severity=ItemSeverity.MINOR)
@@ -48,9 +48,9 @@ class TestFindingVerifierExecute:
             )
         )
 
-        assert result == [minor]
+        assert result == [minor, blocking]
 
-    def test_drops_blocking_when_verification_aborts_on_unparseable(
+    def test_preserves_blocking_when_verification_aborts_on_unparseable(
         self, mock_chat_port, mock_tool_factory,
     ) -> None:
         minor = _item(item_id="minor", severity=ItemSeverity.MINOR)
@@ -68,7 +68,7 @@ class TestFindingVerifierExecute:
             )
         )
 
-        assert result == [minor]
+        assert result == [minor, blocking]
 
     def test_drops_refuted_and_keeps_verified_items(
         self, mock_chat_port, mock_tool_factory,
@@ -105,6 +105,63 @@ class TestFindingVerifierExecute:
         )
 
         assert result == [blocking[0], minor]
+
+    def test_string_false_verification_is_not_treated_as_confirmed(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        item = _item(item_id="string-false")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({
+                "results": [{
+                    "finding_index": 0,
+                    "verified": "false",
+                    "reasoning": "The source confirms the finding.",
+                }]
+            }),
+        ])
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[item], repo_path=Path("."), changed_files=[],
+                review_session="test-session",
+            )
+        )
+
+        assert result == []
+
+    def test_verified_true_with_refuting_reasoning_is_dropped(
+        self, mock_chat_port, mock_tool_factory,
+    ) -> None:
+        item = _item(item_id="contradiction")
+        verifier = _verifier(mock_chat_port, mock_tool_factory, [
+            json.dumps({"action": "read_file", "args": "src/a.py"}),
+            json.dumps({
+                "results": [{
+                    "finding_index": 0,
+                    "verified": True,
+                    "reasoning": (
+                        "The code is functionally safe; this is not strictly "
+                        "a bug, only a defensive programming consideration."
+                    ),
+                }]
+            }),
+        ])
+        mock_tool_factory.return_value.execute.return_value = {
+            "status": "success", "data": {}
+        }
+
+        result = verifier.execute(
+            VerifyFindingsCommand(
+                items=[item], repo_path=Path("."), changed_files=[],
+                review_session="test-session",
+            )
+        )
+
+        assert result == []
 
     def test_refuted_minor_item_is_dropped_by_llm_verification(
         self, mock_chat_port, mock_tool_factory,

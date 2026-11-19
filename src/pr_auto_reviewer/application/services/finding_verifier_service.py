@@ -57,6 +57,16 @@ _FINDING_RESULT_LINE = re.compile(
     r"(?:- |#### )?\*?\*?(?:Finding|Item)\s*(\d+)\*?\*?\s*[:—-]\s*(.+)",
     re.IGNORECASE,
 )
+_REFUTING_REASONING_MARKERS = (
+    "functionally safe",
+    "not strictly a bug",
+    "defensive programming",
+    "defensive-only",
+    "theoretical",
+    "no actual bug",
+    "not a defect",
+    "not buggy",
+)
 
 
 class FindingVerifierService(VerifyFindingsPort):
@@ -100,8 +110,8 @@ class FindingVerifierService(VerifyFindingsPort):
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
         """Drop synthetic findings, then LLM-verify every survivor.
 
-        On verifier abort the fail-closed rule drops blocking items
-        only while non-blocking survivors pass through unverified.
+        On verifier abort the fail-closed rule preserves survivors so
+        an incomplete verification can never produce an approval.
         """
         survivors = self._filter_synthetic_findings(
             list(command.items), command.repo_path,
@@ -163,12 +173,14 @@ class FindingVerifierService(VerifyFindingsPort):
     def _fail_closed_result(
         self, survivors: list[ReviewItem],
     ) -> list[ReviewItem]:
-        """Keep non-blocking survivors open and drop blocking ones on abort."""
-        logger.warning("Verification aborted; dropping blocking findings")
+        """Preserve findings when verification aborts so approval is impossible."""
+        logger.warning(
+            "Verification aborted; preserving %d findings to prevent approval",
+            len(survivors),
+        )
         return [
             replace(item, status=ReviewItemStatus.OPEN)
             for item in survivors
-            if not item.is_blocking
         ]
 
     def _verified_current_indices(
@@ -179,8 +191,17 @@ class FindingVerifierService(VerifyFindingsPort):
             idx
             for r in results
             if isinstance((idx := r.get("finding_index")), int)
-            and r.get("verified", False)
+            and r.get("verified") is True
+            and self._has_confirming_reasoning(r)
         }
+
+    @staticmethod
+    def _has_confirming_reasoning(result: dict[str, Any]) -> bool:
+        """Reject affirmative flags whose explanation explicitly refutes the finding."""
+        reasoning = str(result.get("reasoning", "")).strip().lower()
+        return bool(reasoning) and not any(
+            marker in reasoning for marker in _REFUTING_REASONING_MARKERS
+        )
 
     def _log_refuted_findings(
         self,
