@@ -52,6 +52,14 @@ logger = logging.getLogger(__name__)
 _VERIFY_MAX_TURNS = 5
 _MAX_EMPTY_RESPONSES = 3
 _MAX_UNPARSEABLE_RESPONSES = 3
+_NON_DEFECT_REASON_MARKERS = (
+    "actually safe",
+    "not a bug",
+    "not strictly a bug",
+    "defensive programming",
+    "theoretical concern",
+    "potential future",
+)
 
 _FINDING_RESULT_LINE = re.compile(
     r"(?:- |#### )?\*?\*?(?:Finding|Item)\s*(\d+)\*?\*?\s*[:—-]\s*(.+)",
@@ -174,13 +182,23 @@ class FindingVerifierService(VerifyFindingsPort):
     def _verified_current_indices(
         self, results: list[dict[str, Any]],
     ) -> set[int]:
-        """Finding indices the verifier confirmed as real."""
+        """Finding indices the verifier confirmed as actual defects."""
         return {
             idx
             for r in results
             if isinstance((idx := r.get("finding_index")), int)
-            and r.get("verified", False)
+            and self._is_confirmed_defect(r)
         }
+
+    @staticmethod
+    def _is_confirmed_defect(result: dict[str, Any]) -> bool:
+        """Reject verifier results whose reasoning admits the concern is non-defective."""
+        if not result.get("verified", False):
+            return False
+        reasoning = str(result.get("reasoning", "")).casefold()
+        return not any(
+            marker in reasoning for marker in _NON_DEFECT_REASON_MARKERS
+        )
 
     def _log_refuted_findings(
         self,
