@@ -344,8 +344,9 @@ class ExplorationToolService:
 
         Returns:
             A dict with ``status`` (``ok``, ``timeout``, or ``error``),
-            ``stdout``, ``stderr``, and ``exit_code`` on success;
-            ``error`` on failure.
+            ``stdout``, ``stderr``, and ``exit_code``. A non-zero snippet
+            exit code is returned as ``error`` so execution failures remain
+            tool results instead of becoming successful observations.
         """
         tmp_dir = self._repo_root / ".pr-auto-reviewer-tmp"
         tmp_dir.mkdir(exist_ok=True)
@@ -386,11 +387,17 @@ class ExplorationToolService:
         logger.debug(
             "action=run_snippet exit_code=%d", result.returncode
         )
+        error = result.stderr.strip() or (
+            f"Snippet exited with code {result.returncode}"
+            if result.returncode != 0
+            else None
+        )
         return {
-            "status": "ok",
+            "status": "ok" if result.returncode == 0 else "error",
             "stdout": result.stdout,
             "stderr": result.stderr,
             "exit_code": result.returncode,
+            "error": error,
         }
 
     def _resolve_safe(self, relative_path: str) -> Path | None:
