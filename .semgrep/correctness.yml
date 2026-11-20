@@ -1,0 +1,44 @@
+rules:
+  - id: python-code-review-no-commented-verdict
+    languages:
+      - python
+    message: CodeReview must not be constructed with a COMMENTED verdict
+    severity: ERROR
+    metadata:
+      category: correctness
+      technology:
+        - python
+      confidence: HIGH
+      scope: conventional-hexagonal
+      policy: opt-in
+      rationale: A COMMENTED CodeReview is an incomplete review outcome and must never be constructed.
+      references:
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax/
+        - src/pr_auto_reviewer/domain/value_objects/code_review.py
+    paths:
+      include:
+        - '**/src/**/*.py'
+    pattern: |
+      CodeReview(..., verdict=ReviewVerdict.COMMENTED, ...)
+
+  - id: python-code-review-no-hardcoded-approved-verdict
+    languages:
+      - python
+    message: CodeReview must not hardcode an APPROVED verdict during reconstruction
+    severity: ERROR
+    metadata:
+      category: correctness
+      technology:
+        - python
+      confidence: HIGH
+      scope: conventional-hexagonal
+      policy: opt-in
+      rationale: Reconstructed CodeReview values must preserve or compute their verdict rather than hardcode APPROVED.
+      references:
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax/
+        - src/pr_auto_reviewer/domain/value_objects/code_review.py
+    paths:
+      include:
+        - '**/src/**/*.py'
+    pattern: |
+      CodeReview(..., verdict=ReviewVerdict.APPROVED, ...)

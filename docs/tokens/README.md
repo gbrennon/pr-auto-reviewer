@@ -24,6 +24,36 @@ The reviewer can be the same account as the owner, but must **differ from the PR
 
 For single-platform mode (`PLATFORM_MODE=github` or `PLATFORM_MODE=codeberg`), the app falls back to `PLATFORM_TOKEN` / `REVIEWER_TOKEN` / `REVIEWER_USERNAME` if the platform-specific vars are unset.
 
+
+## Encrypted Local Token Storage
+
+Define the unlock key outside the token database. The interactive command
+prompts without echoing the key and writes it to the user config file:
+
+```bash
+pr-auto-reviewer config set-encryption-key
+```
+
+Alternatively, define `PR_AUTO_REVIEWER_ENCRYPTION_KEY` in the environment or
+add it to `~/.config/pr-auto-reviewer/config`:
+
+Then store platform tokens without putting their values in the config file:
+
+```bash
+pr-auto-reviewer config set FORGEJO_OWNER_TOKEN 'OWNER_TOKEN_VALUE'
+pr-auto-reviewer config set FORGEJO_REVIEWER_TOKEN 'REVIEWER_TOKEN_VALUE'
+pr-auto-reviewer config set FORGEJO_REVIEWER_USERNAME 'REVIEWER_USERNAME_VALUE'
+pr-auto-reviewer config list
+```
+
+The encryption key is never stored in the encrypted database. Environment
+values override config-file values; the database is the fallback source.
+
+If an existing installation used the built-in storage key before an explicit
+key was configured, the first startup with the configured key automatically
+re-encrypts both `state.sqlite3` and `secrets.sqlite3`. Keep the configured
+key stable after that migration.
+
 ---
 
 ## Auth Header Format
