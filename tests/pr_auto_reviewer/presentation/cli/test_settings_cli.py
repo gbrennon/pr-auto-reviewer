@@ -75,3 +75,25 @@ class TestSettingsCli:
 
         assert cli.run(["list"]) == 0
         assert "FORGEJO_OWNER_TOKEN = <secret>" in capsys.readouterr().out
+
+    def test_encryption_key_setup_writes_user_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        config_home = tmp_path / "config"
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", raising=False)
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.cli.settings_cli.getpass.getpass",
+            lambda prompt: "defined-key",
+        )
+        cli = SettingsCli()
+
+        assert cli.run(["set-encryption-key"]) == 0
+
+        config_path = config_home / "pr-auto-reviewer" / "config"
+        assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY=defined-key\n" in (
+            config_path.read_text(encoding="utf-8")
+        )
+        assert "defined-key" not in capsys.readouterr().out

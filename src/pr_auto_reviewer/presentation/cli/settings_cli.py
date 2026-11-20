@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Sequence
 
@@ -42,17 +44,59 @@ class SettingsCli:
         get_command.add_argument("name")
         delete_command = commands.add_parser("unset")
         delete_command.add_argument("name")
+        commands.add_parser("set-encryption-key")
         commands.add_parser("list")
         return parser
 
     def _dispatch(self, args: argparse.Namespace) -> int:
         if args.action == "set":
             return self._set(args.name, args.value)
+        if args.action == "set-encryption-key":
+            return self._set_encryption_key()
         if args.action == "get":
             return self._get(args.name)
         if args.action == "unset":
             return self._unset(args.name)
         return self._list()
+
+    def _set_encryption_key(self) -> int:
+        key = getpass.getpass("Encryption key: ").strip()
+        if not key:
+            raise ValueError("Encryption key must not be empty")
+        config_path = AppPaths.config_dir() / "config"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+        lines = existing.splitlines(keepends=True)
+        replacement = f"PR_AUTO_REVIEWER_ENCRYPTION_KEY={key}\n"
+        updated: list[str] = []
+        replaced = False
+        for line in lines:
+            if line.startswith("PR_AUTO_REVIEWER_ENCRYPTION_KEY="):
+                if not replaced:
+                    updated.append(replacement)
+                    replaced = True
+                continue
+            updated.append(line)
+        if not replaced:
+            if updated and not updated[-1].endswith("\n"):
+                updated.append("\n")
+            updated.append(replacement)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f"{config_path.name}.",
+            dir=config_path.parent,
+            text=True,
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write("".join(updated))
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, config_path)
+        except BaseException:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+            raise
+        print("Updated encryption key")
+        return 0
 
     def _set(self, name: str, raw_value: str) -> int:
         if TomlSettingsStore.is_secret_name(name):

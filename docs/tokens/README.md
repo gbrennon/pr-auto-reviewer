@@ -27,13 +27,15 @@ For single-platform mode (`PLATFORM_MODE=github` or `PLATFORM_MODE=codeberg`), t
 
 ## Encrypted Local Token Storage
 
-Define an encryption key outside the token database. The application accepts
-the key from `PR_AUTO_REVIEWER_ENCRYPTION_KEY` in the environment or from the
-user config file at `~/.config/pr-auto-reviewer/config`:
+Define the unlock key outside the token database. The interactive command
+prompts without echoing the key and writes it to the user config file:
 
-```dotenv
-PR_AUTO_REVIEWER_ENCRYPTION_KEY=choose-a-long-private-key
+```bash
+pr-auto-reviewer config set-encryption-key
 ```
+
+Alternatively, define `PR_AUTO_REVIEWER_ENCRYPTION_KEY` in the environment or
+add it to `~/.config/pr-auto-reviewer/config`:
 
 Then store platform tokens without putting their values in the config file:
 
