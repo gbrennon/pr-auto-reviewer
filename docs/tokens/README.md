@@ -49,6 +49,11 @@ pr-auto-reviewer config list
 The encryption key is never stored in the encrypted database. Environment
 values override config-file values; the database is the fallback source.
 
+If an existing installation used the built-in storage key before an explicit
+key was configured, the first startup with the configured key automatically
+re-encrypts both `state.sqlite3` and `secrets.sqlite3`. Keep the configured
+key stable after that migration.
+
 ---
 
 ## Auth Header Format
