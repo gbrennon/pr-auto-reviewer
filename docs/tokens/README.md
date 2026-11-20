@@ -24,6 +24,29 @@ The reviewer can be the same account as the owner, but must **differ from the PR
 
 For single-platform mode (`PLATFORM_MODE=github` or `PLATFORM_MODE=codeberg`), the app falls back to `PLATFORM_TOKEN` / `REVIEWER_TOKEN` / `REVIEWER_USERNAME` if the platform-specific vars are unset.
 
+
+## Encrypted Local Token Storage
+
+Define an encryption key outside the token database. The application accepts
+the key from `PR_AUTO_REVIEWER_ENCRYPTION_KEY` in the environment or from the
+user config file at `~/.config/pr-auto-reviewer/config`:
+
+```dotenv
+PR_AUTO_REVIEWER_ENCRYPTION_KEY=choose-a-long-private-key
+```
+
+Then store platform tokens without putting their values in the config file:
+
+```bash
+pr-auto-reviewer config set FORGEJO_OWNER_TOKEN 'OWNER_TOKEN_VALUE'
+pr-auto-reviewer config set FORGEJO_REVIEWER_TOKEN 'REVIEWER_TOKEN_VALUE'
+pr-auto-reviewer config set FORGEJO_REVIEWER_USERNAME 'REVIEWER_USERNAME_VALUE'
+pr-auto-reviewer config list
+```
+
+The encryption key is never stored in the encrypted database. Environment
+values override config-file values; the database is the fallback source.
+
 ---
 
 ## Auth Header Format

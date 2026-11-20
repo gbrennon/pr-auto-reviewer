@@ -53,3 +53,25 @@ class TestSettingsCli:
         assert "debug = true" in output
         assert "FORGEJO_OWNER_TOKEN = <secret>" in output
         assert "secret" not in output.replace("FORGEJO_OWNER_TOKEN = <secret>", "")
+
+    def test_secret_setup_uses_key_from_user_config(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        config_home = tmp_path / "config"
+        config_dir = config_home / "pr-auto-reviewer"
+        config_dir.mkdir(parents=True)
+        (config_dir / "config").write_text(
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY=test-key\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", raising=False)
+        cli = SettingsCli()
+
+        assert cli.run(["set", "FORGEJO_OWNER_TOKEN", "secret"]) == 0
+        capsys.readouterr()
+
+        assert cli.run(["list"]) == 0
+        assert "FORGEJO_OWNER_TOKEN = <secret>" in capsys.readouterr().out

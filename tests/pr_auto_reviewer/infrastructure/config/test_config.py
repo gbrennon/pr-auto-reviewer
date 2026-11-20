@@ -308,13 +308,29 @@ class TestLoadConfig:
             EncryptedSqliteSecretStore,
         )
 
+        config_dir = tmp_path / "config"
+        state_dir = tmp_path / "state"
+        config_dir.mkdir()
+        state_dir.mkdir()
+        (config_dir / "config").write_text(
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY=test-key\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {"PR_AUTO_REVIEWER_ENCRYPTION_KEY": "test-key"},
+        )
+        monkeypatch.setattr(
+            AppPaths,
+            "config_dir",
+            classmethod(lambda cls: config_dir),
+        )
         monkeypatch.setattr(
             AppPaths,
             "state_dir",
-            classmethod(lambda cls: tmp_path),
+            classmethod(lambda cls: state_dir),
         )
-        monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "test-key")
-        store = EncryptedSqliteSecretStore(tmp_path / "secrets.sqlite3", "test-key")
+        store = EncryptedSqliteSecretStore(state_dir / "secrets.sqlite3", "test-key")
         store.set("FORGEJO_OWNER_TOKEN", "database-owner")
         store.set("FORGEJO_REVIEWER_TOKEN", "database-reviewer")
         store.set("FORGEJO_TOKEN_senkai_OWNER", "database-org-owner")

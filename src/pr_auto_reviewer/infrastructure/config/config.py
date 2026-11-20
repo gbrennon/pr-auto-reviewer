@@ -46,6 +46,7 @@ _COMMAND_LINE_KEYS = {
     "GITHUB_OWNER_TOKEN", "GITHUB_REVIEWER_TOKEN",
     "GITHUB_REVIEWER_USERNAME", "FORGEJO_OWNER_TOKEN",
     "FORGEJO_REVIEWER_TOKEN", "FORGEJO_REVIEWER_USERNAME",
+    "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
     "RUN_ONCE", "REPOS_FILTER", "REPOS_ALLOW_LIST", "FORCE_PR",
     "CLONE_PROTOCOL", "REVIEW_MAX_RETRIES", "REVIEW_MAX_TRIES",
 }
@@ -110,14 +111,18 @@ class ConfigLoader:
 
     def _load_toml_values(self) -> dict[str, str]:
         settings = TomlSettingsStore(AppPaths.config_dir() / "settings.toml")
-        values = {
+        return {
             name.upper(): str(value) for name, value in settings.all().items()
         }
-        values.update(self._load_encrypted_secret_values())
-        return values
 
-    def _load_encrypted_secret_values(self) -> dict[str, str]:
+    def _load_encrypted_secret_values(
+        self, configured_values: dict[str, str],
+    ) -> dict[str, str]:
         key = os.environ.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "").strip()
+        if not key:
+            key = configured_values.get(
+                "PR_AUTO_REVIEWER_ENCRYPTION_KEY", "",
+            ).strip()
         if not key:
             return {}
         store = EncryptedSqliteSecretStore(
@@ -149,16 +154,18 @@ class ConfigLoader:
             os.environ["REQUESTS_CA_BUNDLE"] = bundle
 
     def _load_production(self, config_path: str) -> Config:
+        values = self._load_toml_values()
+        configured_values: dict[str, str] = {}
         if Path(config_path).exists():
-            values = self._load_toml_values()
-            values.update(self._load_values(Path(config_path)))
+            configured_values = self._load_values(Path(config_path))
             logger.info("Loading production config from %s", config_path)
         else:
-            values = self._load_toml_values()
             logger.warning(
                 "Production config not found at %s; using defaults.",
                 config_path,
             )
+        values.update(self._load_encrypted_secret_values(configured_values))
+        values.update(configured_values)
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
@@ -189,18 +196,21 @@ class ConfigLoader:
         self, user_config_path: str, repo_env_path: Path, env: str
     ) -> Config:
         values: dict[str, str] = self._load_toml_values()
+        configured_values: dict[str, str] = {}
 
         user_cfg = Path(user_config_path)
         if user_cfg.exists():
             logger.info(
                 "Loading dev user config from %s", user_config_path
             )
-            values.update(self._load_values(user_cfg))
+            configured_values.update(self._load_values(user_cfg))
 
         if repo_env_path.exists():
             logger.info("Loading dev .env from %s", repo_env_path)
-            values.update(self._load_values(repo_env_path))
+            configured_values.update(self._load_values(repo_env_path))
 
+        values.update(self._load_encrypted_secret_values(configured_values))
+        values.update(configured_values)
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))

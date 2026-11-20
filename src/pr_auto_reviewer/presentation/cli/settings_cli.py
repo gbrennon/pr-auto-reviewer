@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Sequence
 
+from dotenv import dotenv_values
+
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
     TomlSettingsStore,
@@ -106,8 +108,20 @@ class SettingsCli:
         return TomlSettingsStore(AppPaths.config_dir() / "settings.toml")
 
     @staticmethod
-    def _secrets() -> EncryptedSqliteSecretStore:
-        key = os.environ.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "")
+    def _encryption_key() -> str:
+        key = os.environ.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "").strip()
+        if not key:
+            configured = dotenv_values(AppPaths.config_dir() / "config")
+            key = str(
+                configured.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "") or "",
+            ).strip()
         if not key:
             raise ValueError("PR_AUTO_REVIEWER_ENCRYPTION_KEY is required")
-        return EncryptedSqliteSecretStore(AppPaths.state_dir() / "secrets.sqlite3", key)
+        return key
+
+    @classmethod
+    def _secrets(cls) -> EncryptedSqliteSecretStore:
+        return EncryptedSqliteSecretStore(
+            AppPaths.state_dir() / "secrets.sqlite3",
+            cls._encryption_key(),
+        )
