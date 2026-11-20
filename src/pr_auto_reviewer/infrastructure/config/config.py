@@ -26,7 +26,9 @@ from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
     TomlSettingsStore,
 )
 from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+    LEGACY_STORAGE_ENCRYPTION_KEY,
     EncryptedSqliteSecretStore,
+    SqliteStorageKeyMigrator,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +127,11 @@ class ConfigLoader:
             ).strip()
         if not key:
             return {}
+        SqliteStorageKeyMigrator(
+            AppPaths.state_dir() / "secrets.sqlite3",
+            key,
+            LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).migrate()
         store = EncryptedSqliteSecretStore(
             AppPaths.state_dir() / "secrets.sqlite3", key,
         )
