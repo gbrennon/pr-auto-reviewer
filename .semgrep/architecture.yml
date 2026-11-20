@@ -1,0 +1,125 @@
+rules:
+  - id: python-domain-no-outward-layer-dependencies
+    languages:
+      - python
+    message: "Domain code must not import application, infrastructure, or presentation layers"
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/pr_auto_reviewer/domain/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern: import $MODULE
+          - pattern: from $MODULE import $X
+          - pattern: from $MODULE import *
+      - metavariable-regex:
+          metavariable: $MODULE
+          regex: '^pr_auto_reviewer\.(?:application|infrastructure|presentation)(?:\.|$)'
+    metadata:
+      category: architecture
+      technology:
+        - python
+      confidence: HIGH
+      scope: domain
+      policy: hexagonal-boundaries
+      rationale: "The domain layer is the innermost layer and must remain independent of outer application, infrastructure, and presentation concerns."
+      references:
+        - docs/architecture.md
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax
+
+  - id: python-application-no-presentation-dependencies
+    languages:
+      - python
+    message: "Application code must not import the presentation layer"
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/pr_auto_reviewer/application/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern: import pr_auto_reviewer.presentation
+          - pattern: import pr_auto_reviewer.presentation.$SUBMODULE
+          - pattern: from pr_auto_reviewer.presentation import $X
+          - pattern: from pr_auto_reviewer.presentation.$SUBMODULE import $X
+    metadata:
+      category: architecture
+      technology:
+        - python
+      confidence: HIGH
+      scope: application
+      policy: hexagonal-boundaries
+      rationale: "Application services and ports must not depend on presentation adapters or delivery mechanisms."
+      references:
+        - docs/architecture.md
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax
+
+  - id: python-application-no-infrastructure-dependencies
+    languages:
+      - python
+    message: "Application code should not import the infrastructure layer"
+    severity: WARNING
+    paths:
+      include:
+        - '**/src/pr_auto_reviewer/application/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern: import pr_auto_reviewer.infrastructure
+          - pattern: import pr_auto_reviewer.infrastructure.$SUBMODULE
+          - pattern: from pr_auto_reviewer.infrastructure import $X
+          - pattern: from pr_auto_reviewer.infrastructure.$SUBMODULE import $X
+    metadata:
+      category: architecture
+      technology:
+        - python
+      confidence: HIGH
+      scope: application
+      policy: hexagonal-boundaries
+      rationale: "Application code should depend on outbound ports rather than concrete infrastructure adapters; this advisory rule surfaces existing boundary violations."
+      references:
+        - docs/architecture.md
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax
+
+  - id: python-application-ports-must-use-protocol
+    languages:
+      - python
+    message: "Application port contracts must be declared as typing.Protocol classes"
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/pr_auto_reviewer/application/ports/inbound/**/*.py'
+        - '**/src/pr_auto_reviewer/application/ports/outbound/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern: |
+              class $CLASS:
+                  ...
+          - pattern: |
+              class $CLASS(...):
+                  ...
+      - metavariable-regex:
+          metavariable: $CLASS
+          regex: '^[A-Za-z_][A-Za-z0-9_]*Port$'
+      - pattern-not: |
+          class $CLASS(Protocol):
+              ...
+      - pattern-not: |
+          class $CLASS(Protocol, ...):
+              ...
+      - pattern-not: |
+          class $CLASS(..., Protocol):
+              ...
+      - pattern-not: |
+          class $CLASS(..., Protocol, ...):
+              ...
+    metadata:
+      category: architecture
+      technology:
+        - python
+      confidence: HIGH
+      scope: application-ports
+      policy: hexagonal-boundaries
+      rationale: "Inbound and outbound port names identify contracts; Protocol bases make those contracts structural and keep adapters decoupled from concrete implementations."
+      references:
+        - docs/architecture.md
+        - https://docs.python.org/3/library/typing.html#typing.Protocol
+        - https://semgrep.dev/docs/writing-rules/pattern-syntax

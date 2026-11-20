@@ -69,3 +69,58 @@ class TestSqlitePersistence:
 
         with pytest.raises(ValueError, match="decrypt"):
             EncryptedSqliteSecretStore(database, "wrong-key").get("TOKEN")
+
+    def test_storage_key_migration_reencrypts_state_and_secrets(
+        self, tmp_path: Path,
+    ) -> None:
+        from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+            LEGACY_STORAGE_ENCRYPTION_KEY,
+            SqliteStorageKeyMigrator,
+        )
+
+        state_database = tmp_path / "state.sqlite3"
+        secrets_database = tmp_path / "secrets.sqlite3"
+        pull_request = self._pull_request()
+        SqlitePullRequestRepository(
+            state_database, LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).save(pull_request)
+        EncryptedSqliteSecretStore(
+            secrets_database, LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).set("TOKEN", "value")
+
+        assert SqliteStorageKeyMigrator(
+            state_database, "configured-key",
+        ).migrate()
+        assert SqliteStorageKeyMigrator(
+            secrets_database, "configured-key",
+        ).migrate()
+
+        assert SqlitePullRequestRepository(
+            state_database, "configured-key",
+        ).find(pull_request.id) == pull_request
+        assert EncryptedSqliteSecretStore(
+            secrets_database, "configured-key",
+        ).get("TOKEN") == "value"
+
+    def test_storage_key_migration_rejects_unknown_legacy_key(
+        self, tmp_path: Path,
+    ) -> None:
+        from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+            LEGACY_STORAGE_ENCRYPTION_KEY,
+            SqliteStorageKeyMigrator,
+        )
+
+        database = tmp_path / "state.sqlite3"
+        pull_request = self._pull_request()
+        SqlitePullRequestRepository(
+            database, LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).save(pull_request)
+
+        with pytest.raises(ValueError, match="decrypt"):
+            SqliteStorageKeyMigrator(
+                database, "configured-key", "wrong-legacy-key",
+            ).migrate()
+
+        assert SqlitePullRequestRepository(
+            database, LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).find(pull_request.id) == pull_request
