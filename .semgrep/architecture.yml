@@ -37,12 +37,10 @@ rules:
         - '**/src/pr_auto_reviewer/application/**/*.py'
     patterns:
       - pattern-either:
-          - pattern: import $MODULE
-          - pattern: from $MODULE import $X
-          - pattern: from $MODULE import *
-      - metavariable-regex:
-          metavariable: $MODULE
-          regex: '^pr_auto_reviewer\.presentation(?:\.|$)'
+          - pattern: import pr_auto_reviewer.presentation
+          - pattern: import pr_auto_reviewer.presentation.$SUBMODULE
+          - pattern: from pr_auto_reviewer.presentation import $X
+          - pattern: from pr_auto_reviewer.presentation.$SUBMODULE import $X
     metadata:
       category: architecture
       technology:
@@ -65,12 +63,10 @@ rules:
         - '**/src/pr_auto_reviewer/application/**/*.py'
     patterns:
       - pattern-either:
-          - pattern: import $MODULE
-          - pattern: from $MODULE import $X
-          - pattern: from $MODULE import *
-      - metavariable-regex:
-          metavariable: $MODULE
-          regex: '^pr_auto_reviewer\.infrastructure(?:\.|$)'
+          - pattern: import pr_auto_reviewer.infrastructure
+          - pattern: import pr_auto_reviewer.infrastructure.$SUBMODULE
+          - pattern: from pr_auto_reviewer.infrastructure import $X
+          - pattern: from pr_auto_reviewer.infrastructure.$SUBMODULE import $X
     metadata:
       category: architecture
       technology:
