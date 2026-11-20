@@ -1,0 +1,153 @@
+rules:
+  - id: python-domain-boundary-dataclasses-must-be-frozen
+    languages:
+      - python
+    message: Domain boundary dataclasses must declare frozen=True.
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/pr_auto_reviewer/domain/entities/**/*.py'
+        - '**/src/pr_auto_reviewer/domain/value_objects/**/*.py'
+        - '**/src/pr_auto_reviewer/domain/messages/**/*.py'
+        - '**/src/pr_auto_reviewer/domain/fragments/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @dataclass
+              class $CLASS(...):
+                ...
+          - pattern-inside: |
+              @dataclass(...)
+              class $CLASS(...):
+                ...
+          - pattern-inside: |
+              @dataclasses.dataclass
+              class $CLASS(...):
+                ...
+          - pattern-inside: |
+              @dataclasses.dataclass(...)
+              class $CLASS(...):
+                ...
+      - pattern-not-inside: |
+          @dataclass(..., frozen=True, ...)
+          class $CLASS(...):
+            ...
+      - pattern-not-inside: |
+          @dataclasses.dataclass(..., frozen=True, ...)
+          class $CLASS(...):
+            ...
+    metadata:
+      category: architecture
+      technology: python
+      confidence: HIGH
+      scope: production
+      policy: domain-boundary-immutability
+      rationale: Domain boundary objects are value-like contracts and must be immutable after construction.
+      references:
+        - https://docs.python.org/3/library/dataclasses.html#frozen-instances
+
+  - id: python-no-mutable-default-arguments
+    languages:
+      - python
+    message: Do not use a mutable list, dict, or set as a function parameter default.
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/**/*.py'
+    patterns:
+      - pattern-either:
+          - pattern: |
+              def $FUNC(..., $PARAM = [], ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = [], ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = [$ITEM, ...], ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = [$ITEM, ...], ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = {}, ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = {}, ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = {$KEY: $VALUE, ...}, ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = {$KEY: $VALUE, ...}, ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = {$ITEM, ...}, ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = {$ITEM, ...}, ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = list($...ARGS), ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = list($...ARGS), ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = dict($...ARGS), ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = dict($...ARGS), ...):
+                ...
+          - pattern: |
+              def $FUNC(..., $PARAM = set($...ARGS), ...):
+                ...
+          - pattern: |
+              async def $FUNC(..., $PARAM = set($...ARGS), ...):
+                ...
+    metadata:
+      category: correctness
+      technology: python
+      confidence: HIGH
+      scope: production
+      policy: function-default-safety
+      rationale: Mutable parameter defaults are shared between calls and can leak state across requests.
+      references:
+        - https://docs.python.org/3/reference/compound_stmts.html#function-definitions
+
+  - id: python-no-production-suppression-directives
+    languages:
+      - python
+    message: Production source must not suppress static-analysis findings with inline directives.
+    severity: ERROR
+    paths:
+      include:
+        - '**/src/**/*.py'
+    pattern-regex: '(?m)(?:^|\s)#\s*(?:noqa\b|type:\s*ignore\b|pyright:\s*ignore\b|pylint:\s*disable\b|nosec\b)'
+    metadata:
+      category: maintainability
+      technology: python
+      confidence: HIGH
+      scope: production
+      policy: static-analysis-integrity
+      rationale: Suppression comments hide quality findings from the production policy and require explicit remediation instead.
+      references:
+        - https://semgrep.dev/docs/ignoring-files-folders-code
+
+  - id: python-no-production-wildcard-imports
+    languages:
+      - python
+    message: Production source must not use wildcard imports.
+    severity: WARNING
+    paths:
+      include:
+        - '**/src/**/*.py'
+    pattern: from $MODULE import *
+    metadata:
+      category: maintainability
+      technology: python
+      confidence: HIGH
+      scope: production
+      policy: import-explicitness
+      rationale: Explicit imports make module dependencies and public names reviewable.
+      references:
+        - https://peps.python.org/pep-0008/#imports

@@ -1,4 +1,4 @@
-.PHONY: help install start stop status restart test clean reset issues list-items bootstrap review review-force daemon daemon-once watch
+.PHONY: help install start stop status restart test semgrep clean reset issues list-items bootstrap review review-force daemon daemon-once watch
 
 SHELL := /usr/bin/bash
 SCRIPT_DIR := scripts
@@ -56,6 +56,12 @@ bootstrap:  ## Bootstrap the project environment
 
 test:  ## Run tests
 	uv run pytest
+
+semgrep:  ## Validate and test project-local Semgrep policies
+	semgrep --validate --config .semgrep
+	semgrep scan --config .semgrep --severity ERROR --error --exclude tests/fixtures/semgrep .
+	semgrep scan --config .semgrep --severity WARNING --exclude tests/fixtures/semgrep .
+	tests/scripts/semgrep_test.sh
 
 # ── operations ──────────────────────────────────────────────────────────────
 
