@@ -60,11 +60,13 @@ run_fixtures() {
         printf 'No fixtures found for %s\n' "$config" >&2
         return 1
     fi
-    local fixture flat
+    local fixture relative target
     for fixture in "${fixtures[@]}"; do
-        flat="$(mktemp "$tmp_dir/fixture.XXXXXX.py")"
-        cp "$fixture" "$flat"
-        semgrep scan --test --config "$config" "$flat"
+        relative="${fixture#"$fixture_root"/}"
+        target="$tmp_dir/src/pr_auto_reviewer/$relative"
+        mkdir -p "$(dirname "$target")"
+        cp "$fixture" "$target"
+        semgrep scan --test --config "$config" "$target"
     done
 }
 
