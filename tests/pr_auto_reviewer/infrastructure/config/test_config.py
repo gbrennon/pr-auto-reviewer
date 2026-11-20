@@ -5,7 +5,6 @@ from typing import cast
 
 import pytest
 
-
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
@@ -344,6 +343,49 @@ class TestLoadConfig:
             cfg.org_token_overrides.forgejo["senkai"].owner_token
             == "database-org-owner"
         )
+
+    def test_load_migrates_legacy_encrypted_tokens(
+        self, monkeypatch, tmp_path: Path,
+    ):
+        from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+        from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+            EncryptedSqliteSecretStore,
+        )
+
+        config_dir = tmp_path / "config"
+        state_dir = tmp_path / "state"
+        config_dir.mkdir()
+        state_dir.mkdir()
+        (config_dir / "config").write_text(
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY=configured-key\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {"PR_AUTO_REVIEWER_ENCRYPTION_KEY": "configured-key"},
+        )
+        monkeypatch.setattr(
+            AppPaths,
+            "config_dir",
+            classmethod(lambda cls: config_dir),
+        )
+        monkeypatch.setattr(
+            AppPaths,
+            "state_dir",
+            classmethod(lambda cls: state_dir),
+        )
+        EncryptedSqliteSecretStore(
+            state_dir / "secrets.sqlite3",
+            "pr-auto-reviewer-local-key",
+        ).set("FORGEJO_OWNER_TOKEN", "legacy-token")
+
+        cfg = load_config()
+
+        assert cfg.forgejo_owner_token == "legacy-token"
+        assert EncryptedSqliteSecretStore(
+            state_dir / "secrets.sqlite3", "configured-key",
+        ).get("FORGEJO_OWNER_TOKEN") == "legacy-token"
 
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch, tmp_path: Path):
