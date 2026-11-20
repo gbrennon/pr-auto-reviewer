@@ -298,6 +298,37 @@ class TestLoadConfig:
         fj_overrides = cfg.org_token_overrides.forgejo
         assert "my-other-org" in fj_overrides
         assert fj_overrides["my-other-org"].owner_token == "fj_owner_token"
+
+    def test_loads_encrypted_tokens_with_environment_precedence(
+        self, monkeypatch, tmp_path: Path,
+    ):
+        from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+        from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+            EncryptedSqliteSecretStore,
+        )
+
+        monkeypatch.setattr(
+            AppPaths,
+            "state_dir",
+            classmethod(lambda cls: tmp_path),
+        )
+        monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "test-key")
+        store = EncryptedSqliteSecretStore(tmp_path / "secrets.sqlite3", "test-key")
+        store.set("FORGEJO_OWNER_TOKEN", "database-owner")
+        store.set("FORGEJO_REVIEWER_TOKEN", "database-reviewer")
+        store.set("FORGEJO_TOKEN_senkai_OWNER", "database-org-owner")
+        monkeypatch.setenv("FORGEJO_OWNER_TOKEN", "environment-owner")
+
+        cfg = load_config()
+
+        assert cfg.forgejo_owner_token == "environment-owner"
+        assert cfg.forgejo_reviewer_token == "database-reviewer"
+        assert (
+            cfg.org_token_overrides.forgejo["senkai"].owner_token
+            == "database-org-owner"
+        )
+
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch, tmp_path: Path):
         """Prevent real .env and env vars from leaking into tests."""
