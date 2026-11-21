@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import AdvisorGranularity
+from pr_auto_reviewer.infrastructure.config.auth_configuration import AuthConfiguration
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.llm_config_parser import LlmConfigParser
 from pr_auto_reviewer.infrastructure.config.platform_config_parser import PlatformConfigParser
@@ -39,6 +40,7 @@ class ConfigBuilder:
         review_max_tries: int = 2,
         llm_call_budget: int = 300,
         advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
+        auth_configuration: AuthConfiguration | None = None,
     ) -> Config:
         """Build immutable configuration data from environment values."""
         platform = self._platform_parser.parse(source)
@@ -59,6 +61,7 @@ class ConfigBuilder:
             platform_mode=platform.mode,
             platform_transport=platform.transport,
             storage_encryption_key=source.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", ""),
+            auth_configuration=auth_configuration or AuthConfiguration.empty(),
             github_api_url=platform.github_api_url,
             forgejo_api_url=platform.forgejo_api_url,
             github_owner_token=platform.github_owner_token,

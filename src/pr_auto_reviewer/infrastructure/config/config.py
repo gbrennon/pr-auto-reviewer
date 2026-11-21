@@ -11,6 +11,9 @@ from dotenv import dotenv_values
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.auth_configuration import (
+    AuthConfigParser,
+)
 from pr_auto_reviewer.infrastructure.config.app_paths import (
     AppPaths,
 )
@@ -111,10 +114,15 @@ class ConfigLoader:
             if key in os.environ:
                 values[key] = os.environ[key]
 
-    def _load_toml_values(self) -> dict[str, str]:
+    def _load_toml_document(self) -> dict[str, object]:
         settings = TomlSettingsStore(AppPaths.config_dir() / "settings.toml")
+        return settings.all()
+
+    def _load_toml_values(self, document: dict[str, object]) -> dict[str, str]:
         return {
-            name.upper(): str(value) for name, value in settings.all().items()
+            name.upper(): str(value)
+            for name, value in document.items()
+            if not isinstance(value, dict)
         }
 
     def _load_encrypted_secret_values(
@@ -161,7 +169,9 @@ class ConfigLoader:
             os.environ["REQUESTS_CA_BUNDLE"] = bundle
 
     def _load_production(self, config_path: str) -> Config:
-        values = self._load_toml_values()
+        toml_document = self._load_toml_document()
+        values = self._load_toml_values(toml_document)
+        auth_configuration = AuthConfigParser().parse(toml_document)
         configured_values: dict[str, str] = {}
         if Path(config_path).exists():
             configured_values = self._load_values(Path(config_path))
@@ -197,12 +207,15 @@ class ConfigLoader:
             review_max_tries=review_max_tries,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
+            auth_configuration=auth_configuration,
         )
 
     def _load_development(
         self, user_config_path: str, repo_env_path: Path, env: str
     ) -> Config:
-        values: dict[str, str] = self._load_toml_values()
+        toml_document = self._load_toml_document()
+        values: dict[str, str] = self._load_toml_values(toml_document)
+        auth_configuration = AuthConfigParser().parse(toml_document)
         configured_values: dict[str, str] = {}
 
         user_cfg = Path(user_config_path)
@@ -241,6 +254,7 @@ class ConfigLoader:
             review_max_tries=review_max_tries,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
+            auth_configuration=auth_configuration,
         )
 
 def load_config() -> Config:

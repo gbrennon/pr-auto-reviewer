@@ -9,6 +9,9 @@ from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.auth_configuration import (
+    AuthConfiguration,
+)
 from pr_auto_reviewer.infrastructure.config.llm_defaults import LlmDefaults
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
@@ -22,6 +25,9 @@ class Config:
     platform_mode: GitProvider = GitProvider.FORGEJO
     platform_transport: str = "http"
     storage_encryption_key: str = ""
+    auth_configuration: AuthConfiguration = field(
+        default_factory=AuthConfiguration.empty
+    )
     clone_protocol: CloneProtocol = CloneProtocol.HTTPS
 
     github_api_url: str = "https://api.github.com"
