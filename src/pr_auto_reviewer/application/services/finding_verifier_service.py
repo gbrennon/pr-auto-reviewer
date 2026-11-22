@@ -38,6 +38,9 @@ from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
@@ -264,7 +267,9 @@ class FindingVerifierService(VerifyFindingsPort):
                 guardrails.turn,
                 guardrails.max_turns,
             )
-            content = self._chat_port.send(messages)
+            content = self._chat_port.send(
+                messages, purpose=ConversationPurpose.FINDING_VERIFIER
+            )
             if not content:
                 decision, guardrails = guardrails.record_empty_response()
                 if decision == ConversationDecision.EXCEEDED_EMPTY:

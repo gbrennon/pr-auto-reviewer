@@ -23,6 +23,9 @@ from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.infrastructure.llm.chat_attempt import ChatAttempt
 from pr_auto_reviewer.infrastructure.llm.chat_client_settings import (
     ChatClientSettings,
@@ -173,8 +176,13 @@ class BaseChatClient(AgentChatPort, ABC):
         )
         return bounded
 
-    def send(self, messages: list[ConversationMessage]) -> str:
-        """Send messages to the LLM backend with retry loop and budget tracking."""
+    def send(
+        self,
+        messages: list[ConversationMessage],
+        *,
+        purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
+    ) -> str:
+        """Send one isolated context with retry loop and budget tracking."""
         bounded_messages = self._bound_context(messages)
         call_index = self._reserve_call()
         started_at = time.monotonic()

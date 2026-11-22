@@ -12,11 +12,9 @@ class TestTurnObserverWiring:
 
             def observe(
                 self,
-                peer_content: str,
-                phase_name: str,
+                evidence: AdvisorTurnEvidence,
                 review_session: str,
                 pr_identifier_service: str = "",
-                changed_files: list[str] | None = None,
             ) -> AdvisorDirective:
                 return AdvisorDirective(
                     grade=SubAgentGrade.from_phrase(self._script.pop(0)),
@@ -55,18 +53,16 @@ class TestTurnObserverWiring:
         assert "off task" in advisor_notes[0].content
 
     def test_observer_is_not_called_on_the_final_verdict_turn(self) -> None:
-        observed: list[str] = []
+        observed: list[AdvisorTurnEvidence] = []
 
         class _RecordingObserver:
             def observe(
                 self,
-                peer_content: str,
-                phase_name: str,
+                evidence: AdvisorTurnEvidence,
                 review_session: str,
                 pr_identifier_service: str = "",
-                changed_files: list[str] | None = None,
             ) -> AdvisorDirective:
-                observed.append(peer_content)
+                observed.append(evidence)
                 return AdvisorDirective(grade=SubAgentGrade.OKOK)
 
         chat = MagicMock()
@@ -90,7 +86,7 @@ class TestTurnObserverWiring:
 
         assert result.llm_verdict == "approved"
         assert len(observed) == 1
-        assert '"verdict"' not in observed[0]
+        assert observed[0].turn_kind is TurnKind.TOOL_CALL
 
     def test_repeated_blocks_abort_the_phase(self) -> None:
         import pytest as _pytest

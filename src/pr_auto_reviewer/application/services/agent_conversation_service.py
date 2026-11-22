@@ -64,6 +64,14 @@ from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.advisor_turn_evidence import (
+    AdvisorEvidenceKey,
+    AdvisorTurnEvidence,
+    EMPTY_TEXT,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import SubAgentGrade
 from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
@@ -147,6 +155,25 @@ class AgentConversationService(RunAgentConversationPort):
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
         return PRIdentifierService.derive(repo_path)
+
+    @staticmethod
+    def _advisor_turn_evidence(
+        parsed: TurnParseResult, phase_name: str,
+    ) -> AdvisorTurnEvidence:
+        """Extract only structured facts needed by the turn advisor."""
+        tool_call = parsed.tool_call
+        arguments = tool_call.arguments if tool_call is not None else {}
+        return AdvisorTurnEvidence(
+            phase_name=phase_name,
+            turn_kind=parsed.kind,
+            tool_name=(
+                tool_call.tool_name if tool_call is not None else EMPTY_TEXT
+            ),
+            tool_path=str(
+                arguments.get(AdvisorEvidenceKey.TOOL_PATH, EMPTY_TEXT)
+            ),
+            claim_count=len(parsed.raw_items or []),
+        )
 
     def _guardrails_for_files(
         self, repo_path: Path, changed_files: list[str],
@@ -447,7 +474,9 @@ class AgentConversationService(RunAgentConversationPort):
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
-            content = self._chat_port.send(messages)
+            content = self._chat_port.send(
+                messages, purpose=ConversationPurpose.REVIEWER_PHASE
+            )
             guardrails = guardrails.advance_turn()
             if not content:
                 decision, guardrails = guardrails.record_empty_response()
@@ -478,9 +507,9 @@ class AgentConversationService(RunAgentConversationPort):
                     accumulated_suggestions = list(parsed.metadata["suggestions"])
             if self._turn_observer is not None and parsed.kind is not TurnKind.VERDICT:
                 directive = self._turn_observer.observe(
-                    content, phase_name, review_session,
+                    self._advisor_turn_evidence(parsed, phase_name),
+                    review_session,
                     pr_identifier_service=self._derive_pr_identifier(repo_path),
-                    changed_files=changed_files,
                 )
                 if directive.blocks_output:
                     consecutive_blocks += 1
@@ -624,7 +653,10 @@ class AgentConversationService(RunAgentConversationPort):
                         messages.append(self._suggestions_praise_message.render())
                         guardrails = guardrails.advance_turn()
                         try:
-                            sp_content = self._chat_port.send(messages)
+                            sp_content = self._chat_port.send(
+                                messages,
+                                purpose=ConversationPurpose.REVIEWER_PHASE,
+                            )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
                                 "Suggestions/praise turn skipped: %s", error
@@ -773,7 +805,9 @@ class AgentConversationService(RunAgentConversationPort):
             )
         )
         try:
-            final_content = self._chat_port.send(messages)
+            final_content = self._chat_port.send(
+                messages, purpose=ConversationPurpose.REVIEWER_PHASE
+            )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
             return None
