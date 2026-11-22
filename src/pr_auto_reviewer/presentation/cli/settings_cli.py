@@ -28,6 +28,7 @@ class SettingsSnapshot:
 
     values: tuple[tuple[str, str], ...]
     secret_names: tuple[str, ...]
+    secret_error: str | None = None
 
 
 class SettingsCli:
@@ -54,6 +55,10 @@ class SettingsCli:
         delete_command = commands.add_parser("unset")
         delete_command.add_argument("name")
         commands.add_parser("set-encryption-key")
+        add_repo = commands.add_parser("repo-add")
+        add_repo.add_argument("repository")
+        remove_repo = commands.add_parser("repo-remove")
+        remove_repo.add_argument("repository")
         commands.add_parser("list")
         return parser
 
@@ -66,6 +71,18 @@ class SettingsCli:
             return self._get(args.name)
         if args.action == "unset":
             return self._unset(args.name)
+        if args.action == "repo-add":
+            self.add_repository(
+                args.repository,
+                getpass.getpass("Manager token: "),
+                getpass.getpass("Reviewer token: "),
+            )
+            print(f"Added repository {args.repository}")
+            return 0
+        if args.action == "repo-remove":
+            self.remove_repository(args.repository)
+            print(f"Removed repository {args.repository}")
+            return 0
         return self._list()
 
     def snapshot(self) -> SettingsSnapshot:
@@ -73,11 +90,17 @@ class SettingsCli:
         values = tuple(
             (name, self._format_value(value))
             for name, value in sorted(self._settings().all().items())
+            if not TomlSettingsStore.is_secret_name(name)
         )
-        return SettingsSnapshot(
-            values=values,
-            secret_names=self._secrets().names(),
-        )
+        try:
+            secret_names = self._secrets().names()
+        except ValueError as error:
+            return SettingsSnapshot(
+                values=values,
+                secret_names=(),
+                secret_error=str(error),
+            )
+        return SettingsSnapshot(values=values, secret_names=secret_names)
 
     def write(self, name: str, raw_value: str) -> None:
         """Write one setting without returning or logging its value."""
@@ -95,6 +118,40 @@ class SettingsCli:
             self._secrets().delete(name)
             return
         self._settings().delete(name)
+
+    def add_repository(
+        self, repository: str, manager_token: str, reviewer_token: str,
+    ) -> None:
+        """Allow a repository and store its platform role tokens."""
+        platform, separator, scoped_name = repository.partition(":")
+        if not separator or platform.upper() not in {"GITHUB", "FORGEJO"}:
+            raise ValueError("repository must be platform:owner/name")
+        owner, owner_separator, _name = scoped_name.partition("/")
+        if not owner_separator or not owner:
+            raise ValueError("repository must be platform:owner/name")
+        if not manager_token or not reviewer_token:
+            raise ValueError("manager and reviewer tokens are required")
+        settings = self._settings()
+        repositories = self._repositories()
+        if repository not in repositories:
+            repositories.append(repository)
+            settings.set("REPOS_ALLOW_LIST", repositories)
+        prefix = platform.upper()
+        self._secrets().set(f"{prefix}_TOKEN_{owner}_MANAGER", manager_token)
+        self._secrets().set(f"{prefix}_TOKEN_{owner}_REVIEWER", reviewer_token)
+
+    def remove_repository(self, repository: str) -> None:
+        """Remove a repository from the allow list without deleting shared tokens."""
+        repositories = [item for item in self._repositories() if item != repository]
+        self._settings().set("REPOS_ALLOW_LIST", repositories)
+
+    def _repositories(self) -> list[str]:
+        raw = self._settings().get("REPOS_ALLOW_LIST", [])
+        if isinstance(raw, list):
+            return [str(item).strip() for item in raw if str(item).strip()]
+        if isinstance(raw, str):
+            return [item.strip() for item in raw.replace("\\n", ",").split(",") if item.strip()]
+        return []
 
     def _set_encryption_key(self) -> int:
         key = getpass.getpass("Encryption key: ").strip()
@@ -162,7 +219,8 @@ class SettingsCli:
 
     def _list(self) -> int:
         for name, value in sorted(self._settings().all().items()):
-            print(f"{name} = {self._format_value(value)}")
+            if not TomlSettingsStore.is_secret_name(name):
+                print(f"{name} = {self._format_value(value)}")
         for name in self._secrets().names():
             print(f"{name} = <secret>")
         return 0
