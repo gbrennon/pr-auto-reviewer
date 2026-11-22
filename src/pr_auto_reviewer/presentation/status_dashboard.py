@@ -4,8 +4,8 @@ from collections.abc import Callable
 from datetime import datetime
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Static
+from textual.containers import Vertical
+from textual.widgets import DataTable, Footer, Header, Static
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
@@ -13,66 +13,87 @@ from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 
 class StatusDashboard(App[None]):
-    """Render live daemon status in a terminal dashboard."""
+    """Render live daemon status in a grouped, sortable terminal dashboard."""
 
     CSS = """
     Screen { layout: vertical; }
     #main { height: 1fr; }
-    .panel { border: round $primary; margin: 1; padding: 1; width: 1fr; }
-    #state { color: $success; text-style: bold; }
-    #error { color: $error; }
+    #state { border: round $primary; margin: 1; padding: 1; color: $success; text-style: bold; }
+    #sort { margin: 0 1; }
+    #items { height: 1fr; margin: 1; }
+    #error { color: $error; margin: 0 1; }
+    #last-refresh { margin: 0 1; }
     """
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("s", "cycle_sort", "Sort"),
+    ]
+    _SORT_KEYS = ("platform", "repository", "status")
 
     def __init__(
         self, status_provider: Callable[[], DaemonStatusSnapshot],
     ) -> None:
         super().__init__()
         self._status_provider = status_provider
+        self._sort_key = self._SORT_KEYS[0]
+        self._snapshot: DaemonStatusSnapshot | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="main"):
-            with Horizontal():
-                yield Static("Loading", id="state", classes="panel")
-                yield Static("", id="review", classes="panel")
-            with Horizontal():
-                yield Static("", id="repositories", classes="panel")
-                yield Static("", id="capabilities", classes="panel")
-            yield Static("", id="error", classes="panel")
+            yield Static("Loading", id="state")
+            yield Static("Sort: platform (press s to change)", id="sort")
+            yield DataTable(id="items", zebra_stripes=True, cursor_type="row")
+            yield Static("", id="error")
             yield Static("", id="last-refresh")
         yield Footer()
 
     def on_mount(self) -> None:
+        table = self.query_one("#items", DataTable)
+        table.add_columns("Type", "Platform", "Repository / Role", "Details")
         self.set_interval(1.0, self.refresh_status)
         self.refresh_status()
 
+    def action_cycle_sort(self) -> None:
+        """Cycle the visible rows through the supported sort keys."""
+        index = self._SORT_KEYS.index(self._sort_key)
+        self._sort_key = self._SORT_KEYS[(index + 1) % len(self._SORT_KEYS)]
+        self.query_one("#sort", Static).update(
+            f"Sort: {self._sort_key} (press s to change)"
+        )
+        if self._snapshot is not None:
+            self._render_snapshot(self._snapshot)
+
     def refresh_status(self) -> None:
-        """Refresh every dashboard panel from the application snapshot."""
+        """Refresh dashboard rows from the application snapshot."""
         try:
             snapshot = self._status_provider()
         except Exception as error:
+            self._snapshot = None
             self.query_one("#state", Static).update("ERROR")
-            self.query_one("#review", Static).update("")
             self.query_one("#error", Static).update(f"Error: {error}")
-            self.query_one("#last-refresh", Static).update(
-                f"Last refresh: {datetime.now().astimezone().isoformat(timespec='seconds')}"
-            )
+            self._update_refresh_time()
             return
+        self._snapshot = snapshot
+        self._render_snapshot(snapshot)
 
+    def _render_snapshot(self, snapshot: DaemonStatusSnapshot) -> None:
         self.query_one("#state", Static).update(self._state_text(snapshot))
-        self.query_one("#review", Static).update(self._review_text(snapshot))
-        self.query_one("#repositories", Static).update(
-            self._repositories_text(snapshot)
+        self.query_one("#sort", Static).update(
+            f"Sort: {self._sort_key} (press s to change)"
         )
-        self.query_one("#capabilities", Static).update(
-            self._capabilities_text(snapshot)
-        )
+        table = self.query_one("#items", DataTable)
+        table.clear()
+        for row in self._sorted_rows(snapshot):
+            table.add_row(*row)
         self.query_one("#error", Static).update(
             snapshot.runtime_status.last_error
             if snapshot.runtime_status and snapshot.runtime_status.last_error
             else ""
         )
+        self._update_refresh_time()
+
+    def _update_refresh_time(self) -> None:
         self.query_one("#last-refresh", Static).update(
             f"Last refresh: {datetime.now().astimezone().isoformat(timespec='seconds')}"
         )
@@ -87,31 +108,43 @@ class StatusDashboard(App[None]):
             return "REVIEWING"
         return "IDLE / WAITING"
 
-    def _review_text(self, snapshot: DaemonStatusSnapshot) -> str:
+    def _sorted_rows(
+        self, snapshot: DaemonStatusSnapshot,
+    ) -> list[tuple[str, str, str, str]]:
+        rows = self._rows(snapshot)
+        sort_index = {"platform": 1, "repository": 2, "status": 0}[self._sort_key]
+        return sorted(rows, key=lambda row: (row[sort_index].casefold(), row[2].casefold()))
+
+    def _rows(self, snapshot: DaemonStatusSnapshot) -> list[tuple[str, str, str, str]]:
         status = snapshot.runtime_status
-        review = status.current_review if status is not None else None
-        if review is None:
-            return "Active Review: none"
-        return (
-            f"Active Review: {review.repository} #{review.pr_number}\n"
-            f"{review.pr_title}\n"
-            f"Phase: {review.phase_name}\n"
-            f"Progress: Turn {review.current_turn}/{review.max_turns}\n"
-            f"Action: {review.last_tool_call or 'initializing'}"
-        )
-
-    def _repositories_text(self, snapshot: DaemonStatusSnapshot) -> str:
-        if not snapshot.allowed_repositories:
-            return "Allowed Repositories: all repositories permitted"
-        entries = "\n".join(f"- {repository}" for repository in snapshot.allowed_repositories)
-        return f"Allowed Repositories\n{entries}"
-
-    def _capabilities_text(self, snapshot: DaemonStatusSnapshot) -> str:
-        if not snapshot.capabilities:
-            return "API Access Capabilities: none recorded"
-        entries = "\n".join(
-            f"- {capability.platform} / {capability.role} / "
-            f"{capability.scope or 'all scopes'}"
+        rows = [
+            ("repository", *self._repository_parts(repository), "allowed")
+            for repository in snapshot.allowed_repositories
+        ]
+        rows.extend(
+            (
+                "capability",
+                capability.platform,
+                f"{capability.role} / {capability.source_name}",
+                capability.scope or "all scopes",
+            )
             for capability in snapshot.capabilities
         )
-        return f"API Access Capabilities\n{entries}"
+        review = status.current_review if status is not None else None
+        if review is not None:
+            rows.append(
+                (
+                    "active review",
+                    *self._repository_parts(review.repository),
+                    f"PR #{review.pr_number} · {review.phase_name or 'starting'} · "
+                    f"turn {review.current_turn}/{review.max_turns}",
+                )
+            )
+        return rows
+
+    @staticmethod
+    def _repository_parts(repository: str) -> tuple[str, str]:
+        platform, separator, name = repository.partition(":")
+        if not separator:
+            return "unscoped", repository
+        return platform, name
