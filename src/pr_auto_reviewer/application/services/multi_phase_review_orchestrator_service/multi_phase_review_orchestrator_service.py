@@ -728,13 +728,21 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             (item.id, item.file_path, item.description)
             for item in historical_items
         }
+        resolved_item_keys = {
+            self._historical_record_key(item)
+            for item in historical_items
+            if not item.is_active
+        }
         suggestion_keys = {
             (item.id, item.file_path, item.description)
             for item in historical_suggestions
         }
         items = historical_items + [
             item for item in review.items
-            if (item.id, item.file_path, item.description) not in item_keys
+            if (
+                (item.id, item.file_path, item.description) not in item_keys
+                and self._historical_record_key(item) not in resolved_item_keys
+            )
         ]
         suggestions = historical_suggestions + [
             item for item in review.suggestions
@@ -753,6 +761,11 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             suggestions=suggestions,
             verdict=verdict,
         )
+
+    @staticmethod
+    def _historical_record_key(item: ReviewItem) -> tuple[str | None, str]:
+        """Identify a finding independently of its regenerated short ID."""
+        return item.file_path, " ".join(item.description.split()).casefold()
 
     def _rebuild_after_verification(
         self, verified_items: list[Any], model: str,
