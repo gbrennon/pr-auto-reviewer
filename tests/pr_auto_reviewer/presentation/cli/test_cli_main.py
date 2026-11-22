@@ -42,16 +42,29 @@ class TestCliServiceCommands:
         )
         assert mock_run.call_args_list == expected_calls
 
-    def test_status_command_calls_show_status(self) -> None:
+    def test_status_command_prints_plain_output_when_stdout_is_not_a_tty(self) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", "status"]),
             patch("pr_auto_reviewer.cli.show_status", return_value="Status output") as mock_status,
+            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=False),
             patch("builtins.print") as mock_print,
         ):
             main()
 
-        assert mock_status.called
+        mock_status.assert_called_once_with()
         mock_print.assert_called_with("Status output")
+
+    def test_status_command_runs_dashboard_when_stdout_is_a_tty(self) -> None:
+        with (
+            patch("sys.argv", ["pr-auto-reviewer", "status"]),
+            patch("pr_auto_reviewer.cli.status_snapshot", return_value=object()) as snapshot,
+            patch("pr_auto_reviewer.cli.StatusDashboard") as dashboard,
+            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=True),
+        ):
+            main()
+
+        dashboard.assert_called_once_with(snapshot)
+        dashboard.return_value.run.assert_called_once_with()
 
     def test_logs_command_dispatches_journalctl(self) -> None:
         with (

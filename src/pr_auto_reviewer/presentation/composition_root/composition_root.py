@@ -17,6 +17,9 @@ from pr_auto_reviewer.application.services.list_allowed_repositories_service imp
 from pr_auto_reviewer.application.services.register_issue_service import (
     RegisterIssueService,
 )
+from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
+    DaemonStatusSnapshot,
+)
 from pr_auto_reviewer.application.services.show_status_service import (
     ShowStatusService,
 )
@@ -138,21 +141,27 @@ class CompositionRoot:
         self._authenticate_for_git_host(config)
         daemon.start()
 
-    def show_status(self) -> str:
-        """Render human-readable runtime telemetry from the daemon state store."""
+    def _status_service(self) -> ShowStatusService:
         state_path = AppPaths.state_dir() / "daemon-status.json"
         runtime_state = JsonDaemonRuntimeStateStore(state_path)
         config = self._container.config if hasattr(self, '_container') else load_config()
         capability_state = ApiAccessCapabilityState(
             ApiAccessCapabilityStore(AppPaths.state_dir() / "api-capabilities.json")
         )
-        service = ShowStatusService(
+        return ShowStatusService(
             runtime_state=runtime_state,
             process_checker=self._is_pid_alive,
             allowed_repositories=config.repos_allow_list,
             capability_query=capability_state,
         )
-        return service.show_status()
+
+    def status_snapshot(self) -> DaemonStatusSnapshot:
+        """Return structured runtime telemetry from the daemon state store."""
+        return self._status_service().snapshot()
+
+    def show_status(self) -> str:
+        """Render human-readable runtime telemetry from the daemon state store."""
+        return self._status_service().show_status()
 
     @staticmethod
     def _is_pid_alive(pid: int) -> bool:
