@@ -1,10 +1,9 @@
 Phase under observation: {{ phase_name }}
-{% if changed_files is defined and changed_files %}
-Changed files in this PR:
-{% for f in changed_files %}
-- {{ f }}
-{% endfor %}
-{% endif %}
 
-Peer turn:
-{{ peer_content }}
+Structured peer-turn evidence:
+- turn kind: {{ turn_kind }}
+- tool: {{ tool_name or "none" }}
+- path: {{ tool_path or "none" }}
+- claim count: {{ claim_count }}
+
+Grade only whether the peer's observed action matches the assigned task. Do not infer source contents or perform a code review.

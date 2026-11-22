@@ -6,22 +6,17 @@ class TestAdvisorAndVerifierComponents:
 
     def test_turn_grade_user_message_carries_phase_and_peer_turn(self) -> None:
         message = AdvisorTurnGradeUserRenderer().render(
-            phase_name="Bug Hunt — Diff", peer_content="peer output"
+            phase_name="Bug Hunt — Diff",
+            turn_kind="tool_call",
+            tool_name="read_file",
+            tool_path="Cargo.toml",
+            claim_count=0,
         )
 
         assert "Bug Hunt — Diff" in message.content
-        assert "peer output" in message.content
-
-
-    def test_turn_grade_user_message_carries_changed_files(self) -> None:
-        message = AdvisorTurnGradeUserRenderer().render(
-            phase_name="Bug Hunt — Diff",
-            peer_content="peer output",
-            changed_files=["Cargo.toml", "CHANGELOG.md"],
-        )
-
+        assert "read_file" in message.content
         assert "Cargo.toml" in message.content
-        assert "CHANGELOG.md" in message.content
+        assert "peer output" not in message.content
     def test_verify_initial_user_message_carries_repo_path(self) -> None:
         message = VerifyInitialUserRenderer().render(repo_path="/repos/x")
 
