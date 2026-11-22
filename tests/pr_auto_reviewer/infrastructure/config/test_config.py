@@ -389,7 +389,8 @@ class TestLoadConfig:
 
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch, tmp_path: Path):
-        """Prevent real .env and env vars from leaking into tests."""
+        """Prevent real configuration and environment from leaking into tests."""
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
         monkeypatch.setattr(
             "pr_auto_reviewer.infrastructure.config.repo_root.RepoRoot.path",
             classmethod(lambda cls: tmp_path),
