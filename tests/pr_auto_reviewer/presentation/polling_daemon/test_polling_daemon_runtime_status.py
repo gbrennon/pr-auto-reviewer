@@ -144,6 +144,39 @@ class TestPollingDaemonRuntimeStatus:
         assert len(reloaded) >= 1
         assert reloaded[0].allowed_repositories == ("new/repo",)
 
+    def test_daemon_refreshes_allow_list_at_start_of_each_interaction(self) -> None:
+        state_port = MagicMock()
+        reloader = MagicMock()
+        reloader.check_for_reload.return_value = Config(
+            env="production",
+            poll_interval=240,
+            repos_allow_list=("new/repo",),
+        )
+        config = PollingDaemonConfig(
+            poll_interval_seconds=300,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("old/repo",),
+        )
+        repo_lister = MagicMock()
+        pr_lister = MagicMock()
+        review_service = MagicMock()
+
+        daemon = PollingDaemon(
+            config,
+            repo_lister,
+            pr_lister,
+            review_service,
+            runtime_state=state_port,
+            config_reloader=reloader,
+        )
+
+        daemon._run_cycle()
+
+        assert reloader.check_for_reload.called
+        status = state_port.record_status.call_args[0][0]
+        assert status.allowed_repositories == ("new/repo",)
+
     def test_daemon_reads_settings_at_the_start_of_each_loop(self) -> None:
         state_port = MagicMock()
         reloader = MagicMock()

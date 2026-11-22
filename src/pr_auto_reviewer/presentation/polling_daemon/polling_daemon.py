@@ -128,7 +128,6 @@ class PollingDaemon:
         try:
             while True:
                 cycle += 1
-                self._check_config_reload()
                 self._run_cycle()
 
                 if self._config.run_once:
@@ -322,7 +321,8 @@ class PollingDaemon:
             logger.warning("No repositories remain after allow-list filtering")
 
     def _run_cycle(self) -> None:
-        """Execute one polling cycle."""
+        """Refresh settings and execute one polling cycle."""
+        self._check_config_reload()
         repos = self._repositories_to_poll()
 
         if not repos:
