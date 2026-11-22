@@ -29,6 +29,9 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
+from ...domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
+)
 from ...domain.exceptions.review_verdict_error import ReviewVerdictError
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
@@ -121,8 +124,12 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 )
             else:
                 review = self._run_single_turn_review(composed)
-        except ReviewVerdictError:
+        except (ReviewBudgetExhaustedError, ReviewVerdictError) as exc:
             self._persist(pr.record_inconclusive_review(command.head_sha))
+            if isinstance(exc, ReviewBudgetExhaustedError):
+                raise ReviewVerdictError(
+                    "Review budget exhausted without a publishable verdict."
+                ) from exc
             raise
         review = self._filter_suggestion_scope(review, diff)
         review = self._add_deterministic_findings(review, diff)

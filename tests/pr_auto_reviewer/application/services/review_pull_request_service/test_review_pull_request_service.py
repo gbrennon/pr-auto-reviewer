@@ -3,6 +3,9 @@ from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemS
 from pr_auto_reviewer.domain.value_objects.review_execution_result import (
     ReviewExecutionResult,
 )
+from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
+    ReviewBudgetExhaustedError,
+)
 from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
 from pr_auto_reviewer.domain.value_objects.review_audit_result import ReviewAuditResult
 from dataclasses import replace
@@ -96,6 +99,37 @@ class TestReviewPullRequestService:
         )
 
         with pytest.raises(ReviewVerdictError, match="inconclusive"):
+            service.execute(cmd)
+
+        saved = mock_pr_repository.save.call_args.args[0]
+        assert saved.last_inconclusive_sha == cmd.head_sha
+
+    def test_budget_exhaustion_is_persisted_as_inconclusive_review(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        cmd = _cmd()
+        existing = _pr(cmd.pr_id, cmd.head_sha)
+        diff = replace(_diff_fixture(cmd.pr_id, cmd.head_sha), clone_path=Path("/repo"))
+        command_bus = MagicMock()
+        command_bus.dispatch.side_effect = [
+            ReviewAuditResult(items=(), suggestions=(), lifecycles=()),
+            ReviewBudgetExhaustedError("no progress"),
+        ]
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = diff
+
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=object(),
+        )
+
+        with pytest.raises(ReviewVerdictError, match="budget exhausted"):
             service.execute(cmd)
 
         saved = mock_pr_repository.save.call_args.args[0]
