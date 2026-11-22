@@ -124,6 +124,11 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             last_platform_review_dismissed=raw.get(
                 "last_platform_review_dismissed", False
             ),
+            last_inconclusive_sha=(
+                CommitSha(raw["last_inconclusive_sha"])
+                if raw.get("last_inconclusive_sha")
+                else None
+            ),
             last_command_checked_at=raw.get("last_command_checked_at"),
             lifecycles=lifecycles,
         ).with_derived_lifecycles()
@@ -165,5 +170,10 @@ class JsonFilePullRequestRepository(PullRequestRepositoryPort):
             "last_review_request_event_id": pr.last_review_request_event_id,
             "last_platform_review_id": pr.last_platform_review_id,
             "last_platform_review_dismissed": pr.last_platform_review_dismissed,
+            "last_inconclusive_sha": (
+                str(pr.last_inconclusive_sha)
+                if pr.last_inconclusive_sha is not None
+                else None
+            ),
             "last_command_checked_at": pr.last_command_checked_at,
         }

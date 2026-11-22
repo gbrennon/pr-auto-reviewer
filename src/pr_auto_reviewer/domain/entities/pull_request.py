@@ -35,6 +35,7 @@ class PullRequest:
     last_review_request_event_id: int | None = None
     last_platform_review_id: int | None = None
     last_platform_review_dismissed: bool = False
+    last_inconclusive_sha: CommitSha | None = None
     last_command_checked_at: str | None = None
     lifecycles: tuple[ReviewItemLifecycle, ...] = ()
 
@@ -51,10 +52,16 @@ class PullRequest:
         return self.lifecycles
 
     def needs_review(self, sha: CommitSha) -> bool:
-        """True when sha differs from the last reviewed commit."""
+        """True when *sha* has not reached a terminal review state."""
+        if self.last_inconclusive_sha == sha:
+            return False
         if not self.reviews:
             return True
         return sha != self.head_sha
+
+    def record_inconclusive_review(self, sha: CommitSha) -> PullRequest:
+        """Record that review exhausted without a publishable verdict."""
+        return replace(self, last_inconclusive_sha=sha)
 
     def record_review_request_event(self, event_id: int) -> PullRequest:
         """Record the latest Codeberg review-request timeline event."""
@@ -95,6 +102,7 @@ class PullRequest:
             self,
             reviews=self.reviews + (review,),
             head_sha=sha,
+            last_inconclusive_sha=None,
             dismissed_item_ids=frozenset(),
             lifecycles=tuple(lifecycles),
         )

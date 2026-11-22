@@ -3,6 +3,10 @@ from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemS
 from pr_auto_reviewer.domain.value_objects.review_execution_result import (
     ReviewExecutionResult,
 )
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
+from pr_auto_reviewer.domain.value_objects.review_audit_result import ReviewAuditResult
+from dataclasses import replace
+from pathlib import Path
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -65,6 +69,37 @@ class TestReviewPullRequestService:
         mock_llm_review.review_prompt.assert_not_called()
         mock_review_publisher.publish.assert_not_called()
         mock_pr_repository.save.assert_called_once()
+
+    def test_inconclusive_review_is_persisted_for_same_sha(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        cmd = _cmd()
+        existing = _pr(cmd.pr_id, cmd.head_sha)
+        diff = replace(_diff_fixture(cmd.pr_id, cmd.head_sha), clone_path=Path("/repo"))
+        command_bus = MagicMock()
+        command_bus.dispatch.side_effect = [
+            ReviewAuditResult(items=(), suggestions=(), lifecycles=()),
+            ReviewVerdictError("inconclusive"),
+        ]
+        mock_pr_repository.find.return_value = existing
+        mock_changeset_fetcher.fetch.return_value = diff
+
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=object(),
+        )
+
+        with pytest.raises(ReviewVerdictError, match="inconclusive"):
+            service.execute(cmd)
+
+        saved = mock_pr_repository.save.call_args.args[0]
+        assert saved.last_inconclusive_sha == cmd.head_sha
 
     def test_force_bypasses_idempotency_guard(
         self, mock_pr_repository, mock_changeset_fetcher,

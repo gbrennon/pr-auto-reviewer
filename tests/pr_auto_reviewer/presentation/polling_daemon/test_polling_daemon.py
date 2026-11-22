@@ -533,6 +533,37 @@ class TestPollingDaemon:
         dispatched = mock_review_service.execute.call_args.args[0]
         assert dispatched.review_requested is True
 
+    def test_review_request_does_not_repeat_inconclusive_same_sha(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock
+    ) -> None:
+        tracker = MagicMock()
+        tracker.is_stale.return_value = False
+        pr_id = PullRequestId(repository="owner/repo1", number=1)
+        sha = CommitSha("abc123")
+        stored = PullRequest(
+            id=pr_id,
+            title="Fix bug",
+            head_sha=sha,
+        ).record_inconclusive_review(sha)
+        requested_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=sha,
+            title="Fix bug",
+            review_requested=True,
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([RepoInfo("owner/repo1", pushed_at="same")]),
+            pr_lister=MockPrLister([requested_pr]),
+            review_service=mock_review_service,
+            update_tracker=tracker,
+            pr_repository=PullRequestRepositoryFake(stored),
+        )
+
+        daemon.start()
+
+        mock_review_service.execute.assert_not_called()
+
     def test_re_review_request_is_actionable_without_active_reviewer(
         self, config: PollingDaemonConfig, mock_review_service: MagicMock
     ) -> None:

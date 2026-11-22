@@ -29,6 +29,7 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from ...domain.entities.pull_request import PullRequest
 from ...domain.entities.review_item import ReviewItem
 from ...domain.exceptions.empty_diff_error import EmptyDiffError
+from ...domain.exceptions.review_verdict_error import ReviewVerdictError
 from ...domain.services.review_item_factory import ReviewItemFactory
 from ...domain.services.suggestion_scope_policy import SuggestionScopePolicy
 from ...domain.value_objects.code_review import CodeReview
@@ -113,12 +114,16 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             target_branch=command.target_branch,
         )
 
-        if self._command_bus is not None:
-            review = self._run_multi_phase_review(
-                composed, command, diff, pr, audit_result,
-            )
-        else:
-            review = self._run_single_turn_review(composed)
+        try:
+            if self._command_bus is not None:
+                review = self._run_multi_phase_review(
+                    composed, command, diff, pr, audit_result,
+                )
+            else:
+                review = self._run_single_turn_review(composed)
+        except ReviewVerdictError:
+            self._persist(pr.record_inconclusive_review(command.head_sha))
+            raise
         review = self._filter_suggestion_scope(review, diff)
         review = self._add_deterministic_findings(review, diff)
         review = self._merge_audited_history(
@@ -216,7 +221,7 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     def _needs_review(
         self, command: ReviewPullRequestCommand, pr: PullRequest
     ) -> bool:
-        if command.force or pr.needs_review(command.head_sha):
+        if command.force:
             return True
         if (
             command.review_request_event_id is not None
@@ -224,7 +229,9 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             > (pr.last_review_request_event_id or 0)
         ):
             return True
-        return self._platform_review_requires_review(command, pr)
+        if self._platform_review_requires_review(command, pr):
+            return True
+        return pr.needs_review(command.head_sha)
 
     @staticmethod
     def _platform_review_requires_review(
