@@ -56,16 +56,19 @@ class TestChatClientBudgetScope:
         client.send(
             self._messages(),
             purpose=ConversationPurpose.REVIEWER_PHASE,
+            session_id="reviewer-a",
         )
         client.send(
             self._messages(),
-            purpose=ConversationPurpose.FINDING_VERIFIER,
+            purpose=ConversationPurpose.REVIEWER_PHASE,
+            session_id="reviewer-b",
         )
 
         with pytest.raises(ReviewBudgetExhaustedError):
             client.send(
                 self._messages(),
                 purpose=ConversationPurpose.REVIEWER_PHASE,
+                session_id="reviewer-a",
             )
 
     def test_call_budget_rejects_second_call_in_same_context(self) -> None:
@@ -98,4 +101,8 @@ class TestChatClientBudgetScope:
         client = self._client(max_llm_calls=None)
 
         for purpose in ConversationPurpose:
-            client.send(self._messages(), purpose=purpose)
+            client.send(
+                self._messages(),
+                purpose=purpose,
+                session_id=purpose.value,
+            )

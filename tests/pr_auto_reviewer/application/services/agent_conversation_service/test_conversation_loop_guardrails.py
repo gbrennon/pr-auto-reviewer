@@ -672,7 +672,7 @@ class TestConversationLoopGuardrails:
 
         final_requests: list[str] = []
 
-        def fake_send(messages, *, purpose):
+        def fake_send(messages, *, purpose, session_id):
             if "final review verdict" in messages[-1].content:
                 final_requests.append(messages[-1].content)
                 return "final-verdict"

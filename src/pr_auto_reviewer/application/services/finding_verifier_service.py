@@ -94,10 +94,16 @@ class FindingVerifierService(VerifyFindingsPort):
         repo_path: Path,
         changed_files: list[str],
         base_sha: str,
+        session_id: str = "",
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
         """Run a remediation-audit transcript advertising the audit schema."""
         return self._run_verification_transcript(
-            system_prompt, repo_path, changed_files, base_sha, audit=True,
+            system_prompt,
+            repo_path,
+            changed_files,
+            base_sha,
+            audit=True,
+            session_id=session_id,
         )
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
@@ -123,6 +129,7 @@ class FindingVerifierService(VerifyFindingsPort):
             repo_path=command.repo_path,
             changed_files=command.changed_files,
             base_sha=command.base_sha,
+            session_id=command.review_session,
         )
         self._publish_exchange(
             command.repo_path, command.review_session, prompt, transcript,
@@ -237,6 +244,7 @@ class FindingVerifierService(VerifyFindingsPort):
         changed_files: list[str],
         base_sha: str = "",
         audit: bool = False,
+        session_id: str = "",
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
         """Run the verification conversation, returning results and transcript.
 
@@ -268,7 +276,9 @@ class FindingVerifierService(VerifyFindingsPort):
                 guardrails.max_turns,
             )
             content = self._chat_port.send(
-                messages, purpose=ConversationPurpose.FINDING_VERIFIER
+                messages,
+                purpose=ConversationPurpose.FINDING_VERIFIER,
+                session_id=session_id,
             )
             if not content:
                 decision, guardrails = guardrails.record_empty_response()

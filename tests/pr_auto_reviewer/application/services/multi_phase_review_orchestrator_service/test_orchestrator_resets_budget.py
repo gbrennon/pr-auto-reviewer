@@ -5,7 +5,7 @@ class _BudgetTrackingChatPort:
     def __init__(self) -> None:
         self.calls_started = 0
 
-    def send(self, messages, *, purpose) -> str:
+    def send(self, messages, *, purpose, session_id) -> str:
         self.calls_started += 1
         return ""
 

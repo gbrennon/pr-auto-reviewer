@@ -45,7 +45,7 @@ class BaseChatClient(AgentChatPort, ABC):
         self._max_retries = settings.max_retries
         self._max_llm_calls = settings.max_llm_calls
         self._max_context_tokens = settings.max_context_tokens
-        self._calls_started: dict[ConversationPurpose, int] = {}
+        self._calls_started: dict[tuple[str, ConversationPurpose], int] = {}
 
     @property
     def model(self) -> str:
@@ -177,10 +177,11 @@ class BaseChatClient(AgentChatPort, ABC):
         messages: list[ConversationMessage],
         *,
         purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
+        session_id: str = "",
     ) -> str:
         """Send one isolated context with retry loop and budget tracking."""
         bounded_messages = self._bound_context(messages)
-        call_index = self._reserve_call(purpose)
+        call_index = self._reserve_call(session_id, purpose)
         started_at = time.monotonic()
         logger.info(
             "LLM chat call %s starting (%d messages in history)",
@@ -208,9 +209,12 @@ class BaseChatClient(AgentChatPort, ABC):
         """Reset the per-review call counter so a new review starts fresh."""
         self._calls_started.clear()
 
-    def _reserve_call(self, purpose: ConversationPurpose) -> int:
-        """Reserve one call slot for the isolated conversation purpose."""
-        call_index = self._calls_started.get(purpose, 0) + 1
+    def _reserve_call(
+        self, session_id: str, purpose: ConversationPurpose,
+    ) -> int:
+        """Reserve one call slot for the isolated agent session."""
+        scope = (session_id, purpose)
+        call_index = self._calls_started.get(scope, 0) + 1
         if (
             self._max_llm_calls is not None
             and call_index > self._max_llm_calls
@@ -219,7 +223,7 @@ class BaseChatClient(AgentChatPort, ABC):
                 f"LLM call budget of {self._max_llm_calls} exhausted; "
                 "refusing to send another chat request"
             )
-        self._calls_started[purpose] = call_index
+        self._calls_started[scope] = call_index
         return call_index
 
     def _describe_call(self, call_index: int) -> str:

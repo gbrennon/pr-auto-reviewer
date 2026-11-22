@@ -22,6 +22,7 @@ class AgentChatPort(Protocol):
         messages: list[ConversationMessage],
         *,
         purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
+        session_id: str = "",
     ) -> str:
         """Send one isolated context to the LLM and return its response."""
         ...

@@ -95,7 +95,9 @@ class PhaseAdvisorService(AssessPhasePort):
         messages = self._build_messages(phase, assignment, phase_result)
         try:
             raw = self._chat_port.send(
-                messages, purpose=ConversationPurpose.ADVISOR_PHASE
+                messages,
+                purpose=ConversationPurpose.ADVISOR_PHASE,
+                session_id=review_session,
             )
         except LlmUnavailableError:
             raise
@@ -131,7 +133,9 @@ class PhaseAdvisorService(AssessPhasePort):
         messages = self._build_turn_messages(evidence)
         try:
             raw = self._chat_port.send(
-                messages, purpose=ConversationPurpose.ADVISOR_TURN
+                messages,
+                purpose=ConversationPurpose.ADVISOR_TURN,
+                session_id=review_session,
             )
         except LlmUnavailableError:
             raise

@@ -477,7 +477,7 @@ class AgentConversationService(RunAgentConversationPort):
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
             content = self._chat_port.send(
-                messages, purpose=purpose
+                messages, purpose=purpose, session_id=review_session
             )
             guardrails = guardrails.advance_turn()
             if not content:
@@ -658,6 +658,7 @@ class AgentConversationService(RunAgentConversationPort):
                             sp_content = self._chat_port.send(
                                 messages,
                                 purpose=purpose,
+                                session_id=review_session,
                             )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
@@ -810,7 +811,7 @@ class AgentConversationService(RunAgentConversationPort):
         )
         try:
             final_content = self._chat_port.send(
-                messages, purpose=purpose
+                messages, purpose=purpose, session_id=context.review_session
             )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
