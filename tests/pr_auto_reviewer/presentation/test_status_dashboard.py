@@ -129,6 +129,50 @@ class TestStatusDashboard:
             await pilot.press("q")
 
     @pytest.mark.asyncio
+    async def test_refresh_updates_changed_cells_without_resetting_cursor(self) -> None:
+        initial_review = ActiveReviewProgress(
+            repository="forgejo:owner/repo",
+            pr_number=42,
+            pr_title="PR Title",
+            head_sha="abc1234",
+            started_at="2026-11-09T18:00:00Z",
+            phase_name="Architecture",
+            current_turn=1,
+            max_turns=5,
+        )
+        updated_review = replace(initial_review, current_turn=2)
+        initial_status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.REVIEWING,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=("forgejo:owner/repo",),
+            current_cycle=2,
+            current_review=initial_review,
+        )
+        updated_status = replace(initial_status, current_review=updated_review)
+        initial = DaemonStatusSnapshot(
+            runtime_status=initial_status,
+            daemon_alive=True,
+            allowed_repositories=initial_status.allowed_repositories,
+            capabilities=(),
+        )
+        updated = replace(initial, runtime_status=updated_status)
+        snapshots = iter((initial, updated))
+
+        async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
+            table = pilot.app.query_one("#items")
+            table.move_cursor(row=1)
+            cursor_key = list(table.rows)[table.cursor_row]
+            pilot.app.refresh_status()
+
+            assert table.cursor_row == 1
+            assert list(table.rows)[table.cursor_row] == cursor_key
+            assert "turn 2/5" in " ".join(str(cell) for cell in table.get_row(cursor_key))
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
     async def test_renders_provider_error_without_crashing(self) -> None:
         def failing_provider() -> DaemonStatusSnapshot:
             raise RuntimeError("status store unavailable")
