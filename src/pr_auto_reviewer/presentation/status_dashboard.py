@@ -161,16 +161,54 @@ class StatusDashboard(App[None]):
     def _render_snapshot(self, snapshot: DaemonStatusSnapshot) -> None:
         self.query_one("#state", Static).update(self._state_text(snapshot))
         self._render_sort_label()
-        table = self.query_one("#items", DataTable)
-        table.clear()
-        for row in self._sorted_rows(snapshot):
-            table.add_row(*row)
+        self._update_items_table(self._sorted_rows(snapshot))
         self.query_one("#error", Static).update(
             snapshot.runtime_status.last_error
             if snapshot.runtime_status and snapshot.runtime_status.last_error
             else ""
         )
         self._update_refresh_time()
+
+    def _update_items_table(
+        self, rows: list[tuple[str, str, str, str]],
+    ) -> None:
+        table = self.query_one("#items", DataTable)
+        keyed_rows = [(self._row_key(row), row) for row in rows]
+        current_keys = list(table.rows)
+        cursor_row = table.cursor_row
+        cursor_column = table.cursor_column
+        cursor_key = (
+            current_keys[cursor_row]
+            if 0 <= cursor_row < len(current_keys)
+            else None
+        )
+        desired_keys = [key for key, _row in keyed_rows]
+        if current_keys == desired_keys:
+            column_keys = list(table.columns)
+            for key, row in keyed_rows:
+                existing = table.get_row(key)
+                for column, value in enumerate(row):
+                    if existing[column] != value:
+                        table.update_cell(key, column_keys[column], value)
+            return
+        table.clear()
+        for key, row in keyed_rows:
+            table.add_row(*row, key=key)
+        if not desired_keys:
+            return
+        target_row = (
+            desired_keys.index(cursor_key)
+            if cursor_key in desired_keys
+            else min(cursor_row, len(desired_keys) - 1)
+        )
+        table.move_cursor(
+            row=target_row,
+            column=min(cursor_column, len(keyed_rows[0][1]) - 1),
+        )
+
+    @staticmethod
+    def _row_key(row: tuple[str, str, str, str]) -> str:
+        return "|".join(row[:3])
 
     def _render_sort_label(self) -> None:
         self.query_one("#sort", Static).update(
