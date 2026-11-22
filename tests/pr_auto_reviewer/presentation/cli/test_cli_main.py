@@ -6,6 +6,7 @@ from unittest.mock import call, patch
 import pytest
 
 from pr_auto_reviewer.cli import SERVICE_NAME, main
+from pr_auto_reviewer.presentation.cli.settings_cli import SettingsCli
 
 
 class TestCliServiceCommands:
@@ -63,7 +64,8 @@ class TestCliServiceCommands:
         ):
             main()
 
-        dashboard.assert_called_once_with(snapshot)
+        assert dashboard.call_args.args == (snapshot,)
+        assert isinstance(dashboard.call_args.kwargs["settings"], SettingsCli)
         dashboard.return_value.run.assert_called_once_with()
 
     def test_logs_command_dispatches_journalctl(self) -> None:

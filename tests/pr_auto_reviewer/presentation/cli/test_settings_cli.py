@@ -10,6 +10,32 @@ from pr_auto_reviewer.presentation.cli.settings_cli import SettingsCli
 class TestSettingsCli:
     """Verify CLI behavior at the settings boundary."""
 
+    def test_snapshot_exposes_values_but_never_secret_values(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.run(["set", "poll_interval", "30"])
+        cli.run(["set", "GITHUB_MANAGER_TOKEN", "secret-value"])
+
+        snapshot = cli.snapshot()
+
+        assert snapshot.values == (("poll_interval", "30"),)
+        assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
+        assert "secret-value" not in repr(snapshot)
+
+    def test_write_and_unset_settings_without_reading_secrets(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+
+        cli.write("poll_interval", "45")
+        cli.write("GITHUB_MANAGER_TOKEN", "secret-value")
+        cli.unset("poll_interval")
+
+        snapshot = cli.snapshot()
+        assert snapshot.values == ()
+        assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
+
     @staticmethod
     def _cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SettingsCli:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))

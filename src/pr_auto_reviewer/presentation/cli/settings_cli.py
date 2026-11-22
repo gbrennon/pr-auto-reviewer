@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Sequence
 
 from dotenv import dotenv_values
@@ -19,6 +20,14 @@ from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
 from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
     EncryptedSqliteSecretStore,
 )
+
+
+@dataclass(frozen=True)
+class SettingsSnapshot:
+    """Non-secret settings and secret names without secret values."""
+
+    values: tuple[tuple[str, str], ...]
+    secret_names: tuple[str, ...]
 
 
 class SettingsCli:
@@ -59,10 +68,43 @@ class SettingsCli:
             return self._unset(args.name)
         return self._list()
 
+    def snapshot(self) -> SettingsSnapshot:
+        """Return editable settings while keeping secrets write-only."""
+        values = tuple(
+            (name, self._format_value(value))
+            for name, value in sorted(self._settings().all().items())
+        )
+        return SettingsSnapshot(
+            values=values,
+            secret_names=self._secrets().names(),
+        )
+
+    def write(self, name: str, raw_value: str) -> None:
+        """Write one setting without returning or logging its value."""
+        if name == "PR_AUTO_REVIEWER_ENCRYPTION_KEY":
+            self._write_encryption_key(raw_value)
+            return
+        if TomlSettingsStore.is_secret_name(name):
+            self._secrets().set(name, raw_value)
+            return
+        self._settings().set(name, self._parse_value(raw_value))
+
+    def unset(self, name: str) -> None:
+        """Remove one setting without exposing a secret value."""
+        if TomlSettingsStore.is_secret_name(name):
+            self._secrets().delete(name)
+            return
+        self._settings().delete(name)
+
     def _set_encryption_key(self) -> int:
         key = getpass.getpass("Encryption key: ").strip()
         if not key:
             raise ValueError("Encryption key must not be empty")
+        self._write_encryption_key(key)
+        print("Updated encryption key")
+        return 0
+
+    def _write_encryption_key(self, key: str) -> None:
         config_path = AppPaths.config_dir() / "config"
         config_path.parent.mkdir(parents=True, exist_ok=True)
         existing = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
@@ -95,16 +137,11 @@ class SettingsCli:
             if os.path.exists(temporary):
                 os.unlink(temporary)
             raise
-        print("Updated encryption key")
-        return 0
 
     def _set(self, name: str, raw_value: str) -> int:
-        if TomlSettingsStore.is_secret_name(name):
-            self._secrets().set(name, raw_value)
-            print(f"Updated secret {name}")
-            return 0
-        self._settings().set(name, self._parse_value(raw_value))
-        print(f"Updated setting {name}")
+        self.write(name, raw_value)
+        label = "secret" if TomlSettingsStore.is_secret_name(name) else "setting"
+        print(f"Updated {label} {name}")
         return 0
 
     def _get(self, name: str) -> int:
@@ -119,10 +156,7 @@ class SettingsCli:
         return 0
 
     def _unset(self, name: str) -> int:
-        if TomlSettingsStore.is_secret_name(name):
-            self._secrets().delete(name)
-        else:
-            self._settings().delete(name)
+        self.unset(name)
         print(f"Removed {name}")
         return 0
 

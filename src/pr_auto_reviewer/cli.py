@@ -93,7 +93,7 @@ class CommandLineInterface:
             return True
         if command == "status":
             if sys.stdout.isatty():
-                StatusDashboard(status_snapshot).run()
+                StatusDashboard(status_snapshot, settings=SettingsCli()).run()
             else:
                 print(show_status())
             return True
