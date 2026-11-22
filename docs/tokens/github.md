@@ -6,23 +6,23 @@
 
 | Method | Endpoint | Token | Required Permission |
 |--------|----------|-------|---------------------|
-| `GET` | `/user` | Owner + Reviewer | No specific permission — validates token is not expired |
-| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner + Reviewer | **Pull requests: Write** — empty reviewers list probes write access |
-| `GET` | `/repos/{o}/{r}/pulls/{n}` | Owner | **Pull requests: Read** — fetches PR metadata |
-| `GET` | `/repos/{o}/{r}/pulls/{n}.diff` | Owner | **Pull requests: Read** — fetches the unified diff |
-| `GET` | `/repos/{o}/{r}/pulls/{n}/commits` | Owner | **Pull requests: Read** — fetches commit messages |
-| `GET` | `/repos/{o}/{r}/contents/{path}?ref={sha}` | Owner | **Contents: Read** — fetches file contents at a commit |
-| `GET` | `/repos/{o}/{r}/git/trees/{branch}?recursive=1` | Owner | **Contents: Read** — lists the repository file tree |
-| `GET` | `/repos/{o}/{r}/contents/{filename}` | Owner | **Contents: Read** — fetches conventions files |
-| `GET` | `/repos/{o}/{r}/pulls` | Owner | **Pull requests: Read** — lists open PRs |
-| `GET` | `/user/repos` | Owner | **Metadata: Read** — lists repositories |
+| `GET` | `/user` | Manager + Reviewer | No specific permission — validates token is not expired |
+| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Manager + Reviewer | **Pull requests: Write** — empty reviewers list probes write access |
+| `GET` | `/repos/{o}/{r}/pulls/{n}` | Manager | **Pull requests: Read** — fetches PR metadata |
+| `GET` | `/repos/{o}/{r}/pulls/{n}.diff` | Manager | **Pull requests: Read** — fetches the unified diff |
+| `GET` | `/repos/{o}/{r}/pulls/{n}/commits` | Manager | **Pull requests: Read** — fetches commit messages |
+| `GET` | `/repos/{o}/{r}/contents/{path}?ref={sha}` | Manager | **Contents: Read** — fetches file contents at a commit |
+| `GET` | `/repos/{o}/{r}/git/trees/{branch}?recursive=1` | Manager | **Contents: Read** — lists the repository file tree |
+| `GET` | `/repos/{o}/{r}/contents/{filename}` | Manager | **Contents: Read** — fetches conventions files |
+| `GET` | `/repos/{o}/{r}/pulls` | Manager | **Pull requests: Read** — lists open PRs |
+| `GET` | `/user/repos` | Manager | **Metadata: Read** — lists repositories |
 | `GET` | `/repos/{o}/{r}/pulls/{n}/reviews` | Reviewer | **Pull requests: Read** — reads existing reviews |
 
-| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner | **Pull requests: Write** — requests the bot as reviewer |
+| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Manager | **Pull requests: Write** — requests the bot as reviewer |
 | `POST` | `/repos/{o}/{r}/pulls/{n}/reviews` | Reviewer | **Pull requests: Write** — submits the formal review |
 | `POST` | `/repos/{o}/{r}/issues/{n}/comments` | Reviewer | **Issues: Write** — posts a comment on the PR |
-| `GET` | `/repos/{o}/{r}/issues/{n}/comments` | Owner | **Issues: Read** — reads existing comments |
-| `POST` | `/repos/{o}/{r}/issues` | Owner | **Issues: Write** — creates a tracker issue |
+| `GET` | `/repos/{o}/{r}/issues/{n}/comments` | Manager | **Issues: Read** — reads existing comments |
+| `POST` | `/repos/{o}/{r}/issues` | Manager | **Issues: Write** — creates a tracker issue |
 
 
 ---
@@ -38,7 +38,7 @@ Fine-grained PATs for org repos may require **org approval** (Settings → Perso
 
 ---
 
-## Owner Token (`GITHUB_OWNER_TOKEN`)
+## Manager Token (`GITHUB_MANAGER_TOKEN`)
 
 ### Required Permissions (Fine-grained)
 
@@ -64,14 +64,14 @@ Select `repo` scope (full control). No separate issue permission needed — `rep
    - **Contents**: **Read-only**
    - **Pull requests**: **Read and Write**
    - **Issues**: **Read and Write**
-6. Generate, copy to `GITHUB_OWNER_TOKEN` in `.env`
+6. Generate, copy to `GITHUB_MANAGER_TOKEN` in `.env`
 
 ### Create (Classic)
 
 1. Go to https://github.com/settings/tokens
 2. **Generate new token** → **Classic**
 3. Select scopes: `repo` (full control)
-4. Generate, copy to `GITHUB_OWNER_TOKEN` in `.env`
+4. Generate, copy to `GITHUB_MANAGER_TOKEN` in `.env`
 
 
 ---
@@ -92,7 +92,7 @@ Select `repo` scope.
 
 ### Create
 
-Same steps as owner token. If the reviewer is a **separate bot account**, create the token under that account.
+Same steps as manager token. If the reviewer is a **separate bot account**, create the token under that account.
 
 ```
 GITHUB_REVIEWER_TOKEN=github_pat_...
@@ -120,17 +120,17 @@ tokens per org:
 
 ```bash
 # Default tokens (fallback)
-GITHUB_OWNER_TOKEN=<REDACTED_GITHUB_TOKEN>...
+GITHUB_MANAGER_TOKEN=<REDACTED_GITHUB_TOKEN>...
 GITHUB_REVIEWER_TOKEN=<REDACTED_GITHUB_TOKEN>...
 GITHUB_REVIEWER_USERNAME=default-bot
 
 # Overrides for org "my-company"
-GITHUB_TOKEN_my-company_OWNER=<REDACTED_GITHUB_TOKEN>...
+GITHUB_TOKEN_my-company_MANAGER=<REDACTED_GITHUB_TOKEN>...
 GITHUB_TOKEN_my-company_REVIEWER=<REDACTED_GITHUB_TOKEN>...
 GITHUB_TOKEN_my-company_REVIEWER_USERNAME=org-bot
 ```
 
-Resolution order per repo: `GITHUB_TOKEN_{org}_OWNER` → `GITHUB_OWNER_TOKEN` → `""`.
+Resolution order per repo: `GITHUB_TOKEN_{org}_MANAGER` → `GITHUB_MANAGER_TOKEN` → `""`.
 
 ---
 
@@ -156,14 +156,14 @@ Manual verification:
 ```bash
 # Auth check (both tokens)
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
-  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  -H "Authorization: Bearer $GITHUB_MANAGER_TOKEN" \
   -H "Accept: application/vnd.github+json" \
   https://api.github.com/user
 
-# Write access check — owner
+# Write access check — manager
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -X POST \
-  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  -H "Authorization: Bearer $GITHUB_MANAGER_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/vnd.github+json" \
   -d '{"reviewers":[]}' \
@@ -178,4 +178,4 @@ curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -d '{"reviewers":[]}' \
   https://api.github.com/repos/OWNER/REPO/pulls/PR/requested_reviewers
 ```
-> The reviewer token can be the same as the owner token for a single-account setup.
+> The reviewer token can be the same as the manager token for a single-account setup.

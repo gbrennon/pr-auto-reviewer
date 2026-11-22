@@ -3,14 +3,14 @@
 Scans environment variables matching ``{PREFIX}_TOKEN_{ORG}_{ROLE}`` and
 falls back to default tokens when no org-specific override exists.
 
-    GITHUB_TOKEN_my-org_OWNER=ghp_...
+    GITHUB_TOKEN_my-org_MANAGER=ghp_...
     GITHUB_TOKEN_my-org_REVIEWER=ghp_...
     GITHUB_TOKEN_my-org_REVIEWER_USERNAME=my-bot
 
 Resolution order per role: org override → default → "".
 
 Org names may contain underscores — the role is identified by suffix-matching
-against known roles (``REVIEWER_USERNAME``, ``REVIEWER``, ``OWNER``) in
+against known roles (``REVIEWER_USERNAME``, ``REVIEWER``, ``MANAGER``) in
 longest-first order, eliminating ambiguity without a double-underscore
 convention.
 """
@@ -84,8 +84,8 @@ class TokenResolver:
         """Return ``(token, env_var_key)`` for *role* scoped to *repo*'s org.
 
         The *env_var_key* is the exact environment variable name that
-        supplied the token (e.g. ``"GITHUB_OWNER_TOKEN"`` or
-        ``"GITHUB_TOKEN_forging-blocks-org_OWNER"``).
+        supplied the token (e.g. ``"GITHUB_MANAGER_TOKEN"`` or
+        ``"GITHUB_TOKEN_forging-blocks-org_MANAGER"``).
         """
         return self._resolve_with_source(role, repo)
 
@@ -121,8 +121,8 @@ class TokenResolver:
         entry = self._org_entry(org)
         if entry is None:
             return None
-        if role_upper == "OWNER":
-            return entry.owner_token or None
+        if role_upper == "MANAGER":
+            return entry.manager_token or None
         if role_upper == "REVIEWER":
             return entry.reviewer_token or None
         return None

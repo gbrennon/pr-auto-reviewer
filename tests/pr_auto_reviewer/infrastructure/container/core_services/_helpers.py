@@ -61,7 +61,7 @@ def forgejo_config() -> Config:
     return Config(
         env="test",
         platform_mode=GitProvider.FORGEJO,
-        forgejo_owner_token="fj-own",
+        forgejo_manager_token="fj-own",
         forgejo_reviewer_token="fj-rev",
         forgejo_reviewer_username="fj-bot",
     )

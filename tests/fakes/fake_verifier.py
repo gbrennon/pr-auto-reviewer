@@ -26,7 +26,7 @@ class FakeVerifier(PreflightVerifier):
         org: str,
         repo: str,
         pr_number: int,
-        role: str = "owner",
+        role: str = "manager",
         token_source: str = "",
     ) -> None:
         self.calls.append(

@@ -4,9 +4,9 @@ from ._helpers import *
 class TestTokenResolverForgejoPrefix:
     def test_resolve_returns_forgejo_org_override_owner(self):
         resolver = _resolver(
-            platform_prefix="FORGEJO", FORGEJO_TOKEN_myorg_OWNER="fj-own"
+            platform_prefix="FORGEJO", FORGEJO_TOKEN_myorg_MANAGER="fj-own"
         )
-        assert resolver.resolve("OWNER", "myorg/repo") == "fj-own"
+        assert resolver.resolve("MANAGER", "myorg/repo") == "fj-own"
 
     def test_resolve_returns_forgejo_org_override_reviewer(self):
         resolver = _resolver(
@@ -22,8 +22,8 @@ class TestTokenResolverForgejoPrefix:
         assert resolver.reviewer_username("myorg/repo") == "fj-user"
 
     def test_github_and_forgejo_prefixes_are_independent(self):
-        gh = _resolver(GITHUB_TOKEN_myorg_OWNER="gh-tok")
-        fj = _resolver(platform_prefix="FORGEJO", FORGEJO_TOKEN_myorg_OWNER="fj-tok")
-        assert gh.resolve("OWNER", "myorg/repo") == "gh-tok"
-        assert fj.resolve("OWNER", "myorg/repo") == "fj-tok"
+        gh = _resolver(GITHUB_TOKEN_myorg_MANAGER="gh-tok")
+        fj = _resolver(platform_prefix="FORGEJO", FORGEJO_TOKEN_myorg_MANAGER="fj-tok")
+        assert gh.resolve("MANAGER", "myorg/repo") == "gh-tok"
+        assert fj.resolve("MANAGER", "myorg/repo") == "fj-tok"
 

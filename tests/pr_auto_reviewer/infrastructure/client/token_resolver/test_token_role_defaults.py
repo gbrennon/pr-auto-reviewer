@@ -7,10 +7,10 @@ from pr_auto_reviewer.infrastructure.client.token_resolver.token_role_defaults i
 
 
 class TestTokenRoleDefaults:
-    def test_owner_role_returns_owner_token(self):
-        defaults = TokenDefaults(owner_token="own-tok")
+    def test_owner_role_returns_manager_token(self):
+        defaults = TokenDefaults(manager_token="own-tok")
         role_defaults = TokenRoleDefaults("GITHUB", defaults)
-        assert role_defaults.token_for("OWNER") == "own-tok"
+        assert role_defaults.token_for("MANAGER") == "own-tok"
 
     def test_reviewer_role_returns_reviewer_token(self):
         defaults = TokenDefaults(reviewer_token="rev-tok")
@@ -18,14 +18,14 @@ class TestTokenRoleDefaults:
         assert role_defaults.token_for("REVIEWER") == "rev-tok"
 
     def test_unknown_role_returns_empty(self):
-        defaults = TokenDefaults(owner_token="own-tok")
+        defaults = TokenDefaults(manager_token="own-tok")
         role_defaults = TokenRoleDefaults("GITHUB", defaults)
         assert role_defaults.token_for("BOGUS") == ""
 
     def test_source_key_for_owner(self):
         defaults = TokenDefaults()
         role_defaults = TokenRoleDefaults("GITHUB", defaults)
-        assert role_defaults.source_key_for("OWNER") == "GITHUB_OWNER_TOKEN"
+        assert role_defaults.source_key_for("MANAGER") == "GITHUB_MANAGER_TOKEN"
 
     def test_source_key_for_reviewer(self):
         defaults = TokenDefaults()
@@ -35,7 +35,7 @@ class TestTokenRoleDefaults:
     def test_source_key_normalizes_role_case(self):
         defaults = TokenDefaults()
         role_defaults = TokenRoleDefaults("GITHUB", defaults)
-        assert role_defaults.source_key_for("owner") == "GITHUB_OWNER_TOKEN"
+        assert role_defaults.source_key_for("manager") == "GITHUB_MANAGER_TOKEN"
 
     def test_reviewer_username_returns_default(self):
         defaults = TokenDefaults(reviewer_username="rev-user")

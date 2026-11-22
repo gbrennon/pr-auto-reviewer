@@ -16,7 +16,7 @@ from tests.fakes import FakeTokenResolver, FakeVerifier
 class TestTokenVerifierPersistence:
     @staticmethod
     def _client(
-        label: str = "owner",
+        label: str = "manager",
         verified_cache_path: Path | None = None,
     ) -> GitPlatformHttpClient:
         resolver = FakeTokenResolver({"o/r": f"{label}-tok"})
@@ -35,7 +35,7 @@ class TestTokenVerifierPersistence:
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierPersistence._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierPersistence._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierPersistence._client(
             "reviewer", verified_cache_path=store,
         )
@@ -46,7 +46,7 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "owner"] in data
+        assert ["o", "manager"] in data
         assert ["o", "reviewer"] in data
 
     def test_verify_loads_persisted_pairs_and_skips_preflight(
@@ -54,10 +54,10 @@ class TestTokenVerifierPersistence:
     ) -> None:
         store = tmp_path / "verified-tokens.json"
         store.parent.mkdir(parents=True, exist_ok=True)
-        store.write_text(json.dumps([["o", "owner"], ["o", "reviewer"]]))
+        store.write_text(json.dumps([["o", "manager"], ["o", "reviewer"]]))
 
         owner = TestTokenVerifierPersistence._client(
-            "owner", verified_cache_path=store,
+            "manager", verified_cache_path=store,
         )
         reviewer = TestTokenVerifierPersistence._client(
             "reviewer", verified_cache_path=store,
@@ -74,7 +74,7 @@ class TestTokenVerifierPersistence:
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierPersistence._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierPersistence._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierPersistence._client(
             "reviewer", verified_cache_path=store,
         )
@@ -85,7 +85,7 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "owner"] in data
+        assert ["o", "manager"] in data
         assert ["o", "reviewer"] in data
 
     def test_load_handles_corrupt_json(self, tmp_path: Path) -> None:
@@ -94,7 +94,7 @@ class TestTokenVerifierPersistence:
         store.write_text("not json")
 
         owner = TestTokenVerifierPersistence._client(
-            "owner", verified_cache_path=store,
+            "manager", verified_cache_path=store,
         )
         reviewer = TestTokenVerifierPersistence._client(
             "reviewer", verified_cache_path=store,

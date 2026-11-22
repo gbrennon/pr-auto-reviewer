@@ -51,11 +51,11 @@ class TestSqlitePersistence:
         database = tmp_path / "secrets.sqlite3"
         store = EncryptedSqliteSecretStore(database, "test-key")
 
-        store.set("GITHUB_OWNER_TOKEN", "secret-token")
-        store.set("GITHUB_OWNER_TOKEN", "replacement-token")
+        store.set("GITHUB_MANAGER_TOKEN", "secret-token")
+        store.set("GITHUB_MANAGER_TOKEN", "replacement-token")
 
-        assert store.get("GITHUB_OWNER_TOKEN") == "replacement-token"
-        assert store.names() == ("GITHUB_OWNER_TOKEN",)
+        assert store.get("GITHUB_MANAGER_TOKEN") == "replacement-token"
+        assert store.names() == ("GITHUB_MANAGER_TOKEN",)
         with sqlite3.connect(database) as connection:
             raw = connection.execute(
                 "SELECT ciphertext FROM secrets"

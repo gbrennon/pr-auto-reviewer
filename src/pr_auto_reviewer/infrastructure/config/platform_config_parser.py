@@ -19,11 +19,11 @@ class PlatformConfigParser:
             transport=source.get("PLATFORM_TRANSPORT", "http").strip().lower(),
             github_api_url=source.get("GITHUB_API_URL", "https://api.github.com").strip(),
             forgejo_api_url=ForgejoApiUrlNormalizer.normalize(forgejo_url.strip()),
-            github_owner_token=source.get("GITHUB_OWNER_TOKEN", "").strip(),
+            github_manager_token=source.get("GITHUB_MANAGER_TOKEN", "").strip(),
             github_reviewer_token=source.get("GITHUB_REVIEWER_TOKEN", "").strip(),
             github_reviewer_username=source.get("GITHUB_REVIEWER_USERNAME", "").strip(),
             github_review_mode=source.get("GITHUB_REVIEW_MODE", "formal").strip(),
-            forgejo_owner_token=source.get("FORGEJO_OWNER_TOKEN", "").strip(),
+            forgejo_manager_token=source.get("FORGEJO_MANAGER_TOKEN", "").strip(),
             forgejo_reviewer_token=source.get("FORGEJO_REVIEWER_TOKEN", "").strip(),
             forgejo_reviewer_username=source.get("FORGEJO_REVIEWER_USERNAME", "").strip(),
         )

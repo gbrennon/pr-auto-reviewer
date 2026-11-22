@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_ROLES: tuple[str, ...] = ("REVIEWER_USERNAME", "REVIEWER", "OWNER")
+_ROLES: tuple[str, ...] = ("REVIEWER_USERNAME", "REVIEWER", "MANAGER")
 
 
 class RoleSuffixParser:

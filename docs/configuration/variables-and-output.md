@@ -16,7 +16,7 @@ Set the token group that matches your `PLATFORM_MODE`:
 
 | Variable | Description |
 |----------|-------------|
-| `GITHUB_OWNER_TOKEN` | Owner account API token (classic or fine-grained PAT) |
+| `GITHUB_MANAGER_TOKEN` | Manager account API token (classic or fine-grained PAT) |
 | `GITHUB_REVIEWER_TOKEN` | Bot account token for posting reviews |
 | `GITHUB_REVIEWER_USERNAME` | Bot's GitHub username |
 
@@ -24,7 +24,7 @@ Set the token group that matches your `PLATFORM_MODE`:
 
 | Variable | Description |
 |----------|-------------|
-| `FORGEJO_OWNER_TOKEN` | Owner account API token |
+| `FORGEJO_MANAGER_TOKEN` | Manager account API token |
 | `FORGEJO_REVIEWER_TOKEN` | Bot account token for posting reviews |
 | `FORGEJO_REVIEWER_USERNAME` | Bot's Codeberg username |
 

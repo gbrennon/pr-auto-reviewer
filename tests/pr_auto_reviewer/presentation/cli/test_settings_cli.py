@@ -33,9 +33,9 @@ class TestSettingsCli:
     ) -> None:
         cli = self._cli(monkeypatch, tmp_path)
 
-        assert cli.run(["set", "GITHUB_OWNER_TOKEN", "first"]) == 0
-        assert cli.run(["set", "GITHUB_OWNER_TOKEN", "second"]) == 0
-        assert cli.run(["get", "GITHUB_OWNER_TOKEN"]) == 2
+        assert cli.run(["set", "GITHUB_MANAGER_TOKEN", "first"]) == 0
+        assert cli.run(["set", "GITHUB_MANAGER_TOKEN", "second"]) == 0
+        assert cli.run(["get", "GITHUB_MANAGER_TOKEN"]) == 2
 
         assert "cannot read secret" in capsys.readouterr().err
 
@@ -44,15 +44,15 @@ class TestSettingsCli:
     ) -> None:
         cli = self._cli(monkeypatch, tmp_path)
         cli.run(["set", "debug", "true"])
-        cli.run(["set", "FORGEJO_OWNER_TOKEN", "secret"])
+        cli.run(["set", "FORGEJO_MANAGER_TOKEN", "secret"])
         capsys.readouterr()
 
         assert cli.run(["list"]) == 0
 
         output = capsys.readouterr().out
         assert "debug = true" in output
-        assert "FORGEJO_OWNER_TOKEN = <secret>" in output
-        assert "secret" not in output.replace("FORGEJO_OWNER_TOKEN = <secret>", "")
+        assert "FORGEJO_MANAGER_TOKEN = <secret>" in output
+        assert "secret" not in output.replace("FORGEJO_MANAGER_TOKEN = <secret>", "")
 
     def test_secret_setup_uses_key_from_user_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -70,11 +70,11 @@ class TestSettingsCli:
         monkeypatch.delenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", raising=False)
         cli = SettingsCli()
 
-        assert cli.run(["set", "FORGEJO_OWNER_TOKEN", "secret"]) == 0
+        assert cli.run(["set", "FORGEJO_MANAGER_TOKEN", "secret"]) == 0
         capsys.readouterr()
 
         assert cli.run(["list"]) == 0
-        assert "FORGEJO_OWNER_TOKEN = <secret>" in capsys.readouterr().out
+        assert "FORGEJO_MANAGER_TOKEN = <secret>" in capsys.readouterr().out
 
     def test_encryption_key_setup_writes_user_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,

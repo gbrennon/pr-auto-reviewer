@@ -34,11 +34,11 @@ class GithubReviewPublisher(ReviewPublisherPort):
         self,
         body_renderer: ReviewBodyRenderer,
         client: GitPlatformHttpClient,
-        owner_client: GitPlatformHttpClient,
+        manager_client: GitPlatformHttpClient,
         review_mode: str = "formal",
     ) -> None:
         self._review_mode = review_mode
-        self._publishing = ReviewPublishingService(client, owner_client)
+        self._publishing = ReviewPublishingService(client, manager_client)
         self._processor = ReviewPublisherProcessor(
             body_renderer,
             GithubVerdictEventMapper(),

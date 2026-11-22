@@ -45,10 +45,10 @@ class TestBootstrapBackwardCompat:
         return Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fake-owner",
+            forgejo_manager_token="fake-owner",
             forgejo_reviewer_token="fake-reviewer",
             forgejo_reviewer_username="fake-user",
-            github_owner_token="fake-owner",
+            github_manager_token="fake-owner",
             github_reviewer_token="fake-reviewer",
             github_reviewer_username="fake-user",
             output_mode="terminal",

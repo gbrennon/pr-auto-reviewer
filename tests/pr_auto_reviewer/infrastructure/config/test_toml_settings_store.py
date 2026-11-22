@@ -41,4 +41,4 @@ class TestTomlSettingsStore:
         store = TomlSettingsStore(tmp_path / "settings.toml")
 
         with pytest.raises(ValueError, match="secret"):
-            store.set("GITHUB_OWNER_TOKEN", "secret")
+            store.set("GITHUB_MANAGER_TOKEN", "secret")

@@ -10,7 +10,7 @@ class TestLlmCallBudgetWiring:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             llm_call_budget=7,
         )
         result = wire_core_services(config, repo_context, _config_dir=tmp_path)

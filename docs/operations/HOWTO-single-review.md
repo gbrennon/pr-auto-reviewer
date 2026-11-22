@@ -17,7 +17,7 @@ The application loads settings from `.env`. See [Configuration](../configuration
 
 ```ini
 PLATFORM_MODE=github
-GITHUB_OWNER_TOKEN=<REDACTED_GITHUB_TOKEN>         # owner token
+GITHUB_MANAGER_TOKEN=<REDACTED_GITHUB_TOKEN>         # manager token
 GITHUB_REVIEWER_TOKEN=<REDACTED_GITHUB_TOKEN>      # reviewer token
 GITHUB_REVIEWER_USERNAME=my-bot           # reviewer username
 LLM_MODEL=code-review:latest
@@ -27,7 +27,7 @@ LLM_MODEL=code-review:latest
 
 ```ini
 PLATFORM_MODE=codeberg
-FORGEJO_OWNER_TOKEN=xxx                   # owner token
+FORGEJO_MANAGER_TOKEN=xxx                   # manager token
 FORGEJO_REVIEWER_TOKEN=xxx                # reviewer token
 FORGEJO_REVIEWER_USERNAME=my-bot          # reviewer username
 LLM_MODEL=code-review:latest
@@ -37,10 +37,10 @@ LLM_MODEL=code-review:latest
 
 ```ini
 PLATFORM_MODE=both
-GITHUB_OWNER_TOKEN=xxx
+GITHUB_MANAGER_TOKEN=xxx
 GITHUB_REVIEWER_TOKEN=xxx
 GITHUB_REVIEWER_USERNAME=my-bot
-FORGEJO_OWNER_TOKEN=xxx
+FORGEJO_MANAGER_TOKEN=xxx
 FORGEJO_REVIEWER_TOKEN=xxx
 FORGEJO_REVIEWER_USERNAME=my-bot
 LLM_MODEL=code-review:latest

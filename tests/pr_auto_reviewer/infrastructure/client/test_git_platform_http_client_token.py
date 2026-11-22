@@ -48,14 +48,14 @@ class TestGitPlatformHttpClientTokens:
     def test_resolve_token_for_repo_resolves_via_resolver(self) -> None:
         """_resolve_token_for_repo delegates to TokenResolver when one is
         configured and returns the resolved per-org token."""
-        env_key = "GITHUB_TOKEN_my-org_OWNER"
+        env_key = "GITHUB_TOKEN_my-org_MANAGER"
         os.environ[env_key] = "org-token-123"
         try:
-            resolver = TokenResolver("GITHUB", TokenDefaults(owner_token="default-owner"))
+            resolver = TokenResolver("GITHUB", TokenDefaults(manager_token="default-manager"))
             client = GitPlatformHttpClient(
                 "https://api.example.com",
-                "default-owner",
-                client_label="OWNER",
+                "default-manager",
+                client_label="MANAGER",
                 token_resolver=resolver,
             )
             result = client._resolve_token_for_repo("my-org/repo")
@@ -64,17 +64,17 @@ class TestGitPlatformHttpClientTokens:
             del os.environ[env_key]
 
     def test_resolve_token_for_repo_lowercase_client_label(self) -> None:
-        """When the client_label is lowercase (e.g. "owner"), the TokenResolver
+        """When the client_label is lowercase (e.g. "manager"), the TokenResolver
         still matches the uppercase org-entry key and returns the per-org
         override instead of falling back to the default."""
-        env_key = "GITHUB_TOKEN_my-org_OWNER"
+        env_key = "GITHUB_TOKEN_my-org_MANAGER"
         os.environ[env_key] = "org-token-456"
         try:
-            resolver = TokenResolver("GITHUB", TokenDefaults(owner_token="default-owner"))
+            resolver = TokenResolver("GITHUB", TokenDefaults(manager_token="default-manager"))
             client = GitPlatformHttpClient(
                 "https://api.example.com",
-                "default-owner",
-                client_label="owner",
+                "default-manager",
+                client_label="manager",
                 token_resolver=resolver,
             )
             result = client._resolve_token_for_repo("my-org/repo")
@@ -247,20 +247,20 @@ class TestGitPlatformHttpClientTokens:
         cache_path = tmp_path / "verified-tokens.json"
 
         # First: owner client verifies.
-        owner_verifier = FakeVerifier()
-        owner_resolver = FakeTokenResolver({"my-org/repo": "owner-token"})
-        owner_client = GitPlatformHttpClient(
+        manager_verifier = FakeVerifier()
+        manager_resolver = FakeTokenResolver({"my-org/repo": "manager-token"})
+        manager_client = GitPlatformHttpClient(
             "https://api.example.com",
-            "default-owner",
-            client_label="owner",
-            token_resolver=owner_resolver,
-            preflight_verifier=owner_verifier,  # pyright: ignore[reportArgumentType]
+            "default-manager",
+            client_label="manager",
+            token_resolver=manager_resolver,
+            preflight_verifier=manager_verifier,  # pyright: ignore[reportArgumentType]
             _verified_cache_path=cache_path,
         )
         pr_id = PullRequestId(repository="my-org/repo", number=1)
-        owner_client.verify_token_for_pr(pr_id)
-        assert len(owner_verifier.calls) == 1
-        assert owner_verifier.calls[0]["role"] == "owner"
+        manager_client.verify_token_for_pr(pr_id)
+        assert len(manager_verifier.calls) == 1
+        assert manager_verifier.calls[0]["role"] == "manager"
 
         # Second: reviewer client verifies (same org).
         reviewer_verifier = FakeVerifier()
@@ -279,7 +279,7 @@ class TestGitPlatformHttpClientTokens:
 
         # Both entries persisted (no overwrite).
         data = json.loads(cache_path.read_text())
-        assert ["my-org", "owner"] in data
+        assert ["my-org", "manager"] in data
         assert ["my-org", "reviewer"] in data
 
     def test_verify_token_for_pr_loads_corrupt_cache(

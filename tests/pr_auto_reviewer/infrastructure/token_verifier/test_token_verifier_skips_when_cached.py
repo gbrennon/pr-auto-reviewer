@@ -9,7 +9,7 @@ class TestTokenVerifierSkipsWhenCached:
         self, tmp_path: Path
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=cache)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=cache)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -24,7 +24,7 @@ class TestTokenVerifierSkipsWhenCached:
         self, tmp_path: Path
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=cache)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=cache)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="norepo", number=1)
@@ -37,7 +37,7 @@ class TestTokenVerifierSkipsWhenCached:
         self, tmp_path: Path
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=cache)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=cache)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="/repo", number=1)

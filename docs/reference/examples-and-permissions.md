@@ -53,7 +53,7 @@ Processing commands and creating issues requires appropriate token permissions. 
 
 ### GitHub Permissions
 
-- **Owner Token (`GITHUB_OWNER_TOKEN`)**:
+- **Manager Token (`GITHUB_MANAGER_TOKEN`)**:
   - Issues: `Read and Write` (required to read PR comments and create tracker issues)
   - Pull requests: `Read and Write` (required to inspect PR data)
 - **Reviewer Token (`GITHUB_REVIEWER_TOKEN`)**:
@@ -61,7 +61,7 @@ Processing commands and creating issues requires appropriate token permissions. 
 
 ### Codeberg / Forgejo Scopes
 
-- **Owner Token (`FORGEJO_OWNER_TOKEN`)**:
+- **Manager Token (`FORGEJO_MANAGER_TOKEN`)**:
   - `read:issue`, `write:issue` (required to read PR comments and create tracker issues)
   - `read:repository`, `write:repository` (required to access PR and review data)
 - **Reviewer Token (`FORGEJO_REVIEWER_TOKEN`)**:

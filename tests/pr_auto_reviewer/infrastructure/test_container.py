@@ -36,10 +36,10 @@ class TestContainer:
         config = Config(
             env="test",
             platform_mode=GitProvider.BOTH,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             forgejo_reviewer_token="fj-rev",
             forgejo_reviewer_username="fj-user",
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
             github_reviewer_token="gh-rev",
             github_reviewer_username="gh-user",
             output_mode="api",
@@ -50,24 +50,24 @@ class TestContainer:
         gh_adapter = getattr(publisher, "_publishers")["github"]
         assert gh_adapter._publishing._client._token_resolver is not None
         _token, source = gh_adapter._publishing._client._token_resolver.resolve_source(
-            "OWNER", "test-org/repo"
+            "MANAGER", "test-org/repo"
         )
         assert source.startswith("GITHUB_")
-        assert gh_adapter._publishing._owner_client._token_resolver is not None
-        _token2, source2 = gh_adapter._publishing._owner_client._token_resolver.resolve_source(
-            "OWNER", "test-org/repo"
+        assert gh_adapter._publishing._manager_client._token_resolver is not None
+        _token2, source2 = gh_adapter._publishing._manager_client._token_resolver.resolve_source(
+            "MANAGER", "test-org/repo"
         )
         assert source2.startswith("GITHUB_")
 
         fj_adapter = getattr(publisher, "_publishers")["forgejo"]
         assert fj_adapter._publishing._client._token_resolver is not None
         _token3, source3 = fj_adapter._publishing._client._token_resolver.resolve_source(
-            "OWNER", "test-org/repo"
+            "MANAGER", "test-org/repo"
         )
         assert source3.startswith("FORGEJO_")
-        assert fj_adapter._publishing._owner_client._token_resolver is not None
-        _token4, source4 = fj_adapter._publishing._owner_client._token_resolver.resolve_source(
-            "OWNER", "test-org/repo"
+        assert fj_adapter._publishing._manager_client._token_resolver is not None
+        _token4, source4 = fj_adapter._publishing._manager_client._token_resolver.resolve_source(
+            "MANAGER", "test-org/repo"
         )
         assert source4.startswith("FORGEJO_")
 
@@ -77,10 +77,10 @@ class TestContainer:
         config = Config(
             env="test",
             platform_mode=GitProvider.BOTH,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             forgejo_reviewer_token="fj-rev",
             forgejo_reviewer_username="fj-user",
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
             github_reviewer_token="gh-rev",
             github_reviewer_username="gh-user",
             output_mode="api",
@@ -90,11 +90,11 @@ class TestContainer:
 
         gh_adapter = getattr(publisher, "_publishers")["github"]
         assert gh_adapter._publishing._client._preflight_verifier is not None
-        assert gh_adapter._publishing._owner_client._preflight_verifier is not None
+        assert gh_adapter._publishing._manager_client._preflight_verifier is not None
 
         fj_adapter = getattr(publisher, "_publishers")["forgejo"]
         assert fj_adapter._publishing._client._preflight_verifier is not None
-        assert fj_adapter._publishing._owner_client._preflight_verifier is not None
+        assert fj_adapter._publishing._manager_client._preflight_verifier is not None
 
     def test_container_creates_token_resolver_single_platform(self):
         """TokenResolver is injected into http_client with correct prefix
@@ -102,10 +102,10 @@ class TestContainer:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fake-owner",
+            forgejo_manager_token="fake-owner",
             forgejo_reviewer_token="fake-reviewer",
             forgejo_reviewer_username="fake-user",
-            github_owner_token="fake-owner",
+            github_manager_token="fake-owner",
             github_reviewer_token="fake-reviewer",
             github_reviewer_username="fake-user",
             output_mode="terminal",
@@ -113,7 +113,7 @@ class TestContainer:
         container = Container(config)
         assert container.http_client._token_resolver is not None
         _token, source = container.http_client._token_resolver.resolve_source(
-            "OWNER", "test-org/repo"
+            "MANAGER", "test-org/repo"
         )
         assert source.startswith("FORGEJO_")
 
@@ -134,10 +134,10 @@ class TestContainer:
         return Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fake-owner",
+            forgejo_manager_token="fake-owner",
             forgejo_reviewer_token="fake-reviewer",
             forgejo_reviewer_username="fake-user",
-            github_owner_token="fake-owner",
+            github_manager_token="fake-owner",
             github_reviewer_token="fake-reviewer",
             github_reviewer_username="fake-user",
             output_mode="terminal",

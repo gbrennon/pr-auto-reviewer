@@ -160,7 +160,7 @@ class GitPlatformHttpClient:
         # Strip internal platform prefix (forgejo:, github:) from org for API calls
         if ":" in org:
             org = org.split(":", 1)[1]
-        role = "owner" if self._role == "owner" else "reviewer"
+        role = "manager" if self._role == "manager" else "reviewer"
         cache_key = (org, role)
         if cache_key in self._load_verified_cache():
             return
@@ -274,7 +274,7 @@ class GitPlatformHttpClient:
     def _save_verified_cache(self, cache_key: tuple[str, str]) -> None:
         """Persist the current ``_verified_orgs`` set to disk, merged with
         existing file contents so that writes from different client instances
-        (owner/reviewer) accumulate rather than overwrite each other.
+        (manager/reviewer) accumulate rather than overwrite each other.
 
         Best-effort -- write failures are logged but never raised so that
         a transient disk issue does not block the review pipeline.

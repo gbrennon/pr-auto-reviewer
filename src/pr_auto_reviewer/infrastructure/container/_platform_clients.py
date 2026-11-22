@@ -39,8 +39,8 @@ from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
 class PlatformClients:
     """Wired platform-client instances.
 
-    In single-platform mode ``forgejo_owner`` and ``forgejo_reviewer``
-    are ``None``.  ``http_client`` is always the *owner* client and
+    In single-platform mode ``forgejo_manager`` and ``forgejo_reviewer``
+    are ``None``.  ``http_client`` is always the *manager* client and
     ``reviewer_client`` the *reviewer* client for the primary platform
     (GitHub in BOTH mode, the configured platform in single mode).
     """
@@ -48,7 +48,7 @@ class PlatformClients:
     http_client: GitPlatformHttpClient
     reviewer_client: GitPlatformHttpClient
     token_verifier: TokenVerifierPort
-    forgejo_owner: GitPlatformHttpClient | None = None
+    forgejo_manager: GitPlatformHttpClient | None = None
     forgejo_reviewer: GitPlatformHttpClient | None = None
 
 
@@ -61,7 +61,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
         github_resolver = TokenResolver(
             "GITHUB",
             TokenDefaults(
-                owner_token=config.github_owner_token,
+                manager_token=config.github_manager_token,
                 reviewer_token=config.github_reviewer_token,
                 reviewer_username=config.github_reviewer_username,
             ),
@@ -70,7 +70,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
         forgejo_resolver = TokenResolver(
             "FORGEJO",
             TokenDefaults(
-                owner_token=config.forgejo_owner_token,
+                manager_token=config.forgejo_manager_token,
                 reviewer_token=config.forgejo_reviewer_token,
                 reviewer_username=config.forgejo_reviewer_username,
             ),
@@ -91,14 +91,14 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
         )
 
         if config.platform_transport == "cli":
-            gb_owner = GhCliClient(client_label="owner")
+            gb_manager = GhCliClient(client_label="manager")
             gb_reviewer = GhCliClient(client_label="reviewer")
         else:
-            gb_owner = GitPlatformHttpClient(
+            gb_manager = GitPlatformHttpClient(
                 config.github_api_url,
-                config.github_owner_token,
+                config.github_manager_token,
                 platform_mode="github",
-                client_label="owner",
+                client_label="manager",
                 preflight_verifier=github_preflight,
                 token_resolver=github_resolver,
                 _verified_cache_path=_verified_cache_path,
@@ -113,14 +113,14 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
                 _verified_cache_path=_verified_cache_path,
             )
         if config.platform_transport == "cli":
-            fj_owner = FjCliClient(client_label="owner")
+            fj_manager = FjCliClient(client_label="manager")
             fj_reviewer = FjCliClient(client_label="reviewer")
         else:
-            fj_owner = GitPlatformHttpClient(
+            fj_manager = GitPlatformHttpClient(
                 config.forgejo_api_url,
-                config.forgejo_owner_token,
+                config.forgejo_manager_token,
                 platform_mode="forgejo",
-                client_label="owner",
+                client_label="manager",
                 preflight_verifier=forgejo_preflight,
                 token_resolver=forgejo_resolver,
                 _verified_cache_path=_verified_cache_path,
@@ -136,17 +136,17 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
             )
 
         return PlatformClients(
-            http_client=gb_owner,
+            http_client=gb_manager,
             reviewer_client=gb_reviewer,
             token_verifier=TokenVerifier(
-                gb_owner,
+                gb_manager,
                 gb_reviewer,
                 persist=not is_terminal,
-                forgejo_owner_client=fj_owner,
+                forgejo_manager_client=fj_manager,
                 forgejo_reviewer_client=fj_reviewer,
                 _store_path=_store_path,
             ),
-            forgejo_owner=fj_owner,
+            forgejo_manager=fj_manager,
             forgejo_reviewer=fj_reviewer,
         )
 
@@ -155,16 +155,16 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
     api_url = (
         config.github_api_url if is_github else config.forgejo_api_url
     )
-    owner_token = (
-        config.github_owner_token
+    manager_token = (
+        config.github_manager_token
         if is_github
-        else config.forgejo_owner_token
+        else config.forgejo_manager_token
     )
     reviewer_token = (
-        (config.github_reviewer_token or config.github_owner_token)
+        (config.github_reviewer_token or config.github_manager_token)
         if is_github
         else (
-            config.forgejo_reviewer_token or config.forgejo_owner_token
+            config.forgejo_reviewer_token or config.forgejo_manager_token
         )
     )
     reviewer_username = (
@@ -177,7 +177,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
     resolver = TokenResolver(
         "GITHUB" if is_github else "FORGEJO",
         TokenDefaults(
-            owner_token=owner_token,
+            manager_token=manager_token,
             reviewer_token=reviewer_token,
             reviewer_username=reviewer_username,
         ),
@@ -193,14 +193,14 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
 
     if config.platform_transport == "cli":
         client_type = GhCliClient if is_github else FjCliClient
-        http_client = client_type(client_label="owner")
+        http_client = client_type(client_label="manager")
         reviewer_client = client_type(client_label="reviewer")
     else:
         http_client = GitPlatformHttpClient(
             api_url,
-            owner_token,
+            manager_token,
             platform_mode=platform_value,
-            client_label="owner",
+            client_label="manager",
             preflight_verifier=preflight,
             token_resolver=resolver,
             _verified_cache_path=_verified_cache_path,

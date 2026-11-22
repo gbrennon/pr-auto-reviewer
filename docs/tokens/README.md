@@ -4,10 +4,10 @@ PR Auto Reviewer uses **two tokens per platform** with different permission leve
 
 | Token | Role | Purpose |
 |-------|------|---------|
-| **Owner** | Reads data, requests reviewers | Fetch PRs, diff, files, repo tree |
+| **Manager** | Reads data, requests reviewers | Fetch PRs, diff, files, repo tree |
 | **Reviewer** | Submits the review | Post review verdict + inline comments |
 
-The reviewer can be the same account as the owner, but must **differ from the PR author** — self-review is blocked by both GitHub and Codeberg.
+The reviewer can be the same account as the manager, but must **differ from the PR author** — self-review is blocked by both GitHub and Codeberg.
 
 ---
 
@@ -15,10 +15,10 @@ The reviewer can be the same account as the owner, but must **differ from the PR
 
 | Variable | Platform | Purpose |
 |----------|----------|---------|
-| `GITHUB_OWNER_TOKEN` | GitHub | Owner token |
+| `GITHUB_MANAGER_TOKEN` | GitHub | Owner token |
 | `GITHUB_REVIEWER_TOKEN` | GitHub | Reviewer token |
 | `GITHUB_REVIEWER_USERNAME` | GitHub | Reviewer's GitHub username |
-| `FORGEJO_OWNER_TOKEN` | Codeberg | Owner token |
+| `FORGEJO_MANAGER_TOKEN` | Codeberg | Owner token |
 | `FORGEJO_REVIEWER_TOKEN` | Codeberg | Reviewer token |
 | `FORGEJO_REVIEWER_USERNAME` | Codeberg | Reviewer's Codeberg username |
 
@@ -40,7 +40,7 @@ add it to `~/.config/pr-auto-reviewer/config`:
 Then store platform tokens without putting their values in the config file:
 
 ```bash
-pr-auto-reviewer config set FORGEJO_OWNER_TOKEN 'OWNER_TOKEN_VALUE'
+pr-auto-reviewer config set FORGEJO_MANAGER_TOKEN 'MANAGER_TOKEN_VALUE'
 pr-auto-reviewer config set FORGEJO_REVIEWER_TOKEN 'REVIEWER_TOKEN_VALUE'
 pr-auto-reviewer config set FORGEJO_REVIEWER_USERNAME 'REVIEWER_USERNAME_VALUE'
 pr-auto-reviewer config list
