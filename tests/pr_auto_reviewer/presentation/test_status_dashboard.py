@@ -138,6 +138,24 @@ class TestStatusDashboard:
             await pilot.press("q")
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_changes_navigation_mode_from_settings_panel(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
+            await pilot.press("e")
+            pilot.app.query_one("#navigation-mode").value = "vim"
+            await pilot.pause()
+            assert ("TUI_NAVIGATION_MODE", "vim") in settings.writes
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
     async def test_supports_refresh_pause_and_settings_actions(self) -> None:
         snapshot = DaemonStatusSnapshot(
             runtime_status=None,
@@ -214,6 +232,31 @@ class TestStatusDashboard:
 
         async with StatusDashboard(failing_provider).run_test() as pilot:
             assert "status store unavailable" in str(pilot.app.query_one("#error").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_automatically_refreshes_from_provider_on_timer(self) -> None:
+        initial = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        updated_status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.IDLE,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=(),
+            current_cycle=1,
+        )
+        updated = replace(initial, runtime_status=updated_status, daemon_alive=True)
+        snapshots = iter((initial, updated, updated))
+
+        async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
+            await pilot.pause(delay=1.1)
+            assert "IDLE / WAITING" in str(pilot.app.query_one("#state").render())
             await pilot.press("q")
 
     @pytest.mark.asyncio

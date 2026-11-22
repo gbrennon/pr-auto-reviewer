@@ -85,6 +85,11 @@ class SettingsCli:
             return 0
         return self._list()
 
+    def navigation_mode(self) -> str:
+        """Return the configured dashboard navigation mode."""
+        value = self._settings().get("TUI_NAVIGATION_MODE", "arrows")
+        return str(value).strip().lower() or "arrows"
+
     def snapshot(self) -> SettingsSnapshot:
         """Return editable settings while keeping secrets write-only."""
         values = tuple(

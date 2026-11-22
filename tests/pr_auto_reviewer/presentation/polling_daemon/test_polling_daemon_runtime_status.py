@@ -69,6 +69,7 @@ class TestPollingDaemonRuntimeStatus:
         assert reviewing
         assert reviewing[-1].current_review is not None
         assert reviewing[-1].current_review.pr_number == 42
+        assert reviewing[-1].current_cycle == 1
 
         release.set()
         worker.join(timeout=5)
