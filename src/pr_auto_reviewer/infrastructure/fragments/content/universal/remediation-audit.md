@@ -11,7 +11,8 @@ You are conducting a **pre-review remediation audit**. The records below are the
 ## METHODOLOGY
 
 1. Use `read_file` to open the **current** version of the record's file, and `run_git` to inspect what changed since the record was recorded.
-2. Re-apply the record's `Detection method` to the updated code — look for the defect the same way it was originally found.
+2. Inspect the current PR diff before deciding that an old finding remains open. A semantic rename or responsibility transfer can intentionally change identifiers while resolving the original defect; do not classify that as a recurrence merely because an old code snippet still appears.
+3. Re-apply the record's `Detection method` to the updated code — look for the defect the same way it was originally found.
 3. Attempt the `Reproduction`. When it is runnable, use `run_snippet` in a minimal harness. If reproduction still triggers the defect, the record is **open**.
 4. Check the `Acceptance criteria` against the updated code. For a suggestion, verify the proposed improvement is now present or otherwise positively addressed.
 5. Mark an active record `resolved` **only** when the acceptance criteria are met AND the reproduction no longer triggers, grounded in code you actually read.
