@@ -10,6 +10,20 @@ from pr_auto_reviewer.presentation.cli.settings_cli import SettingsCli
 class TestSettingsCli:
     """Verify CLI behavior at the settings boundary."""
 
+    def test_snapshot_hides_secret_values_even_if_legacy_settings_contain_them(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli._settings().set("poll_interval", 30)
+        (tmp_path / "config" / "pr-auto-reviewer" / "settings.toml").write_text(
+            'poll_interval = 30\nGITHUB_MANAGER_TOKEN = "legacy-secret"\n', encoding="utf-8",
+        )
+
+        snapshot = cli.snapshot()
+
+        assert snapshot.values == (("poll_interval", "30"),)
+        assert "legacy-secret" not in repr(snapshot)
+
     def test_snapshot_exposes_values_but_never_secret_values(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
@@ -22,6 +36,21 @@ class TestSettingsCli:
         assert snapshot.values == (("poll_interval", "30"),)
         assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
         assert "secret-value" not in repr(snapshot)
+
+    def test_snapshot_without_encryption_key_keeps_non_secret_settings_available(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", raising=False)
+        cli = SettingsCli()
+        cli.write("poll_interval", "30")
+
+        snapshot = cli.snapshot()
+
+        assert snapshot.values == (("poll_interval", "30"),)
+        assert snapshot.secret_names == ()
+        assert snapshot.secret_error == "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required"
 
     def test_write_and_unset_settings_without_reading_secrets(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -53,6 +82,37 @@ class TestSettingsCli:
 
         assert cli.run(["get", "poll_interval"]) == 0
         assert capsys.readouterr().out.strip() == "30"
+
+    def test_add_and_remove_repository_manage_allow_list_and_role_tokens(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+
+        cli.add_repository("github:acme/widget", "manager", "reviewer")
+
+        assert cli._settings().get("REPOS_ALLOW_LIST") == ["github:acme/widget"]
+        assert cli.snapshot().secret_names == (
+            "GITHUB_TOKEN_acme_MANAGER",
+            "GITHUB_TOKEN_acme_REVIEWER",
+        )
+        cli.remove_repository("github:acme/widget")
+        assert cli._settings().get("REPOS_ALLOW_LIST") == []
+
+    def test_repo_add_command_prompts_for_write_only_role_tokens(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        tokens = iter(("manager", "reviewer"))
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.cli.settings_cli.getpass.getpass",
+            lambda _prompt: next(tokens),
+        )
+
+        assert cli.run(["repo-add", "forgejo:acme/widget"]) == 0
+
+        assert cli._settings().get("REPOS_ALLOW_LIST") == ["forgejo:acme/widget"]
+        assert "Added repository forgejo:acme/widget" in capsys.readouterr().out
 
     def test_secret_can_be_overwritten_but_not_read(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]

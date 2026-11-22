@@ -38,6 +38,12 @@ class FakeSettings:
     def unset(self, name: str) -> None:
         self.writes.append((name, ""))
 
+    def add_repository(self, repository: str, manager_token: str, reviewer_token: str) -> None:
+        self.writes.append((repository, manager_token + reviewer_token))
+
+    def remove_repository(self, repository: str) -> None:
+        self.writes.append((repository, ""))
+
 class TestStatusDashboard:
     @pytest.mark.asyncio
     async def test_renders_grouped_status_items_in_one_table(self) -> None:
@@ -106,6 +112,29 @@ class TestStatusDashboard:
             assert "Sort: repository" in str(pilot.app.query_one("#sort").render())
             await pilot.press("s")
             assert "Sort: status" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_settings_panel_shows_secret_storage_setup_error(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+        settings.snapshot_value = SettingsSnapshot(
+            values=(("poll_interval", "60"),),
+            secret_names=(),
+            secret_error="PR_AUTO_REVIEWER_ENCRYPTION_KEY is required",
+        )
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
+            await pilot.press("e")
+            rendered = str(pilot.app.query_one("#settings-list").render())
+            assert "Secret storage unavailable" in rendered
+            assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required" in rendered
             await pilot.press("q")
 
     @pytest.mark.asyncio

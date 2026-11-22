@@ -26,6 +26,12 @@ class SettingsPort(Protocol):
     def unset(self, name: str) -> None:
         """Remove a setting."""
 
+    def add_repository(self, repository: str, manager_token: str, reviewer_token: str) -> None:
+        """Allow a repository with role-specific write-only tokens."""
+
+    def remove_repository(self, repository: str) -> None:
+        """Remove a repository from the allow list."""
+
 class StatusDashboard(App[None]):
     """Render live daemon status and settings actions in a terminal dashboard."""
 
@@ -72,6 +78,11 @@ class StatusDashboard(App[None]):
                 yield Static("Settings (e to close; secrets are write-only)", id="settings-title")
                 yield Static("", id="settings-list")
                 yield Input(placeholder="Setting name", id="setting-name")
+                yield Input(placeholder="Repository platform:owner/name", id="repository")
+                yield Input(placeholder="Manager token (write-only)", password=True, id="manager-token")
+                yield Input(placeholder="Reviewer token (write-only)", password=True, id="reviewer-token")
+                yield Button("Add repository", id="add-repository", variant="primary")
+                yield Button("Remove repository", id="remove-repository", variant="error")
                 yield Input(
                     placeholder="Value (never displayed after save)",
                     password=True,
@@ -125,6 +136,29 @@ class StatusDashboard(App[None]):
         if self._settings is None:
             return
         name = self.query_one("#setting-name", Input).value.strip()
+        repository = self.query_one("#repository", Input).value.strip()
+        if event.button.id == "add-repository":
+            try:
+                self._settings.add_repository(
+                    repository,
+                    self.query_one("#manager-token", Input).value,
+                    self.query_one("#reviewer-token", Input).value,
+                )
+                self._render_settings()
+                self.query_one("#action-status", Static).update(f"Added {repository}")
+                self.query_one("#error", Static).update("")
+            except Exception as error:
+                self.query_one("#error", Static).update(f"Settings error: {error}")
+            return
+        if event.button.id == "remove-repository":
+            try:
+                self._settings.remove_repository(repository)
+                self._render_settings()
+                self.query_one("#action-status", Static).update(f"Removed {repository}")
+                self.query_one("#error", Static).update("")
+            except Exception as error:
+                self.query_one("#error", Static).update(f"Settings error: {error}")
+            return
         if not name:
             self.query_one("#error", Static).update("Setting name is required")
             return
@@ -222,6 +256,10 @@ class StatusDashboard(App[None]):
         snapshot = self._settings.snapshot()
         values = [f"{name} = {value}" for name, value in snapshot.values]
         values.extend(f"{name} = <write-only>" for name in snapshot.secret_names)
+        if snapshot.secret_error:
+            values.append(
+                "Secret storage unavailable: " + snapshot.secret_error
+            )
         self.query_one("#settings-list", Static).update(
             "\n".join(values) if values else "No settings configured"
         )
