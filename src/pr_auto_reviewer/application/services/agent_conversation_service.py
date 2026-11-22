@@ -151,6 +151,7 @@ class AgentConversationService(RunAgentConversationPort):
             phase_name=command.phase_name,
             review_session=command.review_session,
             existing_item_ids=command.existing_item_ids,
+            purpose=command.purpose,
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
@@ -432,6 +433,7 @@ class AgentConversationService(RunAgentConversationPort):
         review_session: str,
         phase_name: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
     ) -> PhaseResult:
         """Run a single-phase multi-turn conversation.
 
@@ -475,7 +477,7 @@ class AgentConversationService(RunAgentConversationPort):
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
             content = self._chat_port.send(
-                messages, purpose=ConversationPurpose.REVIEWER_PHASE
+                messages, purpose=purpose
             )
             guardrails = guardrails.advance_turn()
             if not content:
@@ -655,7 +657,7 @@ class AgentConversationService(RunAgentConversationPort):
                         try:
                             sp_content = self._chat_port.send(
                                 messages,
-                                purpose=ConversationPurpose.REVIEWER_PHASE,
+                                purpose=purpose,
                             )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
@@ -747,6 +749,7 @@ class AgentConversationService(RunAgentConversationPort):
                 accumulated_praise=accumulated_praise,
                 accumulated_suggestions=accumulated_suggestions,
             ),
+            purpose,
         )
         if forced_result is not None:
             return forced_result
@@ -776,6 +779,7 @@ class AgentConversationService(RunAgentConversationPort):
         messages: list[ConversationMessage],
         guardrails: ConversationGuardrails,
         context: _FinalVerdictContext,
+        purpose: ConversationPurpose,
     ) -> PhaseResult | None:
         """Request one tool-free verdict as a last resort after exhaustion.
 
@@ -806,7 +810,7 @@ class AgentConversationService(RunAgentConversationPort):
         )
         try:
             final_content = self._chat_port.send(
-                messages, purpose=ConversationPurpose.REVIEWER_PHASE
+                messages, purpose=purpose
             )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
