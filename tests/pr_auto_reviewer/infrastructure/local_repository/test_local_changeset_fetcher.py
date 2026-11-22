@@ -42,6 +42,8 @@ class TestLocalChangesetFetcher:
             "src/foo.py": "print('hello')",
         }
         assert result.commit_messages == ["fix: stuff"]
+        assert repo.compute_diff_calls[0][0][2] == str(sha)
+        assert {call[1]["ref"] for call in repo.read_file_calls} == {str(sha)}
 
     def test_fetch_calls_clone_with_correct_url(self) -> None:
         """Clone is called with the PR id and the configured platform clone URL."""
@@ -183,8 +185,8 @@ class TestLocalChangesetFetcher:
         assert result.file_contents == {}
         assert len(repo.read_file_calls) == 0
 
-    def test_fetch_passes_pr_head_ref_for_read_file(self) -> None:
-        """read_file is called with ref set to the PR head ref (pr-{number})."""
+    def test_fetch_passes_requested_head_sha_for_read_file(self) -> None:
+        """read_file is called with the requested commit as its ref."""
         repo = self._make_repo()
         pr_id = PullRequestId("test-org/test-repo", 42)
         sha = CommitSha("def456")
@@ -196,7 +198,7 @@ class TestLocalChangesetFetcher:
         read_file_calls = repo.read_file_calls
         assert len(read_file_calls) >= 1
         for call_args, call_kwargs in read_file_calls:
-            assert call_kwargs["ref"] == "pr-42"
+            assert call_kwargs["ref"] == str(sha)
 
     def _make_sample_diff(self, with_deletion: bool = False) -> str:
         """Build a sample unified diff with optional deletion header."""

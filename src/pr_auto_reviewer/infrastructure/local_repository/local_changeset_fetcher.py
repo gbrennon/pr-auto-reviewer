@@ -40,7 +40,7 @@ class LocalChangesetFetcher(ChangesetFetcherPort):
         )
 
         repo_path = self._local_repo.clone(pr_id, clone_url)
-        pr_head_ref = f"pr-{pr_id.number}"
+        pr_head_ref = str(sha)
         base_sha = self._local_repo.resolve_base_sha(repo_path, pr_id.number)
 
         logger.debug(
