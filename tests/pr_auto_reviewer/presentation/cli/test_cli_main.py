@@ -89,11 +89,12 @@ class TestCliServiceCommands:
         with (
             patch.dict(os.environ, {}, clear=True),
             patch("pr_auto_reviewer.cli.bootstrap", return_value=object()),
-            patch("pr_auto_reviewer.cli.run_daemon"),
+            patch("pr_auto_reviewer.cli.run_daemon") as run_daemon,
             patch("sys.argv", ["pr-auto-reviewer", "watch-prs", "--once"]),
         ):
             main()
             assert os.environ["RUN_ONCE"] == "true"
+            assert run_daemon.call_args.args == ()
 
             with patch("sys.argv", ["pr-auto-reviewer", "watch-prs"]):
                 main()

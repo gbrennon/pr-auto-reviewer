@@ -127,8 +127,7 @@ class CommandLineInterface:
 
     def _handle_watch(self, args: argparse.Namespace) -> None:
         self._apply_watch_env(args)
-        components = bootstrap()
-        run_daemon(components)
+        run_daemon()
 
     @staticmethod
     def _build_runner_argv(args: argparse.Namespace) -> list[str]:
