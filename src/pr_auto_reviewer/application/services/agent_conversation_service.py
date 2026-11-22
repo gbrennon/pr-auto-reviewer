@@ -92,6 +92,7 @@ logger = logging.getLogger(__name__)
 _MAX_REPEATED_TOOL_CALLS = 3
 _MAX_READ_FILE_REPLAYS = 2
 _MIN_READ_FILE_REPLAY_FILES = 2
+_MAX_COVERAGE_FILES = 40
 
 
 from .final_verdict_context import _FinalVerdictContext
@@ -218,7 +219,7 @@ class AgentConversationService(RunAgentConversationPort):
                 and cls._is_text_file(candidate)
             ):
                 readable.append(file_path)
-        return tuple(readable)
+        return tuple(readable[:_MAX_COVERAGE_FILES])
 
     @staticmethod
     def _normalize_read_file_path(
