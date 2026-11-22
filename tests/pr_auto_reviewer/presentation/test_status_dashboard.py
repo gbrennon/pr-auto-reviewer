@@ -75,12 +75,18 @@ class TestStatusDashboard:
                     source_name="GITHUB_TOKEN",
                     scope="other/project",
                 ),
+                ApiAccessCapability(
+                    platform="github",
+                    role="reviewer",
+                    source_name="GITHUB_TOKEN",
+                    scope="another/project",
+                ),
             ),
         )
 
         async with StatusDashboard(lambda: snapshot).run_test() as pilot:
             table = pilot.app.query_one("#items")
-            assert table.row_count == 4
+            assert table.row_count == 5
             assert "REVIEWING" in str(pilot.app.query_one("#state").render())
             assert "Sort: platform" in str(pilot.app.query_one("#sort").render())
             await pilot.press("q")

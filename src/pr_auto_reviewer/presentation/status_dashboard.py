@@ -208,7 +208,8 @@ class StatusDashboard(App[None]):
 
     @staticmethod
     def _row_key(row: tuple[str, str, str, str]) -> str:
-        return "|".join(row[:3])
+        identity = row if row[0] == "capability" else row[:3]
+        return "|".join(identity)
 
     def _render_sort_label(self) -> None:
         self.query_one("#sort", Static).update(
