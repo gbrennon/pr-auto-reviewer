@@ -34,9 +34,13 @@ class InMemoryCommandBus(CommandBusPort):
         handlers: dict[type, Handler] | None = None,
     ) -> None:
         self._handlers: dict[type, Handler] = dict(handlers) if handlers else {}
+        self._additional_event_handlers: dict[type, list[Handler]] = {}
 
     def register(self, command_type: type, handler: Handler) -> None:
-        """Register a handler for a command type."""
+        """Register a handler for a command or event type."""
+        if command_type.__name__.endswith("Event") and command_type in self._handlers:
+            self._additional_event_handlers.setdefault(command_type, []).append(handler)
+            return
         self._handlers[command_type] = handler
 
     def dispatch(self, command: Any) -> Any:
@@ -45,6 +49,9 @@ class InMemoryCommandBus(CommandBusPort):
         if handler is not None:
             handler_name = getattr(handler, "__name__", type(handler).__name__)
             logger.debug("Dispatching %s to %s", cmd_type, handler_name)
-            return handler(command)
+            result = handler(command)
+            for additional_handler in self._additional_event_handlers.get(type(command), []):
+                additional_handler(command)
+            return result
         logger.debug("No handler registered for %s (fire-and-forget)", cmd_type)
         return None
