@@ -76,7 +76,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             llm_host="http://custom-llm:9999",
         )
 
@@ -91,7 +91,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             llm_model="custom-model:v2",
         )
 
@@ -106,7 +106,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             llm_timeout=300,
         )
 
@@ -130,7 +130,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
         )
         object.__setattr__(config, "fragment_max_tokens", 4096)
 
@@ -155,7 +155,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             max_prompt_tokens=0,
         )
 
@@ -176,7 +176,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             max_prompt_tokens=500,
         )
 
@@ -213,7 +213,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             use_strict_fragment_selection=True,
         )
 
@@ -239,7 +239,7 @@ class TestWireCoreServices:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             fragments_dir=str(custom_dir),
         )
 

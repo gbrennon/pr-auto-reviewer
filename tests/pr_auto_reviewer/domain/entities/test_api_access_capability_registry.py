@@ -51,14 +51,14 @@ class TestApiAccessCapabilityRegistry:
     def test_suspension_applies_to_same_key_across_repository_scopes(self):
         first_scope = ApiAccessCapability(
             platform="github",
-            role="owner",
-            source_name="GITHUB_OWNER_TOKEN",
+            role="manager",
+            source_name="GITHUB_MANAGER_TOKEN",
             scope="acme/widgets",
         )
         second_scope = ApiAccessCapability(
             platform="github",
-            role="owner",
-            source_name="GITHUB_OWNER_TOKEN",
+            role="manager",
+            source_name="GITHUB_MANAGER_TOKEN",
             scope="acme/gadgets",
         )
         suspension = CapabilitySuspension(
@@ -78,8 +78,8 @@ class TestApiAccessCapabilityRegistry:
     def test_expired_suspension_is_available(self):
         capability = ApiAccessCapability(
             platform="forgejo",
-            role="owner",
-            source_name="FORGEJO_OWNER_TOKEN",
+            role="manager",
+            source_name="FORGEJO_MANAGER_TOKEN",
             scope="acme/widgets",
         )
         suspension = CapabilitySuspension(
@@ -98,8 +98,8 @@ class TestApiAccessCapabilityRegistry:
     def test_domain_objects_are_immutable(self):
         capability = ApiAccessCapability(
             platform="github",
-            role="owner",
-            source_name="GITHUB_OWNER_TOKEN",
+            role="manager",
+            source_name="GITHUB_MANAGER_TOKEN",
             scope="acme/widgets",
         )
 

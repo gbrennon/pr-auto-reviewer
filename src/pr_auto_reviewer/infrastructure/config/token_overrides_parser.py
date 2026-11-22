@@ -34,12 +34,12 @@ class TokenOverridesParser:
         self, entry: OrgTokenEntry, role: str, value: str
     ) -> OrgTokenEntry:
         values = {
-            "owner_token": entry.owner_token,
+            "manager_token": entry.manager_token,
             "reviewer_token": entry.reviewer_token,
             "reviewer_username": entry.reviewer_username,
         }
         role_fields = {
-            "OWNER": "owner_token",
+            "MANAGER": "manager_token",
             "REVIEWER": "reviewer_token",
             "REVIEWER_USERNAME": "reviewer_username",
         }

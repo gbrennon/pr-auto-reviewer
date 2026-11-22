@@ -20,6 +20,9 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.prepare_issue_content_command import (
     PrepareIssueContentCommand,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.issue_content import IssueContent
 from pr_auto_reviewer.domain.value_objects.pull_request_id import PullRequestId
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
@@ -64,7 +67,9 @@ class IssueContentPreparerService(PrepareIssueContentPort):
             ),
         ]
         try:
-            raw_response = self._chat_port.send(messages)
+            raw_response = self._chat_port.send(
+                messages, purpose=ConversationPurpose.ISSUE_CONTENT
+            )
         except Exception:
             logger.warning(
                 "Sub-agent issue content preparation failed for item %s on %s",

@@ -33,7 +33,7 @@ class TestPreflightVerifierAuth:
         verifier = PreflightVerifier(
             http, ForgejoAuthHeaders(), "https://api.example.com", "forgejo"
         )
-        verifier.verify("tok", "my-org", "my-repo", 1, "owner")
+        verifier.verify("tok", "my-org", "my-repo", 1, "manager")
         assert http.calls[0]["url"] == "/user"
 
     def test_verify_raises_when_auth_returns_401(self) -> None:
@@ -42,7 +42,7 @@ class TestPreflightVerifierAuth:
             http, ForgejoAuthHeaders(), "https://api.example.com", "forgejo"
         )
         with pytest.raises(PreflightVerificationError) as exc:
-            verifier.verify("tok", "my-org", "my-repo", 1, "owner")
+            verifier.verify("tok", "my-org", "my-repo", 1, "manager")
         assert exc.value.http_status == 401
         assert exc.value.step == "auth"
 

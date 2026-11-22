@@ -48,8 +48,8 @@ class TestShowStatusService:
         )
         additional_capability = ApiAccessCapability(
             platform="forgejo",
-            role="owner",
-            source_name="FORGEJO_OWNER_TOKEN",
+            role="manager",
+            source_name="FORGEJO_MANAGER_TOKEN",
             scope="gbrennon/example",
         )
         service = ShowStatusService(
@@ -66,7 +66,7 @@ class TestShowStatusService:
         assert "\\n" not in output
         assert "API Access Capabilities" in output
         assert "  - forgejo:" in output
-        assert "    - owner / FORGEJO_OWNER_TOKEN:" in output
+        assert "    - manager / FORGEJO_MANAGER_TOKEN:" in output
         assert "available" not in output
         assert "      - gbrennon/example" in output
         assert "  - github:" in output

@@ -22,3 +22,7 @@ class TestRemediationAuditPrompt:
         assert "suggestion" in lower
         assert "terminal" in lower
         assert "do not assign an old id" in lower
+        assert "semantic rename" in lower
+        assert "current pr diff" in lower
+        assert "first seen commit" in lower
+        assert "current audit commit" in lower

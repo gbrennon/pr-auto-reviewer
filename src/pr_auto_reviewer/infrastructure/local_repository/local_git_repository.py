@@ -163,7 +163,9 @@ class LocalGitRepository(LocalRepositoryPort):
         ]
 
     def read_file(self, repo_path: Path, file_path: str, ref: str = "HEAD") -> str:
-        effective_ref = self._pr_refs.get(repo_path, ref)
+        effective_ref = (
+            self._pr_refs.get(repo_path, ref) if ref == "HEAD" else ref
+        )
         raw = self._run_git_bytes(
             repo_path, "show", f"{effective_ref}:{file_path}",
         )
@@ -179,7 +181,9 @@ class LocalGitRepository(LocalRepositoryPort):
             ) from exc
 
     def list_tree(self, repo_path: Path, ref: str = "HEAD") -> list[str]:
-        effective_ref = self._pr_refs.get(repo_path, ref)
+        effective_ref = (
+            self._pr_refs.get(repo_path, ref) if ref == "HEAD" else ref
+        )
         output = self._run_git(repo_path, "ls-tree", "-r", "--name-only", effective_ref)
         return [line for line in output.splitlines() if line.strip()]
 

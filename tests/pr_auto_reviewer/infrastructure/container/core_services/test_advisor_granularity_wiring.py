@@ -8,7 +8,7 @@ class TestAdvisorGranularityWiring:
         return Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             advisor_granularity=granularity,
         )
 

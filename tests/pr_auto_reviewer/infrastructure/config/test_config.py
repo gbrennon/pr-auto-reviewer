@@ -220,7 +220,7 @@ class TestLoadConfig:
 
         token_values = {
             "GITHUB_API_URL": "https://github.example.com",
-            "GITHUB_OWNER_TOKEN": "gh_owner",
+            "GITHUB_MANAGER_TOKEN": "gh_owner",
             "GITHUB_REVIEWER_TOKEN": "gh_reviewer",
             "GITHUB_REVIEWER_USERNAME": "bot",
             "GITHUB_REVIEW_MODE": "informal",
@@ -233,7 +233,7 @@ class TestLoadConfig:
 
         cfg = load_config()
         assert cfg.github_api_url == "https://github.example.com"
-        assert cfg.github_owner_token == "gh_owner"
+        assert cfg.github_manager_token == "gh_owner"
         assert cfg.github_reviewer_token == "gh_reviewer"
         assert cfg.github_reviewer_username == "bot"
         assert cfg.github_review_mode == "informal"
@@ -245,7 +245,7 @@ class TestLoadConfig:
         monkeypatch.setenv("FORGEJO_HOST", "https://git.example.com")
 
         token_values = {
-            "FORGEJO_OWNER_TOKEN": "fj_owner",
+            "FORGEJO_MANAGER_TOKEN": "fj_owner",
             "FORGEJO_REVIEWER_TOKEN": "fj_reviewer",
             "FORGEJO_REVIEWER_USERNAME": "fj_bot",
         }
@@ -256,7 +256,7 @@ class TestLoadConfig:
 
         cfg = load_config()
         assert cfg.forgejo_api_url == "https://git.example.com/api/v1"
-        assert cfg.forgejo_owner_token == "fj_owner"
+        assert cfg.forgejo_manager_token == "fj_owner"
         assert cfg.forgejo_reviewer_token == "fj_reviewer"
         assert cfg.forgejo_reviewer_username == "fj_bot"
 
@@ -278,10 +278,10 @@ class TestLoadConfig:
         monkeypatch.setattr(
             "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
             lambda path: {
-                "GITHUB_TOKEN_forging-blocks-org_OWNER": "ghp_org_owner",
+                "GITHUB_TOKEN_forging-blocks-org_MANAGER": "ghp_org_owner",
                 "GITHUB_TOKEN_forging-blocks-org_REVIEWER": "ghp_org_reviewer",
                 "GITHUB_TOKEN_forging-blocks-org_REVIEWER_USERNAME": "org-reviewer-bot",
-                "FORGEJO_TOKEN_my-other-org_OWNER": "fj_owner_token",
+                "FORGEJO_TOKEN_my-other-org_MANAGER": "fj_manager_token",
             },
         )
 
@@ -290,13 +290,13 @@ class TestLoadConfig:
         gh_overrides = cfg.org_token_overrides.github
         assert "forging-blocks-org" in gh_overrides
         entry = gh_overrides["forging-blocks-org"]
-        assert entry.owner_token == "ghp_org_owner"
+        assert entry.manager_token == "ghp_org_owner"
         assert entry.reviewer_token == "ghp_org_reviewer"
         assert entry.reviewer_username == "org-reviewer-bot"
 
         fj_overrides = cfg.org_token_overrides.forgejo
         assert "my-other-org" in fj_overrides
-        assert fj_overrides["my-other-org"].owner_token == "fj_owner_token"
+        assert fj_overrides["my-other-org"].manager_token == "fj_manager_token"
 
     def test_loads_encrypted_tokens_with_environment_precedence(
         self, monkeypatch, tmp_path: Path,
@@ -330,17 +330,17 @@ class TestLoadConfig:
             classmethod(lambda cls: state_dir),
         )
         store = EncryptedSqliteSecretStore(state_dir / "secrets.sqlite3", "test-key")
-        store.set("FORGEJO_OWNER_TOKEN", "database-owner")
+        store.set("FORGEJO_MANAGER_TOKEN", "database-owner")
         store.set("FORGEJO_REVIEWER_TOKEN", "database-reviewer")
-        store.set("FORGEJO_TOKEN_senkai_OWNER", "database-org-owner")
-        monkeypatch.setenv("FORGEJO_OWNER_TOKEN", "environment-owner")
+        store.set("FORGEJO_TOKEN_senkai_MANAGER", "database-org-owner")
+        monkeypatch.setenv("FORGEJO_MANAGER_TOKEN", "environment-owner")
 
         cfg = load_config()
 
-        assert cfg.forgejo_owner_token == "environment-owner"
+        assert cfg.forgejo_manager_token == "environment-owner"
         assert cfg.forgejo_reviewer_token == "database-reviewer"
         assert (
-            cfg.org_token_overrides.forgejo["senkai"].owner_token
+            cfg.org_token_overrides.forgejo["senkai"].manager_token
             == "database-org-owner"
         )
 
@@ -378,14 +378,14 @@ class TestLoadConfig:
         EncryptedSqliteSecretStore(
             state_dir / "secrets.sqlite3",
             "pr-auto-reviewer-local-key",
-        ).set("FORGEJO_OWNER_TOKEN", "legacy-token")
+        ).set("FORGEJO_MANAGER_TOKEN", "legacy-token")
 
         cfg = load_config()
 
-        assert cfg.forgejo_owner_token == "legacy-token"
+        assert cfg.forgejo_manager_token == "legacy-token"
         assert EncryptedSqliteSecretStore(
             state_dir / "secrets.sqlite3", "configured-key",
-        ).get("FORGEJO_OWNER_TOKEN") == "legacy-token"
+        ).get("FORGEJO_MANAGER_TOKEN") == "legacy-token"
 
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch, tmp_path: Path):
@@ -409,11 +409,11 @@ class TestLoadConfig:
             "FORGEJO_API_URL",
             "FORGEJO_HOST",
             "GITHUB_API_URL",
-            "GITHUB_OWNER_TOKEN",
+            "GITHUB_MANAGER_TOKEN",
             "GITHUB_REVIEWER_TOKEN",
             "GITHUB_REVIEWER_USERNAME",
             "GITHUB_REVIEW_MODE",
-            "FORGEJO_OWNER_TOKEN",
+            "FORGEJO_MANAGER_TOKEN",
             "FORGEJO_REVIEWER_TOKEN",
             "FORGEJO_REVIEWER_USERNAME",
             "LLM_HOST",

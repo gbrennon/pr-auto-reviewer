@@ -29,6 +29,9 @@ from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFacto
 from pr_auto_reviewer.domain.value_objects.advisor_directive import (
     AdvisorDirective,
 )
+from pr_auto_reviewer.domain.value_objects.advisor_turn_evidence import (
+    AdvisorTurnEvidence,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
@@ -85,7 +88,7 @@ def _command(tool_execution: Any) -> RunAgentConversationCommand:
     )
 
 
-__all__ = ['EXPLORATION_DEMAND', 'AdvisorDirective', 'AgentConversationService', 'Any', 'ConversationMessage', 'InMemoryCommandBus', 'LlmUnavailableError', 'MagicMock', 'MaxTurnsExceededError', 'ParseReviewTurnCommand', 'Path', 'PhaseResult', 'ReviewItemFactory', 'ReviewResponseParser', 'RunAgentConversationCommand', 'SimpleNamespace', 'SubAgentGrade', 'ToolCall', 'ToolResult', 'TurnKind', 'TurnParseResult', 'TurnParserService', '_StubToolExecution', '_command', '_tool_parse', '_verdict_parse', 'annotations']
+__all__ = ['EXPLORATION_DEMAND', 'AdvisorDirective', 'AdvisorTurnEvidence', 'AgentConversationService', 'Any', 'ConversationMessage', 'InMemoryCommandBus', 'LlmUnavailableError', 'MagicMock', 'MaxTurnsExceededError', 'ParseReviewTurnCommand', 'Path', 'PhaseResult', 'ReviewItemFactory', 'ReviewResponseParser', 'RunAgentConversationCommand', 'SimpleNamespace', 'SubAgentGrade', 'ToolCall', 'ToolResult', 'TurnKind', 'TurnParseResult', 'TurnParserService', '_StubToolExecution', '_command', '_tool_parse', '_verdict_parse', 'annotations']
 
 
 class _StubToolExecution:

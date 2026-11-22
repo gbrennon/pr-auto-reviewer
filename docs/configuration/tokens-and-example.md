@@ -4,17 +4,17 @@ When a single token needs to review repos across multiple organisations,
 override tokens per org:
 
 ```
-GITHUB_TOKEN_myorg_OWNER=ghp_xxx
+GITHUB_TOKEN_myorg_MANAGER=ghp_xxx
 GITHUB_TOKEN_myorg_REVIEWER=ghp_yyy
 GITHUB_TOKEN_myorg_REVIEWER_USERNAME=code-reviewer-bot
-FORGEJO_TOKEN_myorg_OWNER=fc_xxx
+FORGEJO_TOKEN_myorg_MANAGER=fc_xxx
 FORGEJO_TOKEN_myorg_REVIEWER=fc_yyy
 FORGEJO_TOKEN_myorg_REVIEWER_USERNAME=code-reviewer-bot
 ```
 
 The prefix is the platform (`GITHUB` or `FORGEJO`) followed by `_TOKEN_`,
-then the organisation name, then the role suffix (`_OWNER`, `_REVIEWER`,
-or `_REVIEWER_USERNAME`). The standard (non-org) token `GITHUB_OWNER_TOKEN`
+then the organisation name, then the role suffix (`_MANAGER`, `_REVIEWER`,
+or `_REVIEWER_USERNAME`). The standard (non-org) token `GITHUB_MANAGER_TOKEN`
 is always available as the default.
 
 ## Generating Tokens
@@ -28,7 +28,7 @@ and platform-specific details, see `docs/tokens/ <tokens/>`_.
 1. Go to **Settings** → **Developer settings** → **Personal access tokens** →
    **Tokens (classic)**.
 2. Create a new token with scopes: `repo` (all) and `read:user`.
-3. Copy to `GITHUB_OWNER_TOKEN`.
+3. Copy to `GITHUB_MANAGER_TOKEN`.
 
 **Fine-grained PAT:** Requires explicit org/repo assignment, even for public
 repos. If the org does not appear under "Resource owner", use a classic PAT.
@@ -42,13 +42,13 @@ repos. If the org does not appear under "Resource owner", use a classic PAT.
    - `Pull requests`: **Write**
    - `Contents`: **Write** (needed to read PR diff)
    - `Administration`: **Read** (needed for branch info)
-5. Copy to `GITHUB_OWNER_TOKEN`.
+5. Copy to `GITHUB_MANAGER_TOKEN`.
 
 ### Codeberg / Forgejo
 
 1. Go to **Settings** → **Applications**.
 2. Create new token with scopes: `repo`, `read:user`.
-3. Copy to `FORGEJO_OWNER_TOKEN`.
+3. Copy to `FORGEJO_MANAGER_TOKEN`.
 
 ### Reviewer Tokens
 
@@ -61,22 +61,22 @@ with `repo` scope. Copy it to `FORGEJO_REVIEWER_TOKEN` or
 ```bash
 # --- Single-platform: GitHub ---
 PLATFORM_MODE=github
-GITHUB_OWNER_TOKEN=ghp_your_github_token
+GITHUB_MANAGER_TOKEN=ghp_your_github_token
 GITHUB_REVIEWER_TOKEN=ghp_your_reviewer_token
 GITHUB_REVIEWER_USERNAME=code-reviewer-bot
 
 # --- Single-platform: Codeberg ---
 # PLATFORM_MODE=codeberg
-# FORGEJO_OWNER_TOKEN=fc_your_codeberg_token
+# FORGEJO_MANAGER_TOKEN=fc_your_codeberg_token
 # FORGEJO_REVIEWER_TOKEN=fc_your_reviewer_token
 # FORGEJO_REVIEWER_USERNAME=code-reviewer-bot
 
 # --- Multi-platform ---
 # PLATFORM_MODE=both
-# GITHUB_OWNER_TOKEN=...
+# GITHUB_MANAGER_TOKEN=...
 # GITHUB_REVIEWER_TOKEN=...
 # GITHUB_REVIEWER_USERNAME=...
-# FORGEJO_OWNER_TOKEN=...
+# FORGEJO_MANAGER_TOKEN=...
 # FORGEJO_REVIEWER_TOKEN=...
 # FORGEJO_REVIEWER_USERNAME=...
 

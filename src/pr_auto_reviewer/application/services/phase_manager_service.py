@@ -26,6 +26,9 @@ from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
@@ -66,7 +69,9 @@ class PhaseManagerService(BriefNextPhasePort):
     ) -> str:
         """Return the assignment text for *next_phase*, or empty when none."""
         messages = self._build_messages(next_phase, findings_summary)
-        raw = self._send_brief(messages, next_phase.phase_name)
+        raw = self._send_brief(
+            messages, next_phase.phase_name, review_session,
+        )
         brief = raw.strip()
         if not brief:
             return ""
@@ -91,10 +96,15 @@ class PhaseManagerService(BriefNextPhasePort):
         self,
         messages: list[ConversationMessage],
         phase_name: str,
+        review_session: str,
     ) -> str:
         """Send a manager brief, preserving fatal LLM availability errors."""
         try:
-            return self._chat_port.send(messages)
+            return self._chat_port.send(
+                messages,
+                purpose=ConversationPurpose.MANAGER_BRIEF,
+                session_id=review_session,
+            )
         except LlmUnavailableError:
             raise
         except Exception:

@@ -21,7 +21,7 @@ from tests.fakes.fake_notifier import FakeNotifier
 
 def _cassette_name(scenario: ReviewScenario) -> str:
     """Generate cassette filename from scenario params."""
-    return f"review_{scenario['platform']}_{scenario['owner']}_{scenario['repo']}_pr{scenario['pr_id']}"
+    return f"review_{scenario['platform']}_{scenario['manager']}_{scenario['repo']}_pr{scenario['pr_id']}"
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ class TestReviewFlowVCR:
         config_file.write_text("\n".join([
             f"PLATFORM_MODE={scenario['platform']}",
             "GITHUB_API_URL=https://api.github.com",
-            "GITHUB_OWNER_TOKEN=e2e-owner-token",
+            "GITHUB_MANAGER_TOKEN=e2e-manager-token",
             "GITHUB_REVIEWER_TOKEN=e2e-reviewer-token",
             "GITHUB_REVIEWER_USERNAME=e2e-reviewer",
             "LLM_HOST=http://localhost:11434",
@@ -111,8 +111,8 @@ class TestReviewFlowVCR:
         token_store = xdg_cache / "pr-auto-reviewer" / "verified-tokens.json"
         token_store.parent.mkdir(parents=True, exist_ok=True)
         token_store.write_text(json.dumps([
-            [scenario["owner"], "owner"],
-            [scenario["owner"], "reviewer"],
+            [scenario["manager"], "manager"],
+            [scenario["manager"], "reviewer"],
         ]))
         monkeypatch.setenv("LLM_HOST", "http://localhost:11434")
         monkeypatch.setenv("LLM_MODEL", "code-review:latest")
@@ -122,15 +122,15 @@ class TestReviewFlowVCR:
     @pytest.mark.parametrize(
         "scenario",
         get_normalized_scenarios(),
-        ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
+        ids=lambda s: f"{s['platform']}:{s['manager']}/{s['repo']}#{s['pr_id']}",
     )
     def test_review_flow(
         self, components, scenario: dict, notifier: FakeNotifier,
     ) -> None:
-        repo_spec = f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
+        repo_spec = f"{scenario['platform']}:{scenario['manager']}/{scenario['repo']}"
         pr_id = PullRequestId(repository=repo_spec, number=scenario["pr_id"])
         expected_repository = (
-            f"{scenario['owner']}/{scenario['repo']}"
+            f"{scenario['manager']}/{scenario['repo']}"
         )
 
         review_argv = [
@@ -175,16 +175,16 @@ class TestReviewFlowVCR:
     @pytest.mark.parametrize(
         "scenario",
         get_normalized_scenarios(),
-        ids=lambda s: f"{s['platform']}:{s['owner']}/{s['repo']}#{s['pr_id']}",
+        ids=lambda s: f"{s['platform']}:{s['manager']}/{s['repo']}#{s['pr_id']}",
     )
     def test_daemon_review_flow_notifies_success(
         self, components, scenario: ReviewScenario, notifier: FakeNotifier,
     ) -> None:
         repository = (
-            f"{scenario['platform']}:{scenario['owner']}/{scenario['repo']}"
+            f"{scenario['platform']}:{scenario['manager']}/{scenario['repo']}"
         )
         expected_repository = (
-            f"{scenario['owner']}/{scenario['repo']}"
+            f"{scenario['manager']}/{scenario['repo']}"
         )
         daemon = PollingDaemon(
             config=PollingDaemonConfig(

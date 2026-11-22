@@ -25,10 +25,10 @@ class TokenMigration:
     _KEY_NAME = "PR_AUTO_REVIEWER_ENCRYPTION_KEY"
     _GLOBAL_SECRET_NAMES = frozenset(
         {
-            "GITHUB_OWNER_TOKEN",
+            "GITHUB_MANAGER_TOKEN",
             "GITHUB_REVIEWER_TOKEN",
             "GITHUB_REVIEWER_USERNAME",
-            "FORGEJO_OWNER_TOKEN",
+            "FORGEJO_MANAGER_TOKEN",
             "FORGEJO_REVIEWER_TOKEN",
             "FORGEJO_REVIEWER_USERNAME",
         }

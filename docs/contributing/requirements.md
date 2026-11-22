@@ -27,7 +27,7 @@
 
 Requires two accounts or one account with two tokens:
 
-- **Owner** — reads PR data, requests reviewers
+- **Manager** — reads PR data, requests reviewers
 - **Reviewer** — submits the review (must differ from PR author)
 
 ## Tokens

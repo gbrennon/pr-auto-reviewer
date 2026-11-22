@@ -20,8 +20,8 @@ class TestConfigMigration:
         source.write_text(
             "PLATFORM_MODE=both\n"
             "USE_STRICT_FRAGMENT_SELECTION=False\n"
-            "GITHUB_OWNER_TOKEN=sometoken\n"
-            "GITHUB_TOKEN_org_OWNER=sometoken\n"
+            "GITHUB_MANAGER_TOKEN=sometoken\n"
+            "GITHUB_TOKEN_org_MANAGER=sometoken\n"
         )
         config_dir = tmp_path / "config-home"
         state_dir = tmp_path / "state-home"
@@ -34,12 +34,12 @@ class TestConfigMigration:
         ).run()
 
         assert result["settings"] == ("PLATFORM_MODE", "USE_STRICT_FRAGMENT_SELECTION")
-        assert result["secrets"] == ("GITHUB_OWNER_TOKEN", "GITHUB_TOKEN_org_OWNER")
+        assert result["secrets"] == ("GITHUB_MANAGER_TOKEN", "GITHUB_TOKEN_org_MANAGER")
         assert source.read_text() == (
             "PLATFORM_MODE=both\n"
             "USE_STRICT_FRAGMENT_SELECTION=False\n"
-            "GITHUB_OWNER_TOKEN=sometoken\n"
-            "GITHUB_TOKEN_org_OWNER=sometoken\n"
+            "GITHUB_MANAGER_TOKEN=sometoken\n"
+            "GITHUB_TOKEN_org_MANAGER=sometoken\n"
         )
         with (config_dir / "settings.toml").open("rb") as stream:
             assert tomllib.load(stream) == {
@@ -51,5 +51,5 @@ class TestConfigMigration:
             "USE_STRICT_FRAGMENT_SELECTION": False,
         }
         secrets = EncryptedSqliteSecretStore(state_dir / "secrets.sqlite3", "migration-key")
-        assert secrets.get("GITHUB_OWNER_TOKEN") == "sometoken"
-        assert secrets.get("GITHUB_TOKEN_org_OWNER") == "sometoken"
+        assert secrets.get("GITHUB_MANAGER_TOKEN") == "sometoken"
+        assert secrets.get("GITHUB_TOKEN_org_MANAGER") == "sometoken"

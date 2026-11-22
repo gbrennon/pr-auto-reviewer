@@ -162,6 +162,26 @@ class TestGithubPrLister:
         result = adapter.list_open("github:o/r")
 
         assert [pr.pr_id.repository for pr in result] == ["o/r"]
+    def test_list_open_when_latest_review_is_stale_then_requires_review(self) -> None:
+        adapter = _adapter(
+            {
+                "/repos/o/r/pulls": [pr_dict(1)],
+                "/repos/o/r/pulls/1/reviews": [
+                    {
+                        "id": 7,
+                        "submitted_at": "2026-10-11T04:28:39Z",
+                        "state": "REQUEST_CHANGES",
+                        "stale": True,
+                    },
+                ],
+            }
+        )
+
+        result = adapter.list_open("o/r")
+
+        assert result[0].latest_review_id == 7
+        assert result[0].latest_review_dismissed is True
+
     def test_list_open_when_latest_review_is_dismissed_then_maps_review_state(self) -> None:
         adapter = _adapter(
             {

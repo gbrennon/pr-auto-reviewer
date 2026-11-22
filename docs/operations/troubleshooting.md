@@ -12,7 +12,7 @@
 
 **Cause:** Missing or invalid GitHub token.
 
-**Fix:** Verify `GITHUB_OWNER_TOKEN` has `repo` scope. Generate at https://github.com/settings/tokens.
+**Fix:** Verify `GITHUB_MANAGER_TOKEN` has `repo` scope. Generate at https://github.com/settings/tokens.
 
 ### "Self-review detected"
 

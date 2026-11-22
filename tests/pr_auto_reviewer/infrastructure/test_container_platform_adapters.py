@@ -127,7 +127,7 @@ BOTH_NON_TERMINAL_TYPES = [
 
 def _forgejo_config(**kwargs: str) -> Config:
     defaults: dict = {
-        "forgejo_owner_token": "fj-own",
+        "forgejo_manager_token": "fj-own",
         "forgejo_reviewer_token": "fj-rev",
         "forgejo_reviewer_username": "fj-bot",
     }
@@ -137,7 +137,7 @@ def _forgejo_config(**kwargs: str) -> Config:
 
 def _github_config(**kwargs: str) -> Config:
     defaults: dict = {
-        "github_owner_token": "gh-own",
+        "github_manager_token": "gh-own",
         "github_reviewer_token": "gh-rev",
         "github_reviewer_username": "gh-bot",
     }
@@ -149,10 +149,10 @@ def _both_config() -> Config:
     return Config(
         env="test",
         platform_mode=GitProvider.BOTH,
-        forgejo_owner_token="fj-own",
+        forgejo_manager_token="fj-own",
         forgejo_reviewer_token="fj-rev",
         forgejo_reviewer_username="fj-bot",
-        github_owner_token="gh-own",
+        github_manager_token="gh-own",
         github_reviewer_token="gh-rev",
         github_reviewer_username="gh-bot",
     )

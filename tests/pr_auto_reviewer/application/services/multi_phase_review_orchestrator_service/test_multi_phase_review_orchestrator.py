@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ._helpers import *
 
 
@@ -651,6 +653,32 @@ class TestMultiPhaseReviewOrchestrator:
 
         assert result.suggestions[0].file_path == relative_path
         assert result.praise[0].file_path == relative_path
+
+    def test_merge_prior_records_drops_regenerated_resolved_finding(
+        self, mock_command_bus, mock_tool_factory,
+    ) -> None:
+        orchestrator = MultiPhaseReviewOrchestratorService(
+            command_bus=mock_command_bus,
+            tool_factory=mock_tool_factory,
+        )
+        historical = _make_review_item(
+            "src/main.py", "Role comparison is incorrect",
+        )
+        historical = replace(historical, status="resolved")
+        regenerated = _make_review_item(
+            "src/main.py", "Role comparison is incorrect",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            items=[regenerated],
+            summary="Needs changes",
+            reason="Explicit phase verdict",
+            model_used="test",
+        )
+
+        merged = orchestrator._merge_prior_records(review, [historical], [])
+
+        assert merged.items == [historical]
 
     def test_merge_prior_records_preserves_nonblocking_requested_verdict(
         self, mock_command_bus, mock_tool_factory,

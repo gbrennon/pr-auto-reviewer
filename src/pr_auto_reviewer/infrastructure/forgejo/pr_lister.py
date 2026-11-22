@@ -242,6 +242,10 @@ class ForgejoPrLister(PrListerPort):
                 ),
             )
             state = str(latest.get("state", "")).upper()
-            return int(latest["id"]), latest.get("dismissed") is True or state == "DISMISSED"
+            return int(latest["id"]), (
+                latest.get("dismissed") is True
+                or latest.get("stale") is True
+                or state == "DISMISSED"
+            )
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
             return None, False

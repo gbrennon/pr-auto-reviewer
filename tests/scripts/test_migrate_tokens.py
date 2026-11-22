@@ -29,7 +29,7 @@ class TestTokenMigration:
         source = tmp_path / "config"
         source.write_text(
             "PR_AUTO_REVIEWER_ENCRYPTION_KEY=keep-key\n"
-            "FORGEJO_OWNER_TOKEN=owner-token\n"
+            "FORGEJO_MANAGER_TOKEN=manager-token\n"
             "PLATFORM_MODE=forgejo\n",
             encoding="utf-8",
         )
@@ -47,9 +47,9 @@ class TestTokenMigration:
 
         output = capsys.readouterr().out
         assert "Would migrate 1 token entries" in output
-        assert "FORGEJO_OWNER_TOKEN" in output
-        assert "owner-token" not in output
-        assert source.read_text(encoding="utf-8").count("FORGEJO_OWNER_TOKEN") == 1
+        assert "FORGEJO_MANAGER_TOKEN" in output
+        assert "manager-token" not in output
+        assert source.read_text(encoding="utf-8").count("FORGEJO_MANAGER_TOKEN") == 1
         assert not (tmp_path / "secrets.sqlite3").exists()
 
     def test_migration_stores_tokens_and_preserves_non_tokens(
@@ -62,7 +62,7 @@ class TestTokenMigration:
         source.write_text(
             "# keep this comment\n"
             "PR_AUTO_REVIEWER_ENCRYPTION_KEY=keep-key\n"
-            "FORGEJO_OWNER_TOKEN=owner-token\n"
+            "FORGEJO_MANAGER_TOKEN=manager-token\n"
             "FORGEJO_TOKEN_senkai_REVIEWER=org-reviewer-token\n"
             "FORGEJO_TOKEN_invalid=not-a-token-entry\n"
             "PLATFORM_MODE=forgejo\n",
@@ -78,15 +78,15 @@ class TestTokenMigration:
         output = capsys.readouterr().out
         store = EncryptedSqliteSecretStore(database, "keep-key")
         assert set(store.names()) == {
-            "FORGEJO_OWNER_TOKEN",
+            "FORGEJO_MANAGER_TOKEN",
             "FORGEJO_TOKEN_senkai_REVIEWER",
         }
         retained = source.read_text(encoding="utf-8")
         assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY=keep-key" in retained
         assert "PLATFORM_MODE=forgejo" in retained
         assert "FORGEJO_TOKEN_invalid=not-a-token-entry" in retained
-        assert "FORGEJO_OWNER_TOKEN=owner-token" not in retained
-        assert "owner-token" not in output
+        assert "FORGEJO_MANAGER_TOKEN=manager-token" not in retained
+        assert "manager-token" not in output
         assert "org-reviewer-token" not in output
 
     def test_missing_source_returns_error(

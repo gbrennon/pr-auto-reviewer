@@ -14,8 +14,8 @@ class TokenRoleDefaults:
 
     def token_for(self, role: str) -> str:
         role_upper = role.upper()
-        if role_upper == "OWNER":
-            return self._defaults.owner_token
+        if role_upper == "MANAGER":
+            return self._defaults.manager_token
         if role_upper == "REVIEWER":
             return self._defaults.reviewer_token
         return ""

@@ -60,8 +60,8 @@ class TestApiAccessCapabilityStore:
                     "capabilities": [
                         {
                             "platform": "github",
-                            "role": "owner",
-                            "source_name": "GITHUB_OWNER_TOKEN",
+                            "role": "manager",
+                            "source_name": "GITHUB_MANAGER_TOKEN",
                             "scope": "acme/widgets",
                             "suspension": {
                                 "suspended_until": 1,
@@ -86,8 +86,8 @@ class TestApiAccessCapabilityStore:
         store = ApiAccessCapabilityStore(path)
         capability = ApiAccessCapability(
             platform="github",
-            role="owner",
-            source_name="GITHUB_OWNER_TOKEN",
+            role="manager",
+            source_name="GITHUB_MANAGER_TOKEN",
             scope="acme/widgets",
         )
 

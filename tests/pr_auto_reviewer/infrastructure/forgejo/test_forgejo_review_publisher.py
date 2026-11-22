@@ -40,7 +40,7 @@ class TestForgejoReviewPublisher:
         adapter = ForgejoReviewPublisher(
             body_renderer=_BODY,
             client=reviewer,
-            owner_client=owner,
+            manager_client=owner,
         )
         pr_id = PullRequestId(repository="my-org/my-repo", number=7)
 
@@ -67,7 +67,7 @@ class TestForgejoReviewPublisher:
         adapter = ForgejoReviewPublisher(
             body_renderer=_BODY,
             client=reviewer,
-            owner_client=owner,
+            manager_client=owner,
         )
         review = CodeReview(
             verdict=ReviewVerdict.CHANGES_REQUESTED,

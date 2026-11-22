@@ -7,9 +7,9 @@ from pr_auto_reviewer.infrastructure.client.token_resolver.role_suffix_parser im
 
 class TestRoleSuffixParser:
     def test_parses_owner_role(self):
-        org, role = RoleSuffixParser.parse("myorg_OWNER")
+        org, role = RoleSuffixParser.parse("myorg_MANAGER")
         assert org == "myorg"
-        assert role == "OWNER"
+        assert role == "MANAGER"
 
     def test_parses_reviewer_role(self):
         org, role = RoleSuffixParser.parse("myorg_REVIEWER")
@@ -22,9 +22,9 @@ class TestRoleSuffixParser:
         assert role == "REVIEWER_USERNAME"
 
     def test_org_name_with_underscores(self):
-        org, role = RoleSuffixParser.parse("my_org_name_OWNER")
+        org, role = RoleSuffixParser.parse("my_org_name_MANAGER")
         assert org == "my_org_name"
-        assert role == "OWNER"
+        assert role == "MANAGER"
 
     def test_unknown_role_returns_empty(self):
         org, role = RoleSuffixParser.parse("myorg_BOGUS")
@@ -37,6 +37,6 @@ class TestRoleSuffixParser:
         assert role == ""
 
     def test_org_name_with_hyphens(self):
-        org, role = RoleSuffixParser.parse("forging-blocks-org_OWNER")
+        org, role = RoleSuffixParser.parse("forging-blocks-org_MANAGER")
         assert org == "forging-blocks-org"
-        assert role == "OWNER"
+        assert role == "MANAGER"

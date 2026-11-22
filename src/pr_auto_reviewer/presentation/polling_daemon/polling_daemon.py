@@ -445,10 +445,10 @@ class PollingDaemon:
         return [pr for pr in open_prs if self._is_actionable_pr(pr)]
 
     def _is_actionable_pr(self, pr: OpenPullRequest) -> bool:
-        if pr.review_requested or pr.pr_id.number == self._force_pr:
+        if pr.pr_id.number == self._force_pr:
             return True
         if self._pr_repository is None:
-            return False
+            return pr.review_requested
         stored = self._pr_repository.find(pr.pr_id)
         if stored is None:
             return True

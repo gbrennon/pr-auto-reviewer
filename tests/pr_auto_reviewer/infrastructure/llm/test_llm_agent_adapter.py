@@ -25,6 +25,9 @@ from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
     PullRequestDiff,
 )
@@ -43,7 +46,12 @@ class _FakeChatPort(AgentChatPort):
     def __init__(self, model: str = "test-model") -> None:
         self._model = model
 
-    def send(self, messages: list[ConversationMessage]) -> str:
+    def send(
+        self,
+        messages: list[ConversationMessage],
+        *,
+        purpose: ConversationPurpose,
+    ) -> str:
         del messages
         return "response"
 
