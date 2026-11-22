@@ -15,6 +15,7 @@ from .presentation.composition_root import (
     show_status,
     status_snapshot,
 )
+from .presentation.navigation import NavigationMode
 from .presentation.status_dashboard import StatusDashboard
 
 SERVICE_NAME = "pr-auto-reviewer.service"
@@ -93,7 +94,12 @@ class CommandLineInterface:
             return True
         if command == "status":
             if sys.stdout.isatty():
-                StatusDashboard(status_snapshot, settings=SettingsCli()).run()
+                settings = SettingsCli()
+                StatusDashboard(
+                    status_snapshot,
+                    settings=settings,
+                    navigation_mode=NavigationMode.parse(settings.navigation_mode()),
+                ).run()
             else:
                 print(show_status())
             return True

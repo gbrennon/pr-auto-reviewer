@@ -72,6 +72,14 @@ class TestSettingsCli:
         monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "test-key")
         return SettingsCli()
 
+    def test_navigation_mode_defaults_to_arrows_and_accepts_configured_mode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        assert cli.navigation_mode() == "arrows"
+        cli.write("TUI_NAVIGATION_MODE", "vim")
+        assert cli.navigation_mode() == "vim"
+
     def test_non_secret_setting_can_be_written_and_read(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

@@ -6,7 +6,9 @@ from typing import Protocol
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Button, DataTable, Footer, Header, Input, Static
+from textual.widgets import Button, DataTable, Footer, Header, Input, Select, Static
+
+from pr_auto_reviewer.presentation.navigation import NavigationInput, NavigationMode
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
@@ -59,6 +61,7 @@ class StatusDashboard(App[None]):
         self,
         status_provider: Callable[[], DaemonStatusSnapshot],
         settings: SettingsPort | None = None,
+        navigation_mode: NavigationMode = NavigationMode.ARROWS,
     ) -> None:
         super().__init__()
         self._status_provider = status_provider
@@ -66,6 +69,7 @@ class StatusDashboard(App[None]):
         self._sort_key = self._SORT_KEYS[0]
         self._snapshot: DaemonStatusSnapshot | None = None
         self._paused = False
+        self._navigation_mode = navigation_mode
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -77,16 +81,30 @@ class StatusDashboard(App[None]):
             with Vertical(id="settings"):
                 yield Static("Settings (e to close; secrets are write-only)", id="settings-title")
                 yield Static("", id="settings-list")
-                yield Input(placeholder="Setting name", id="setting-name")
-                yield Input(placeholder="Repository platform:owner/name", id="repository")
-                yield Input(placeholder="Manager token (write-only)", password=True, id="manager-token")
-                yield Input(placeholder="Reviewer token (write-only)", password=True, id="reviewer-token")
+                yield Select(
+                    [(mode.value.title(), mode.value) for mode in NavigationMode],
+                    value=self._navigation_mode.value,
+                    id="navigation-mode",
+                )
+                yield NavigationInput(
+                    placeholder="Setting name", id="setting-name", mode=self._navigation_mode,
+                )
+                yield NavigationInput(
+                    placeholder="Repository platform:owner/name", id="repository", mode=self._navigation_mode,
+                )
+                yield NavigationInput(
+                    placeholder="Manager token (write-only)", password=True, id="manager-token", mode=self._navigation_mode,
+                )
+                yield NavigationInput(
+                    placeholder="Reviewer token (write-only)", password=True, id="reviewer-token", mode=self._navigation_mode,
+                )
                 yield Button("Add repository", id="add-repository", variant="primary")
                 yield Button("Remove repository", id="remove-repository", variant="error")
-                yield Input(
+                yield NavigationInput(
                     placeholder="Value (never displayed after save)",
                     password=True,
                     id="setting-value",
+                    mode=self._navigation_mode,
                 )
                 yield Button("Save", id="save-setting", variant="primary")
                 yield Button("Unset", id="unset-setting", variant="error")
@@ -130,6 +148,25 @@ class StatusDashboard(App[None]):
         panel.styles.display = "none" if panel.styles.display == "block" else "block"
         if panel.styles.display == "block":
             self._render_settings()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """Apply a newly selected dashboard navigation mode."""
+        if event.select.id != "navigation-mode" or self._settings is None:
+            return
+        mode = NavigationMode.parse(str(event.value))
+        if mode is self._navigation_mode:
+            return
+        self._navigation_mode = mode
+        for widget in self.query(NavigationInput):
+            widget.set_navigation_mode(mode)
+        try:
+            self._settings.write("TUI_NAVIGATION_MODE", mode.value)
+            self.query_one("#action-status", Static).update(
+                f"Navigation mode: {mode.value}"
+            )
+            self.query_one("#error", Static).update("")
+        except Exception as error:
+            self.query_one("#error", Static).update(f"Settings error: {error}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Persist or remove the setting named in the editor."""

@@ -108,6 +108,7 @@ class PollingDaemon:
         self._config_reloader = config_reloader
         self._force_pr = getattr(config, "force_pr", None)
         self._llm_retry_at = 0.0
+        self._current_cycle = 0
         self._setup_signal_handlers()
 
     def start(self) -> None:
@@ -128,6 +129,7 @@ class PollingDaemon:
         try:
             while True:
                 cycle += 1
+                self._current_cycle = cycle
                 self._run_cycle()
 
                 if self._config.run_once:
@@ -182,7 +184,7 @@ class PollingDaemon:
             updated_at=now_str,
             poll_interval_seconds=self._config.poll_interval_seconds,
             allowed_repositories=self._config.repos_allow_list,
-            current_cycle=cycle,
+            current_cycle=cycle or self._current_cycle,
             next_cycle_at=next_cycle_at,
             current_review=current_review,
             last_error=error,
