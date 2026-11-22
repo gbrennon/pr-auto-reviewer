@@ -9,7 +9,13 @@ import sys
 from typing import Any
 
 from .presentation.cli.settings_cli import SettingsCli
-from .presentation.composition_root import bootstrap, run_daemon, show_status
+from .presentation.composition_root import (
+    bootstrap,
+    run_daemon,
+    show_status,
+    status_snapshot,
+)
+from .presentation.status_dashboard import StatusDashboard
 
 SERVICE_NAME = "pr-auto-reviewer.service"
 
@@ -86,7 +92,10 @@ class CommandLineInterface:
             self._run_systemctl(command)
             return True
         if command == "status":
-            print(show_status())
+            if sys.stdout.isatty():
+                StatusDashboard(status_snapshot).run()
+            else:
+                print(show_status())
             return True
         if command == "logs":
             self._run_journalctl()
