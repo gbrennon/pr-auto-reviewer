@@ -222,13 +222,23 @@ class PullRequest:
 
     def _historical(self, records: tuple[ReviewItem, ...]) -> tuple[ReviewItem, ...]:
         seen: set[str] = set()
+        terminal_keys: set[tuple[str | None, str]] = set()
         result: list[ReviewItem] = []
         for item in records:
+            projected = self._project_item(item)
+            semantic_key = (
+                projected.file_path,
+                " ".join(projected.description.split()).casefold(),
+            )
+            if semantic_key in terminal_keys:
+                continue
             if item.id and item.id in seen:
                 continue
             if item.id:
                 seen.add(item.id)
-            result.append(self._project_item(item))
+            result.append(projected)
+            if projected.status.is_terminal:
+                terminal_keys.add(semantic_key)
         return tuple(result)
 
     def _project_item(self, item: ReviewItem) -> ReviewItem:
