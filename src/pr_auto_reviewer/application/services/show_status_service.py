@@ -6,6 +6,9 @@ import math
 import time
 from collections.abc import Callable
 
+from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
+    DaemonStatusSnapshot,
+)
 from pr_auto_reviewer.application.ports.outbound.api_access_capability_query_port import (
     ApiAccessCapabilityQueryPort,
 )
@@ -39,45 +42,63 @@ class ShowStatusService:
         self._allowed_repositories = allowed_repositories
         self._capability_query = capability_query
 
+    def snapshot(self) -> DaemonStatusSnapshot:
+        """Return the current structured daemon status."""
+        status = self._runtime_state.read_status()
+        is_alive = status is not None and self._process_checker(status.pid)
+        capabilities = (
+            self._capability_query.statuses()
+            if self._capability_query is not None
+            else ()
+        )
+        return DaemonStatusSnapshot(
+            runtime_status=status,
+            daemon_alive=is_alive,
+            allowed_repositories=self._allowed_repositories,
+            capabilities=tuple(capabilities),
+        )
+
     def show_status(self) -> str:
         """Return formatted summary of current daemon runtime status."""
-        status = self._runtime_state.read_status()
+        snapshot = self.snapshot()
+        status = snapshot.runtime_status
         if status is None:
-            return self._format_unknown()
+            return self._format_unknown(snapshot)
 
-        is_alive = self._process_checker(status.pid)
-        if not is_alive:
-            return self._format_stopped(status)
+        if not snapshot.daemon_alive:
+            return self._format_stopped(status, snapshot)
 
         sections = [
             self._format_header(status),
             self._format_state_body(status),
-            self._format_allowed_repos(status),
-            self._format_capabilities(),
+            self._format_allowed_repos(status, snapshot),
+            self._format_capabilities(snapshot.capabilities),
         ]
         if status.last_error:
             sections.append(f"Last Error: {status.last_error}")
         return "\n\n".join(sections)
 
-    def _format_unknown(self) -> str:
-        repos = self._format_allowed_repos(None)
+    def _format_unknown(self, snapshot: DaemonStatusSnapshot) -> str:
+        repos = self._format_allowed_repos(None, snapshot)
         return (
             "PR Auto-Reviewer Status\n"
             "=======================\n"
             "Daemon: STOPPED (no status file found)\n\n"
             f"{repos}\n\n"
-            f"{self._format_capabilities()}"
+            f"{self._format_capabilities(snapshot.capabilities)}"
         )
 
-    def _format_stopped(self, status: DaemonRuntimeStatus) -> str:
-        repos = self._format_allowed_repos(status)
+    def _format_stopped(
+        self, status: DaemonRuntimeStatus, snapshot: DaemonStatusSnapshot,
+    ) -> str:
+        repos = self._format_allowed_repos(status, snapshot)
         return (
             "PR Auto-Reviewer Status\n"
             "=======================\n"
             f"Daemon: STOPPED (PID {status.pid} is not running)\n"
             f"Last active state: {status.state.value.upper()} (cycle {status.current_cycle})\n\n"
             f"{repos}\n\n"
-            f"{self._format_capabilities()}"
+            f"{self._format_capabilities(snapshot.capabilities)}"
         )
 
     def _format_header(self, status: DaemonRuntimeStatus) -> str:
@@ -116,12 +137,9 @@ class ShowStatusService:
             f"Progress: Turn {review.current_turn}/{review.max_turns} | Action: {action}"
         )
 
-    def _format_capabilities(self) -> str:
-        capabilities = (
-            self._capability_query.statuses()
-            if self._capability_query is not None
-            else ()
-        )
+    def _format_capabilities(
+        self, capabilities: tuple[ApiAccessCapability, ...],
+    ) -> str:
         if not capabilities:
             return "API Access Capabilities: (none recorded)"
         now = time.time()
@@ -174,11 +192,15 @@ class ShowStatusService:
             return f"{hours}h {remaining_minutes:02d}m"
         return f"{minutes}m"
 
-    def _format_allowed_repos(self, status: DaemonRuntimeStatus | None) -> str:
+    def _format_allowed_repos(
+        self,
+        status: DaemonRuntimeStatus | None,
+        snapshot: DaemonStatusSnapshot,
+    ) -> str:
         repos = (
             status.allowed_repositories
             if status and status.allowed_repositories
-            else self._allowed_repositories
+            else snapshot.allowed_repositories
         )
         if not repos:
             return "Allowed Repositories: (all repositories permitted)"
