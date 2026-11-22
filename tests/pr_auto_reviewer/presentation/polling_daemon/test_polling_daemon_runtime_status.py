@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import Event, Thread
 from unittest.mock import MagicMock, patch
 
 from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
@@ -21,6 +22,57 @@ from pr_auto_reviewer.presentation.ports import (
 
 class TestPollingDaemonRuntimeStatus:
     """Verifies PollingDaemon writes runtime status and handles config reload."""
+
+    def test_active_review_status_is_visible_while_review_is_running(self) -> None:
+        state_port = MagicMock()
+        entered = Event()
+        release = Event()
+        config = PollingDaemonConfig(
+            poll_interval_seconds=300,
+            repos_filter=None,
+            run_once=True,
+            repos_allow_list=("owner/repo",),
+        )
+        repo_lister = MagicMock()
+        repo_lister.list_repos.return_value = []
+        pr_lister = MagicMock()
+        pr_lister.list_recent.return_value = []
+        pr_lister.list_open.return_value = [
+            OpenPullRequest(
+                pr_id=PullRequestId("owner/repo", 42),
+                head_sha=CommitSha("abc1234"),
+                title="PR Title",
+                description="PR Description",
+            ),
+        ]
+
+        def execute(_command: object) -> ReviewExecutionResult:
+            entered.set()
+            assert release.wait(timeout=5)
+            return ReviewExecutionResult(reviewed=True, duration_seconds=1.0)
+
+        review_service = MagicMock()
+        review_service.execute.side_effect = execute
+        daemon = PollingDaemon(
+            config,
+            repo_lister,
+            pr_lister,
+            review_service,
+            runtime_state=state_port,
+        )
+        worker = Thread(target=daemon.start)
+        worker.start()
+
+        assert entered.wait(timeout=5)
+        statuses = [call.args[0] for call in state_port.record_status.call_args_list]
+        reviewing = [status for status in statuses if status.state == DaemonState.REVIEWING]
+        assert reviewing
+        assert reviewing[-1].current_review is not None
+        assert reviewing[-1].current_review.pr_number == 42
+
+        release.set()
+        worker.join(timeout=5)
+        assert not worker.is_alive()
 
     def test_daemon_records_idle_and_stopped_status(self) -> None:
         state_port = MagicMock()
