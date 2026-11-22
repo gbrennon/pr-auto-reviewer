@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from textual.widgets import Button
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
@@ -17,7 +18,25 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
     DaemonRuntimeStatus,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
+from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
 from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
+
+class FakeSettings:
+    def __init__(self) -> None:
+        self.writes: list[tuple[str, str]] = []
+        self.snapshot_value = SettingsSnapshot(
+            values=(("poll_interval", "60"),),
+            secret_names=("GITHUB_TOKEN",),
+        )
+
+    def snapshot(self) -> SettingsSnapshot:
+        return self.snapshot_value
+
+    def write(self, name: str, value: str) -> None:
+        self.writes.append((name, value))
+
+    def unset(self, name: str) -> None:
+        self.writes.append((name, ""))
 
 class TestStatusDashboard:
     @pytest.mark.asyncio
@@ -81,6 +100,32 @@ class TestStatusDashboard:
             assert "Sort: repository" in str(pilot.app.query_one("#sort").render())
             await pilot.press("s")
             assert "Sort: status" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_supports_refresh_pause_and_settings_actions(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test(size=(120, 40)) as pilot:
+            await pilot.press("p")
+            assert "paused" in str(pilot.app.query_one("#action-status").render()).lower()
+            await pilot.press("p")
+            assert "live" in str(pilot.app.query_one("#action-status").render()).lower()
+            await pilot.press("e")
+            assert pilot.app.query_one("#settings").styles.display == "block"
+            pilot.app.query_one("#setting-name").value = "GITHUB_TOKEN"
+            pilot.app.query_one("#setting-value").value = "new-secret"
+            pilot.app.on_button_pressed(
+                Button.Pressed(pilot.app.query_one("#save-setting"))
+            )
+            assert settings.writes == [("GITHUB_TOKEN", "new-secret")]
+            assert "new-secret" not in str(pilot.app.query_one("#settings").render())
             await pilot.press("q")
 
     @pytest.mark.asyncio
