@@ -32,6 +32,29 @@ class TestSettingsScreen:
             await pilot.press("q")
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_emacs_ctrl_p_moves_to_previous_field_instead_of_opening_palette(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            settings=FakeSettings(),
+            navigation_mode=NavigationMode.EMACS,
+        ).run_test() as pilot:
+            await pilot.press("e")
+            screen = pilot.app.screen
+            screen.query_one("#repository").focus()
+            await pilot.press("ctrl+p")
+            assert pilot.app.focused.id == "setting-name"
+            assert not pilot.app.query("#command-palette")
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
     async def test_back_keys_work_while_vim_input_has_focus(self) -> None:
         snapshot = DaemonStatusSnapshot(
             runtime_status=None,
