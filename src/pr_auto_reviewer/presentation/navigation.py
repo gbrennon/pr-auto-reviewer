@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 from textual.events import Key
-from textual.widgets import Input
+from textual.widgets import Button, Input
 
 
 class NavigationMode(StrEnum):
@@ -59,11 +59,11 @@ class NavigationInput(Input):
                 self._consume(event)
                 return
             if event.key == "ctrl+n":
-                self.screen.focus_next(Input)
+                self.screen.focus_next()
                 self._consume(event)
                 return
             if event.key == "ctrl+p":
-                self.screen.focus_previous(Input)
+                self.screen.focus_previous()
                 self._consume(event)
                 return
             await super()._on_key(event)
@@ -80,9 +80,9 @@ class NavigationInput(Input):
             elif event.key == "l":
                 self.action_cursor_right()
             elif event.key == "j":
-                self.screen.focus_next(Input)
+                self.screen.focus_next()
             elif event.key == "k":
-                self.screen.focus_previous(Input)
+                self.screen.focus_previous()
             self._consume(event)
             return
         if event.key in {"left", "right", "up", "down"}:
@@ -94,3 +94,36 @@ class NavigationInput(Input):
     def _consume(event: Key) -> None:
         event.stop()
         event.prevent_default()
+
+
+class NavigationButton(Button):
+    """Button that participates in Vim and Emacs focus navigation."""
+
+    def __init__(self, *args: object, mode: NavigationMode = NavigationMode.ARROWS, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self._navigation_mode = mode
+
+    def set_navigation_mode(self, mode: NavigationMode) -> None:
+        """Change the keyboard navigation mode."""
+        self._navigation_mode = mode
+
+    async def _on_key(self, event: Key) -> None:
+        if self._navigation_mode is NavigationMode.VIM:
+            if event.key == "j":
+                self.screen.focus_next()
+                NavigationInput._consume(event)
+                return
+            if event.key == "k":
+                self.screen.focus_previous()
+                NavigationInput._consume(event)
+                return
+        if self._navigation_mode is NavigationMode.EMACS:
+            if event.key == "ctrl+n":
+                self.screen.focus_next()
+                NavigationInput._consume(event)
+                return
+            if event.key == "ctrl+p":
+                self.screen.focus_previous()
+                NavigationInput._consume(event)
+                return
+        await super()._on_key(event)

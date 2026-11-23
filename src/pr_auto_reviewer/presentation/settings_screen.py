@@ -8,7 +8,11 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, Select, Static
 
 from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
-from pr_auto_reviewer.presentation.navigation import NavigationInput, NavigationMode
+from pr_auto_reviewer.presentation.navigation import (
+    NavigationButton,
+    NavigationInput,
+    NavigationMode,
+)
 
 
 class SettingsPort(Protocol):
@@ -76,14 +80,22 @@ class SettingsScreen(Screen[None]):
             placeholder="Reviewer token (write-only)", password=True, id="reviewer-token",
             mode=self._navigation_mode,
         )
-        yield Button("Add repository", id="add-repository", variant="primary")
-        yield Button("Remove repository", id="remove-repository", variant="error")
+        yield NavigationButton(
+            "Add repository", id="add-repository", variant="primary", mode=self._navigation_mode,
+        )
+        yield NavigationButton(
+            "Remove repository", id="remove-repository", variant="error", mode=self._navigation_mode,
+        )
         yield NavigationInput(
             placeholder="Value (never displayed after save)", password=True,
             id="setting-value", mode=self._navigation_mode,
         )
-        yield Button("Save", id="save-setting", variant="primary")
-        yield Button("Unset", id="unset-setting", variant="error")
+        yield NavigationButton(
+            "Save", id="save-setting", variant="primary", mode=self._navigation_mode,
+        )
+        yield NavigationButton(
+            "Unset", id="unset-setting", variant="error", mode=self._navigation_mode,
+        )
         yield Static("", id="action-status")
         yield Static("", id="error")
 
@@ -103,7 +115,8 @@ class SettingsScreen(Screen[None]):
         if mode is self._navigation_mode:
             return
         self._navigation_mode = mode
-        for widget in self.query(NavigationInput):
+        widgets = [*self.query(NavigationInput), *self.query(NavigationButton)]
+        for widget in widgets:
             widget.set_navigation_mode(mode)
         try:
             self._settings.write("TUI_NAVIGATION_MODE", mode.value)
