@@ -30,3 +30,22 @@ class TestSettingsScreen:
             await pilot.press("escape")
             assert not isinstance(pilot.app.screen, SettingsScreen)
             await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_back_keys_work_while_vim_input_has_focus(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            settings=FakeSettings(),
+            navigation_mode=NavigationMode.VIM,
+        ).run_test() as pilot:
+            await pilot.press("e")
+            pilot.app.screen.query_one("#setting-name").focus()
+            await pilot.press("q")
+            assert not isinstance(pilot.app.screen, SettingsScreen)

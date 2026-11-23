@@ -42,6 +42,10 @@ class NavigationInput(Input):
         self._vim_insert_mode = False
 
     async def _on_key(self, event: Key) -> None:
+        if event.key in {"q", "escape"} and hasattr(self.screen, "action_back"):
+            self.screen.action_back()
+            self._consume(event)
+            return
         if self._navigation_mode is NavigationMode.ARROWS:
             await super()._on_key(event)
             return
