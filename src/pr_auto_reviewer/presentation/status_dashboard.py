@@ -2,40 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import Protocol
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Button, DataTable, Footer, Header, Input, Select, Static
-
-from pr_auto_reviewer.presentation.navigation import NavigationInput, NavigationMode
+from textual.widgets import DataTable, Footer, Header, Static
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
-from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
+from pr_auto_reviewer.presentation.navigation import NavigationMode
+from pr_auto_reviewer.presentation.settings_screen import SettingsPort, SettingsScreen
 
-class SettingsPort(Protocol):
-    """Presentation boundary for write-only settings management."""
-
-    def snapshot(self) -> SettingsSnapshot:
-        """Return visible settings and secret names."""
-
-    def write(self, name: str, raw_value: str) -> None:
-        """Write a setting without returning its value."""
-
-    def unset(self, name: str) -> None:
-        """Remove a setting."""
-
-    def add_repository(self, repository: str, manager_token: str, reviewer_token: str) -> None:
-        """Allow a repository with role-specific write-only tokens."""
-
-    def remove_repository(self, repository: str) -> None:
-        """Remove a repository from the allow list."""
 
 class StatusDashboard(App[None]):
-    """Render live daemon status and settings actions in a terminal dashboard."""
+    """Render live daemon status and dashboard actions."""
 
     CSS = """
     Screen { layout: vertical; }
@@ -43,9 +24,6 @@ class StatusDashboard(App[None]):
     #state { border: round $primary; margin: 1; padding: 1; color: $success; text-style: bold; }
     #sort, #action-status, #last-refresh { margin: 0 1; }
     #items { height: 1fr; margin: 1; }
-    #settings { display: none; border: round $accent; margin: 1; padding: 1; }
-    #settings-list { height: 1fr; }
-    #setting-name, #setting-value { margin: 1 0; }
     #error { color: $error; margin: 0 1; }
     """
     BINDINGS = [
@@ -78,36 +56,6 @@ class StatusDashboard(App[None]):
             yield Static("Sort: platform (press s to change)", id="sort")
             yield Static("Live refresh enabled", id="action-status")
             yield DataTable(id="items", zebra_stripes=True, cursor_type="row")
-            with Vertical(id="settings"):
-                yield Static("Settings (e to close; secrets are write-only)", id="settings-title")
-                yield Static("", id="settings-list")
-                yield Select(
-                    [(mode.value.title(), mode.value) for mode in NavigationMode],
-                    value=self._navigation_mode.value,
-                    id="navigation-mode",
-                )
-                yield NavigationInput(
-                    placeholder="Setting name", id="setting-name", mode=self._navigation_mode,
-                )
-                yield NavigationInput(
-                    placeholder="Repository platform:owner/name", id="repository", mode=self._navigation_mode,
-                )
-                yield NavigationInput(
-                    placeholder="Manager token (write-only)", password=True, id="manager-token", mode=self._navigation_mode,
-                )
-                yield NavigationInput(
-                    placeholder="Reviewer token (write-only)", password=True, id="reviewer-token", mode=self._navigation_mode,
-                )
-                yield Button("Add repository", id="add-repository", variant="primary")
-                yield Button("Remove repository", id="remove-repository", variant="error")
-                yield NavigationInput(
-                    placeholder="Value (never displayed after save)",
-                    password=True,
-                    id="setting-value",
-                    mode=self._navigation_mode,
-                )
-                yield Button("Save", id="save-setting", variant="primary")
-                yield Button("Unset", id="unset-setting", variant="error")
             yield Static("", id="error")
             yield Static("", id="last-refresh")
         yield Footer()
@@ -119,7 +67,7 @@ class StatusDashboard(App[None]):
         self.refresh_status()
 
     def action_cycle_sort(self) -> None:
-        """Cycle the visible rows through the supported sort keys."""
+        """Cycle the visible rows through supported sort keys."""
         index = self._SORT_KEYS.index(self._sort_key)
         self._sort_key = self._SORT_KEYS[(index + 1) % len(self._SORT_KEYS)]
         self._render_sort_label()
@@ -127,12 +75,12 @@ class StatusDashboard(App[None]):
             self._render_snapshot(self._snapshot)
 
     def action_refresh(self) -> None:
-        """Force an immediate status refresh even when auto-refresh is paused."""
+        """Force an immediate status refresh."""
         self.refresh_status(force=True)
         self.query_one("#action-status", Static).update("Refreshed")
 
     def action_toggle_pause(self) -> None:
-        """Toggle automatic status refresh while keeping manual refresh available."""
+        """Toggle automatic status refresh."""
         self._paused = not self._paused
         state = "paused" if self._paused else "live"
         self.query_one("#action-status", Static).update(
@@ -140,79 +88,11 @@ class StatusDashboard(App[None]):
         )
 
     def action_toggle_settings(self) -> None:
-        """Toggle the write-only settings editor."""
-        panel = self.query_one("#settings", Vertical)
+        """Open the dedicated settings screen."""
         if self._settings is None:
             self.query_one("#action-status", Static).update("Settings unavailable")
             return
-        panel.styles.display = "none" if panel.styles.display == "block" else "block"
-        if panel.styles.display == "block":
-            self._render_settings()
-
-    def on_select_changed(self, event: Select.Changed) -> None:
-        """Apply a newly selected dashboard navigation mode."""
-        if event.select.id != "navigation-mode" or self._settings is None:
-            return
-        mode = NavigationMode.parse(str(event.value))
-        if mode is self._navigation_mode:
-            return
-        self._navigation_mode = mode
-        for widget in self.query(NavigationInput):
-            widget.set_navigation_mode(mode)
-        try:
-            self._settings.write("TUI_NAVIGATION_MODE", mode.value)
-            self.query_one("#action-status", Static).update(
-                f"Navigation mode: {mode.value}"
-            )
-            self.query_one("#error", Static).update("")
-        except Exception as error:
-            self.query_one("#error", Static).update(f"Settings error: {error}")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Persist or remove the setting named in the editor."""
-        if self._settings is None:
-            return
-        name = self.query_one("#setting-name", Input).value.strip()
-        repository = self.query_one("#repository", Input).value.strip()
-        if event.button.id == "add-repository":
-            try:
-                self._settings.add_repository(
-                    repository,
-                    self.query_one("#manager-token", Input).value,
-                    self.query_one("#reviewer-token", Input).value,
-                )
-                self._render_settings()
-                self.query_one("#action-status", Static).update(f"Added {repository}")
-                self.query_one("#error", Static).update("")
-            except Exception as error:
-                self.query_one("#error", Static).update(f"Settings error: {error}")
-            return
-        if event.button.id == "remove-repository":
-            try:
-                self._settings.remove_repository(repository)
-                self._render_settings()
-                self.query_one("#action-status", Static).update(f"Removed {repository}")
-                self.query_one("#error", Static).update("")
-            except Exception as error:
-                self.query_one("#error", Static).update(f"Settings error: {error}")
-            return
-        if not name:
-            self.query_one("#error", Static).update("Setting name is required")
-            return
-        try:
-            if event.button.id == "save-setting":
-                self._settings.write(
-                    name, self.query_one("#setting-value", Input).value
-                )
-                message = f"Updated {name}"
-            else:
-                self._settings.unset(name)
-                message = f"Removed {name}"
-            self._render_settings()
-            self.query_one("#action-status", Static).update(message)
-            self.query_one("#error", Static).update("")
-        except Exception as error:
-            self.query_one("#error", Static).update(f"Settings error: {error}")
+        self.push_screen(SettingsScreen(self._settings, self._navigation_mode))
 
     def refresh_status(self, force: bool = False) -> None:
         """Refresh dashboard rows from the application snapshot."""
@@ -240,9 +120,7 @@ class StatusDashboard(App[None]):
         )
         self._update_refresh_time()
 
-    def _update_items_table(
-        self, rows: list[tuple[str, str, str, str]],
-    ) -> None:
+    def _update_items_table(self, rows: list[tuple[str, str, str, str]]) -> None:
         table = self.query_one("#items", DataTable)
         keyed_rows = [(self._row_key(row), row) for row in rows]
         current_keys = list(table.rows)
@@ -285,20 +163,6 @@ class StatusDashboard(App[None]):
     def _render_sort_label(self) -> None:
         self.query_one("#sort", Static).update(
             f"Sort: {self._sort_key} (press s to change)"
-        )
-
-    def _render_settings(self) -> None:
-        if self._settings is None:
-            return
-        snapshot = self._settings.snapshot()
-        values = [f"{name} = {value}" for name, value in snapshot.values]
-        values.extend(f"{name} = <write-only>" for name in snapshot.secret_names)
-        if snapshot.secret_error:
-            values.append(
-                "Secret storage unavailable: " + snapshot.secret_error
-            )
-        self.query_one("#settings-list", Static).update(
-            "\n".join(values) if values else "No settings configured"
         )
 
     def _update_refresh_time(self) -> None:
