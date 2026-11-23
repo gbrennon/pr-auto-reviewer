@@ -19,6 +19,7 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
+from pr_auto_reviewer.presentation.settings_screen import SettingsScreen
 from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
 
 class FakeSettings:
@@ -132,7 +133,8 @@ class TestStatusDashboard:
 
         async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
             await pilot.press("e")
-            rendered = str(pilot.app.query_one("#settings-list").render())
+            assert isinstance(pilot.app.screen, SettingsScreen)
+            rendered = str(pilot.app.screen.query_one("#settings-list").render())
             assert "Secret storage unavailable" in rendered
             assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required" in rendered
             await pilot.press("q")
@@ -150,7 +152,8 @@ class TestStatusDashboard:
 
         async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
             await pilot.press("e")
-            pilot.app.query_one("#navigation-mode").value = "vim"
+            assert isinstance(pilot.app.screen, SettingsScreen)
+            pilot.app.screen.query_one("#navigation-mode").value = "vim"
             await pilot.pause()
             assert ("TUI_NAVIGATION_MODE", "vim") in settings.writes
             await pilot.press("q")
@@ -171,14 +174,15 @@ class TestStatusDashboard:
             await pilot.press("p")
             assert "live" in str(pilot.app.query_one("#action-status").render()).lower()
             await pilot.press("e")
-            assert pilot.app.query_one("#settings").styles.display == "block"
-            pilot.app.query_one("#setting-name").value = "GITHUB_TOKEN"
-            pilot.app.query_one("#setting-value").value = "new-secret"
-            pilot.app.on_button_pressed(
-                Button.Pressed(pilot.app.query_one("#save-setting"))
+            assert isinstance(pilot.app.screen, SettingsScreen)
+            screen = pilot.app.screen
+            screen.query_one("#setting-name").value = "GITHUB_TOKEN"
+            screen.query_one("#setting-value").value = "new-secret"
+            screen.on_button_pressed(
+                Button.Pressed(screen.query_one("#save-setting"))
             )
             assert settings.writes == [("GITHUB_TOKEN", "new-secret")]
-            assert "new-secret" not in str(pilot.app.query_one("#settings").render())
+            assert "new-secret" not in str(screen.render())
             await pilot.press("q")
 
     @pytest.mark.asyncio
