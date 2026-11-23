@@ -46,6 +46,7 @@ class TestNavigationInput:
             assert input_widget.cursor_position == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_arrows_mode_keeps_standard_input_behavior(self) -> None:
         async with NavigationTestApp(NavigationMode.ARROWS).run_test() as pilot:
             input_widget = pilot.app.query_one("#input", NavigationInput)

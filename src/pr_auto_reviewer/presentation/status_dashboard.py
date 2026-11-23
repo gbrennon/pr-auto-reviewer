@@ -26,6 +26,7 @@ class StatusDashboard(App[None]):
     #items { height: 1fr; margin: 1; }
     #error { color: $error; margin: 0 1; }
     """
+    COMMAND_PALETTE_BINDING = "ctrl+shift+p"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("s", "cycle_sort", "Sort"),
