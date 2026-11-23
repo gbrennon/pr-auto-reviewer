@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Button, Input, Select, Static
 
@@ -40,8 +41,8 @@ class SettingsScreen(Screen[None]):
     #action-status { margin: 0 1; }
     """
     BINDINGS = [
-        ("q", "back", "Back"),
-        ("escape", "back", "Back"),
+        Binding("q", "back", "Back", priority=True),
+        Binding("escape", "back", "Back", priority=True),
     ]
 
     def __init__(
