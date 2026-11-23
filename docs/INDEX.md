@@ -26,6 +26,7 @@ Navigation hub for all project documentation.
 | Document | Purpose |
 |---|---|
 | [features/features.md](features/features.md) | Implemented features, planned work, platform support |
+| [features/status-tui.md](features/status-tui.md) | Live Textual status dashboard, settings screen, and navigation modes |
 
 ### Operations (Running the App)
 | Document | Purpose |
@@ -71,6 +72,7 @@ Navigation hub for all project documentation.
 | Goal | Start Here |
 |---|---|
 | Run a review | [operations/HOWTO-single-review.md](operations/HOWTO-single-review.md) |
+| Use the status TUI | [features/status-tui.md](features/status-tui.md) |
 | Configure the app | [configuration/configuration.md](configuration/configuration.md) |
 | Understand architecture | [architecture/structure.md](architecture/structure.md) → [architecture/diagrams/deep-architecture.md](architecture/diagrams/deep-architecture.md) |
 | Set up tokens | [tokens/README.md](tokens/README.md) |
