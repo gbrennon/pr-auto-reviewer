@@ -110,9 +110,14 @@ class ShowStatusService:
         )
 
     def _format_state_body(self, status: DaemonRuntimeStatus) -> str:
+        next_info = f" | Next cycle at: {status.next_cycle_at}" if status.next_cycle_at else ""
+        if status.state == DaemonState.ERROR or status.last_error:
+            return (
+                f"Status: ERROR / RETRYING\n"
+                f"Poll interval: {status.poll_interval_seconds}s{next_info}"
+            )
         if status.state == DaemonState.REVIEWING and status.current_review:
             return self._format_active_review(status.current_review)
-        next_info = f" | Next cycle at: {status.next_cycle_at}" if status.next_cycle_at else ""
         return (
             f"Status: IDLE / WAITING\n"
             f"Poll interval: {status.poll_interval_seconds}s{next_info}"
