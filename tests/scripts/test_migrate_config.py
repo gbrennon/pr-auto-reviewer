@@ -53,3 +53,28 @@ class TestConfigMigration:
         secrets = EncryptedSqliteSecretStore(state_dir / "secrets.sqlite3", "migration-key")
         assert secrets.get("GITHUB_MANAGER_TOKEN") == "sometoken"
         assert secrets.get("GITHUB_TOKEN_org_MANAGER") == "sometoken"
+
+    def test_migrates_allow_list_to_toml_array_without_mutating_source(
+        self, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "config"
+        source.write_bytes(
+            b"REPOS_ALLOW_LIST=github:owner/repo, forgejo:owner/other\r\n"
+        )
+        original_source = source.read_bytes()
+        config_dir = tmp_path / "config-home"
+        state_dir = tmp_path / "state-home"
+
+        result = ConfigMigration(
+            source=source,
+            config_dir=config_dir,
+            state_dir=state_dir,
+            encryption_key="migration-key",
+        ).run()
+
+        assert result == {"settings": ("REPOS_ALLOW_LIST",), "secrets": ()}
+        assert source.read_bytes() == original_source
+        with (config_dir / "settings.toml").open("rb") as stream:
+            assert tomllib.load(stream) == {
+                "REPOS_ALLOW_LIST": ["github:owner/repo", "forgejo:owner/other"],
+            }
