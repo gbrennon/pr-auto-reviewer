@@ -43,12 +43,12 @@ class TestConfigMigration:
         )
         with (config_dir / "settings.toml").open("rb") as stream:
             assert tomllib.load(stream) == {
-                "PLATFORM_MODE": "both",
-                "USE_STRICT_FRAGMENT_SELECTION": False,
+                "platform": {"mode": "both"},
+                "prompt": {"strict_fragment_selection": False},
             }
         assert TomlSettingsStore(config_dir / "settings.toml").all() == {
-            "PLATFORM_MODE": "both",
-            "USE_STRICT_FRAGMENT_SELECTION": False,
+            "platform.mode": "both",
+            "prompt.strict_fragment_selection": False,
         }
         secrets = EncryptedSqliteSecretStore(state_dir / "secrets.sqlite3", "migration-key")
         assert secrets.get("GITHUB_MANAGER_TOKEN") == "sometoken"
@@ -76,5 +76,7 @@ class TestConfigMigration:
         assert source.read_bytes() == original_source
         with (config_dir / "settings.toml").open("rb") as stream:
             assert tomllib.load(stream) == {
-                "REPOS_ALLOW_LIST": ["github:owner/repo", "forgejo:owner/other"],
+                "repositories": {
+                    "allow_list": ["github:owner/repo", "forgejo:owner/other"],
+                },
             }

@@ -26,6 +26,9 @@ from pr_auto_reviewer.infrastructure.config.environment_detector import (
     EnvironmentDetector,
 )
 from pr_auto_reviewer.infrastructure.config.repo_root import RepoRoot
+from pr_auto_reviewer.infrastructure.config.settings_key_mapping import (
+    flatten_settings,
+)
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
     TomlSettingsStore,
 )
@@ -120,13 +123,13 @@ class ConfigLoader:
 
     def _load_toml_document(self) -> dict[str, object]:
         settings = TomlSettingsStore(AppPaths.config_dir() / "settings.toml")
-        return settings.all()
+        return settings._document()
 
     def _load_toml_values(self, document: dict[str, object]) -> dict[str, str]:
         return {
-            name.upper(): json.dumps(value) if isinstance(value, list) else str(value)
-            for name, value in document.items()
-            if not isinstance(value, dict)
+            name: json.dumps(value) if isinstance(value, list) else str(value)
+            for name, value in flatten_settings(document).items()
+            if not TomlSettingsStore.is_secret_name(name)
         }
 
     def _load_encrypted_secret_values(

@@ -17,6 +17,7 @@ from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
     RepositoryEntriesParser,
 )
+from pr_auto_reviewer.infrastructure.config.settings_key_mapping import setting_key
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
     TomlSettingsStore,
 )
@@ -90,7 +91,7 @@ class SettingsCli:
 
     def navigation_mode(self) -> str:
         """Return the configured dashboard navigation mode."""
-        value = self._settings().get("TUI_NAVIGATION_MODE", "arrows")
+        value = self._settings().get("tui.navigation_mode", "arrows")
         return str(value).strip().lower() or "arrows"
 
     def snapshot(self) -> SettingsSnapshot:
@@ -115,7 +116,8 @@ class SettingsCli:
         if name == "PR_AUTO_REVIEWER_ENCRYPTION_KEY":
             self._write_encryption_key(raw_value)
             return
-        if name.upper() == "REPOS_ALLOW_LIST":
+        key = setting_key(name)
+        if key is not None and key.canonical_name == "repositories.allow_list":
             self._settings().set(
                 name,
                 cast(list[object], RepositoryEntriesParser().canonical_list(raw_value)),
@@ -148,7 +150,7 @@ class SettingsCli:
         repositories = self._repositories()
         if repository not in repositories:
             repositories.append(repository)
-            settings.set("REPOS_ALLOW_LIST", repositories)
+            settings.set("repositories.allow_list", cast(list[object], repositories))
         prefix = platform.upper()
         self._secrets().set(f"{prefix}_TOKEN_{owner}_MANAGER", manager_token)
         self._secrets().set(f"{prefix}_TOKEN_{owner}_REVIEWER", reviewer_token)
@@ -156,10 +158,10 @@ class SettingsCli:
     def remove_repository(self, repository: str) -> None:
         """Remove a repository from the allow list without deleting shared tokens."""
         repositories = [item for item in self._repositories() if item != repository]
-        self._settings().set("REPOS_ALLOW_LIST", repositories)
+        self._settings().set("repositories.allow_list", cast(list[object], repositories))
 
     def _repositories(self) -> list[str]:
-        raw = self._settings().get("REPOS_ALLOW_LIST", [])
+        raw = self._settings().get("repositories.allow_list", [])
         return list(RepositoryEntriesParser().parse(raw))
 
     def _set_encryption_key(self) -> int:
@@ -250,7 +252,8 @@ class SettingsCli:
 
     @staticmethod
     def _format_setting(name: str, value: object) -> str:
-        if name.upper() == "REPOS_ALLOW_LIST":
+        key = setting_key(name)
+        if key is not None and key.canonical_name == "repositories.allow_list":
             return json.dumps(
                 RepositoryEntriesParser().canonical_list(value),
                 ensure_ascii=False,

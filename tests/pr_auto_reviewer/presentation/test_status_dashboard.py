@@ -108,6 +108,23 @@ class TestStatusDashboard:
             assert "Sort: platform" in str(pilot.app.query_one("#sort").render())
             await pilot.press("q")
 
+
+    @pytest.mark.asyncio
+    async def test_duplicate_allowed_repositories_do_not_crash_refresh(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(
+                "forgejo:gbrennon/ephact",
+                "forgejo:gbrennon/ephact",
+            ),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            table = pilot.app.query_one("#items")
+            assert table.row_count == 1
+            await pilot.press("q")
     @pytest.mark.asyncio
     async def test_cycles_user_selected_sorting(self) -> None:
         snapshot = DaemonStatusSnapshot(

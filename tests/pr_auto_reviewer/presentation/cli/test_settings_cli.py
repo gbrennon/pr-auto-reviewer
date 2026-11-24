@@ -21,7 +21,7 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
 
-        assert snapshot.values == (("poll_interval", "30"),)
+        assert snapshot.values == (("daemon.poll_interval", "30"),)
         assert "legacy-secret" not in repr(snapshot)
 
     def test_snapshot_exposes_values_but_never_secret_values(
@@ -33,7 +33,7 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
 
-        assert snapshot.values == (("poll_interval", "30"),)
+        assert snapshot.values == (("daemon.poll_interval", "30"),)
         assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
         assert "secret-value" not in repr(snapshot)
 
@@ -48,7 +48,7 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
 
-        assert snapshot.values == (("poll_interval", "30"),)
+        assert snapshot.values == (("daemon.poll_interval", "30"),)
         assert snapshot.secret_names == ()
         assert snapshot.secret_error == "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required"
 
@@ -90,6 +90,9 @@ class TestSettingsCli:
 
         assert cli.run(["get", "poll_interval"]) == 0
         assert capsys.readouterr().out.strip() == "30"
+        assert cli.run(["set", "platform.mode", "github"]) == 0
+        assert cli._settings().get("PLATFORM_MODE") == "github"
+        assert cli._settings().get("daemon.poll_interval") == 30
 
     def test_add_and_remove_repository_manage_allow_list_and_role_tokens(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -144,7 +147,7 @@ class TestSettingsCli:
         assert cli.run(["list"]) == 0
 
         output = capsys.readouterr().out
-        assert "debug = true" in output
+        assert "daemon.debug = true" in output
         assert "FORGEJO_MANAGER_TOKEN = <secret>" in output
         assert "secret" not in output.replace("FORGEJO_MANAGER_TOKEN = <secret>", "")
 
@@ -213,16 +216,17 @@ class TestSettingsCli:
             "forgejo:owner/third",
         ]
         snapshot = cli.snapshot()
-        assert ("REPOS_ALLOW_LIST", '["github:owner/repo", "forgejo:owner/other", "forgejo:owner/third"]') in (
-            snapshot.values
-        )
+        assert (
+            "repositories.allow_list",
+            '["github:owner/repo", "forgejo:owner/other", "forgejo:owner/third"]',
+        ) in snapshot.values
         assert cli.run(["get", "REPOS_ALLOW_LIST"]) == 0
         assert capsys.readouterr().out.strip() == (
             '["github:owner/repo", "forgejo:owner/other", "forgejo:owner/third"]'
         )
         assert cli.run(["list"]) == 0
         assert (
-            "REPOS_ALLOW_LIST = [\"github:owner/repo\", \"forgejo:owner/other\", \"forgejo:owner/third\"]"
+            "repositories.allow_list = [\"github:owner/repo\", \"forgejo:owner/other\", \"forgejo:owner/third\"]"
             in capsys.readouterr().out
         )
 
@@ -238,15 +242,16 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
 
-        assert ("REPOS_ALLOW_LIST", '["github:owner/repo", "forgejo:owner/other"]') in (
-            snapshot.values
-        )
+        assert (
+            "repositories.allow_list",
+            '["github:owner/repo", "forgejo:owner/other"]',
+        ) in snapshot.values
         assert cli.run(["get", "REPOS_ALLOW_LIST"]) == 0
         assert capsys.readouterr().out.strip() == (
             '["github:owner/repo", "forgejo:owner/other"]'
         )
         assert cli.run(["list"]) == 0
         assert (
-            "REPOS_ALLOW_LIST = [\"github:owner/repo\", \"forgejo:owner/other\"]"
+            "repositories.allow_list = [\"github:owner/repo\", \"forgejo:owner/other\"]"
             in capsys.readouterr().out
         )

@@ -235,9 +235,10 @@ class StatusDashboard(App[None]):
 
     def _rows(self, snapshot: DaemonStatusSnapshot) -> list[tuple[str, str, str, str]]:
         status = snapshot.runtime_status
+        repositories = tuple(dict.fromkeys(snapshot.allowed_repositories))
         rows = [
             ("repository", *self._repository_parts(repository), "allowed")
-            for repository in snapshot.allowed_repositories
+            for repository in repositories
         ]
         rows.extend(
             (

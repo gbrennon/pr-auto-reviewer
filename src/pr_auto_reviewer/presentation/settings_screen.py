@@ -5,6 +5,7 @@ from typing import Protocol
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.events import Key
 from textual.screen import Screen
 from textual.widgets import Button, Input, Select, Static
 
@@ -60,6 +61,30 @@ class SettingsScreen(Screen[None]):
         self._settings = settings
         self._navigation_mode = navigation_mode
         self._on_navigation_mode_changed = on_navigation_mode_changed
+
+    def on_key(self, event: Key) -> None:
+        """Move focus across every settings control in the configured mode."""
+        focused = self.focused
+        if isinstance(focused, NavigationInput) and focused.is_vim_insert_mode:
+            return
+        if self._navigation_mode is NavigationMode.VIM:
+            if event.key == "j":
+                self.screen.focus_next()
+            elif event.key == "k":
+                self.screen.focus_previous()
+            else:
+                return
+        elif self._navigation_mode is NavigationMode.EMACS:
+            if event.key == "ctrl+n":
+                self.screen.focus_next()
+            elif event.key == "ctrl+p":
+                self.screen.focus_previous()
+            else:
+                return
+        else:
+            return
+        event.stop()
+        event.prevent_default()
 
     def compose(self) -> ComposeResult:
         yield Static("Settings (q or Escape to return; secrets are write-only)", id="settings-title")

@@ -81,8 +81,9 @@ class AuthConfigParser:
         )
 
     def _has_auth_assignment(self, values: object) -> bool:
-        mapping = self._mapping(values)
-        return "manager_profile" in mapping or "reviewer_profile" in mapping
+        if not isinstance(values, Mapping):
+            return False
+        return "manager_profile" in values or "reviewer_profile" in values
 
     def _required(self, values: Mapping[str, object], name: str) -> str:
         value = str(values.get(name, "")).strip()

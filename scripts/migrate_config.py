@@ -7,13 +7,17 @@ import json
 import os
 import tomllib
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, cast
 
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
 from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
     RepositoryEntriesParser,
 )
-from pr_auto_reviewer.infrastructure.config.toml_settings_store import TomlSettingsStore
+from pr_auto_reviewer.infrastructure.config.settings_key_mapping import canonical_name
+from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
+    TomlSettingsStore,
+    TomlValue,
+)
 from pr_auto_reviewer.infrastructure.persistence.encrypted_sqlite_secret_store import (
     EncryptedSqliteSecretStore,
 )
@@ -68,7 +72,7 @@ class ConfigMigration:
                 if name.upper() == "REPOS_ALLOW_LIST"
                 else self._parse_value(values[name])
             )
-            store.set(name, value)
+            store.set(canonical_name(name), cast(TomlValue, value))
         with (self._config_dir / "settings.toml").open("rb") as stream:
             tomllib.load(stream)
 
