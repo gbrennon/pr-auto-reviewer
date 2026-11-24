@@ -40,15 +40,23 @@ review needs more conversation history.
 | `POLL_INTERVAL` | `60` | Seconds between PR checks in watch mode |
 | `RUN_ONCE` | `false` | Run one check cycle and exit |
 | `REPOS_FILTER` | — | Single `owner/repo` to watch (empty = all repos, same as `-r` flag) |
-| `REPOS_ALLOW_LIST` | — | Comma- or newline-separated exact repositories allowed in polling mode |
+| `REPOS_ALLOW_LIST` | — | Exact polling repositories; prefer canonical TOML arrays |
 | `FORCE_PR` | — | PR number to re-review regardless of state |
 | `DEBUG` | `false` | Enable debug logging (`1`, `true`, or `yes`) |
 | `ENV` | `development` | Set to `production` to load from user config |
 
-`REPOS_ALLOW_LIST` accepts comma- or newline-separated `owner/repo` entries.
-Entries may include a platform prefix such as `github:owner/repo` or
-`forgejo:owner/repo`; matching is case-insensitive and exact. The allow list
-applies to polling mode and does not restrict the one-off `review` command.
+Persist the canonical allow list in `settings.toml`:
+
+```toml
+REPOS_ALLOW_LIST = ["github:owner/repo", "forgejo:owner/other"]
+```
+
+Legacy dotenv input remains compatible with comma- or newline-separated
+`owner/repo` entries. Entries may include a platform prefix such as
+`github:owner/repo` or `forgejo:owner/repo`; matching is case-insensitive and
+exact. Internally, `Config.repos_allow_list` remains an immutable tuple. The
+allow list applies to polling mode and does not restrict the one-off `review`
+command.
 
 ## Prompt Tuning
 
