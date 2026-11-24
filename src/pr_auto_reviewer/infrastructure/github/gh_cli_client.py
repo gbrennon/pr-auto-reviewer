@@ -9,6 +9,9 @@ from urllib.parse import urlencode
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from .command_runner import CommandRunner
 from .subprocess_command_runner import SubprocessCommandRunner
 
@@ -21,15 +24,16 @@ class GhCliClient(GitPlatformHttpClient):
         *,
         client_label: str = "",
         runner: CommandRunner | None = None,
+        remote_host_backoff: RemoteHostBackoff | None = None,
     ) -> None:
         super().__init__(
             "https://api.github.com",
             "",
             platform_mode="github",
             client_label=client_label,
+            remote_host_backoff=remote_host_backoff,
         )
         self._runner = runner or SubprocessCommandRunner()
-
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> Any:
         """Read a GitHub API resource through ``gh api``."""
         del headers, repo
@@ -68,4 +72,4 @@ class GhCliClient(GitPlatformHttpClient):
         if body is not None:
             command.extend(["--input", "-"])
             input_text = json.dumps(body)
-        return self._runner.run(command, input_text)
+        return self._run_remote_command(self._runner, command, input_text)
