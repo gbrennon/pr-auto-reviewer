@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+from textual.app import ComposeResult
+from textual.screen import Screen
 from textual.widgets import Button
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
@@ -19,8 +21,16 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
+from pr_auto_reviewer.presentation.navigation import NavigationMode
 from pr_auto_reviewer.presentation.settings_screen import SettingsScreen
 from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
+
+
+class FocusNavigationScreen(Screen[None]):
+    def compose(self) -> ComposeResult:
+        yield Button("First", id="first")
+        yield Button("Second", id="second")
+
 
 class FakeSettings:
     def __init__(self) -> None:
@@ -276,7 +286,7 @@ class TestStatusDashboard:
             daemon_mode=True,
             state=DaemonState.IDLE,
             updated_at="2026-11-09T18:00:00Z",
-            poll_interval_seconds=60,
+            poll_interval_seconds=17,
             allowed_repositories=(),
             current_cycle=3,
         )
@@ -285,6 +295,101 @@ class TestStatusDashboard:
 
         async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
             assert "STOPPED" in str(pilot.app.query_one("#state").render())
+            assert "Poll interval: unavailable" in str(
+                pilot.app.query_one("#poll-interval").render()
+            )
             pilot.app.refresh_status()
             assert "IDLE / WAITING" in str(pilot.app.query_one("#state").render())
+            assert "Poll interval: 17s" in str(
+                pilot.app.query_one("#poll-interval").render()
+            )
             await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_renders_live_error_status_and_message(self) -> None:
+        status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.ERROR,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=(),
+            current_cycle=2,
+            last_error="repository fetch failed",
+        )
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=status,
+            daemon_alive=True,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            state_text = str(pilot.app.query_one("#state").render())
+            error_text = str(pilot.app.query_one("#error").render())
+            assert "ERROR / RETRYING" in state_text
+            assert "IDLE / WAITING" not in state_text
+            assert "repository fetch failed" in error_text
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("mode", "next_key", "previous_key"),
+        (
+            (NavigationMode.VIM, "j", "k"),
+            (NavigationMode.EMACS, "ctrl+n", "ctrl+p"),
+        ),
+    )
+    async def test_global_navigation_moves_focus_on_active_screen(
+        self,
+        mode: NavigationMode,
+        next_key: str,
+        previous_key: str,
+    ) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            navigation_mode=mode,
+        ).run_test() as pilot:
+            pilot.app.push_screen(FocusNavigationScreen())
+            await pilot.pause()
+            screen = pilot.app.screen
+            first = screen.query_one("#first", Button)
+            second = screen.query_one("#second", Button)
+            first.focus()
+
+            await pilot.press(next_key)
+            assert pilot.app.focused is second
+            await pilot.press(previous_key)
+            assert pilot.app.focused is first
+
+    @pytest.mark.asyncio
+    async def test_arrows_mode_preserves_standard_focus_navigation(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            navigation_mode=NavigationMode.ARROWS,
+        ).run_test() as pilot:
+            pilot.app.push_screen(FocusNavigationScreen())
+            await pilot.pause()
+            screen = pilot.app.screen
+            first = screen.query_one("#first", Button)
+            second = screen.query_one("#second", Button)
+            first.focus()
+
+            await pilot.press("j")
+            assert pilot.app.focused is first
+            await pilot.press("tab")
+            assert pilot.app.focused is second
