@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -54,6 +55,9 @@ _COMMAND_LINE_KEYS = {
     "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
     "RUN_ONCE", "REPOS_FILTER", "REPOS_ALLOW_LIST", "FORCE_PR",
     "CLONE_PROTOCOL", "REVIEW_MAX_RETRIES", "REVIEW_MAX_TRIES",
+    "REMOTE_FAILURE_THRESHOLD", "REMOTE_FAILURE_INTERVAL_SECONDS",
+    "REMOTE_FAILURE_INTERVAL_INCREMENT_SECONDS",
+    "REMOTE_FAILURE_QUARANTINE_SECONDS",
 }
 
 _TOKEN_OVERRIDE_PREFIXES = ("GITHUB_TOKEN_", "FORGEJO_TOKEN_")
@@ -120,7 +124,7 @@ class ConfigLoader:
 
     def _load_toml_values(self, document: dict[str, object]) -> dict[str, str]:
         return {
-            name.upper(): str(value)
+            name.upper(): json.dumps(value) if isinstance(value, list) else str(value)
             for name, value in document.items()
             if not isinstance(value, dict)
         }
@@ -168,6 +172,21 @@ class ConfigLoader:
         if bundle:
             os.environ["REQUESTS_CA_BUNDLE"] = bundle
 
+    @staticmethod
+    def _load_remote_failure_settings(
+        values: dict[str, str],
+    ) -> tuple[int, float, float, float]:
+        return (
+            int(values.pop("REMOTE_FAILURE_THRESHOLD", "3")),
+            float(values.pop("REMOTE_FAILURE_INTERVAL_SECONDS", "60")),
+            float(
+                values.pop(
+                    "REMOTE_FAILURE_INTERVAL_INCREMENT_SECONDS", "60",
+                )
+            ),
+            float(values.pop("REMOTE_FAILURE_QUARANTINE_SECONDS", "3600")),
+        )
+
     def _load_production(self, config_path: str) -> Config:
         toml_document = self._load_toml_document()
         values = self._load_toml_values(toml_document)
@@ -197,6 +216,12 @@ class ConfigLoader:
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
         )
+        (
+            remote_failure_threshold,
+            remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds,
+            remote_failure_quarantine_seconds,
+        ) = self._load_remote_failure_settings(values)
         return self._builder.build(
             values,
             env_name="production",
@@ -207,6 +232,12 @@ class ConfigLoader:
             review_max_tries=review_max_tries,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
+            remote_failure_threshold=remote_failure_threshold,
+            remote_failure_interval_seconds=remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds=(
+                remote_failure_interval_increment_seconds
+            ),
+            remote_failure_quarantine_seconds=remote_failure_quarantine_seconds,
             auth_configuration=auth_configuration,
         )
 
@@ -244,6 +275,12 @@ class ConfigLoader:
         advisor_granularity = AdvisorGranularity.parse(
             values.pop("ADVISOR_GRANULARITY", AdvisorGranularity.PHASE.value)
         )
+        (
+            remote_failure_threshold,
+            remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds,
+            remote_failure_quarantine_seconds,
+        ) = self._load_remote_failure_settings(values)
         return self._builder.build(
             values,
             env_name=env,
@@ -254,6 +291,12 @@ class ConfigLoader:
             review_max_tries=review_max_tries,
             llm_call_budget=llm_call_budget,
             advisor_granularity=advisor_granularity,
+            remote_failure_threshold=remote_failure_threshold,
+            remote_failure_interval_seconds=remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds=(
+                remote_failure_interval_increment_seconds
+            ),
+            remote_failure_quarantine_seconds=remote_failure_quarantine_seconds,
             auth_configuration=auth_configuration,
         )
 
