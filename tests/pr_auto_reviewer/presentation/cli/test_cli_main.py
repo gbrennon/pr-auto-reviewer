@@ -43,24 +43,28 @@ class TestCliServiceCommands:
         )
         assert mock_run.call_args_list == expected_calls
 
-    def test_status_command_prints_plain_output_when_stdout_is_not_a_tty(self) -> None:
+    @pytest.mark.parametrize("is_tty", [False, True])
+    def test_status_command_always_prints_plain_output(
+        self, is_tty: bool,
+    ) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", "status"]),
             patch("pr_auto_reviewer.cli.show_status", return_value="Status output") as mock_status,
-            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=False),
+            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=is_tty),
             patch("builtins.print") as mock_print,
+            patch("pr_auto_reviewer.cli.StatusDashboard") as dashboard,
         ):
             main()
 
         mock_status.assert_called_once_with()
-        mock_print.assert_called_with("Status output")
+        mock_print.assert_called_once_with("Status output")
+        dashboard.assert_not_called()
 
-    def test_status_command_runs_dashboard_when_stdout_is_a_tty(self) -> None:
+    def test_dashboard_command_runs_dashboard(self) -> None:
         with (
-            patch("sys.argv", ["pr-auto-reviewer", "status"]),
+            patch("sys.argv", ["pr-auto-reviewer", "dashboard"]),
             patch("pr_auto_reviewer.cli.status_snapshot", return_value=object()) as snapshot,
             patch("pr_auto_reviewer.cli.StatusDashboard") as dashboard,
-            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=True),
         ):
             main()
 
