@@ -1,6 +1,7 @@
 from .messages import (
     dismissed_items_message,
     invalid_items_message,
+    issue_creation_failed_message,
     issues_created_message,
     rejected_command_items_message,
 )
@@ -8,6 +9,7 @@ from .messages import (
 __all__ = [
     "dismissed_items_message",
     "invalid_items_message",
+    "issue_creation_failed_message",
     "issues_created_message",
     "rejected_command_items_message",
 ]
