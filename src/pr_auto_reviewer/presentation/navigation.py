@@ -36,6 +36,11 @@ class NavigationInput(Input):
         """Return the active keyboard navigation mode."""
         return self._navigation_mode
 
+    @property
+    def is_vim_insert_mode(self) -> bool:
+        """Return whether this input is currently accepting Vim text input."""
+        return self._navigation_mode is NavigationMode.VIM and self._vim_insert_mode
+
     def set_navigation_mode(self, mode: NavigationMode) -> None:
         """Change the keyboard navigation mode and reset Vim insert state."""
         self._navigation_mode = mode
