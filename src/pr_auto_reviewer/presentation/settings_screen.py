@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from textual.app import ComposeResult
@@ -38,8 +39,8 @@ class SettingsScreen(Screen[None]):
     """Full-screen write-only settings editor."""
 
     CSS = """
-    Screen { layout: vertical; }
-    #settings-list { height: 1fr; border: round $accent; margin: 1; padding: 1; }
+    Screen { layout: vertical; overflow-y: auto; }
+    #settings-list { height: auto; border: round $accent; margin: 1; padding: 1; }
     #setting-name, #setting-value, #repository, #manager-token, #reviewer-token { margin: 1 0; }
     #error { color: $error; margin: 0 1; }
     #action-status { margin: 0 1; }
@@ -53,10 +54,12 @@ class SettingsScreen(Screen[None]):
         self,
         settings: SettingsPort,
         navigation_mode: NavigationMode,
+        on_navigation_mode_changed: Callable[[NavigationMode], None] | None = None,
     ) -> None:
         super().__init__()
         self._settings = settings
         self._navigation_mode = navigation_mode
+        self._on_navigation_mode_changed = on_navigation_mode_changed
 
     def compose(self) -> ComposeResult:
         yield Static("Settings (q or Escape to return; secrets are write-only)", id="settings-title")
@@ -118,6 +121,8 @@ class SettingsScreen(Screen[None]):
         widgets = [*self.query(NavigationInput), *self.query(NavigationButton)]
         for widget in widgets:
             widget.set_navigation_mode(mode)
+        if self._on_navigation_mode_changed is not None:
+            self._on_navigation_mode_changed(mode)
         try:
             self._settings.write("TUI_NAVIGATION_MODE", mode.value)
             self.query_one("#action-status", Static).update(
