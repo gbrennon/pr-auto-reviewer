@@ -12,6 +12,10 @@ from pr_auto_reviewer.application.ports.outbound.token_verifier_port import (
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from pr_auto_reviewer.infrastructure.client.preflight.forgejo_auth_headers import (
     ForgejoAuthHeaders,
 )
@@ -52,10 +56,21 @@ class PlatformClients:
     forgejo_reviewer: GitPlatformHttpClient | None = None
 
 
-def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None = None, _store_path: Path | None = None) -> PlatformClients:
+def wire_platform_clients(
+    config: Config,
+    *,
+    _verified_cache_path: Path | None = None,
+    _store_path: Path | None = None,
+    remote_host_backoff: RemoteHostBackoff | None = None,
+) -> PlatformClients:
     """Create all platform-client instances for *config*."""
 
     is_terminal = config.output_mode == "terminal"
+    backoff = (
+        remote_host_backoff
+        if remote_host_backoff is not None
+        else RemoteHostBackoff()
+    )
 
     if config.platform_mode == GitProvider.BOTH:
         github_resolver = TokenResolver(
@@ -78,21 +93,29 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
         )
 
         github_preflight = PreflightVerifier(
-            RequestsHttpClient(config.github_api_url),
+            RequestsHttpClient(
+                config.github_api_url, remote_host_backoff=backoff,
+            ),
             GitHubAuthHeaders(),
             config.github_api_url,
             "github",
         )
         forgejo_preflight = PreflightVerifier(
-            RequestsHttpClient(config.forgejo_api_url),
+            RequestsHttpClient(
+                config.forgejo_api_url, remote_host_backoff=backoff,
+            ),
             ForgejoAuthHeaders(),
             config.forgejo_api_url,
             "forgejo",
         )
 
         if config.platform_transport == "cli":
-            gb_manager = GhCliClient(client_label="manager")
-            gb_reviewer = GhCliClient(client_label="reviewer")
+            gb_manager = GhCliClient(
+                client_label="manager", remote_host_backoff=backoff,
+            )
+            gb_reviewer = GhCliClient(
+                client_label="reviewer", remote_host_backoff=backoff,
+            )
         else:
             gb_manager = GitPlatformHttpClient(
                 config.github_api_url,
@@ -102,6 +125,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
                 preflight_verifier=github_preflight,
                 token_resolver=github_resolver,
                 _verified_cache_path=_verified_cache_path,
+                remote_host_backoff=backoff,
             )
             gb_reviewer = GitPlatformHttpClient(
                 config.github_api_url,
@@ -111,10 +135,15 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
                 preflight_verifier=github_preflight,
                 token_resolver=github_resolver,
                 _verified_cache_path=_verified_cache_path,
+                remote_host_backoff=backoff,
             )
         if config.platform_transport == "cli":
-            fj_manager = FjCliClient(client_label="manager")
-            fj_reviewer = FjCliClient(client_label="reviewer")
+            fj_manager = FjCliClient(
+                client_label="manager", remote_host_backoff=backoff,
+            )
+            fj_reviewer = FjCliClient(
+                client_label="reviewer", remote_host_backoff=backoff,
+            )
         else:
             fj_manager = GitPlatformHttpClient(
                 config.forgejo_api_url,
@@ -124,6 +153,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
                 preflight_verifier=forgejo_preflight,
                 token_resolver=forgejo_resolver,
                 _verified_cache_path=_verified_cache_path,
+                remote_host_backoff=backoff,
             )
             fj_reviewer = GitPlatformHttpClient(
                 config.forgejo_api_url,
@@ -133,6 +163,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
                 preflight_verifier=forgejo_preflight,
                 token_resolver=forgejo_resolver,
                 _verified_cache_path=_verified_cache_path,
+                remote_host_backoff=backoff,
             )
 
         return PlatformClients(
@@ -185,7 +216,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
     )
 
     preflight = PreflightVerifier(
-        RequestsHttpClient(api_url),
+        RequestsHttpClient(api_url, remote_host_backoff=backoff),
         GitHubAuthHeaders() if is_github else ForgejoAuthHeaders(),
         api_url,
         "github" if is_github else "forgejo",
@@ -193,8 +224,12 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
 
     if config.platform_transport == "cli":
         client_type = GhCliClient if is_github else FjCliClient
-        http_client = client_type(client_label="manager")
-        reviewer_client = client_type(client_label="reviewer")
+        http_client = client_type(
+            client_label="manager", remote_host_backoff=backoff,
+        )
+        reviewer_client = client_type(
+            client_label="reviewer", remote_host_backoff=backoff,
+        )
     else:
         http_client = GitPlatformHttpClient(
             api_url,
@@ -204,6 +239,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
             preflight_verifier=preflight,
             token_resolver=resolver,
             _verified_cache_path=_verified_cache_path,
+            remote_host_backoff=backoff,
         )
         reviewer_client = GitPlatformHttpClient(
             api_url,
@@ -213,6 +249,7 @@ def wire_platform_clients(config: Config, *, _verified_cache_path: Path | None =
             preflight_verifier=preflight,
             token_resolver=resolver,
             _verified_cache_path=_verified_cache_path,
+            remote_host_backoff=backoff,
         )
 
     return PlatformClients(
