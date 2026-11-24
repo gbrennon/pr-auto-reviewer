@@ -57,7 +57,20 @@ from pr_auto_reviewer.infrastructure.persistence.json_daemon_runtime_state_store
     JsonDaemonRuntimeStateStore,
 )
 
-from ._shared import *
+from ._shared import (
+    CliRunner,
+    Container,
+    IssueBodyBuilder,
+    IssueCommandParser,
+    NotifierPort,
+    PollingDaemon,
+    PollingDaemonConfig,
+    ProcessIssueCommandsService,
+    RepoUpdateTracker,
+    ReviewItemParser,
+    ReviewPullRequestService,
+    load_config,
+)
 from .application_components import ApplicationComponents
 
 logger = logging.getLogger(__name__)
@@ -136,6 +149,7 @@ class CompositionRoot:
             pr_repository=self._container.pr_repository,
             runtime_state=runtime_state,
             config_reloader=config_reloader,
+            command_failure_backoff=self._container.remote_host_backoff,
         )
 
         self._authenticate_for_git_host(config)
