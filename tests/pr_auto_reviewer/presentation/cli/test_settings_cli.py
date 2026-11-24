@@ -52,6 +52,21 @@ class TestSettingsCli:
         assert snapshot.secret_names == ()
         assert snapshot.secret_error == "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required"
 
+    def test_snapshot_reports_key_that_cannot_decrypt_persisted_secrets(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.write("GITHUB_MANAGER_TOKEN", "secret-value")
+        monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "wrong-key")
+
+        snapshot = cli.snapshot()
+
+        assert snapshot.secret_names == ()
+        assert snapshot.secret_error == (
+            "Configured encryption key could not decrypt persisted data; "
+            "verify the key or check for corrupted storage"
+        )
+
     def test_write_and_unset_settings_without_reading_secrets(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
@@ -150,6 +165,18 @@ class TestSettingsCli:
         assert "daemon.debug = true" in output
         assert "FORGEJO_MANAGER_TOKEN = <secret>" in output
         assert "secret" not in output.replace("FORGEJO_MANAGER_TOKEN = <secret>", "")
+
+    def test_list_reports_key_that_cannot_decrypt_persisted_secrets(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.run(["set", "FORGEJO_MANAGER_TOKEN", "secret"])
+        capsys.readouterr()
+        monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "wrong-key")
+
+        assert cli.run(["list"]) == 2
+        assert "could not decrypt persisted data" in capsys.readouterr().err
 
     def test_secret_setup_uses_key_from_user_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,

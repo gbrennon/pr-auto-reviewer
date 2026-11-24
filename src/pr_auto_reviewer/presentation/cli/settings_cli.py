@@ -26,6 +26,10 @@ from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
 )
 
 
+NO_ENCRYPTED_RECORDS_MESSAGE = (
+    "No encrypted records available to validate encryption key"
+)
+
 @dataclass(frozen=True)
 class SettingsSnapshot:
     """Non-secret settings and secret names without secret values."""
@@ -102,7 +106,14 @@ class SettingsCli:
             if not TomlSettingsStore.is_secret_name(name)
         )
         try:
-            secret_names = self._secrets().names()
+            secret_store = self._secrets()
+            secret_names = secret_store.names()
+            if not secret_store.validate_key():
+                return SettingsSnapshot(
+                    values=values,
+                    secret_names=(),
+                    secret_error=NO_ENCRYPTED_RECORDS_MESSAGE,
+                )
         except ValueError as error:
             return SettingsSnapshot(
                 values=values,
@@ -229,10 +240,16 @@ class SettingsCli:
         return 0
 
     def _list(self) -> int:
-        for name, value in sorted(self._settings().all().items()):
-            if not TomlSettingsStore.is_secret_name(name):
-                print(f"{name} = {self._format_setting(name, value)}")
-        for name in self._secrets().names():
+        snapshot = self.snapshot()
+        for name, value in snapshot.values:
+            print(f"{name} = {value}")
+        if snapshot.secret_error is not None:
+            print(
+                f"Secret storage status: {snapshot.secret_error}",
+                file=os.sys.stderr,
+            )
+            return 0 if snapshot.secret_error == NO_ENCRYPTED_RECORDS_MESSAGE else 2
+        for name in snapshot.secret_names:
             print(f"{name} = <secret>")
         return 0
 
