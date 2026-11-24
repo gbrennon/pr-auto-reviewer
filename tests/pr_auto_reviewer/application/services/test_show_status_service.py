@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
 
 from pr_auto_reviewer.application.dtos.show_status_request import ShowStatusRequest
 from pr_auto_reviewer.application.services.show_status_service import (
@@ -31,19 +30,33 @@ class CapabilityQuery:
         return self._capabilities
 
 
+
 class FakeProcessLiveness:
-    def __init__(self, alive: bool) -> None:
+    def __init__(
+        self,
+        alive: bool,
+        status: DaemonRuntimeStatus | None = None,
+    ) -> None:
         self._alive = alive
+        self._status = status
 
     def is_alive(self, pid: int) -> bool:
         _ = pid
         return self._alive
 
+    def read_status(self) -> DaemonRuntimeStatus | None:
+        return self._status
+
+    def record_status(self, status: DaemonRuntimeStatus) -> None:
+        self._status = status
+
+    def clear(self) -> None:
+        self._status = None
+
 
 class TestShowStatusService:
     def test_shows_suspended_api_capability_without_secret_value(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+        state_port = FakeProcessLiveness(False)
         capability = ApiAccessCapability(
             platform="github",
             role="reviewer",
@@ -85,8 +98,7 @@ class TestShowStatusService:
         assert "rate-limit-secret" not in output
 
     def test_shows_idle_waiting_status(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.IDLE,
@@ -95,7 +107,7 @@ class TestShowStatusService:
             allowed_repositories=("owner/repo-a", "owner/repo-b"),
             current_cycle=3,
             next_cycle_at="2026-11-09T18:10:00Z",
-        )
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(True),
@@ -110,15 +122,14 @@ class TestShowStatusService:
         assert "Next cycle" in output
 
     def test_uses_injected_poll_interval_over_stale_runtime_value(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.IDLE,
             updated_at="2026-11-09T18:00:00Z",
             poll_interval_seconds=10,
             allowed_repositories=(),
-        )
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(True),
@@ -133,8 +144,7 @@ class TestShowStatusService:
         assert "Poll interval: 600s" in StatusTextFormatter().format(response.snapshot)
 
     def test_groups_allowed_repositories_by_platform_and_organization(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+        state_port = FakeProcessLiveness(False)
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(False),
@@ -152,8 +162,7 @@ class TestShowStatusService:
         assert "  - github:\n    - forging-blocks-org:\n      - forging-blocks" in output
 
     def test_normalizes_codeberg_and_deduplicates_repository_count(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+        state_port = FakeProcessLiveness(False)
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(False),
@@ -171,7 +180,7 @@ class TestShowStatusService:
         assert "  - codeberg:" not in output
 
     def test_shows_reviewing_status_with_phase_and_subagent(self) -> None:
-        state_port = MagicMock()
+        state_port = FakeProcessLiveness(True)
         review = ActiveReviewProgress(
             repository="gbrennon/pr-auto-reviewer",
             pr_number=199,
@@ -187,7 +196,7 @@ class TestShowStatusService:
             last_tool_call="read_file",
             last_tool_args="src/main.py",
         )
-        state_port.read_status.return_value = DaemonRuntimeStatus(
+        state_port.record_status(DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.REVIEWING,
@@ -196,7 +205,7 @@ class TestShowStatusService:
             allowed_repositories=("gbrennon/pr-auto-reviewer",),
             current_cycle=1,
             current_review=review,
-        )
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(True),
@@ -212,15 +221,14 @@ class TestShowStatusService:
         assert "read_file(src/main.py)" in output
 
     def test_shows_stopped_when_pid_not_alive(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(False, DaemonRuntimeStatus(
             pid=999999,
             daemon_mode=True,
             state=DaemonState.IDLE,
             updated_at="2026-11-09T18:00:00Z",
             poll_interval_seconds=600,
             allowed_repositories=(),
-        )
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(False),
@@ -232,8 +240,7 @@ class TestShowStatusService:
         assert "Daemon: STOPPED" in output
 
     def test_shows_error_information_when_present(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.ERROR,
@@ -242,7 +249,7 @@ class TestShowStatusService:
             allowed_repositories=(),
             last_error="LLM host unreachable",
             last_error_at="2026-11-09T18:00:00Z",
-        )
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
             process_liveness=FakeProcessLiveness(True),
