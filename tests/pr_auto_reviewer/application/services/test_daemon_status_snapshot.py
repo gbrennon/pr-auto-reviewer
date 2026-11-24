@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from pr_auto_reviewer.application.dtos.show_status_request import ShowStatusRequest
 from pr_auto_reviewer.application.services.show_status_service import (
     ShowStatusService,
 )
@@ -9,6 +10,16 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
     DaemonRuntimeStatus,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
+
+
+class FakeProcessLiveness:
+    def __init__(self, alive: bool) -> None:
+        self._alive = alive
+
+    def is_alive(self, pid: int) -> bool:
+        _ = pid
+        return self._alive
+
 
 class TestShowStatusSnapshot:
     def test_returns_live_runtime_data_and_configured_repositories(self) -> None:
@@ -25,11 +36,12 @@ class TestShowStatusSnapshot:
         state_port.read_status.return_value = status
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: True,
+            process_liveness=FakeProcessLiveness(True),
             allowed_repositories=("owner/repo",),
         )
 
-        snapshot = service.snapshot()
+        response = service.execute(ShowStatusRequest())
+        snapshot = response.snapshot
 
         assert snapshot.runtime_status == status
         assert snapshot.daemon_alive is True
@@ -50,11 +62,11 @@ class TestShowStatusSnapshot:
         state_port.read_status.return_value = status
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=(),
         )
 
-        snapshot = service.snapshot()
+        snapshot = service.execute(ShowStatusRequest()).snapshot
 
         assert snapshot.runtime_status == status
         assert snapshot.daemon_alive is False
@@ -64,11 +76,11 @@ class TestShowStatusSnapshot:
         state_port.read_status.return_value = None
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=("owner/repo",),
         )
 
-        snapshot = service.snapshot()
+        snapshot = service.execute(ShowStatusRequest()).snapshot
 
         assert snapshot.runtime_status is None
         assert snapshot.daemon_alive is False
