@@ -5,13 +5,14 @@ from datetime import datetime
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
+from textual.events import Key
 from textual.widgets import DataTable, Footer, Header, Static
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
-from pr_auto_reviewer.presentation.navigation import NavigationMode
+from pr_auto_reviewer.presentation.navigation import NavigationInput, NavigationMode
 from pr_auto_reviewer.presentation.settings_screen import SettingsPort, SettingsScreen
 
 
@@ -50,11 +51,40 @@ class StatusDashboard(App[None]):
         self._paused = False
         self._navigation_mode = navigation_mode
 
+    def set_navigation_mode(self, mode: NavigationMode) -> None:
+        """Apply the active navigation mode to the dashboard application."""
+        self._navigation_mode = mode
+
+    def on_key(self, event: Key) -> None:
+        """Move focus globally for the configured keyboard navigation mode."""
+        focused = self.focused
+        if isinstance(focused, NavigationInput) and focused.is_vim_insert_mode:
+            return
+        if self._navigation_mode is NavigationMode.VIM:
+            if event.key == "j":
+                self.screen.focus_next()
+            elif event.key == "k":
+                self.screen.focus_previous()
+            else:
+                return
+        elif self._navigation_mode is NavigationMode.EMACS:
+            if event.key == "ctrl+n":
+                self.screen.focus_next()
+            elif event.key == "ctrl+p":
+                self.screen.focus_previous()
+            else:
+                return
+        else:
+            return
+        event.stop()
+        event.prevent_default()
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Vertical(id="main"):
             yield Static("Loading", id="state")
             yield Static("Sort: platform (press s to change)", id="sort")
+            yield Static("Poll interval: unavailable", id="poll-interval")
             yield Static("Live refresh enabled", id="action-status")
             yield DataTable(id="items", zebra_stripes=True, cursor_type="row")
             yield Static("", id="error")
@@ -93,7 +123,13 @@ class StatusDashboard(App[None]):
         if self._settings is None:
             self.query_one("#action-status", Static).update("Settings unavailable")
             return
-        self.push_screen(SettingsScreen(self._settings, self._navigation_mode))
+        self.push_screen(
+            SettingsScreen(
+                self._settings,
+                self._navigation_mode,
+                on_navigation_mode_changed=self.set_navigation_mode,
+            )
+        )
 
     def refresh_status(self, force: bool = False) -> None:
         """Refresh dashboard rows from the application snapshot."""
@@ -113,6 +149,13 @@ class StatusDashboard(App[None]):
     def _render_snapshot(self, snapshot: DaemonStatusSnapshot) -> None:
         self.query_one("#state", Static).update(self._state_text(snapshot))
         self._render_sort_label()
+        runtime_status = snapshot.runtime_status
+        poll_interval_text = (
+            f"Poll interval: {runtime_status.poll_interval_seconds}s"
+            if runtime_status is not None
+            else "Poll interval: unavailable"
+        )
+        self.query_one("#poll-interval", Static).update(poll_interval_text)
         self._update_items_table(self._sorted_rows(snapshot))
         self.query_one("#error", Static).update(
             snapshot.runtime_status.last_error
@@ -177,6 +220,8 @@ class StatusDashboard(App[None]):
             return "STOPPED (no status file found)"
         if not snapshot.daemon_alive:
             return f"STOPPED (PID {status.pid} is not running)"
+        if status.state is DaemonState.ERROR or status.last_error:
+            return "ERROR / RETRYING"
         if status.state is DaemonState.REVIEWING:
             return "REVIEWING"
         return "IDLE / WAITING"
