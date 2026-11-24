@@ -9,11 +9,14 @@ import os
 import tempfile
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, cast
 
 from dotenv import dotenv_values
 
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+    RepositoryEntriesParser,
+)
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import (
     TomlSettingsStore,
 )
@@ -93,7 +96,7 @@ class SettingsCli:
     def snapshot(self) -> SettingsSnapshot:
         """Return editable settings while keeping secrets write-only."""
         values = tuple(
-            (name, self._format_value(value))
+            (name, self._format_setting(name, value))
             for name, value in sorted(self._settings().all().items())
             if not TomlSettingsStore.is_secret_name(name)
         )
@@ -112,11 +115,16 @@ class SettingsCli:
         if name == "PR_AUTO_REVIEWER_ENCRYPTION_KEY":
             self._write_encryption_key(raw_value)
             return
+        if name.upper() == "REPOS_ALLOW_LIST":
+            self._settings().set(
+                name,
+                cast(list[object], RepositoryEntriesParser().canonical_list(raw_value)),
+            )
+            return
         if TomlSettingsStore.is_secret_name(name):
             self._secrets().set(name, raw_value)
             return
         self._settings().set(name, self._parse_value(raw_value))
-
     def unset(self, name: str) -> None:
         """Remove one setting without exposing a secret value."""
         if TomlSettingsStore.is_secret_name(name):
@@ -152,11 +160,7 @@ class SettingsCli:
 
     def _repositories(self) -> list[str]:
         raw = self._settings().get("REPOS_ALLOW_LIST", [])
-        if isinstance(raw, list):
-            return [str(item).strip() for item in raw if str(item).strip()]
-        if isinstance(raw, str):
-            return [item.strip() for item in raw.replace("\\n", ",").split(",") if item.strip()]
-        return []
+        return list(RepositoryEntriesParser().parse(raw))
 
     def _set_encryption_key(self) -> int:
         key = getpass.getpass("Encryption key: ").strip()
@@ -214,7 +218,7 @@ class SettingsCli:
         if value is None:
             print(f"Error: setting {name} is not set", file=os.sys.stderr)
             return 1
-        print(self._format_value(value))
+        print(self._format_setting(name, value))
         return 0
 
     def _unset(self, name: str) -> int:
@@ -225,7 +229,7 @@ class SettingsCli:
     def _list(self) -> int:
         for name, value in sorted(self._settings().all().items()):
             if not TomlSettingsStore.is_secret_name(name):
-                print(f"{name} = {self._format_value(value)}")
+                print(f"{name} = {self._format_setting(name, value)}")
         for name in self._secrets().names():
             print(f"{name} = <secret>")
         return 0
@@ -243,6 +247,15 @@ class SettingsCli:
     @staticmethod
     def _format_value(value: object) -> str:
         return json.dumps(value, ensure_ascii=False)
+
+    @staticmethod
+    def _format_setting(name: str, value: object) -> str:
+        if name.upper() == "REPOS_ALLOW_LIST":
+            return json.dumps(
+                RepositoryEntriesParser().canonical_list(value),
+                ensure_ascii=False,
+            )
+        return SettingsCli._format_value(value)
 
     @staticmethod
     def _settings() -> TomlSettingsStore:
