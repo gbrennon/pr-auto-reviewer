@@ -16,6 +16,9 @@ from pr_auto_reviewer.application.ports.inbound.review_pull_request_port import 
 from pr_auto_reviewer.application.ports.outbound.pull_request_repository_port import (
     PullRequestRepositoryPort,
 )
+from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
+    RepositoryFetchError,
+)
 from pr_auto_reviewer.domain.entities.pull_request import PullRequest
 from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
@@ -39,6 +42,9 @@ from pr_auto_reviewer.presentation.ports import (
     RepoListerPort,
 )
 from tests.fakes.fake_notifier import FakeNotifier
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 
 
 class RecordingCommandService(ProcessIssueCommandsPort):
@@ -341,6 +347,72 @@ class TestPollingDaemon:
 
         assert len(command_service.commands) == 2
 
+
+    def test_quarantined_command_failure_is_skipped_on_next_cycle(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock,
+    ) -> None:
+        pr_id = PullRequestId(repository="owner/repo1", number=7)
+        recent_pr = OpenPullRequest(
+            pr_id=pr_id,
+            head_sha=CommitSha("abc123"),
+            title="Failed command",
+            updated_at="2026-09-11T01:00:00Z",
+        )
+        repository = PullRequestRepositoryFake(
+            PullRequest(id=pr_id, title=recent_pr.title, head_sha=recent_pr.head_sha),
+        )
+        command_service = MagicMock()
+        command_service.execute.side_effect = RuntimeError("tracker unavailable")
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([], [recent_pr]),
+            review_service=mock_review_service,
+            process_commands_service=command_service,
+            pr_repository=repository,
+            command_failure_backoff=RemoteHostBackoff(
+                threshold=1,
+                interval_seconds=0,
+                quarantine_seconds=60,
+            ),
+        )
+
+        daemon._process_command_pr(
+            recent_pr, command_service, repository,
+        )
+        daemon._process_command_pr(
+            recent_pr, command_service, repository,
+        )
+
+        command_service.execute.assert_called_once()
+
+    def test_quarantined_review_failure_is_skipped_on_next_cycle(
+        self, config: PollingDaemonConfig, mock_review_service: MagicMock,
+    ) -> None:
+        pr = OpenPullRequest(
+            pr_id=PullRequestId(repository="owner/repo1", number=8),
+            head_sha=CommitSha("def456"),
+            title="Failed review",
+        )
+        mock_review_service.execute.side_effect = RepositoryFetchError(
+            "repository unavailable",
+        )
+        daemon = PollingDaemon(
+            config=config,
+            repo_lister=MockRepoLister([]),
+            pr_lister=MockPrLister([]),
+            review_service=mock_review_service,
+            command_failure_backoff=RemoteHostBackoff(
+                threshold=1,
+                interval_seconds=0,
+                quarantine_seconds=60,
+            ),
+        )
+
+        daemon._process_pr(pr)
+        daemon._process_pr(pr)
+
+        mock_review_service.execute.assert_called_once()
     def test_creation(self, daemon: PollingDaemon) -> None:
         """Creates PollingDaemon with all dependencies."""
         assert daemon is not None
