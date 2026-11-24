@@ -191,3 +191,62 @@ class TestSettingsCli:
             config_path.read_text(encoding="utf-8")
         )
         assert "defined-key" not in capsys.readouterr().out
+
+    def test_generic_allow_list_set_get_list_and_snapshot_use_json_array_values(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+
+        assert cli.run(
+            [
+                "set",
+                "REPOS_ALLOW_LIST",
+                "github:owner/repo, forgejo:owner/other\nforgejo:owner/third",
+            ]
+        ) == 0
+        capsys.readouterr()
+
+        assert cli._settings().get("REPOS_ALLOW_LIST") == [
+            "github:owner/repo",
+            "forgejo:owner/other",
+            "forgejo:owner/third",
+        ]
+        snapshot = cli.snapshot()
+        assert ("REPOS_ALLOW_LIST", '["github:owner/repo", "forgejo:owner/other", "forgejo:owner/third"]') in (
+            snapshot.values
+        )
+        assert cli.run(["get", "REPOS_ALLOW_LIST"]) == 0
+        assert capsys.readouterr().out.strip() == (
+            '["github:owner/repo", "forgejo:owner/other", "forgejo:owner/third"]'
+        )
+        assert cli.run(["list"]) == 0
+        assert (
+            "REPOS_ALLOW_LIST = [\"github:owner/repo\", \"forgejo:owner/other\", \"forgejo:owner/third\"]"
+            in capsys.readouterr().out
+        )
+
+    def test_old_string_allow_list_is_canonicalized_for_cli_output(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli._settings().set(
+            "REPOS_ALLOW_LIST",
+            r"github:owner/repo\nforgejo:owner/other",
+        )
+
+        snapshot = cli.snapshot()
+
+        assert ("REPOS_ALLOW_LIST", '["github:owner/repo", "forgejo:owner/other"]') in (
+            snapshot.values
+        )
+        assert cli.run(["get", "REPOS_ALLOW_LIST"]) == 0
+        assert capsys.readouterr().out.strip() == (
+            '["github:owner/repo", "forgejo:owner/other"]'
+        )
+        assert cli.run(["list"]) == 0
+        assert (
+            "REPOS_ALLOW_LIST = [\"github:owner/repo\", \"forgejo:owner/other\"]"
+            in capsys.readouterr().out
+        )
