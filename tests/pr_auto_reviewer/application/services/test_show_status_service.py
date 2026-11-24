@@ -223,5 +223,6 @@ class TestShowStatusService:
         )
 
         output = service.show_status()
-
+        assert "Status: ERROR / RETRYING" in output
+        assert "Status: IDLE / WAITING" not in output
         assert "Last Error: LLM host unreachable" in output
