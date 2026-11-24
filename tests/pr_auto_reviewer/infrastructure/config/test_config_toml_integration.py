@@ -21,3 +21,33 @@ class TestConfigTomlIntegration:
 
         assert config.poll_interval == 17
         assert config.platform_mode.value == "github"
+
+    def test_toml_allow_list_array_loads_as_immutable_tuple(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("ENV", "production")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        store = TomlSettingsStore(tmp_path / "config" / "pr-auto-reviewer" / "settings.toml")
+        store.set("REPOS_ALLOW_LIST", ["github:owner/repo", "forgejo:owner/other"])
+
+        config = load_config()
+
+        assert config.repos_allow_list == (
+            "github:owner/repo",
+            "forgejo:owner/other",
+        )
+
+    def test_toml_allow_list_legacy_string_is_normalized(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("ENV", "production")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        store = TomlSettingsStore(tmp_path / "config" / "pr-auto-reviewer" / "settings.toml")
+        store.set("REPOS_ALLOW_LIST", "github:owner/repo, forgejo:owner/other")
+
+        config = load_config()
+
+        assert config.repos_allow_list == (
+            "github:owner/repo",
+            "forgejo:owner/other",
+        )
