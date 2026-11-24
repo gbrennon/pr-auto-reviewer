@@ -57,6 +57,10 @@ class Config:
     llm_call_budget: int = 300
     advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE
     poll_interval: int = 60
+    remote_failure_threshold: int = 3
+    remote_failure_interval_seconds: float = 60.0
+    remote_failure_interval_increment_seconds: float = 60.0
+    remote_failure_quarantine_seconds: float = 3600.0
     run_once: bool = False
     repos_filter: str = ""
     repos_allow_list: tuple[str, ...] = ()
