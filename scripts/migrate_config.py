@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Sequence
 
 from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+    RepositoryEntriesParser,
+)
 from pr_auto_reviewer.infrastructure.config.toml_settings_store import TomlSettingsStore
 from pr_auto_reviewer.infrastructure.persistence.encrypted_sqlite_secret_store import (
     EncryptedSqliteSecretStore,
@@ -60,7 +63,12 @@ class ConfigMigration:
     def _write_settings(self, values: dict[str, str], names: tuple[str, ...]) -> None:
         store = TomlSettingsStore(self._config_dir / "settings.toml")
         for name in names:
-            store.set(name, self._parse_value(values[name]))
+            value = (
+                RepositoryEntriesParser().canonical_list(values[name])
+                if name.upper() == "REPOS_ALLOW_LIST"
+                else self._parse_value(values[name])
+            )
+            store.set(name, value)
         with (self._config_dir / "settings.toml").open("rb") as stream:
             tomllib.load(stream)
 
