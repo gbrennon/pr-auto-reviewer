@@ -533,3 +533,96 @@ class TestLoadConfig:
         monkeypatch.setenv("REPOS_ALLOW_LIST", "owner/a")
         cfg = load_config()
         assert cfg.repos_allow_list == ("owner/a",)
+    def test_repository_entries_parser_normalizes_supported_inputs(self):
+        from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+            RepositoryEntriesParser,
+        )
+
+        parser = RepositoryEntriesParser()
+
+        assert parser.parse(None) == ()
+        assert parser.parse("") == ()
+        assert parser.parse((" github:owner/one ", "forgejo:owner/two")) == (
+            "github:owner/one",
+            "forgejo:owner/two",
+        )
+        assert parser.parse('["github:owner/one", "forgejo:owner/two"]') == (
+            "github:owner/one",
+            "forgejo:owner/two",
+        )
+        assert parser.parse(" github:owner/one\nforgejo:owner/two\\ncodeberg:owner/three ") == (
+            "github:owner/one",
+            "forgejo:owner/two",
+            "codeberg:owner/three",
+        )
+        assert parser.canonical_list("github:owner/one, forgejo:owner/two") == [
+            "github:owner/one",
+            "forgejo:owner/two",
+        ]
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            [1],
+            ("github:owner/one", ""),
+            '["github:owner/one", 2]',
+        ],
+    )
+    def test_repository_entries_parser_rejects_invalid_array_members(self, raw):
+        from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+            RepositoryEntriesParser,
+        )
+
+        with pytest.raises(ValueError):
+            RepositoryEntriesParser().parse(raw)
+
+    def test_repos_allow_list_parsed_from_json_array_source(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
+        )
+
+        cfg = ConfigBuilderComposition().compose().build(
+            {"REPOS_ALLOW_LIST": '["owner/a", "owner/b"]'}, env_name="test"
+        )
+
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_repos_allow_list_parsed_from_literal_newline_source(self):
+        from pr_auto_reviewer.infrastructure.config.config_builder_composition import (
+            ConfigBuilderComposition,
+        )
+
+        cfg = ConfigBuilderComposition().compose().build(
+            {"REPOS_ALLOW_LIST": r"owner/a\nowner/b"}, env_name="test"
+        )
+
+        assert cfg.repos_allow_list == ("owner/a", "owner/b")
+
+    def test_remote_failure_backoff_defaults(self, monkeypatch, tmp_path: Path):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        cfg = load_config()
+
+        assert cfg.remote_failure_threshold == 3
+        assert cfg.remote_failure_interval_seconds == 60.0
+        assert cfg.remote_failure_interval_increment_seconds == 60.0
+        assert cfg.remote_failure_quarantine_seconds == 3600.0
+
+    def test_remote_failure_backoff_settings_from_env(
+        self, monkeypatch, tmp_path: Path
+    ):
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+
+        self._enter_dev_mode(tmp_path)
+        monkeypatch.setenv("REMOTE_FAILURE_THRESHOLD", "5")
+        monkeypatch.setenv("REMOTE_FAILURE_INTERVAL_SECONDS", "12.5")
+        monkeypatch.setenv("REMOTE_FAILURE_INTERVAL_INCREMENT_SECONDS", "7.5")
+        monkeypatch.setenv("REMOTE_FAILURE_QUARANTINE_SECONDS", "900")
+
+        cfg = load_config()
+
+        assert cfg.remote_failure_threshold == 5
+        assert cfg.remote_failure_interval_seconds == 12.5
+        assert cfg.remote_failure_interval_increment_seconds == 7.5
+        assert cfg.remote_failure_quarantine_seconds == 900.0
