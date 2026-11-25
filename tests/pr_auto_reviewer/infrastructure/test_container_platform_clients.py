@@ -27,16 +27,20 @@ from pr_auto_reviewer.infrastructure.container._platform_clients import (
     wire_platform_clients,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
 
 # ── defaults for every config value not being varied ──────────────────────
 DEFAULT_FORGEJO = {
-    "forgejo_owner_token": "fj-own",
+    "forgejo_manager_token": "fj-own",
     "forgejo_reviewer_token": "fj-rev",
     "forgejo_reviewer_username": "fj-bot",
 }
 DEFAULT_GITHUB = {
-    "github_owner_token": "gh-own",
+    "github_manager_token": "gh-own",
     "github_reviewer_token": "gh-rev",
     "github_reviewer_username": "gh-bot",
 }
@@ -64,7 +68,7 @@ class TestWirePlatformClients:
         return Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             forgejo_reviewer_token="fj-rev",
             forgejo_reviewer_username="fj-bot",
         )
@@ -102,14 +106,14 @@ class TestWirePlatformClients:
         assert result.http_client._platform_mode == "forgejo"
         assert result.reviewer_client._platform_mode == "forgejo"
 
-    def test_forgejo_clients_use_owner_token_for_http_client(
+    def test_forgejo_clients_use_manager_token_for_http_client(
         self,
         forgejo_config: Config,
     ) -> None:
         result = wire_platform_clients(forgejo_config)
 
         assert result.http_client._token == "fj-own"
-        assert result.http_client._role == "owner"
+        assert result.http_client._role == "manager"
 
     def test_forgejo_clients_use_reviewer_token_for_reviewer_client(
         self,
@@ -124,7 +128,7 @@ class TestWirePlatformClients:
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             forgejo_reviewer_token="",
             forgejo_reviewer_username="",
         )
@@ -141,7 +145,7 @@ class TestWirePlatformClients:
 
         assert isinstance(result.http_client._token_resolver, TokenResolver)
         _token, source = result.http_client._token_resolver.resolve_source(
-            "OWNER",
+            "MANAGER",
             "test-org/repo",
         )
         assert source.startswith("FORGEJO_")
@@ -191,7 +195,7 @@ class TestWirePlatformClients:
     def test_forgejo_no_dual_platform_fields(self, forgejo_config: Config) -> None:
         result = wire_platform_clients(forgejo_config)
 
-        assert result.forgejo_owner is None
+        assert result.forgejo_manager is None
         assert result.forgejo_reviewer is None
 
     # ── single-platform: github ───────────────────────────────────────────
@@ -201,7 +205,7 @@ class TestWirePlatformClients:
         return Config(
             env="test",
             platform_mode=GitProvider.GITHUB,
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
             github_reviewer_token="gh-rev",
             github_reviewer_username="gh-bot",
         )
@@ -230,7 +234,7 @@ class TestWirePlatformClients:
 
         resolver = self._token_resolver(result.http_client)
         _token, source = resolver.resolve_source(
-            "OWNER",
+            "MANAGER",
             "test-org/repo",
         )
         assert source.startswith("GITHUB_")
@@ -253,7 +257,7 @@ class TestWirePlatformClients:
         config = Config(
             env="test",
             platform_mode=GitProvider.GITHUB,
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
             github_reviewer_token="",
             github_reviewer_username="",
         )
@@ -265,7 +269,7 @@ class TestWirePlatformClients:
     def test_github_no_dual_platform_fields(self, github_config: Config) -> None:
         result = wire_platform_clients(github_config)
 
-        assert result.forgejo_owner is None
+        assert result.forgejo_manager is None
         assert result.forgejo_reviewer is None
 
     def test_github_http_client_is_git_platform_client(
@@ -285,14 +289,14 @@ class TestWirePlatformClients:
         assert isinstance(result.reviewer_client, GitPlatformHttpClient)
         assert result.reviewer_client is not result.http_client
 
-    def test_github_clients_use_owner_token_for_http_client(
+    def test_github_clients_use_manager_token_for_http_client(
         self,
         github_config: Config,
     ) -> None:
         result = wire_platform_clients(github_config)
 
         assert result.http_client._token == "gh-own"
-        assert result.http_client._role == "owner"
+        assert result.http_client._role == "manager"
 
     def test_github_clients_use_reviewer_token_for_reviewer_client(
         self,
@@ -339,21 +343,21 @@ class TestWirePlatformClients:
         return Config(
             env="test",
             platform_mode=GitProvider.BOTH,
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
             github_reviewer_token="gh-rev",
             github_reviewer_username="gh-bot",
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             forgejo_reviewer_token="fj-rev",
             forgejo_reviewer_username="fj-bot",
         )
 
-    def test_both_http_client_is_github_owner(self, both_config: Config) -> None:
+    def test_both_http_client_is_github_manager(self, both_config: Config) -> None:
         result = wire_platform_clients(both_config)
 
         assert result.http_client.base_url == "https://api.github.com"
         assert result.http_client._token == "gh-own"
         assert result.http_client._platform_mode == "github"
-        assert result.http_client._role == "owner"
+        assert result.http_client._role == "manager"
         assert self._preflight_verifier(result.http_client)._platform == "github"
 
     def test_both_reviewer_client_is_github_reviewer(
@@ -367,16 +371,16 @@ class TestWirePlatformClients:
         assert result.reviewer_client._platform_mode == "github"
         assert result.reviewer_client._role == "reviewer"
 
-    def test_both_forgejo_owner_is_present(self, both_config: Config) -> None:
+    def test_both_forgejo_manager_is_present(self, both_config: Config) -> None:
         result = wire_platform_clients(both_config)
 
-        assert isinstance(result.forgejo_owner, GitPlatformHttpClient)
-        assert result.forgejo_owner.base_url == "https://codeberg.org/api/v1"
-        assert result.forgejo_owner._token == "fj-own"
-        assert result.forgejo_owner._platform_mode == "forgejo"
-        assert result.forgejo_owner._role == "owner"
+        assert isinstance(result.forgejo_manager, GitPlatformHttpClient)
+        assert result.forgejo_manager.base_url == "https://codeberg.org/api/v1"
+        assert result.forgejo_manager._token == "fj-own"
+        assert result.forgejo_manager._platform_mode == "forgejo"
+        assert result.forgejo_manager._role == "manager"
         assert (
-            self._preflight_verifier(result.forgejo_owner)._platform == "forgejo"
+            self._preflight_verifier(result.forgejo_manager)._platform == "forgejo"
         )
 
     def test_both_forgejo_reviewer_is_present(self, both_config: Config) -> None:
@@ -395,9 +399,9 @@ class TestWirePlatformClients:
         result = wire_platform_clients(both_config)
 
         gh_resolver = self._token_resolver(result.http_client)
-        assert result.forgejo_owner is not None
+        assert result.forgejo_manager is not None
         assert result.forgejo_reviewer is not None
-        fj_resolver = self._token_resolver(result.forgejo_owner)
+        fj_resolver = self._token_resolver(result.forgejo_manager)
         assert gh_resolver is not fj_resolver
         assert self._token_resolver(result.reviewer_client) is gh_resolver
         assert self._token_resolver(result.forgejo_reviewer) is fj_resolver
@@ -410,7 +414,7 @@ class TestWirePlatformClients:
 
         resolver = self._token_resolver(result.http_client)
         _token, source = resolver.resolve_source(
-            "OWNER",
+            "MANAGER",
             "test-org/repo",
         )
         assert source.startswith("GITHUB_")
@@ -426,10 +430,10 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(both_config)
 
-        assert result.forgejo_owner is not None
-        resolver = self._token_resolver(result.forgejo_owner)
+        assert result.forgejo_manager is not None
+        resolver = self._token_resolver(result.forgejo_manager)
         _token, source = resolver.resolve_source(
-            "OWNER",
+            "MANAGER",
             "test-org/repo",
         )
         assert source.startswith("FORGEJO_")
@@ -456,8 +460,8 @@ class TestWirePlatformClients:
         config = Config(
             env="test",
             platform_mode=platform_mode,
-            forgejo_owner_token="fj-own",
-            github_owner_token="gh-own",
+            forgejo_manager_token="fj-own",
+            github_manager_token="gh-own",
             output_mode="terminal",
         )
 
@@ -481,8 +485,8 @@ class TestWirePlatformClients:
         config = Config(
             env="test",
             platform_mode=platform_mode,
-            forgejo_owner_token="fj-own",
-            github_owner_token="gh-own",
+            forgejo_manager_token="fj-own",
+            github_manager_token="gh-own",
             output_mode=output_mode,
         )
 
@@ -496,19 +500,19 @@ class TestWirePlatformClients:
     ) -> None:
         result = wire_platform_clients(both_config)
 
-        assert getattr(result.token_verifier, "_owner_client") is result.http_client
+        assert getattr(result.token_verifier, "_manager_client") is result.http_client
         assert getattr(result.token_verifier, "_reviewer_client") is result.reviewer_client
 
     # ── org token overrides ───────────────────────────────────────────────
 
     def test_org_token_overrides_are_passed_to_token_resolver(self) -> None:
         overrides = OrgTokenOverrides(
-            forgejo={"my-org": OrgTokenEntry(owner_token="custom-token")},
+            forgejo={"my-org": OrgTokenEntry(manager_token="custom-token")},
         )
         config = Config(
             env="test",
             platform_mode=GitProvider.FORGEJO,
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
             org_token_overrides=overrides,
         )
 
@@ -516,7 +520,7 @@ class TestWirePlatformClients:
 
         resolver = self._token_resolver(result.http_client)
         assert getattr(resolver, "_overrides") is overrides
-        assert resolver.resolve("owner", "my-org/repo") == "custom-token"
+        assert resolver.resolve("manager", "my-org/repo") == "custom-token"
 
     # ── custom API URLs ───────────────────────────────────────────────────
 
@@ -525,7 +529,7 @@ class TestWirePlatformClients:
             env="test",
             platform_mode=GitProvider.GITHUB,
             github_api_url="https://git.internal.example.com/api",
-            github_owner_token="gh-own",
+            github_manager_token="gh-own",
         )
 
         result = wire_platform_clients(config)
@@ -537,7 +541,7 @@ class TestWirePlatformClients:
             env="test",
             platform_mode=GitProvider.FORGEJO,
             forgejo_api_url="https://git.internal.example.com/api/v1",
-            forgejo_owner_token="fj-own",
+            forgejo_manager_token="fj-own",
         )
 
         result = wire_platform_clients(config)
@@ -550,16 +554,16 @@ class TestWirePlatformClients:
             platform_mode=GitProvider.BOTH,
             github_api_url="https://git.internal.example.com/gh-api",
             forgejo_api_url="https://git.internal.example.com/fj-api/v1",
-            github_owner_token="gh-own",
-            forgejo_owner_token="fj-own",
+            github_manager_token="gh-own",
+            forgejo_manager_token="fj-own",
         )
 
         result = wire_platform_clients(config)
 
         assert result.http_client.base_url == "https://git.internal.example.com/gh-api"
-        assert result.forgejo_owner is not None
+        assert result.forgejo_manager is not None
         assert (
-            result.forgejo_owner.base_url
+            result.forgejo_manager.base_url
             == "https://git.internal.example.com/fj-api/v1"
         )
         assert (
@@ -570,3 +574,48 @@ class TestWirePlatformClients:
             result.forgejo_reviewer.base_url
             == "https://git.internal.example.com/fj-api/v1"
         )
+
+    def test_all_http_and_preflight_clients_share_remote_backoff(
+        self, both_config: Config,
+    ) -> None:
+        result = wire_platform_clients(both_config)
+        clients = [
+            result.http_client,
+            result.reviewer_client,
+            result.forgejo_manager,
+            result.forgejo_reviewer,
+        ]
+        backoff = result.http_client._remote_host_backoff
+
+        assert all(client._remote_host_backoff is backoff for client in clients)
+        assert (
+            self._preflight_verifier(result.http_client)._http._remote_host_backoff
+            is backoff
+        )
+        assert (
+            self._preflight_verifier(result.forgejo_manager)._http._remote_host_backoff
+            is backoff
+        )
+
+    @pytest.mark.parametrize(
+        "platform_mode",
+        [GitProvider.FORGEJO, GitProvider.GITHUB, GitProvider.BOTH],
+    )
+    def test_cli_clients_share_supplied_remote_backoff(
+        self, platform_mode: GitProvider,
+    ) -> None:
+        config = Config(
+            env="test",
+            platform_mode=platform_mode,
+            platform_transport="cli",
+        )
+        backoff = RemoteHostBackoff()
+
+        result = wire_platform_clients(config, remote_host_backoff=backoff)
+
+        clients = [result.http_client, result.reviewer_client]
+        if platform_mode == GitProvider.BOTH:
+            assert result.forgejo_manager is not None
+            assert result.forgejo_reviewer is not None
+            clients.extend([result.forgejo_manager, result.forgejo_reviewer])
+        assert all(client._remote_host_backoff is backoff for client in clients)

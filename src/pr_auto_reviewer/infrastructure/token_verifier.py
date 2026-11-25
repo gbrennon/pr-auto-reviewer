@@ -41,7 +41,7 @@ class TokenVerifier(TokenVerifierPort):
     """Verifies owner and reviewer tokens before a review.
 
     Args:
-        owner_client: HTTP client wired with the owner token.
+        manager_client: HTTP client wired with the manager token.
         reviewer_client: HTTP client wired with the reviewer token.
         persist: When ``True`` verified pairs are persisted to disk
             so preflight runs only once across invocations.
@@ -49,17 +49,17 @@ class TokenVerifier(TokenVerifierPort):
 
     def __init__(
         self,
-        owner_client: GitPlatformHttpClient,
+        manager_client: GitPlatformHttpClient,
         reviewer_client: GitPlatformHttpClient,
         *,
         persist: bool = True,
-        forgejo_owner_client: GitPlatformHttpClient | None = None,
+        forgejo_manager_client: GitPlatformHttpClient | None = None,
         forgejo_reviewer_client: GitPlatformHttpClient | None = None,
         _store_path: Path | None = None,
     ) -> None:
-        self._owner_client = owner_client
+        self._manager_client = manager_client
         self._reviewer_client = reviewer_client
-        self._forgejo_owner_client = forgejo_owner_client
+        self._forgejo_manager_client = forgejo_manager_client
         self._forgejo_reviewer_client = forgejo_reviewer_client
         self._persist = persist
         self._store_path = (
@@ -70,8 +70,8 @@ class TokenVerifier(TokenVerifierPort):
 
     def can_review(self, pr_id: PullRequestId) -> bool:
         """Return whether both required API capabilities are available."""
-        owner_client, reviewer_client = self._clients_for(pr_id)
-        return owner_client.is_capability_available(pr_id.repository) and reviewer_client.is_capability_available(
+        manager_client, reviewer_client = self._clients_for(pr_id)
+        return manager_client.is_capability_available(pr_id.repository) and reviewer_client.is_capability_available(
             pr_id.repository
         )
 
@@ -80,12 +80,12 @@ class TokenVerifier(TokenVerifierPort):
         if not org:
             return
 
-        owner_client, reviewer_client = self._clients_for(pr_id)
+        manager_client, reviewer_client = self._clients_for(pr_id)
         if org.startswith("forgejo:"):
             org = org.split(":", 1)[1]
 
         for role, client in [
-            ("owner", owner_client),
+            ("manager", manager_client),
             ("reviewer", reviewer_client),
         ]:
             client.verify_token_for_pr(pr_id)
@@ -96,11 +96,11 @@ class TokenVerifier(TokenVerifierPort):
     ) -> tuple[GitPlatformHttpClient, GitPlatformHttpClient]:
         if (
             pr_id.repository.startswith("forgejo:")
-            and self._forgejo_owner_client is not None
+            and self._forgejo_manager_client is not None
             and self._forgejo_reviewer_client is not None
         ):
-            return self._forgejo_owner_client, self._forgejo_reviewer_client
-        return self._owner_client, self._reviewer_client
+            return self._forgejo_manager_client, self._forgejo_reviewer_client
+        return self._manager_client, self._reviewer_client
 
     def _load(self) -> set[tuple[str, str]]:
         if not self._store_path.exists():

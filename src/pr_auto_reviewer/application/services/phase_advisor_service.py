@@ -29,8 +29,14 @@ from pr_auto_reviewer.domain.messages.events.agent_exchange_event import (
 from pr_auto_reviewer.domain.value_objects.advisor_directive import (
     AdvisorDirective,
 )
+from pr_auto_reviewer.domain.value_objects.advisor_turn_evidence import (
+    AdvisorTurnEvidence,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
 )
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
@@ -88,7 +94,11 @@ class PhaseAdvisorService(AssessPhasePort):
         peer = phase.role
         messages = self._build_messages(phase, assignment, phase_result)
         try:
-            raw = self._chat_port.send(messages)
+            raw = self._chat_port.send(
+                messages,
+                purpose=ConversationPurpose.ADVISOR_PHASE,
+                session_id=review_session,
+            )
         except LlmUnavailableError:
             raise
         except Exception:
@@ -115,47 +125,50 @@ class PhaseAdvisorService(AssessPhasePort):
 
     def observe(
         self,
-        peer_content: str,
-        phase_name: str,
+        evidence: AdvisorTurnEvidence,
         review_session: str,
         pr_identifier_service: str = "",
-        changed_files: list[str] | None = None,
     ) -> AdvisorDirective:
-        """Grade one raw peer turn while its conversation is still running."""
-        messages = self._build_turn_messages(
-            peer_content, phase_name, changed_files=changed_files
-        )
+        """Grade one structured peer turn without receiving raw output."""
+        messages = self._build_turn_messages(evidence)
         try:
-            raw = self._chat_port.send(messages)
+            raw = self._chat_port.send(
+                messages,
+                purpose=ConversationPurpose.ADVISOR_TURN,
+                session_id=review_session,
+            )
         except LlmUnavailableError:
             raise
         except Exception:
             logger.warning(
                 "Advisor turn observation failed for %s; continuing",
-                phase_name,
+                evidence.phase_name,
                 exc_info=True,
             )
             return AdvisorDirective(grade=SubAgentGrade.OKOK)
         directive = self._parse_directive(raw)
         self._publish_exchange(
-            phase_name, pr_identifier_service, review_session, messages, raw,
+            evidence.phase_name,
+            pr_identifier_service,
+            review_session,
+            messages,
+            raw,
             directive,
         )
         return directive
 
     def _build_turn_messages(
-        self,
-        peer_content: str,
-        phase_name: str,
-        changed_files: list[str] | None = None,
+        self, evidence: AdvisorTurnEvidence,
     ) -> list[ConversationMessage]:
-        """Compose the per-turn focus-grading prompt."""
+        """Compose a per-turn grading prompt from structured evidence."""
         return [
             self._turn_system.render(advisor=AdvisorAgent()),
             self._turn_user.render(
-                phase_name=phase_name,
-                peer_content=peer_content[:4000],
-                changed_files=changed_files or [],
+                phase_name=evidence.phase_name,
+                turn_kind=evidence.turn_kind.value,
+                tool_name=evidence.tool_name,
+                tool_path=evidence.tool_path,
+                claim_count=evidence.claim_count,
             ),
         ]
 

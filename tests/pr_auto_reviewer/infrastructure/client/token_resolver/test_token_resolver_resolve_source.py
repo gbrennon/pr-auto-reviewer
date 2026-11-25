@@ -9,13 +9,13 @@ from pr_auto_reviewer.infrastructure.client.token_resolver.env_token_scanner imp
 
 def _resolver(
     platform_prefix: str = "GITHUB",
-    owner_token: str = "default-owner",
+    manager_token: str = "default-manager",
     reviewer_token: str = "default-reviewer",
     reviewer_username: str = "default-username",
     **env: str,
 ) -> TokenResolver:
     defaults = TokenDefaults(
-        owner_token=owner_token,
+        manager_token=manager_token,
         reviewer_token=reviewer_token,
         reviewer_username=reviewer_username,
     )
@@ -28,10 +28,10 @@ def _resolver(
 class TestTokenResolverResolveSource:
     def test_resolve_source_returns_default_key_when_no_override(self):
         resolver = _resolver()
-        _, source = resolver.resolve_source("OWNER", "myorg/repo")
-        assert source == "GITHUB_OWNER_TOKEN"
+        _, source = resolver.resolve_source("MANAGER", "myorg/repo")
+        assert source == "GITHUB_MANAGER_TOKEN"
 
     def test_resolve_source_returns_org_env_var_key(self):
-        resolver = _resolver(GITHUB_TOKEN_myorg_OWNER="org-tok")
-        _, source = resolver.resolve_source("OWNER", "myorg/repo")
-        assert source == "GITHUB_TOKEN_myorg_OWNER"
+        resolver = _resolver(GITHUB_TOKEN_myorg_MANAGER="org-tok")
+        _, source = resolver.resolve_source("MANAGER", "myorg/repo")
+        assert source == "GITHUB_TOKEN_myorg_MANAGER"

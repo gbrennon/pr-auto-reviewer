@@ -22,6 +22,29 @@ from pr_auto_reviewer.infrastructure.local_repository.local_git_repository impor
     LocalGitRepository,
 )
 
+import requests
+
+from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
+    GitPlatformHttpClient,
+)
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.value = 100.0
+        self.sleeps: list[float] = []
+
+    def now(self) -> float:
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.value += seconds
+
+
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None,
     reason="git is not installed on this runner",
@@ -250,6 +273,146 @@ class TestLocalGitRepository:
             side_effect=fail_clone,
         ), pytest.raises(RepositoryFetchError, match="Connection refused"):
             sut.clone(PullRequestId("owner/repo", 42), str(repo_path))
+
+    def test_clone_timeout_counts_as_repository_fetch_failure(
+        self, tmp_path: Path,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            remote_host_backoff=backoff,
+        )
+
+        def fail_clone(*args, **kwargs):
+            raise subprocess.TimeoutExpired(["git", "clone"], timeout=300)
+
+        with patch(
+            "pr_auto_reviewer.infrastructure.local_repository.local_git_repository.subprocess.run",
+            side_effect=fail_clone,
+        ):
+            for _ in range(4):
+                with pytest.raises(RepositoryFetchError, match="timed out"):
+                    sut.clone(
+                        PullRequestId("owner/repo", 42),
+                        "git@codeberg.org:owner/repo.git",
+                    )
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]
+
+    def test_existing_clone_fetch_timeout_counts_as_repository_fetch_failure(
+
+        self, tmp_path: Path,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            remote_host_backoff=backoff,
+        )
+        clone_path = tmp_path / "clones" / "owner_repo_42"
+        clone_path.mkdir(parents=True)
+
+        def fail_fetch(*args, **kwargs):
+            raise subprocess.TimeoutExpired(["git", "fetch"], timeout=120)
+
+        with patch.object(sut, "_run_git", side_effect=fail_fetch):
+            for _ in range(4):
+                with pytest.raises(RepositoryFetchError, match="timed out"):
+                    sut.clone(
+                        PullRequestId("owner/repo", 42),
+                        "git@codeberg.org:owner/repo.git",
+                    )
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]
+    def test_pr_ref_fetch_timeout_records_backoff_and_falls_back(
+        self, tmp_path: Path,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+        threshold=2,
+            clock=clock.now,
+            sleeper=clock.sleep,
+        )
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            remote_host_backoff=backoff,
+        )
+
+        def fake_clone(args, **kwargs):
+            Path(args[-1]).mkdir(parents=True)
+
+        def timeout_fetch(*args, **kwargs):
+            raise subprocess.TimeoutExpired(["git", "fetch"], timeout=120)
+
+        with patch(
+            "pr_auto_reviewer.infrastructure.local_repository.local_git_repository.subprocess.run",
+            side_effect=fake_clone,
+        ), patch.object(sut, "_run_git", side_effect=timeout_fetch):
+            clone_path = sut.clone(
+                PullRequestId("owner/repo", 42),
+                "git@codeberg.org:owner/repo.git",
+            )
+
+        assert clone_path == tmp_path / "clones" / "owner_repo_42"
+        assert clone_path.exists()
+        backoff.before_operation("codeberg.org")
+        assert clock.sleeps == [60.0]
+
+
+    def test_ssh_clone_failures_share_backoff_with_api_requests(
+        self, tmp_path: Path, monkeypatch,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        sut = LocalGitRepository(
+            tmp_path / "clones",
+            remote_host_backoff=backoff,
+        )
+
+        def fail_clone(*args, **kwargs):
+            raise subprocess.CalledProcessError(
+                returncode=128,
+                cmd=["git", "clone", "git@codeberg.org:owner/repo.git"],
+                stderr="Permission denied (publickey)",
+            )
+
+        with patch(
+            "pr_auto_reviewer.infrastructure.local_repository.local_git_repository.subprocess.run",
+            side_effect=fail_clone,
+        ):
+            for _ in range(2):
+                with pytest.raises(RepositoryFetchError):
+                    sut.clone(
+                        PullRequestId("owner/repo", 42),
+                        "git@codeberg.org:owner/repo.git",
+                    )
+
+        def fail_api(*args, **kwargs):
+            raise requests.ConnectionError("connection refused")
+
+        monkeypatch.setattr(requests, "get", fail_api)
+        client = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "token",
+            remote_host_backoff=backoff,
+        )
+        with pytest.raises(requests.ConnectionError):
+            client.get("/user")
+
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b"{}"
+        monkeypatch.setattr(requests, "get", lambda *args, **kwargs: response)
+        client.get("/user")
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]
 
     def test_list_tree_returns_file_list(self, tmp_path: Path) -> None:
         """list_tree returns the list of tracked files at a ref."""

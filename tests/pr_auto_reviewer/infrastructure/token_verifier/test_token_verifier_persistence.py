@@ -9,7 +9,7 @@ class TestTokenVerifierPersistence:
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=store)
         verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -18,7 +18,7 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "owner"] in data
+        assert ["o", "manager"] in data
         assert ["o", "reviewer"] in data
 
     def test_verify_loads_persisted_pairs_and_skips_preflight(
@@ -26,9 +26,9 @@ class TestTokenVerifierPersistence:
     ) -> None:
         store = tmp_path / "verified-tokens.json"
         store.parent.mkdir(parents=True, exist_ok=True)
-        store.write_text(json.dumps([["o", "owner"], ["o", "reviewer"]]))
+        store.write_text(json.dumps([["o", "manager"], ["o", "reviewer"]]))
 
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=store)
         verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -42,7 +42,7 @@ class TestTokenVerifierPersistence:
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=store)
         verifier = TokenVerifier(owner, reviewer, persist=False, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -51,7 +51,7 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "owner"] in data
+        assert ["o", "manager"] in data
         assert ["o", "reviewer"] in data
 
     def test_load_handles_corrupt_json(self, tmp_path: Path) -> None:
@@ -59,7 +59,7 @@ class TestTokenVerifierPersistence:
         store.parent.mkdir(parents=True, exist_ok=True)
         store.write_text("not json")
 
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=store)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=store)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=store)
         verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
@@ -73,7 +73,7 @@ class TestTokenVerifierPersistence:
     ) -> None:
         """Verify default store path resolves to AppPaths.cache_dir() / 'verified-tokens.json'."""
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-        owner = TestTokenVerifierDelegatesToClients._client("owner")
+        owner = TestTokenVerifierDelegatesToClients._client("manager")
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer")
 
         verifier = TokenVerifier(owner, reviewer, persist=False)

@@ -6,6 +6,7 @@ from unittest.mock import call, patch
 import pytest
 
 from pr_auto_reviewer.cli import SERVICE_NAME, main
+from pr_auto_reviewer.presentation.cli.settings_cli import SettingsCli
 
 
 class TestCliServiceCommands:
@@ -42,16 +43,34 @@ class TestCliServiceCommands:
         )
         assert mock_run.call_args_list == expected_calls
 
-    def test_status_command_calls_show_status(self) -> None:
+    @pytest.mark.parametrize("is_tty", [False, True])
+    def test_status_command_always_prints_plain_output(
+        self, is_tty: bool,
+    ) -> None:
         with (
             patch("sys.argv", ["pr-auto-reviewer", "status"]),
             patch("pr_auto_reviewer.cli.show_status", return_value="Status output") as mock_status,
+            patch("pr_auto_reviewer.cli.sys.stdout.isatty", return_value=is_tty),
             patch("builtins.print") as mock_print,
+            patch("pr_auto_reviewer.cli.StatusDashboard") as dashboard,
         ):
             main()
 
-        assert mock_status.called
-        mock_print.assert_called_with("Status output")
+        mock_status.assert_called_once_with()
+        mock_print.assert_called_once_with("Status output")
+        dashboard.assert_not_called()
+
+    def test_dashboard_command_runs_dashboard(self) -> None:
+        with (
+            patch("sys.argv", ["pr-auto-reviewer", "dashboard"]),
+            patch("pr_auto_reviewer.cli.status_snapshot", return_value=object()) as snapshot,
+            patch("pr_auto_reviewer.cli.StatusDashboard") as dashboard,
+        ):
+            main()
+
+        assert dashboard.call_args.args == (snapshot,)
+        assert isinstance(dashboard.call_args.kwargs["settings"], SettingsCli)
+        dashboard.return_value.run.assert_called_once_with()
 
     def test_logs_command_dispatches_journalctl(self) -> None:
         with (
@@ -74,11 +93,12 @@ class TestCliServiceCommands:
         with (
             patch.dict(os.environ, {}, clear=True),
             patch("pr_auto_reviewer.cli.bootstrap", return_value=object()),
-            patch("pr_auto_reviewer.cli.run_daemon"),
+            patch("pr_auto_reviewer.cli.run_daemon") as run_daemon,
             patch("sys.argv", ["pr-auto-reviewer", "watch-prs", "--once"]),
         ):
             main()
             assert os.environ["RUN_ONCE"] == "true"
+            assert run_daemon.call_args.args == ()
 
             with patch("sys.argv", ["pr-auto-reviewer", "watch-prs"]):
                 main()

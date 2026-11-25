@@ -143,13 +143,13 @@ def wire_platform_adapters(
     body_renderer = ReviewBodyRenderer(template_dir=_BODY_TEMPLATE_DIR)
     repos_filter = config.repos_filter or None
     if config.platform_mode == GitProvider.BOTH:
-        gb_owner = clients.http_client
+        gb_manager = clients.http_client
         gb_reviewer = clients.reviewer_client
-        fj_owner = clients.forgejo_owner
+        fj_manager = clients.forgejo_manager
         fj_reviewer = clients.forgejo_reviewer
-        if fj_owner is None:
+        if fj_manager is None:
             raise ValueError(
-                "Forgejo owner HTTP client is required in BOTH platform mode "
+                "Forgejo manager HTTP client is required in BOTH platform mode "
                 "but was not configured."
             )
         if fj_reviewer is None:
@@ -183,27 +183,27 @@ def wire_platform_adapters(
                         "github": GithubReviewPublisher(
                             body_renderer=body_renderer,
                             client=gb_reviewer,
-                            owner_client=gb_owner,
+                            manager_client=gb_manager,
                             review_mode=config.github_review_mode,
                         ),
                         "forgejo": ForgejoReviewPublisher(
                             body_renderer=body_renderer,
                             client=fj_reviewer,
-                            owner_client=fj_owner,
+                            manager_client=fj_manager,
                         ),
                     }
                 )
             ),
             review_reader=CompositeReviewReader(
                 {
-                    "github": GithubReviewReader(gb_owner),
-                    "forgejo": ForgejoReviewReader(fj_owner),
+                    "github": GithubReviewReader(gb_manager),
+                    "forgejo": ForgejoReviewReader(fj_manager),
                 }
             ),
             comment_reader=CompositeCommentReader(
                 {
-                    "github": GithubCommentReader(gb_owner),
-                    "forgejo": ForgejoCommentReader(fj_owner),
+                    "github": GithubCommentReader(gb_manager),
+                    "forgejo": ForgejoCommentReader(fj_manager),
                 }
             ),
             comment_publisher=CompositeCommentPublisher(
@@ -214,20 +214,20 @@ def wire_platform_adapters(
             ),
             issue_tracker=CompositeIssueTracker(
                 {
-                    "github": GithubIssueTracker(gb_owner),
-                    "forgejo": ForgejoIssueTracker(fj_owner),
+                    "github": GithubIssueTracker(gb_manager),
+                    "forgejo": ForgejoIssueTracker(fj_manager),
                 }
             ),
             repo_lister=CompositeRepoLister(
                 {
-                    "github": GithubRepoLister(gb_owner, repos_filter=repos_filter),
-                    "forgejo": ForgejoRepoLister(fj_owner, repos_filter=repos_filter),
+                    "github": GithubRepoLister(gb_manager, repos_filter=repos_filter),
+                    "forgejo": ForgejoRepoLister(fj_manager, repos_filter=repos_filter),
                 }
             ),
             pr_lister=CompositePrLister(
                 {
-                    "github": GithubPrLister(gb_owner),
-                    "forgejo": ForgejoPrLister(fj_owner),
+                    "github": GithubPrLister(gb_manager),
+                    "forgejo": ForgejoPrLister(fj_manager),
                 }
             ),
         )
@@ -257,13 +257,13 @@ def wire_platform_adapters(
             else GithubReviewPublisher(
                 body_renderer=body_renderer,
                 client=reviewer_client,
-                owner_client=http_client,
+                manager_client=http_client,
             )
             if is_github
             else ForgejoReviewPublisher(
                 body_renderer=body_renderer,
                 client=reviewer_client,
-                owner_client=http_client,
+                manager_client=http_client,
             )
         ),
         review_reader=(

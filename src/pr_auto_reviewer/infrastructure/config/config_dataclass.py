@@ -9,6 +9,9 @@ from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
     AdvisorGranularity,
 )
+from pr_auto_reviewer.infrastructure.config.auth_configuration import (
+    AuthConfiguration,
+)
 from pr_auto_reviewer.infrastructure.config.llm_defaults import LlmDefaults
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
@@ -20,17 +23,22 @@ from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvide
 class Config:
     env: str
     platform_mode: GitProvider = GitProvider.FORGEJO
+    platform_transport: str = "http"
+    storage_encryption_key: str = ""
+    auth_configuration: AuthConfiguration = field(
+        default_factory=AuthConfiguration.empty
+    )
     clone_protocol: CloneProtocol = CloneProtocol.HTTPS
 
     github_api_url: str = "https://api.github.com"
     forgejo_api_url: str = "https://codeberg.org/api/v1"
 
-    github_owner_token: str = ""
+    github_manager_token: str = ""
     github_reviewer_token: str = ""
     github_reviewer_username: str = ""
     github_review_mode: str = "formal"
 
-    forgejo_owner_token: str = ""
+    forgejo_manager_token: str = ""
     forgejo_reviewer_token: str = ""
     forgejo_reviewer_username: str = ""
 
@@ -49,6 +57,10 @@ class Config:
     llm_call_budget: int = 300
     advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE
     poll_interval: int = 60
+    remote_failure_threshold: int = 3
+    remote_failure_interval_seconds: float = 60.0
+    remote_failure_interval_increment_seconds: float = 60.0
+    remote_failure_quarantine_seconds: float = 3600.0
     run_once: bool = False
     repos_filter: str = ""
     repos_allow_list: tuple[str, ...] = ()

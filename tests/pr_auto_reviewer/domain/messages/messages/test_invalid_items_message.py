@@ -28,8 +28,8 @@ class TestInvalidItemsMessage:
         ]
         result = invalid_items_message(invalid, available)
         assert "Available items:" in result
-        assert "- #id-1: SQL injection risk..." in result
-        assert "- #id-2: Off-by-one error..." in result
+        assert "- `id-1` [BLOCKING] (critical security; status: open): SQL injection risk..." in result
+        assert "- `id-2` [BLOCKING] (major bug; status: open): Off-by-one error..." in result
 
     def test_full_message_with_both_invalid_and_available(self) -> None:
         invalid = [4, 5]
@@ -44,7 +44,7 @@ class TestInvalidItemsMessage:
         result = invalid_items_message(invalid, available)
         assert "Could not find review items: #4, #5." in result
         assert "Available items:" in result
-        assert "- #id-1: Use type hints throughout the module..." in result
+        assert "- `id-1` [NON-BLOCKING] (info style; status: open): Use type hints throughout the module..." in result
 
     def test_description_truncated_at_60_chars(self) -> None:
         invalid: list[int] = []
@@ -59,7 +59,7 @@ class TestInvalidItemsMessage:
         ]
         result = invalid_items_message(invalid, available)
         expected_desc = long_desc[:60] + "..."
-        assert f"- #id-1: {expected_desc}" in result
+        assert f"- `id-1` [NON-BLOCKING] (info general; status: open): {expected_desc}" in result
 
     def test_single_invalid_item(self) -> None:
         result = invalid_items_message([7], [])

@@ -38,6 +38,9 @@ from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 from pr_auto_reviewer.domain.value_objects.review_item_status import ReviewItemStatus
 from pr_auto_reviewer.infrastructure.templates.conversation_renderers import (
@@ -91,10 +94,16 @@ class FindingVerifierService(VerifyFindingsPort):
         repo_path: Path,
         changed_files: list[str],
         base_sha: str,
+        session_id: str = "",
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
         """Run a remediation-audit transcript advertising the audit schema."""
         return self._run_verification_transcript(
-            system_prompt, repo_path, changed_files, base_sha, audit=True,
+            system_prompt,
+            repo_path,
+            changed_files,
+            base_sha,
+            audit=True,
+            session_id=session_id,
         )
 
     def execute(self, command: VerifyFindingsCommand) -> list[ReviewItem]:
@@ -120,6 +129,7 @@ class FindingVerifierService(VerifyFindingsPort):
             repo_path=command.repo_path,
             changed_files=command.changed_files,
             base_sha=command.base_sha,
+            session_id=command.review_session,
         )
         self._publish_exchange(
             command.repo_path, command.review_session, prompt, transcript,
@@ -234,6 +244,7 @@ class FindingVerifierService(VerifyFindingsPort):
         changed_files: list[str],
         base_sha: str = "",
         audit: bool = False,
+        session_id: str = "",
     ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
         """Run the verification conversation, returning results and transcript.
 
@@ -264,7 +275,11 @@ class FindingVerifierService(VerifyFindingsPort):
                 guardrails.turn,
                 guardrails.max_turns,
             )
-            content = self._chat_port.send(messages)
+            content = self._chat_port.send(
+                messages,
+                purpose=ConversationPurpose.FINDING_VERIFIER,
+                session_id=session_id,
+            )
             if not content:
                 decision, guardrails = guardrails.record_empty_response()
                 if decision == ConversationDecision.EXCEEDED_EMPTY:

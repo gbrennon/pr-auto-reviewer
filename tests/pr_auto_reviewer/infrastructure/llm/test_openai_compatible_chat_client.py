@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 from unittest.mock import patch
@@ -17,6 +18,9 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
 )
 from pr_auto_reviewer.infrastructure.llm.chat_client_settings import (
     ChatClientSettings,
+)
+from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
+    ExplorationToolService,
 )
 from pr_auto_reviewer.infrastructure.llm.openai_compatible_chat_client import (
     OpenAiCompatibleChatClient,
@@ -83,6 +87,47 @@ class TestOpenAiCompatibleChatClient:
         contents = [message["content"] for message in payloads[0]["messages"]]
         assert any("result 0" in content for content in contents)
         assert any("result 9" in content for content in contents)
+
+    def test_send_preserves_bounded_read_file_result(self, tmp_path) -> None:
+        payloads: list[dict[str, Any]] = []
+        large_file = tmp_path / "large.py"
+        large_file.write_text("\n".join(f"line{index}" for index in range(5000)))
+        read_result = ExplorationToolService(tmp_path).read_file("large.py")
+        tool_result = json.dumps(read_result)
+
+        def fake_post(*_args: Any, **kwargs: Any) -> _FakeStreamingResponse:
+            payloads.append(kwargs["json"])
+            return _FakeStreamingResponse(["data: [DONE]"])
+
+        messages = [
+            ConversationMessage(role="system", content="system"),
+            ConversationMessage(role="user", content="request"),
+            ConversationMessage(
+                role="assistant", content='{"action":"read_file"}',
+            ),
+            ConversationMessage(role="user", content=tool_result),
+        ]
+        client = OpenAiCompatibleChatClient(
+            ChatClientSettings(
+                model="default",
+                host="http://localhost:11434",
+                timeout=120,
+                max_retries=1,
+                max_llm_calls=None,
+                max_context_tokens=24_000,
+            ),
+            http_post=fake_post,
+        )
+
+        client.send(messages)
+
+        contents = [message["content"] for message in payloads[0]["messages"]]
+        tool_payload = next(
+            json.loads(content)
+            for content in contents
+            if content.startswith("{") and '"content"' in content
+        )
+        assert tool_payload["content"] == read_result["content"]
 
     def test_send_bounds_large_review_context(self) -> None:
         payloads: list[dict[str, Any]] = []

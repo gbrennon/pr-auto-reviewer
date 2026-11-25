@@ -40,6 +40,16 @@ class TestPullRequest:
         pr = pr.add_review(review, CommitSha(value="sha1"))
         assert pr.needs_review(CommitSha(value="sha1")) is False
 
+    def test_inconclusive_review_at_same_sha_is_not_needed_again(self) -> None:
+        pr = PullRequest(
+            id=PullRequestId(repository="r", number=1),
+            title="Test PR",
+            head_sha=CommitSha(value="sha1"),
+        ).record_inconclusive_review(CommitSha(value="sha1"))
+
+        assert pr.needs_review(CommitSha(value="sha1")) is False
+        assert pr.needs_review(CommitSha(value="sha2")) is True
+
     def test_add_review_advances_head_sha(self) -> None:
         pr = PullRequest(
             id=PullRequestId(repository="r", number=1),

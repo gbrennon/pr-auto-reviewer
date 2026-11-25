@@ -33,9 +33,9 @@ from pr_auto_reviewer.infrastructure.review_publishers.body_formatter import (
     ReviewBodyRenderer,
 )
 
-TOKEN = os.getenv("FORGEJO_OWNER_TOKEN")
+TOKEN = os.getenv("FORGEJO_MANAGER_TOKEN")
 if not TOKEN:
-    print("FORGEJO_OWNER_TOKEN not set", file=sys.stderr)
+    print("FORGEJO_MANAGER_TOKEN not set", file=sys.stderr)
     sys.exit(1)
 
 BASE_URL = "https://codeberg.org/api/v1"

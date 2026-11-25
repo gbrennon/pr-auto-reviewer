@@ -5,6 +5,7 @@ from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.messages import (
     dismissed_items_message,
     issues_created_message,
+    issue_creation_failed_message,
     rejected_command_items_message,
 )
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
@@ -39,7 +40,7 @@ class TestIssueCreatedMessage:
         message = issues_created_message([issue], [item])
 
         assert "review item `afc64b`" in message
-        assert "(major bug, blocking)" in message
+        assert "[BLOCKING]" in message
         assert "status: open (still relevant)" in message
 
     def test_resolved_item_is_reported_as_no_longer_relevant(self) -> None:
@@ -63,7 +64,7 @@ class TestIssueCreatedMessage:
         message = issues_created_message([issue], [item])
 
         assert "review item `fb864c`" in message
-        assert "(info general, non-blocking)" in message
+        assert "[NON-BLOCKING] (info general)" in message
         assert "status: resolved (no longer relevant)" in message
 
     def test_dismissed_message_identifies_item(self) -> None:
@@ -79,7 +80,7 @@ class TestIssueCreatedMessage:
         message = dismissed_items_message([item.id], [item])
 
         assert "Dismissed 1 non-blocking review item(s)" in message
-        assert "`s1` (info style, non-blocking; status: open)" in message
+        assert "`s1` [NON-BLOCKING] (info style; status: open)" in message
 
     def test_rejected_message_identifies_blocking_item(self) -> None:
         """Rejection acknowledgements explain the blocking restriction."""
@@ -96,4 +97,28 @@ class TestIssueCreatedMessage:
         )
 
         assert "Cannot create tracker issues for:" in message
-        assert "`b1` (major bug, blocking; status: open)" in message
+        assert "`b1` [BLOCKING] (major bug; status: open)" in message
+
+    def test_issue_creation_failure_message_identifies_related_item(self) -> None:
+        item = ReviewItem(
+            id="failed-1",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="src/config.py",
+            description="Clarify configuration",
+        )
+
+        message = issue_creation_failed_message([item.id], [item])
+
+        assert message == (
+            "Could not create tracker issue(s) for: "
+            "`failed-1` [NON-BLOCKING] (minor style; status: open).\n\n"
+            "Reason: tracker issue creation failed.\n\n"
+            "The command was recorded and will not be retried automatically. "
+            "Create the issue manually after resolving the tracker problem."
+        )
+
+    def test_issue_creation_failure_message_keeps_unknown_item_id(self) -> None:
+        message = issue_creation_failed_message(["missing-1"], [])
+
+        assert "`missing-1` [UNKNOWN] (classification unavailable)" in message

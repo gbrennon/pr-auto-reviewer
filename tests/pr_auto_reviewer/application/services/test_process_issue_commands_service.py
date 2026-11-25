@@ -12,7 +12,10 @@ from pr_auto_reviewer.application.services.process_issue_commands_service import
 from pr_auto_reviewer.domain.entities.issue import Issue
 from pr_auto_reviewer.domain.entities.pull_request import PullRequest
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
-from pr_auto_reviewer.domain.exceptions import PullRequestNotFoundError
+from pr_auto_reviewer.domain.exceptions import (
+    IssueCreationError,
+    PullRequestNotFoundError,
+)
 from pr_auto_reviewer.domain.messages.commands.process_issue_commands_command import (
     ProcessIssueCommandsCommand,
 )
@@ -131,6 +134,157 @@ class TestProcessIssueCommandsService:
             {CommentId(value="c1")}
         )
 
+    def test_finalizes_failed_create_after_persisting_prior_comment(
+        self, _pr_id: PullRequestId, _sha: CommitSha
+    ) -> None:
+        first_item = ReviewItem(
+            id="dismissable",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="x.py",
+            description="Simplify this branch",
+        )
+        second_item = ReviewItem(
+            id="failing-create",
+            severity=ItemSeverity.MINOR,
+            category=IssueCategory.STYLE,
+            file_path="y.py",
+            description="Rename this variable",
+        )
+        review = CodeReview(
+            verdict=ReviewVerdict.CHANGES_REQUESTED,
+            reason="Found issues",
+            summary="Review summary",
+            model_used="model",
+            items=[first_item, second_item],
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="dismiss-comment"),
+                    body="dismiss dismissable",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                ),
+                PrComment(
+                    id=CommentId(value="create-comment"),
+                    body="create issue failing-create",
+                    created_at=datetime(2025, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        fake_publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+
+        def fail_register(command: RegisterIssueCommand) -> Issue:
+            raise IssueCreationError(
+                "owner/repo", 0, f"issue creation failed for {command.issue_id}",
+            )
+
+        bus.register(RegisterIssueCommand, fail_register)
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert len(fake_repo.save_calls) == 2
+        saved = fake_repo.save_calls[-1]
+        assert saved.processed_comment_ids == frozenset(
+            {CommentId(value="dismiss-comment"), CommentId(value="create-comment")}
+        )
+        assert saved.dismissed_item_ids == frozenset({"dismissable"})
+        assert len(fake_publisher.post_calls) == 2
+        assert "Could not create tracker issue" in fake_publisher.post_calls[-1][1]
+        assert "`failing-create`" in fake_publisher.post_calls[-1][1]
+
+
+    def test_persists_partial_issue_creation_before_finalizing_failure(
+        self, _pr_id: PullRequestId, _sha: CommitSha,
+    ) -> None:
+        items = [
+            ReviewItem(
+                id="created-first",
+                severity=ItemSeverity.MINOR,
+                category=IssueCategory.STYLE,
+                file_path="x.py",
+                description="Simplify this branch",
+            ),
+            ReviewItem(
+                id="failed-second",
+                severity=ItemSeverity.MINOR,
+                category=IssueCategory.STYLE,
+                file_path="y.py",
+                description="Rename this variable",
+            ),
+        ]
+        review = CodeReview(
+            verdict=ReviewVerdict.APPROVED,
+            reason="No blocking issues",
+            summary="Suggestions available",
+            model_used="model",
+            suggestions=items,
+        )
+        pr = PullRequest(id=_pr_id, title="Test PR", head_sha=_sha).add_review(
+            review, _sha,
+        )
+        fake_repo = FakePullRequestRepository(pr)
+        fake_reader = FakeCommentReader(
+            [
+                PrComment(
+                    id=CommentId(value="create-comment"),
+                    body="create issue created-first, failed-second",
+                    created_at=datetime(2025, 1, 1, tzinfo=UTC),
+                ),
+            ],
+        )
+        fake_publisher = FakeCommentPublisher()
+        bus = InMemoryCommandBus()
+        dispatched: list[RegisterIssueCommand] = []
+
+        def handle_register(command: RegisterIssueCommand) -> Issue:
+            dispatched.append(command)
+            if command.issue_id == "failed-second":
+                raise IssueCreationError(
+                    "owner/repo", 0, "422 validation rejected",
+                )
+            return Issue(
+                id=101,
+                repository="owner/repo",
+                title="title",
+                body="body",
+                source_pr_id=_pr_id,
+                source_item_id=command.issue_id,
+            )
+
+        bus.register(RegisterIssueCommand, handle_register)
+        service = ProcessIssueCommandsService(
+            pr_repository=fake_repo,
+            comment_reader=fake_reader,
+            comment_publisher=fake_publisher,
+            issue_command_parser=IssueCommandParser(),
+            command_bus=bus,
+        )
+
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+        service.execute(ProcessIssueCommandsCommand(pr_id=_pr_id, head_sha=_sha))
+
+        assert [command.issue_id for command in dispatched] == [
+            "created-first", "failed-second",
+        ]
+        saved = fake_repo.save_calls[-1]
+        assert saved.created_issue_item_ids == frozenset({"created-first"})
+        failure_message = fake_publisher.post_calls[-1][1]
+        assert "`failed-second`" in failure_message
+        assert "`created-first`" not in failure_message
+        assert "Reason: tracker rejected the issue request." in failure_message
     def test_creates_issues_for_multiple_non_blocking_item_ids(
         self, _pr_id: PullRequestId, _sha: CommitSha
     ) -> None:

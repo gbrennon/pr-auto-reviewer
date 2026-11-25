@@ -50,15 +50,15 @@ class TestApiAccessCapabilityHttp:
         client = GitPlatformHttpClient(
             "https://api.example.com",
             "default-token",
-            client_label="owner",
+            client_label="manager",
             platform_mode="github",
             capability_state=state,
         )
         state.suspend(
             ApiAccessCapability(
                 platform="github",
-                role="owner",
-                source_name="GITHUB_OWNER_TOKEN",
+                role="manager",
+                source_name="GITHUB_MANAGER_TOKEN",
                 scope="acme/widgets",
             ),
             CapabilitySuspension(
@@ -81,12 +81,12 @@ class TestApiAccessCapabilityHttp:
         assert calls == []
 
     def test_rate_limit_freezes_resolved_override_source(self, tmp_path: Path, monkeypatch):
-        source_name = "GITHUB_TOKEN_acme_OWNER"
+        source_name = "GITHUB_TOKEN_acme_MANAGER"
         os.environ[source_name] = "org-token"
         try:
             resolver = TokenResolver(
                 "GITHUB",
-                TokenDefaults(owner_token="default-token"),
+                TokenDefaults(manager_token="default-token"),
             )
             state = ApiAccessCapabilityState(
                 ApiAccessCapabilityStore(tmp_path / "state.json")
@@ -94,7 +94,7 @@ class TestApiAccessCapabilityHttp:
             client = GitPlatformHttpClient(
                 "https://api.example.com",
                 "default-token",
-                client_label="owner",
+                client_label="manager",
                 platform_mode="github",
                 token_resolver=resolver,
                 capability_state=state,
@@ -113,9 +113,9 @@ class TestApiAccessCapabilityHttp:
 
             client.get("/repos", repo="acme/widgets")
 
-            assert state.is_available("github", "owner", source_name, "acme/widgets") is False
+            assert state.is_available("github", "manager", source_name, "acme/widgets") is False
             assert state.is_available(
-                "github", "owner", "GITHUB_OWNER_TOKEN", "other/repo"
+                "github", "manager", "GITHUB_MANAGER_TOKEN", "other/repo"
             ) is True
         finally:
             del os.environ[source_name]

@@ -63,13 +63,13 @@ class TestPublisherVerifyTokens:
         reviewer_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
             body_renderer=_BODY,
             client=reviewer_spy,
-            owner_client=owner_spy,
+            manager_client=manager_spy,
         )
 
         pr_id = PullRequestId(repository="my-org/my-repo", number=1)
@@ -79,8 +79,8 @@ class TestPublisherVerifyTokens:
 
         assert len(reviewer_spy.verify_calls) == 1
         assert reviewer_spy.verify_calls[0] == pr_id
-        assert len(owner_spy.verify_calls) == 1
-        assert owner_spy.verify_calls[0] == pr_id
+        assert len(manager_spy.verify_calls) == 1
+        assert manager_spy.verify_calls[0] == pr_id
 
     def test_verify_tokens_reviewer_failure_wraps_as_review_publish_error(
         self, integration_data: dict,
@@ -89,13 +89,13 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
             fail_verify=_preflight_error(),
         )
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
             body_renderer=_BODY,
             client=reviewer_spy,
-            owner_client=owner_spy,
+            manager_client=manager_spy,
         )
         pr_id = PullRequestId(repository="my-org/my-repo", number=42)
         review = _build_review()
@@ -104,7 +104,7 @@ class TestPublisherVerifyTokens:
             adapter.publish(pr_id, review)
 
         assert len(reviewer_spy.verify_calls) == 1
-        assert len(owner_spy.verify_calls) == 0
+        assert len(manager_spy.verify_calls) == 0
 
     def test_verify_tokens_owner_failure_wraps_as_review_publish_error(
         self, integration_data: dict,
@@ -112,14 +112,14 @@ class TestPublisherVerifyTokens:
         reviewer_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
             fail_verify=_preflight_error(),
         )
         adapter = GithubReviewPublisher(
             body_renderer=_BODY,
             client=reviewer_spy,
-            owner_client=owner_spy,
+            manager_client=manager_spy,
         )
         pr_id = PullRequestId(repository="my-org/my-repo", number=7)
         review = _build_review()
@@ -128,7 +128,7 @@ class TestPublisherVerifyTokens:
             adapter.publish(pr_id, review)
 
         assert len(reviewer_spy.verify_calls) == 1
-        assert len(owner_spy.verify_calls) == 1
+        assert len(manager_spy.verify_calls) == 1
 
     def test_verify_tokens_non_fatal_other_exceptions_propagate(
         self, integration_data: dict,
@@ -138,13 +138,13 @@ class TestPublisherVerifyTokens:
             FixtureHttpClient(integration_data["private"], "private"),
             fail_verify=ValueError("msg"),
         )
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
         adapter = GithubReviewPublisher(
             body_renderer=_BODY,
             client=reviewer_spy,
-            owner_client=owner_spy,
+            manager_client=manager_spy,
         )
 
         pr_id = PullRequestId(repository="my-org/my-repo", number=1)
@@ -161,13 +161,13 @@ class TestPublisherVerifyTokens:
             ReviewPublishingService,
         )
 
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
         reviewer_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        service = ReviewPublishingService(client=reviewer_spy, owner_client=owner_spy)
+        service = ReviewPublishingService(client=reviewer_spy, manager_client=manager_spy)
 
         pr_id = PullRequestId(repository="owner/repo", number=1)
         review = _build_review()
@@ -193,7 +193,7 @@ class TestPublisherVerifyTokens:
     def test_publish_formal_review_with_diff_avoids_owner_api_calls(
         self, integration_data: dict,
     ) -> None:
-        """When diff is provided, publish_formal_review MUST NOT call get/get_raw on owner_client."""
+        """When diff is provided, publish_formal_review MUST NOT call get/get_raw on manager_client."""
         from pr_auto_reviewer.domain.value_objects.commit_sha import CommitSha
         from pr_auto_reviewer.domain.value_objects.pull_request_diff import (
             PullRequestDiff,
@@ -202,13 +202,13 @@ class TestPublisherVerifyTokens:
             ReviewPublishingService,
         )
 
-        owner_spy = SpyClient(
+        manager_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
         reviewer_spy = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        service = ReviewPublishingService(client=reviewer_spy, owner_client=owner_spy)
+        service = ReviewPublishingService(client=reviewer_spy, manager_client=manager_spy)
 
         pr_id = PullRequestId(repository="owner/repo", number=1)
         diff = PullRequestDiff(
@@ -226,11 +226,11 @@ class TestPublisherVerifyTokens:
             diff=diff,
         )
 
-        assert len(owner_spy.get_calls) == 0, (
-            f"Expected 0 get() calls on owner_client when diff is provided, got {owner_spy.get_calls}"
+        assert len(manager_spy.get_calls) == 0, (
+            f"Expected 0 get() calls on manager_client when diff is provided, got {manager_spy.get_calls}"
         )
-        assert len(owner_spy.get_raw_calls) == 0, (
-            f"Expected 0 get_raw() calls on owner_client when diff is provided, got {owner_spy.get_raw_calls}"
+        assert len(manager_spy.get_raw_calls) == 0, (
+            f"Expected 0 get_raw() calls on manager_client when diff is provided, got {manager_spy.get_raw_calls}"
         )
 
     def test_inline_comments_exclude_terminal_records(
@@ -243,7 +243,7 @@ class TestPublisherVerifyTokens:
         client = SpyClient(
             FixtureHttpClient(integration_data["private"], "private"),
         )
-        service = ReviewPublishingService(client=client, owner_client=client)
+        service = ReviewPublishingService(client=client, manager_client=client)
         terminal = ReviewItem(
             id="terminal",
             severity=ItemSeverity.MAJOR,

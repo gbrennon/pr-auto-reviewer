@@ -3,6 +3,7 @@ from .inbound import (
     ProcessIssueCommandsPort,
     RegisterIssuePort,
     ReviewPullRequestPort,
+    ShowStatusPort,
 )
 from .outbound import (
     ChangesetFetcherPort,
@@ -15,6 +16,7 @@ from .outbound import (
     LlmReviewPort,
     NotifierPort,
     PromptRendererPort,
+    ProcessLivenessPort,
     PullRequestRepositoryPort,
     RepositoryContextPort,
     ReviewPublisherPort,
@@ -34,10 +36,12 @@ __all__ = [
     "PrepareIssueContentPort",
     "ProcessIssueCommandsPort",
     "PromptRendererPort",
+    "ProcessLivenessPort",
     "PullRequestRepositoryPort",
     "RegisterIssuePort",
     "RepositoryContextPort",
     "ReviewPublisherPort",
     "ReviewPullRequestPort",
     "ReviewReaderPort",
+    "ShowStatusPort",
 ]

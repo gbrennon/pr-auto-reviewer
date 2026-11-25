@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ...value_objects.conversation_purpose import ConversationPurpose
+
 
 @dataclass(frozen=True)
 class RunAgentConversationCommand:
@@ -23,6 +25,7 @@ class RunAgentConversationCommand:
     review_session: str
     """Opaque review-run key (start timestamp) grouping transcripts for one run."""
     phase_name: str = ""
+    purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE
     existing_item_ids: frozenset[str] = frozenset()
     coverage_files: tuple[str, ...] | None = None
     """Files that must be read before this phase may accept a verdict."""

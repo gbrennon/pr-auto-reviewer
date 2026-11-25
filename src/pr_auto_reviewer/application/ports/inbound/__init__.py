@@ -6,6 +6,7 @@ from .register_issue_port import RegisterIssuePort
 from .review_pull_request_port import ReviewPullRequestPort
 from .run_agent_conversation_port import RunAgentConversationPort
 from .run_multi_phase_review_port import RunMultiPhaseReviewPort
+from .show_status_port import ShowStatusPort
 from .verify_findings_port import VerifyFindingsPort
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "ReviewPullRequestPort",
     "RunAgentConversationPort",
     "RunMultiPhaseReviewPort",
+    "ShowStatusPort",
     "VerifyFindingsPort",
 ]

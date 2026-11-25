@@ -3,9 +3,13 @@ from dataclasses import replace
 from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
     AgentChatPort,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.review_execution_context import (
     ReviewExecutionContext,
 )
+from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 
 from ._shared import *
 from pr_auto_reviewer.domain.services.review_item_factory import ReviewItemFactory
@@ -477,6 +481,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 base_sha=base_sha,
                 review_session=review_session,
                 existing_item_ids=existing_ids,
+                purpose=self._purpose_for_phase(phase),
             )
             phase_result = self._adjudicate_phase(
                 phase=phase,
@@ -723,13 +728,21 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             (item.id, item.file_path, item.description)
             for item in historical_items
         }
+        resolved_item_keys = {
+            self._historical_record_key(item)
+            for item in historical_items
+            if not item.is_active
+        }
         suggestion_keys = {
             (item.id, item.file_path, item.description)
             for item in historical_suggestions
         }
         items = historical_items + [
             item for item in review.items
-            if (item.id, item.file_path, item.description) not in item_keys
+            if (
+                (item.id, item.file_path, item.description) not in item_keys
+                and self._historical_record_key(item) not in resolved_item_keys
+            )
         ]
         suggestions = historical_suggestions + [
             item for item in review.suggestions
@@ -748,6 +761,11 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
             suggestions=suggestions,
             verdict=verdict,
         )
+
+    @staticmethod
+    def _historical_record_key(item: ReviewItem) -> tuple[str | None, str]:
+        """Identify a finding independently of its regenerated short ID."""
+        return item.file_path, " ".join(item.description.split()).casefold()
 
     def _rebuild_after_verification(
         self, verified_items: list[Any], model: str,
@@ -841,6 +859,18 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         extra = f" (and {len(findings) - 3} more)" if len(findings) > 3 else ""
         return f"specifically, {joined}{extra}"
 
+    @staticmethod
+    def _purpose_for_phase(
+        phase: ReviewPhase,
+    ) -> ConversationPurpose:
+        """Return the isolated LLM budget purpose for a phase role."""
+        role = phase.role.role if phase.role is not None else None
+        if role == SubAgentRole.ENGINEER:
+            return ConversationPurpose.ENGINEER_PHASE
+        if role == SubAgentRole.ARCHITECT:
+            return ConversationPurpose.ARCHITECT_PHASE
+        return ConversationPurpose.REVIEWER_PHASE
+
     def _run_phase_with_retry(
         self,
         phase_name: str,
@@ -851,6 +881,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         review_session: str = "",
         base_sha: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
     ) -> PhaseResult:
         """Run a single phase with per-phase retry on exhaustion."""
         tool_service = self._tool_factory(
@@ -878,6 +909,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         phase_name=phase_name,
                         existing_item_ids=existing_item_ids,
                         review_session=review_session,
+                        purpose=purpose,
                     )
                 )
             except (MaxTurnsExceededError, AdvisorBlockedError) as exc:

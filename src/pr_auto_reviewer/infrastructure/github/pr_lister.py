@@ -184,7 +184,11 @@ class GithubPrLister(PrListerPort):
             if not isinstance(review_id, int):
                 return None, False
             state = str(latest.get("state", "")).upper()
-            dismissed = latest.get("dismissed") is True or state == "DISMISSED"
+            dismissed = (
+                latest.get("dismissed") is True
+                or latest.get("stale") is True
+                or state == "DISMISSED"
+            )
             return review_id, dismissed
         except (requests.RequestException, OSError, ValueError, TypeError, KeyError):
             return None, False

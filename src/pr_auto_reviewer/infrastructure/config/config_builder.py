@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pr_auto_reviewer.infrastructure.config.advisor_granularity import AdvisorGranularity
+from pr_auto_reviewer.infrastructure.config.auth_configuration import AuthConfiguration
 from pr_auto_reviewer.infrastructure.config.config_dataclass import Config
 from pr_auto_reviewer.infrastructure.config.llm_config_parser import LlmConfigParser
 from pr_auto_reviewer.infrastructure.config.platform_config_parser import PlatformConfigParser
@@ -39,6 +40,11 @@ class ConfigBuilder:
         review_max_tries: int = 2,
         llm_call_budget: int = 300,
         advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
+        auth_configuration: AuthConfiguration | None = None,
+        remote_failure_threshold: int = 3,
+        remote_failure_interval_seconds: float = 60.0,
+        remote_failure_interval_increment_seconds: float = 60.0,
+        remote_failure_quarantine_seconds: float = 3600.0,
     ) -> Config:
         """Build immutable configuration data from environment values."""
         platform = self._platform_parser.parse(source)
@@ -57,13 +63,16 @@ class ConfigBuilder:
         return Config(
             env=env_name,
             platform_mode=platform.mode,
+            platform_transport=platform.transport,
+            storage_encryption_key=source.get("PR_AUTO_REVIEWER_ENCRYPTION_KEY", ""),
+            auth_configuration=auth_configuration or AuthConfiguration.empty(),
             github_api_url=platform.github_api_url,
             forgejo_api_url=platform.forgejo_api_url,
-            github_owner_token=platform.github_owner_token,
+            github_manager_token=platform.github_manager_token,
             github_reviewer_token=platform.github_reviewer_token,
             github_reviewer_username=platform.github_reviewer_username,
             github_review_mode=platform.github_review_mode,
-            forgejo_owner_token=platform.forgejo_owner_token,
+            forgejo_manager_token=platform.forgejo_manager_token,
             forgejo_reviewer_token=platform.forgejo_reviewer_token,
             forgejo_reviewer_username=platform.forgejo_reviewer_username,
             org_token_overrides=tokens,
@@ -80,6 +89,12 @@ class ConfigBuilder:
             llm_call_budget=llm.call_budget,
             advisor_granularity=review.advisor_granularity,
             poll_interval=review.poll_interval,
+            remote_failure_threshold=remote_failure_threshold,
+            remote_failure_interval_seconds=remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds=(
+                remote_failure_interval_increment_seconds
+            ),
+            remote_failure_quarantine_seconds=remote_failure_quarantine_seconds,
             run_once=review.run_once,
             repos_filter=repository.repos_filter,
             repos_allow_list=repository.repos_allow_list,

@@ -13,11 +13,18 @@ from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
+from pr_auto_reviewer.domain.value_objects.advisor_turn_evidence import (
+    AdvisorTurnEvidence,
+)
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import (
     SubAgentGrade,
 )
+from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
 
 
 def _phase() -> ReviewPhase:
@@ -55,6 +62,7 @@ class TestPhaseAdvisor:
         assert len(chat.send.call_args_list) == 1
         messages = chat.send.call_args.args[0]
         assert any("impressive" in m.content for m in messages)
+        assert chat.send.call_args.kwargs["purpose"] is ConversationPurpose.ADVISOR_PHASE
 
     def test_assess_publishes_exchange_with_grade_metadata(self) -> None:
         chat = MagicMock()
@@ -84,8 +92,11 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat, command_bus=bus)
 
         advisor.observe(
-            peer_content='{"action": "run_git", "args": ""}',
-            phase_name="Bug Hunt — Diff",
+            AdvisorTurnEvidence(
+                phase_name="Bug Hunt — Diff",
+                turn_kind=TurnKind.TOOL_CALL,
+                tool_name="run_git",
+            ),
             review_session="test-session",
         )
 
@@ -100,16 +111,20 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat)
 
         advisor.observe(
-            peer_content='{"action": "read_file", "args": "Cargo.toml"}',
-            phase_name="Bug Hunt — Diff",
+            AdvisorTurnEvidence(
+                phase_name="Bug Hunt — Diff",
+                turn_kind=TurnKind.TOOL_CALL,
+                tool_name="read_file",
+                tool_path="Cargo.toml",
+            ),
             review_session="test-session",
-            changed_files=["Cargo.toml", "CHANGELOG.md"],
         )
 
         messages = chat.send.call_args.args[0]
         user_msg = messages[-1]
         assert "Cargo.toml" in user_msg.content
-        assert "CHANGELOG.md" in user_msg.content
+        assert "CHANGELOG.md" not in user_msg.content
+        assert "read_file" in user_msg.content
 
     def test_assess_parses_grade_from_fenced_json(self) -> None:
         chat = MagicMock()
@@ -177,8 +192,10 @@ class TestPhaseAdvisor:
 
         with pytest.raises(LlmUnavailableError, match="host unreachable"):
             advisor.observe(
-                peer_content="peer output",
-                phase_name="Bug Hunt",
+                AdvisorTurnEvidence(
+                    phase_name="Bug Hunt",
+                    turn_kind=TurnKind.TOOL_CALL,
+                ),
                 review_session="test-session",
             )
 
@@ -236,7 +253,10 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.observe(
-            peer_content="turn", phase_name="Bug Hunt — Diff",
+            AdvisorTurnEvidence(
+                phase_name="Bug Hunt — Diff",
+                turn_kind=TurnKind.TOOL_CALL,
+            ),
             review_session="test-session",
         )
 

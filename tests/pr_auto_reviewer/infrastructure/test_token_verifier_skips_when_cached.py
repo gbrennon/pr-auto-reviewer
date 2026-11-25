@@ -15,7 +15,7 @@ from tests.fakes import FakeTokenResolver, FakeVerifier
 class TestTokenVerifierSkipsWhenCached:
     @staticmethod
     def _client(
-        label: str = "owner",
+        label: str = "manager",
         verified_cache_path: Path | None = None,
     ) -> GitPlatformHttpClient:
         resolver = FakeTokenResolver({"o/r": f"{label}-tok"})
@@ -35,7 +35,7 @@ class TestTokenVerifierSkipsWhenCached:
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
         owner = TestTokenVerifierSkipsWhenCached._client(
-            "owner", verified_cache_path=cache,
+            "manager", verified_cache_path=cache,
         )
         reviewer = TestTokenVerifierSkipsWhenCached._client(
             "reviewer", verified_cache_path=cache,
@@ -54,7 +54,7 @@ class TestTokenVerifierSkipsWhenCached:
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
         owner = TestTokenVerifierSkipsWhenCached._client(
-            "owner", verified_cache_path=cache,
+            "manager", verified_cache_path=cache,
         )
         reviewer = TestTokenVerifierSkipsWhenCached._client(
             "reviewer", verified_cache_path=cache,
@@ -71,7 +71,7 @@ class TestTokenVerifierSkipsWhenCached:
     ) -> None:
         cache = tmp_path / "verified-tokens.json"
         owner = TestTokenVerifierSkipsWhenCached._client(
-            "owner", verified_cache_path=cache,
+            "manager", verified_cache_path=cache,
         )
         reviewer = TestTokenVerifierSkipsWhenCached._client(
             "reviewer", verified_cache_path=cache,

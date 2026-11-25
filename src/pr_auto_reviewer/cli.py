@@ -8,7 +8,15 @@ import subprocess
 import sys
 from typing import Any
 
-from .presentation.composition_root import bootstrap, run_daemon, show_status
+from .presentation.cli.settings_cli import SettingsCli
+from .presentation.composition_root import (
+    bootstrap,
+    run_daemon,
+    show_status,
+    status_snapshot,
+)
+from .presentation.navigation import NavigationMode
+from .presentation.status_dashboard import StatusDashboard
 
 SERVICE_NAME = "pr-auto-reviewer.service"
 
@@ -32,7 +40,8 @@ class CommandLineInterface:
     def _add_service_parsers(self, subparsers: Any) -> None:
         subparsers.add_parser("start", help="Start the systemd service")
         subparsers.add_parser("stop", help="Stop the systemd service")
-        subparsers.add_parser("status", help="Show live daemon status")
+        subparsers.add_parser("status", help="Show plain daemon status")
+        subparsers.add_parser("dashboard", help="Open the live status dashboard")
         subparsers.add_parser("logs", help="Follow service logs")
         subparsers.add_parser("restart", help="Restart the service")
         subparsers.add_parser("bootstrap", help="Bootstrap the application")
@@ -41,6 +50,10 @@ class CommandLineInterface:
             "list-allowed-repositories",
             help="List repositories permitted by the allowlist",
         )
+        config_parser = subparsers.add_parser(
+            "config", help="Read and write application settings"
+        )
+        config_parser.add_argument("config_args", nargs=argparse.REMAINDER)
 
     def _add_action_parsers(self, subparsers: Any) -> None:
         watch_parser = subparsers.add_parser("watch-prs", help="Watch PRs for reviews")
@@ -72,14 +85,16 @@ class CommandLineInterface:
         if args.command == "watch-prs":
             self._handle_watch(args)
             return
+        if args.command == "config":
+            raise SystemExit(SettingsCli().run(args.config_args))
         self._handle_runner_command(args)
 
     def _handle_lifecycle(self, command: str) -> bool:
         if command in {"start", "stop", "restart"}:
             self._run_systemctl(command)
             return True
-        if command == "status":
-            print(show_status())
+        if command in {"status", "dashboard"}:
+            self._run_status_interface(command)
             return True
         if command == "logs":
             self._run_journalctl()
@@ -105,8 +120,7 @@ class CommandLineInterface:
 
     def _handle_watch(self, args: argparse.Namespace) -> None:
         self._apply_watch_env(args)
-        components = bootstrap()
-        run_daemon(components)
+        run_daemon()
 
     @staticmethod
     def _build_runner_argv(args: argparse.Namespace) -> list[str]:
@@ -142,6 +156,18 @@ class CommandLineInterface:
     @staticmethod
     def _run_journalctl() -> None:
         subprocess.run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
+
+    @staticmethod
+    def _run_status_interface(command: str) -> None:
+        if command == "status":
+            print(show_status())
+            return
+        settings = SettingsCli()
+        StatusDashboard(
+            status_snapshot,
+            settings=settings,
+            navigation_mode=NavigationMode.parse(settings.navigation_mode()),
+        ).run()
 
 
 def main() -> None:

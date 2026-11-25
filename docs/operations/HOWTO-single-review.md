@@ -11,13 +11,13 @@ uv run python -m pr_auto_reviewer review --repo owner/repo --pr <number>
 
 ## Environment
 
-The application loads settings from `.env`. See [Configuration](configuration.md).
+The application loads settings from `.env`. See [Configuration](../configuration/configuration.md).
 
 ### GitHub
 
 ```ini
 PLATFORM_MODE=github
-GITHUB_OWNER_TOKEN=<REDACTED_GITHUB_TOKEN>         # owner token
+GITHUB_MANAGER_TOKEN=<REDACTED_GITHUB_TOKEN>         # manager token
 GITHUB_REVIEWER_TOKEN=<REDACTED_GITHUB_TOKEN>      # reviewer token
 GITHUB_REVIEWER_USERNAME=my-bot           # reviewer username
 LLM_MODEL=code-review:latest
@@ -27,7 +27,7 @@ LLM_MODEL=code-review:latest
 
 ```ini
 PLATFORM_MODE=codeberg
-FORGEJO_OWNER_TOKEN=xxx                   # owner token
+FORGEJO_MANAGER_TOKEN=xxx                   # manager token
 FORGEJO_REVIEWER_TOKEN=xxx                # reviewer token
 FORGEJO_REVIEWER_USERNAME=my-bot          # reviewer username
 LLM_MODEL=code-review:latest
@@ -37,10 +37,10 @@ LLM_MODEL=code-review:latest
 
 ```ini
 PLATFORM_MODE=both
-GITHUB_OWNER_TOKEN=xxx
+GITHUB_MANAGER_TOKEN=xxx
 GITHUB_REVIEWER_TOKEN=xxx
 GITHUB_REVIEWER_USERNAME=my-bot
-FORGEJO_OWNER_TOKEN=xxx
+FORGEJO_MANAGER_TOKEN=xxx
 FORGEJO_REVIEWER_TOKEN=xxx
 FORGEJO_REVIEWER_USERNAME=my-bot
 LLM_MODEL=code-review:latest
@@ -61,7 +61,7 @@ LLM_MODEL=code-review:latest
 
 | Command | Description |
 |---------|-------------|
-| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments (see [docs/command-guide.md](command-guide.md)) |
+| `process-commands --repo owner/repo --pr N [-v]` | Process issue creation commands from PR comments (see [command-guide.md](../reference/command-guide.md)) |
 | `list-items --repo owner/repo --pr N [-v]` | List parsed review items from latest review |
 | `clean` | Reset all reviewed-PR tracking state |
 | `bootstrap` | Initialize config and verify tokens |
@@ -93,7 +93,7 @@ Use `terminal` or `file:` for testing without touching the PR.
 
 ## Token Setup
 
-See [docs/tokens/](tokens/README.md) for full instructions on creating tokens and setting required permissions.
+See [docs/tokens/](../tokens/README.md) for full instructions on creating tokens and setting required permissions.
 
 ## Troubleshooting
 

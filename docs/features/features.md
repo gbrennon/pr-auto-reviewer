@@ -18,7 +18,7 @@ This document outlines what is currently implemented and what is planned.
 
 ### Configuration
 
-- **Environment-based Config** — All settings in `.env` or user config; see [Configuration](configuration.md) for the full variable reference
+- **Environment-based Config** — All settings in `.env` or user config; see [Configuration](../configuration/configuration.md) for the full variable reference
 - **Configurable Poll Interval** — Set via `POLL_INTERVAL` env var
 - **Configurable LLM** — Host and model configurable via `LLM_HOST` / `LLM_MODEL` env vars
 - **Configurable Clone Protocol** — HTTPS or SSH for local git clones via `CLONE_PROTOCOL`
@@ -57,7 +57,7 @@ This document outlines what is currently implemented and what is planned.
 - **Full GitHub API integration** — PR diff, file content, commit fetching
 - **Formal reviews** — Approve, request changes, or comment on GitHub PRs
 - **Multi-platform polling** — `PLATFORM_MODE=both` polls PRs on both GitHub and Codeberg; each PR reviewed on its platform
-- **Per-org token overrides** — `GITHUB_TOKEN_<org>_OWNER` for multi-org setups
+- **Per-org token overrides** — `GITHUB_TOKEN_<org>_MANAGER` for multi-org setups
 - **Review Mode** — `GITHUB_REVIEW_MODE=formal|comment` controls review type
 
 ### Codeberg/Forgejo Support
@@ -66,7 +66,7 @@ This document outlines what is currently implemented and what is planned.
 - **Formal reviews** — Uses `event: "APPROVED"` and `official: true` (Forgejo-specific)
 - **Inline comments** — Uses Forgejo's `old_position`/`new_position` format
 - **Non-blocking item split** — MINOR/INFO items posted as separate PR comment
-- **Per-org token overrides** — `FORGEJO_TOKEN_<org>_OWNER` for multi-org setups
+- **Per-org token overrides** — `FORGEJO_TOKEN_<org>_MANAGER` for multi-org setups
 
 ### Advanced Review Features
 
@@ -99,7 +99,7 @@ This document outlines what is currently implemented and what is planned.
 - **Token Verification Caching** — Caches verified tokens to `~/.cache/pr-auto-reviewer/verified-tokens.json`
 - **Rate Limit Tracking** — Tracks `x-ratelimit-*` headers, persists to disk, backs off before exhaustion
 - **Auth Header Format** — `Bearer` for GitHub, `token` for Forgejo/Codeberg
-- **Separate Owner/Reviewer Tokens** — Different tokens for reading vs writing
+- **Separate Manager/Reviewer Tokens** — Different tokens for reading vs writing
 
 ### Testing & Observability
 

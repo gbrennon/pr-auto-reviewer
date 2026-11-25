@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
@@ -34,19 +34,7 @@ from pr_auto_reviewer.domain.value_objects.review_item_status import (
 )
 from pr_auto_reviewer.domain.value_objects.sub_agent_role import SubAgentRole
 
-
-class AuditTranscriptRunner(Protocol):
-    """Seam that runs the auditor conversation and returns its results."""
-
-    def run(
-        self,
-        system_prompt: str,
-        repo_path: Path,
-        changed_files: list[str],
-        base_sha: str,
-    ) -> tuple[list[dict[str, Any]] | None, list[ConversationMessage]]:
-        """Return parsed audit results and the full transcript."""
-        ...
+from .audit_transcript_runner import AuditTranscriptRunner
 
 
 class RemediationAuditService:
@@ -78,8 +66,17 @@ class RemediationAuditService:
                 lifecycles=tuple(command.prior_lifecycles),
             )
 
+        lifecycle_by_id = {
+            lifecycle.item_id: lifecycle
+            for lifecycle in command.prior_lifecycles
+            if lifecycle.item_id
+        }
         findings_text = self._format_findings(
-            items, command.repo_path, suggestions=suggestions,
+            items,
+            command.repo_path,
+            suggestions=suggestions,
+            lifecycles=lifecycle_by_id,
+            current_sha=command.current_sha or command.base_sha,
         )
         prompt = self._audit_prompt.replace("{findings}", findings_text)
         results, transcript = self._transcript_runner.run(
@@ -96,11 +93,6 @@ class RemediationAuditService:
         has_result_ids = any(
             self._result_id(result) for result in normalized_results
         )
-        lifecycle_by_id = {
-            lifecycle.item_id: lifecycle
-            for lifecycle in command.prior_lifecycles
-            if lifecycle.item_id
-        }
         audit_sha = command.current_sha or command.base_sha
         audited_items: list[ReviewItem] = []
         audited_suggestions: list[ReviewItem] = []
@@ -351,16 +343,24 @@ class RemediationAuditService:
         items: list[ReviewItem],
         repo_path: Path,
         suggestions: list[ReviewItem] | None = None,
+        lifecycles: dict[str, ReviewItemLifecycle] | None = None,
+        current_sha: str = "",
     ) -> str:
         """Render item and suggestion history with stable identifiers."""
         suggestion_records = suggestions or []
         sections = [
             "## ITEMS\n\n" + "\n\n".join(
-                self._format_finding(index, item, repo_path, "item")
+                self._format_finding(
+                    index, item, repo_path, "item",
+                    (lifecycles or {}).get(item.id), current_sha,
+                )
                 for index, item in enumerate(items)
             ),
             "## SUGGESTIONS\n\n" + "\n\n".join(
-                self._format_finding(index, item, repo_path, "suggestion")
+                self._format_finding(
+                    index, item, repo_path, "suggestion",
+                    (lifecycles or {}).get(item.id), current_sha,
+                )
                 for index, item in enumerate(suggestion_records)
             ),
         ]
@@ -372,6 +372,8 @@ class RemediationAuditService:
         item: ReviewItem,
         repo_path: Path,
         record_type: str = "item",
+        lifecycle: ReviewItemLifecycle | None = None,
+        current_sha: str = "",
     ) -> str:
         """Render one historical record with enriched remediation context."""
         file_content = self._read_current_file(repo_path, item.file_path or "")
@@ -387,6 +389,8 @@ class RemediationAuditService:
             f"- **Reproduction:** {item.reproduction or '(none)'}\n"
             f"- **Acceptance criteria:** "
             f"{item.acceptance_criteria or '(none)'}\n"
+            f"- **First seen commit:** `{lifecycle.first_seen_sha if lifecycle else '(unknown)'}`\n"
+            f"- **Current audit commit:** `{current_sha or '(unknown)'}`\n"
             f"- **Current code:**\n```\n{item.current_code}\n```\n"
             f"- **File content (current):**\n```\n{file_content}\n```\n"
         )

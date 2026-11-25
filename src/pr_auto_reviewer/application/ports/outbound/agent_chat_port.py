@@ -5,6 +5,9 @@ from typing import Protocol
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 
 
 class AgentChatPort(Protocol):
@@ -14,8 +17,14 @@ class AgentChatPort(Protocol):
     OpenAI-compatible language-model servers.
     """
 
-    def send(self, messages: list[ConversationMessage]) -> str:
-        """Send *messages* to the LLM and return the raw text response."""
+    def send(
+        self,
+        messages: list[ConversationMessage],
+        *,
+        purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
+        session_id: str = "",
+    ) -> str:
+        """Send one isolated context to the LLM and return its response."""
         ...
 
     def reset_budget(self) -> None:

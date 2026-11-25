@@ -11,13 +11,13 @@ class ConfigFixtures:
     # Minimal .env for forgejo-only setup
     forgejo_minimal: str = """PLATFORM_MODE=forgejo
 FORGEJO_API_URL=https://codeberg.org/api/v1
-FORGEJO_OWNER_TOKEN=fj_token_abc123
+FORGEJO_MANAGER_TOKEN=fj_token_abc123
 """
 
     # .env with GitHub settings
     github_settings: str = """PLATFORM_MODE=github
 GITHUB_API_URL=https://github.example.com
-GITHUB_OWNER_TOKEN=gh_token_xyz
+GITHUB_MANAGER_TOKEN=gh_token_xyz
 GITHUB_REVIEWER_TOKEN=gh_reviewer_xyz
 GITHUB_REVIEWER_USERNAME=review-bot
 GITHUB_REVIEW_MODE=informal
@@ -58,7 +58,7 @@ LLM_MODEL=gpt-4
     # .env with FORGEJO_HOST fallback (no FORGEJO_API_URL)
     forgejo_host_fallback: str = """PLATFORM_MODE=forgejo
 FORGEJO_HOST=https://git.example.com
-FORGEJO_OWNER_TOKEN=fj_owner
+FORGEJO_MANAGER_TOKEN=fj_owner
 FORGEJO_REVIEWER_TOKEN=fj_reviewer
 FORGEJO_REVIEWER_USERNAME=fj_bot
 """

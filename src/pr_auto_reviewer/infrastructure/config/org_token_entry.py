@@ -7,6 +7,6 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class OrgTokenEntry:
-    owner_token: str = ""
+    manager_token: str = ""
     reviewer_token: str = ""
     reviewer_username: str = ""

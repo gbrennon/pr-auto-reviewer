@@ -135,6 +135,9 @@ class TestReviewPublisherProcessor:
         assert "non-blocking finding" not in processed.body.partition(
             "### Remediation audit"
         )[0]
+        assert "active suggestion" not in processed.body.partition(
+            "### Remediation audit"
+        )[0]
         assert "### Remediation audit" in processed.body
         assert "[BLOCKING]" in processed.body
         comment_body = processed.comment_body

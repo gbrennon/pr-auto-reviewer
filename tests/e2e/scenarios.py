@@ -26,14 +26,14 @@ from tests.e2e.review_scenario_input import ReviewScenarioInput
 
 def _review_output(scenario: ReviewScenarioInput) -> str:
     """Generate review_output from required params."""
-    return f"file:reviews/{scenario['platform']}_{scenario['owner']}_{scenario['repo']}_pr{scenario['pr_id']}.md"
+    return f"file:reviews/{scenario['platform']}_{scenario['manager']}_{scenario['repo']}_pr{scenario['pr_id']}.md"
 
 
 def _normalize_scenario(scenario: ReviewScenarioInput) -> ReviewScenario:
     """Add auto-generated review_output and expected_items."""
     normalized: ReviewScenario = {
         "platform": scenario["platform"],
-        "owner": scenario["owner"],
+        "manager": scenario["manager"],
         "repo": scenario["repo"],
         "pr_id": scenario["pr_id"],
         "review_output": _review_output(scenario),
@@ -51,7 +51,7 @@ def get_normalized_scenarios() -> list[ReviewScenario]:
 E2E_REVIEW_SCENARIOS: list[ReviewScenarioInput] = [
     {
         "platform": "github",
-        "owner": "gbrennon",
+        "manager": "gbrennon",
         "repo": "ratatui",
         "pr_id": 1,
     },

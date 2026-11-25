@@ -8,16 +8,16 @@ Codeberg runs Forgejo — the API and token model are identical.
 
 | Method | Endpoint | Token | Required Scope |
 |--------|----------|-------|----------------|
-| `GET` | `/user` | Owner + Reviewer | `read:user` — validates token is not expired |
-| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner + Reviewer | `write:repository` — empty reviewers list probes write access |
-| `GET` | `/repos/{o}/{r}/pulls/{n}` | Owner | `read:repository` — fetches PR metadata |
-| `GET` | `/repos/{o}/{r}/issues/{n}/timeline` | Owner | `read:issue` — identifies review-request events |
-| `GET` | `/repos/{o}/{r}/pulls/{n}.diff` | Owner | `read:repository` — fetches the unified diff |
-| `GET` | `/repos/{o}/{r}/pulls/{n}/commits` | Owner | `read:repository` — fetches commit messages |
-| `GET` | `/repos/{o}/{r}/raw/{sha}/{path}` | Owner | `read:repository` — fetches file contents at a commit |
-| `GET` | `/repos/{o}/{r}/git/trees/{branch}?recursive=1` | Owner | `read:repository` — lists the repository file tree |
-| `GET` | `/repos/{o}/{r}/raw/{branch}/{filename}` | Owner | `read:repository` — fetches conventions files |
-| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Owner | `write:repository` — requests the bot as reviewer |
+| `GET` | `/user` | Manager + Reviewer | `read:user` — validates token is not expired |
+| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Manager + Reviewer | `write:repository` — empty reviewers list probes write access |
+| `GET` | `/repos/{o}/{r}/pulls/{n}` | Manager | `read:repository` — fetches PR metadata |
+| `GET` | `/repos/{o}/{r}/issues/{n}/timeline` | Manager | `read:issue` — identifies review-request events |
+| `GET` | `/repos/{o}/{r}/pulls/{n}.diff` | Manager | `read:repository` — fetches the unified diff |
+| `GET` | `/repos/{o}/{r}/pulls/{n}/commits` | Manager | `read:repository` — fetches commit messages |
+| `GET` | `/repos/{o}/{r}/raw/{sha}/{path}` | Manager | `read:repository` — fetches file contents at a commit |
+| `GET` | `/repos/{o}/{r}/git/trees/{branch}?recursive=1` | Manager | `read:repository` — lists the repository file tree |
+| `GET` | `/repos/{o}/{r}/raw/{branch}/{filename}` | Manager | `read:repository` — fetches conventions files |
+| `POST` | `/repos/{o}/{r}/pulls/{n}/requested_reviewers` | Manager | `write:repository` — requests the bot as reviewer |
 | `POST` | `/repos/{o}/{r}/pulls/{n}/reviews` | Reviewer | `write:repository` — submits the formal review |
 | `POST` | `/repos/{o}/{r}/issues/{n}/comments` | Reviewer | `write:issue` — posts a comment on the PR |
 
@@ -40,7 +40,7 @@ A scope with `write` level **includes `read`** — no need to add both.
 
 ---
 
-## Owner Token (`FORGEJO_OWNER_TOKEN`)
+## Manager Token (`FORGEJO_MANAGER_TOKEN`)
 
 ### Required Scopes
 
@@ -56,13 +56,13 @@ A scope with `write` level **includes `read`** — no need to add both.
 
 1. Go to https://codeberg.org/settings/applications
 2. **Generate New Token**
-3. **Token name**: e.g. `pr-auto-reviewer-owner`
+3. **Token name**: e.g. `pr-auto-reviewer-manager`
 4. **Repository access**: choose depending on your needs:
    - **All (public, private, and limited)**: token works on all repos you can access
    - **Public only**: only public repos (read-only for private)
    - **Specific repositories**: only selected repos (only `read:repository`/`write:repository` and `read:issue`/`write:issue` scopes allowed)
 5. **Permissions**: select `read:user`, `read:repository`, `write:repository`, `read:issue`, `write:issue`
-6. Generate, copy to `FORGEJO_OWNER_TOKEN` in `.env`
+6. Generate, copy to `FORGEJO_MANAGER_TOKEN` in `.env`
 
 ---
 
@@ -78,20 +78,20 @@ A scope with `write` level **includes `read`** — no need to add both.
 
 ### Create
 
-Same steps as owner token. If the reviewer is a **separate bot account**, generate the token under that account.
+Same steps as manager token. If the reviewer is a **separate bot account**, generate the token under that account.
 
 ```
 FORGEJO_REVIEWER_TOKEN=...
 FORGEJO_REVIEWER_USERNAME=my-bot-name
 ```
 
-| `GET` | `/repos/{o}/{r}/issues/{n}/comments` | Owner | `read:issue` — reads existing comments |
-| `GET` | `/repos/{o}/{r}/pulls/{n}/reviews` | Owner | `read:repository` — reads latest review body |
-| `POST` | `/repos/{o}/{r}/issues` | Owner | `write:issue` — creates a tracker issue |
-| `GET` | `/user/repos` | Owner | `read:repository` — lists repositories to watch |
-| `GET` | `/repos/{o}/{r}/pulls` | Owner | `read:repository` — lists open PRs |
+| `GET` | `/repos/{o}/{r}/issues/{n}/comments` | Manager | `read:issue` — reads existing comments |
+| `GET` | `/repos/{o}/{r}/pulls/{n}/reviews` | Manager | `read:repository` — reads latest review body |
+| `POST` | `/repos/{o}/{r}/issues` | Manager | `write:issue` — creates a tracker issue |
+| `GET` | `/user/repos` | Manager | `read:repository` — lists repositories to watch |
+| `GET` | `/repos/{o}/{r}/pulls` | Manager | `read:repository` — lists open PRs |
 
-> The reviewer token can be the same as the owner token for a single-account setup.
+> The reviewer token can be the same as the manager token for a single-account setup.
 
 ---
 
@@ -128,13 +128,13 @@ Manual verification:
 ```bash
 # Auth check (both tokens)
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
-  -H "Authorization: token $FORGEJO_OWNER_TOKEN" \
+  -H "Authorization: token $FORGEJO_MANAGER_TOKEN" \
   https://codeberg.org/api/v1/user
 
-# Write access check — owner
+# Write access check — manager
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -X POST \
-  -H "Authorization: token $FORGEJO_OWNER_TOKEN" \
+  -H "Authorization: token $FORGEJO_MANAGER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"reviewers":[]}' \
   https://codeberg.org/api/v1/repos/OWNER/REPO/pulls/PR/requested_reviewers

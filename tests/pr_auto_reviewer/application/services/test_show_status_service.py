@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
 
+from pr_auto_reviewer.application.dtos.show_status_request import ShowStatusRequest
 from pr_auto_reviewer.application.services.show_status_service import (
     ShowStatusService,
 )
@@ -19,6 +19,7 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
     DaemonRuntimeStatus,
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
+from pr_auto_reviewer.presentation.status_text_formatter import StatusTextFormatter
 
 
 class CapabilityQuery:
@@ -29,10 +30,33 @@ class CapabilityQuery:
         return self._capabilities
 
 
+
+class FakeProcessLiveness:
+    def __init__(
+        self,
+        alive: bool,
+        status: DaemonRuntimeStatus | None = None,
+    ) -> None:
+        self._alive = alive
+        self._status = status
+
+    def is_alive(self, pid: int) -> bool:
+        _ = pid
+        return self._alive
+
+    def read_status(self) -> DaemonRuntimeStatus | None:
+        return self._status
+
+    def record_status(self, status: DaemonRuntimeStatus) -> None:
+        self._status = status
+
+    def clear(self) -> None:
+        self._status = None
+
+
 class TestShowStatusService:
     def test_shows_suspended_api_capability_without_secret_value(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+        state_port = FakeProcessLiveness(False)
         capability = ApiAccessCapability(
             platform="github",
             role="reviewer",
@@ -48,37 +72,33 @@ class TestShowStatusService:
         )
         additional_capability = ApiAccessCapability(
             platform="forgejo",
-            role="owner",
-            source_name="FORGEJO_OWNER_TOKEN",
+            role="manager",
+            source_name="FORGEJO_MANAGER_TOKEN",
             scope="gbrennon/example",
         )
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=(),
             capability_query=CapabilityQuery((capability, additional_capability)),
         )
 
-        output = service.show_status()
+        response = service.execute(ShowStatusRequest())
+        output = StatusTextFormatter().format(response.snapshot)
 
         assert "API Access Capabilities" in output
         assert "GITHUB_TOKEN_acme_REVIEWER" in output
         assert "\\n" not in output
-        assert "API Access Capabilities" in output
         assert "  - forgejo:" in output
-        assert "    - owner / FORGEJO_OWNER_TOKEN:" in output
+        assert "    - manager / FORGEJO_MANAGER_TOKEN:" in output
         assert "available" not in output
         assert "      - gbrennon/example" in output
-        assert "  - github:" in output
         assert "    - reviewer / GITHUB_TOKEN_acme_REVIEWER: suspended (1h 00m remaining)" in output
         assert "      - acme/widgets" in output
         assert "rate-limit-secret" not in output
 
-    """Verifies human-readable status formatting across daemon lifecycle states."""
-
     def test_shows_idle_waiting_status(self) -> None:
-        state_port = MagicMock()
-        status = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.IDLE,
@@ -87,27 +107,47 @@ class TestShowStatusService:
             allowed_repositories=("owner/repo-a", "owner/repo-b"),
             current_cycle=3,
             next_cycle_at="2026-11-09T18:10:00Z",
-        )
-        state_port.read_status.return_value = status
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: True,
+            process_liveness=FakeProcessLiveness(True),
             allowed_repositories=("owner/repo-a", "owner/repo-b"),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
         assert "Daemon: RUNNING (PID 1234)" in output
         assert "Status: IDLE / WAITING" in output
         assert "  - unscoped:\n    - owner:\n      - repo-a\n      - repo-b" in output
         assert "Next cycle" in output
 
-    def test_groups_allowed_repositories_by_platform_and_organization(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+    def test_uses_injected_poll_interval_over_stale_runtime_value(self) -> None:
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.IDLE,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=10,
+            allowed_repositories=(),
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(True),
+            allowed_repositories=(),
+            poll_interval_seconds=600,
+        )
+
+        response = service.execute(ShowStatusRequest())
+
+        assert response.snapshot.runtime_status is not None
+        assert response.snapshot.runtime_status.poll_interval_seconds == 600
+        assert "Poll interval: 600s" in StatusTextFormatter().format(response.snapshot)
+
+    def test_groups_allowed_repositories_by_platform_and_organization(self) -> None:
+        state_port = FakeProcessLiveness(False)
+        service = ShowStatusService(
+            runtime_state=state_port,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=(
                 "forgejo:gbrennon/ephact",
                 "github:forging-blocks-org/forging-blocks",
@@ -115,25 +155,24 @@ class TestShowStatusService:
             ),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
         assert "Allowed Repositories (3):\n  - forgejo:" in output
         assert "    - gbrennon:\n      - ephact\n      - LocalNar" in output
         assert "  - github:\n    - forging-blocks-org:\n      - forging-blocks" in output
 
     def test_normalizes_codeberg_and_deduplicates_repository_count(self) -> None:
-        state_port = MagicMock()
-        state_port.read_status.return_value = None
+        state_port = FakeProcessLiveness(False)
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=(
                 "codeberg:gbrennon/ephact",
                 "forgejo:gbrennon/ephact",
             ),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
         assert "Allowed Repositories (1):" in output
         assert "  - forgejo:" in output
@@ -141,7 +180,7 @@ class TestShowStatusService:
         assert "  - codeberg:" not in output
 
     def test_shows_reviewing_status_with_phase_and_subagent(self) -> None:
-        state_port = MagicMock()
+        state_port = FakeProcessLiveness(True)
         review = ActiveReviewProgress(
             repository="gbrennon/pr-auto-reviewer",
             pr_number=199,
@@ -157,7 +196,7 @@ class TestShowStatusService:
             last_tool_call="read_file",
             last_tool_args="src/main.py",
         )
-        status = DaemonRuntimeStatus(
+        state_port.record_status(DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.REVIEWING,
@@ -166,15 +205,14 @@ class TestShowStatusService:
             allowed_repositories=("gbrennon/pr-auto-reviewer",),
             current_cycle=1,
             current_review=review,
-        )
-        state_port.read_status.return_value = status
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: True,
+            process_liveness=FakeProcessLiveness(True),
             allowed_repositories=("gbrennon/pr-auto-reviewer",),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
         assert "Status: REVIEWING (Phase 1/3)" in output
         assert "gbrennon/pr-auto-reviewer #199" in output
@@ -183,29 +221,26 @@ class TestShowStatusService:
         assert "read_file(src/main.py)" in output
 
     def test_shows_stopped_when_pid_not_alive(self) -> None:
-        state_port = MagicMock()
-        status = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(False, DaemonRuntimeStatus(
             pid=999999,
             daemon_mode=True,
             state=DaemonState.IDLE,
             updated_at="2026-11-09T18:00:00Z",
             poll_interval_seconds=600,
             allowed_repositories=(),
-        )
-        state_port.read_status.return_value = status
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: False,
+            process_liveness=FakeProcessLiveness(False),
             allowed_repositories=(),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
         assert "Daemon: STOPPED" in output
 
     def test_shows_error_information_when_present(self) -> None:
-        state_port = MagicMock()
-        status = DaemonRuntimeStatus(
+        state_port = FakeProcessLiveness(True, DaemonRuntimeStatus(
             pid=1234,
             daemon_mode=True,
             state=DaemonState.ERROR,
@@ -214,14 +249,15 @@ class TestShowStatusService:
             allowed_repositories=(),
             last_error="LLM host unreachable",
             last_error_at="2026-11-09T18:00:00Z",
-        )
-        state_port.read_status.return_value = status
+        ))
         service = ShowStatusService(
             runtime_state=state_port,
-            process_checker=lambda pid: True,
+            process_liveness=FakeProcessLiveness(True),
             allowed_repositories=(),
         )
 
-        output = service.show_status()
+        output = StatusTextFormatter().format(service.execute(ShowStatusRequest()).snapshot)
 
+        assert "Status: ERROR / RETRYING" in output
+        assert "Status: IDLE / WAITING" not in output
         assert "Last Error: LLM host unreachable" in output

@@ -64,6 +64,14 @@ from pr_auto_reviewer.domain.value_objects.conversation_guardrails import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.advisor_turn_evidence import (
+    AdvisorEvidenceKey,
+    AdvisorTurnEvidence,
+    EMPTY_TEXT,
+)
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import SubAgentGrade
 from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
@@ -84,22 +92,10 @@ logger = logging.getLogger(__name__)
 _MAX_REPEATED_TOOL_CALLS = 3
 _MAX_READ_FILE_REPLAYS = 2
 _MIN_READ_FILE_REPLAY_FILES = 2
+_MAX_COVERAGE_FILES = 15
 
 
-@dataclass(frozen=True)
-class _FinalVerdictContext:
-    phase_name: str
-    repo_path: Path
-    changed_files: list[str]
-    review_session: str
-    readable_changed_files: tuple[str, ...]
-    readable_coverage_files: tuple[str, ...]
-    read_file_paths: set[str]
-    read_file_count: int
-    run_snippet_count: int
-    existing_item_ids: frozenset[str]
-    accumulated_praise: list[dict[str, Any]]
-    accumulated_suggestions: list[dict[str, Any]]
+from .final_verdict_context import _FinalVerdictContext
 
 
 class AgentConversationService(RunAgentConversationPort):
@@ -156,10 +152,30 @@ class AgentConversationService(RunAgentConversationPort):
             phase_name=command.phase_name,
             review_session=command.review_session,
             existing_item_ids=command.existing_item_ids,
+            purpose=command.purpose,
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
         return PRIdentifierService.derive(repo_path)
+
+    @staticmethod
+    def _advisor_turn_evidence(
+        parsed: TurnParseResult, phase_name: str,
+    ) -> AdvisorTurnEvidence:
+        """Extract only structured facts needed by the turn advisor."""
+        tool_call = parsed.tool_call
+        arguments = tool_call.arguments if tool_call is not None else {}
+        return AdvisorTurnEvidence(
+            phase_name=phase_name,
+            turn_kind=parsed.kind,
+            tool_name=(
+                tool_call.tool_name if tool_call is not None else EMPTY_TEXT
+            ),
+            tool_path=str(
+                arguments.get(AdvisorEvidenceKey.TOOL_PATH, EMPTY_TEXT)
+            ),
+            claim_count=len(parsed.raw_items or []),
+        )
 
     def _guardrails_for_files(
         self, repo_path: Path, changed_files: list[str],
@@ -203,7 +219,7 @@ class AgentConversationService(RunAgentConversationPort):
                 and cls._is_text_file(candidate)
             ):
                 readable.append(file_path)
-        return tuple(readable)
+        return tuple(readable[:_MAX_COVERAGE_FILES])
 
     @staticmethod
     def _normalize_read_file_path(
@@ -418,6 +434,7 @@ class AgentConversationService(RunAgentConversationPort):
         review_session: str,
         phase_name: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
+        purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
     ) -> PhaseResult:
         """Run a single-phase multi-turn conversation.
 
@@ -460,7 +477,9 @@ class AgentConversationService(RunAgentConversationPort):
             logger.debug(
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
-            content = self._chat_port.send(messages)
+            content = self._chat_port.send(
+                messages, purpose=purpose, session_id=review_session
+            )
             guardrails = guardrails.advance_turn()
             if not content:
                 decision, guardrails = guardrails.record_empty_response()
@@ -491,9 +510,9 @@ class AgentConversationService(RunAgentConversationPort):
                     accumulated_suggestions = list(parsed.metadata["suggestions"])
             if self._turn_observer is not None and parsed.kind is not TurnKind.VERDICT:
                 directive = self._turn_observer.observe(
-                    content, phase_name, review_session,
+                    self._advisor_turn_evidence(parsed, phase_name),
+                    review_session,
                     pr_identifier_service=self._derive_pr_identifier(repo_path),
-                    changed_files=changed_files,
                 )
                 if directive.blocks_output:
                     consecutive_blocks += 1
@@ -637,7 +656,11 @@ class AgentConversationService(RunAgentConversationPort):
                         messages.append(self._suggestions_praise_message.render())
                         guardrails = guardrails.advance_turn()
                         try:
-                            sp_content = self._chat_port.send(messages)
+                            sp_content = self._chat_port.send(
+                                messages,
+                                purpose=purpose,
+                                session_id=review_session,
+                            )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
                                 "Suggestions/praise turn skipped: %s", error
@@ -728,6 +751,7 @@ class AgentConversationService(RunAgentConversationPort):
                 accumulated_praise=accumulated_praise,
                 accumulated_suggestions=accumulated_suggestions,
             ),
+            purpose,
         )
         if forced_result is not None:
             return forced_result
@@ -757,6 +781,7 @@ class AgentConversationService(RunAgentConversationPort):
         messages: list[ConversationMessage],
         guardrails: ConversationGuardrails,
         context: _FinalVerdictContext,
+        purpose: ConversationPurpose,
     ) -> PhaseResult | None:
         """Request one tool-free verdict as a last resort after exhaustion.
 
@@ -786,7 +811,9 @@ class AgentConversationService(RunAgentConversationPort):
             )
         )
         try:
-            final_content = self._chat_port.send(messages)
+            final_content = self._chat_port.send(
+                messages, purpose=purpose, session_id=context.review_session
+            )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
             return None

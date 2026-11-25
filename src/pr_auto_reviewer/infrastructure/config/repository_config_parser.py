@@ -6,6 +6,9 @@ from pathlib import Path
 
 from pr_auto_reviewer.domain.value_objects.clone_protocol import CloneProtocol
 from pr_auto_reviewer.infrastructure.config.repository_settings import RepositorySettings
+from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+    RepositoryEntriesParser,
+)
 
 
 class RepositoryConfigParser:
@@ -22,10 +25,6 @@ class RepositoryConfigParser:
                 str(Path("~/.cache/pr-auto-reviewer/repos").expanduser()),
             ).strip(),
             repos_filter=source.get("REPOS_FILTER", "").strip(),
-            repos_allow_list=tuple(
-                item.strip()
-                for item in raw_allow_list.replace("\n", ",").split(",")
-                if item.strip()
-            ),
+            repos_allow_list=RepositoryEntriesParser().parse(raw_allow_list),
             force_pr=int(raw_force_pr) if raw_force_pr else None,
         )

@@ -34,7 +34,7 @@ implementations.
 6. Immutability conventions: frozen dataclasses, no side-effectful init.
 
 The architect phase is also the sole producer of
-`CodeReview.suggestions` — see the [suggestion policy](../architecture.md).
+`CodeReview.suggestions` — see the [suggestion policy](../architecture/architecture.md).
 
 ## Relation to other roles
 

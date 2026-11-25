@@ -9,13 +9,13 @@ from pr_auto_reviewer.infrastructure.client.token_resolver.env_token_scanner imp
 
 def _resolver(
     platform_prefix: str = "GITHUB",
-    owner_token: str = "default-owner",
+    manager_token: str = "default-manager",
     reviewer_token: str = "default-reviewer",
     reviewer_username: str = "default-username",
     **env: str,
 ) -> TokenResolver:
     defaults = TokenDefaults(
-        owner_token=owner_token,
+        manager_token=manager_token,
         reviewer_token=reviewer_token,
         reviewer_username=reviewer_username,
     )

@@ -9,6 +9,6 @@ from dataclasses import dataclass
 class TokenDefaults:
     """Default tokens used when no org-specific override is set."""
 
-    owner_token: str = ""
+    manager_token: str = ""
     reviewer_token: str = ""
     reviewer_username: str = ""

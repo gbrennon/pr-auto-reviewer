@@ -4,7 +4,7 @@ from ._helpers import *
 class TestTokenVerifierDelegatesToClients:
     @staticmethod
     def _client(
-        label: str = "owner",
+        label: str = "manager",
         verified_cache_path: Path | None = None,
     ) -> GitPlatformHttpClient:
         resolver = FakeTokenResolver({"o/r": f"{label}-tok"})
@@ -18,22 +18,22 @@ class TestTokenVerifierDelegatesToClients:
             preflight_verifier=verifier,
             _verified_cache_path=verified_cache_path,
         )
-    def test_verify_calls_owner_client_preflight(self, tmp_path: Path) -> None:
+    def test_verify_calls_manager_client_preflight(self, tmp_path: Path) -> None:
         cache = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=cache)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=cache)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
 
-        owner_preflight = getattr(owner, "_preflight_verifier")
-        assert len(owner_preflight.calls) == 1
-        assert owner_preflight.calls[0]["role"] == "owner"
+        manager_preflight = getattr(owner, "_preflight_verifier")
+        assert len(manager_preflight.calls) == 1
+        assert manager_preflight.calls[0]["role"] == "manager"
 
     def test_verify_calls_reviewer_client_preflight(self, tmp_path: Path) -> None:
         cache = tmp_path / "verified-tokens.json"
-        owner = TestTokenVerifierDelegatesToClients._client("owner", verified_cache_path=cache)
+        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=cache)
         reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=cache)
         verifier = TokenVerifier(owner, reviewer, persist=False)
         pr_id = PullRequestId(repository="o/r", number=1)

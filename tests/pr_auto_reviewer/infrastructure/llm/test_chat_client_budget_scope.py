@@ -12,6 +12,9 @@ from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
 from pr_auto_reviewer.domain.value_objects.conversation_message import (
     ConversationMessage,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 from tests.pr_auto_reviewer.infrastructure.llm.fake_streaming_response import (
     FakeStreamingResponse,
 )
@@ -46,16 +49,27 @@ class TestChatClientBudgetScope:
     def _messages(self) -> list[ConversationMessage]:
         return [ConversationMessage(role="user", content="review")]
 
-    def test_call_budget_is_shared_across_execution_contexts(self) -> None:
-        """A client must not exceed its aggregate call budget across contexts."""
+    def test_call_budget_is_independent_per_conversation_purpose(self) -> None:
+        """Each agent purpose receives an independent call budget."""
         client = self._client(max_llm_calls=1)
-        first_context = copy_context()
-        second_context = copy_context()
 
-        first_context.run(client.send, self._messages())
+        client.send(
+            self._messages(),
+            purpose=ConversationPurpose.REVIEWER_PHASE,
+            session_id="reviewer-a",
+        )
+        client.send(
+            self._messages(),
+            purpose=ConversationPurpose.REVIEWER_PHASE,
+            session_id="reviewer-b",
+        )
 
         with pytest.raises(ReviewBudgetExhaustedError):
-            second_context.run(client.send, self._messages())
+            client.send(
+                self._messages(),
+                purpose=ConversationPurpose.REVIEWER_PHASE,
+                session_id="reviewer-a",
+            )
 
     def test_call_budget_rejects_second_call_in_same_context(self) -> None:
         """A finite budget rejects a second call without sending it."""
@@ -82,10 +96,13 @@ class TestChatClientBudgetScope:
 
         client.send(self._messages())
 
-    def test_unlimited_budget_remains_unlimited_across_contexts(self) -> None:
-        """An unset budget does not reject calls from copied contexts."""
+    def test_unlimited_budget_remains_unlimited_across_purposes(self) -> None:
+        """An unset budget does not reject calls from any agent purpose."""
         client = self._client(max_llm_calls=None)
-        contexts = [copy_context() for _ in range(3)]
 
-        for context in contexts:
-            context.run(client.send, self._messages())
+        for purpose in ConversationPurpose:
+            client.send(
+                self._messages(),
+                purpose=purpose,
+                session_id=purpose.value,
+            )

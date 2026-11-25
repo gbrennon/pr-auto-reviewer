@@ -31,6 +31,9 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import LlmUnavaila
 from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
     RepositoryFetchError,
 )
+from pr_auto_reviewer.domain.exceptions.remote_operation_quarantined_error import (
+    RemoteOperationQuarantinedError,
+)
 from pr_auto_reviewer.domain.exceptions.review_publish_error import ReviewPublishError
 from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
     ReviewVerdictError,
@@ -53,6 +56,9 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
+)
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
 )
 from pr_auto_reviewer.infrastructure.client.repo_update_tracker import RepoUpdateTracker
 from pr_auto_reviewer.infrastructure.temp_file_cleaner import clean_temp_files
@@ -90,6 +96,7 @@ class PollingDaemon:
         pr_repository: PullRequestRepositoryPort | None = None,
         runtime_state: DaemonRuntimeStatePort | None = None,
         config_reloader: ConfigReloaderPort | None = None,
+        command_failure_backoff: RemoteHostBackoff | None = None,
     ) -> None:
         self._config = config
         self._repo_lister = repo_lister
@@ -106,8 +113,15 @@ class PollingDaemon:
         self._pr_repository = pr_repository
         self._runtime_state = runtime_state
         self._config_reloader = config_reloader
+        self._command_failure_backoff = (
+            command_failure_backoff
+            if command_failure_backoff is not None
+            else RemoteHostBackoff()
+        )
         self._force_pr = getattr(config, "force_pr", None)
         self._llm_retry_at = 0.0
+        self._current_cycle = 0
+        self._cycle_error: str | None = None
         self._setup_signal_handlers()
 
     def start(self) -> None:
@@ -128,7 +142,7 @@ class PollingDaemon:
         try:
             while True:
                 cycle += 1
-                self._check_config_reload()
+                self._current_cycle = cycle
                 self._run_cycle()
 
                 if self._config.run_once:
@@ -136,8 +150,12 @@ class PollingDaemon:
 
                 interval = self._config.poll_interval_seconds
                 next_at = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
+                cycle_error = self._cycle_error
                 self._record_runtime_status(
-                    DaemonState.IDLE, next_cycle_at=next_at, cycle=cycle
+                    DaemonState.ERROR if cycle_error is not None else DaemonState.IDLE,
+                    next_cycle_at=next_at,
+                    cycle=cycle,
+                    error=cycle_error,
                 )
                 time.sleep(interval)
         except KeyboardInterrupt:
@@ -183,7 +201,7 @@ class PollingDaemon:
             updated_at=now_str,
             poll_interval_seconds=self._config.poll_interval_seconds,
             allowed_repositories=self._config.repos_allow_list,
-            current_cycle=cycle,
+            current_cycle=cycle or self._current_cycle,
             next_cycle_at=next_cycle_at,
             current_review=current_review,
             last_error=error,
@@ -207,8 +225,20 @@ class PollingDaemon:
                 pr.pr_id.number,
                 pr.pr_id.repository,
             )
+            self._record_runtime_status(DaemonState.IDLE)
             return
         force = self._force_pr == pr.pr_id.number
+        failure_key = f"review:{pr.pr_id.repository}#{pr.pr_id.number}"
+        try:
+            self._command_failure_backoff.before_operation(failure_key)
+        except RemoteOperationQuarantinedError:
+            logger.warning(
+                "Skipping quarantined review for PR #%d in %s",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
+            self._record_runtime_status(DaemonState.IDLE)
+            return
         logger.info(
             "Reviewing PR #%d in %s (title=%r, sha=%s)",
             pr.pr_id.number, pr.pr_id.repository, pr.title,
@@ -238,6 +268,7 @@ class PollingDaemon:
         )
 
         HttpRequestCounter.instance().reset()
+        failure_error: str | None = None
         try:
             result = self._review_service.execute(command)
             if not result.reviewed:
@@ -260,11 +291,15 @@ class PollingDaemon:
         except EmptyDiffError:
             logger.warning("Empty diff, skipping PR #%d", pr.pr_id.number)
         except RepositoryFetchError as e:
+            failure_error = self._exception_message(e)
+            self._cycle_error = failure_error
             logger.warning(
                 "Could not fetch repository for PR #%d in %s: %s; will retry next cycle",
                 pr.pr_id.number, pr.pr_id.repository, e,
             )
         except LlmUnavailableError as e:
+            failure_error = self._exception_message(e)
+            self._cycle_error = failure_error
             self._llm_retry_at = (
                 time.monotonic() + _LLM_FAILURE_COOLDOWN_SECONDS
             )
@@ -276,25 +311,53 @@ class PollingDaemon:
                 )
             raise
         except ReviewPublishError as e:
+            failure_error = self._exception_message(e)
+            self._cycle_error = failure_error
             logger.error("Publish failed for PR #%d: %s", pr.pr_id.number, e)
-        except ReviewVerdictError:
+        except ReviewVerdictError as e:
+            failure_error = self._exception_message(e)
+            self._cycle_error = failure_error
             logger.warning(
                 "Review inconclusive for PR #%d in %s; will retry next cycle",
                 pr.pr_id.number,
                 pr.pr_id.repository,
             )
         except Exception as e:
-            self._record_runtime_status(DaemonState.ERROR, error=str(e))
+            failure_error = self._exception_message(e)
+            self._cycle_error = failure_error
             logger.exception("Unexpected error processing PR #%d", pr.pr_id.number)
         finally:
-            self._record_runtime_status(DaemonState.IDLE)
+            self._record_runtime_status(
+                DaemonState.ERROR if failure_error is not None else DaemonState.IDLE,
+                error=failure_error,
+            )
             HttpRequestCounter.instance().log_summary()
+            if failure_error is None:
+                self._command_failure_backoff.record_success(failure_key)
+            else:
+                self._command_failure_backoff.record_failure(failure_key)
 
     @staticmethod
     def _format_duration(duration_seconds: float) -> str:
         total_seconds = max(0, int(duration_seconds))
         minutes, seconds = divmod(total_seconds, 60)
         return f"{minutes}m {seconds:02d}s"
+
+    @staticmethod
+    def _exception_message(error: BaseException) -> str:
+        message = str(error)
+        return message or type(error).__name__
+
+    def _qualified_pr_identity(self, pr: OpenPullRequest) -> str:
+        repository = pr.pr_id.repository
+        if ":" not in repository:
+            platform = (
+                self._config.platforms[0]
+                if len(self._config.platforms) == 1
+                else "forgejo"
+            )
+            repository = f"{platform}:{repository}"
+        return f"{repository}#{pr.pr_id.number}"
 
     def _allowed_repos(self, repos: list[RepoInfo]) -> list[RepoInfo]:
         """Drop repositories the configured allow list does not permit."""
@@ -322,7 +385,9 @@ class PollingDaemon:
             logger.warning("No repositories remain after allow-list filtering")
 
     def _run_cycle(self) -> None:
-        """Execute one polling cycle."""
+        """Refresh settings and execute one polling cycle."""
+        self._cycle_error = None
+        self._check_config_reload()
         repos = self._repositories_to_poll()
 
         if not repos:
@@ -393,6 +458,16 @@ class PollingDaemon:
             return
         if stored.last_command_checked_at == pr.updated_at:
             return
+        failure_key = f"command:{pr.pr_id.repository}#{pr.pr_id.number}"
+        try:
+            self._command_failure_backoff.before_operation(failure_key)
+        except RemoteOperationQuarantinedError:
+            logger.warning(
+                "Skipping quarantined command processing for PR #%d in %s",
+                pr.pr_id.number,
+                pr.pr_id.repository,
+            )
+            return
         try:
             service.execute(
                 ProcessIssueCommandsCommand(
@@ -401,12 +476,14 @@ class PollingDaemon:
                 )
             )
         except Exception:
+            self._command_failure_backoff.record_failure(failure_key)
             logger.exception(
                 "Failed to process commands for PR #%d in %s",
                 pr.pr_id.number,
                 pr.pr_id.repository,
             )
             return
+        self._command_failure_backoff.record_success(failure_key)
         refreshed = repository.find(pr.pr_id) or stored
         repository.save(refreshed.record_command_check(pr.updated_at))
 
@@ -445,18 +522,26 @@ class PollingDaemon:
         return [pr for pr in open_prs if self._is_actionable_pr(pr)]
 
     def _is_actionable_pr(self, pr: OpenPullRequest) -> bool:
-        if pr.review_requested or pr.pr_id.number == self._force_pr:
+        if pr.pr_id.number == self._force_pr:
             return True
         if self._pr_repository is None:
-            return False
-        stored = self._pr_repository.find(pr.pr_id)
-        if stored is None:
-            return True
-        return stored.needs_review(pr.head_sha) or (
-            pr.review_request_event_id is not None
-            and pr.review_request_event_id
-            > (stored.last_review_request_event_id or 0)
-        ) or self._platform_review_actionable(pr, stored)
+            actionable = pr.review_requested
+        else:
+            stored = self._pr_repository.find(pr.pr_id)
+            if stored is None:
+                return True
+            actionable = stored.needs_review(pr.head_sha) or (
+                pr.review_request_event_id is not None
+                and pr.review_request_event_id
+                > (stored.last_review_request_event_id or 0)
+            ) or self._platform_review_actionable(pr, stored)
+        if not actionable:
+            logger.debug(
+                "Skipping non-actionable PR %s: no new head, review-request "
+                "event, dismissed platform review, or force trigger was present",
+                self._qualified_pr_identity(pr),
+            )
+        return actionable
 
     @staticmethod
     def _platform_review_actionable(

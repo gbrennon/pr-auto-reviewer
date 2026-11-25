@@ -28,7 +28,7 @@ class TestIssuesCreatedMessage:
         assert "Created 1 issue(s):" in result
         assert "- #101: [CRITICAL] security: SQL injection risk" in result
         assert (
-            "  - review item `id-1` (major bug, blocking) — status: open (still relevant)"
+            "  - review item `id-1` [BLOCKING] (major bug) — status: open (still relevant)"
             in result
         )
 
@@ -60,12 +60,12 @@ class TestIssuesCreatedMessage:
         assert "Created 2 issue(s):" in result
         assert "- #101: [CRITICAL] security: SQL injection" in result
         assert (
-            "  - review item `id-1` (critical security, blocking) — status: open (still relevant)"
+            "  - review item `id-1` [BLOCKING] (critical security) — status: open (still relevant)"
             in result
         )
         assert "- #102: [MINOR] docs: Typo" in result
         assert (
-            "  - review item `id-2` (minor docs, non-blocking) — status: open (still relevant)"
+            "  - review item `id-2` [NON-BLOCKING] (minor docs) — status: open (still relevant)"
             in result
         )
 

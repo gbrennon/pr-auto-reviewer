@@ -37,10 +37,10 @@ class ReviewPublishingService:
     def __init__(
         self,
         client: GitPlatformHttpClient,
-        owner_client: GitPlatformHttpClient,
+        manager_client: GitPlatformHttpClient,
     ) -> None:
         self._client = client
-        self._owner_client = owner_client
+        self._manager_client = manager_client
 
     def _is_diff_metadata_line(self, line: str) -> bool:
         return line.startswith((
@@ -86,7 +86,7 @@ class ReviewPublishingService:
         return False
 
     def verify_tokens(self, pr_id: PullRequestId) -> None:
-        """Run preflight verification for both reviewer and owner tokens
+        """Run preflight verification for both reviewer and manager tokens
         before publishing.  Wraps ``PreflightVerificationError`` as
         ``ReviewPublishError`` so the caller gets a uniform error type."""
         try:
@@ -96,10 +96,10 @@ class ReviewPublishingService:
                 f"Reviewer token preflight failed for {pr_id}: {exc}",
             ) from exc
         try:
-            self._owner_client.verify_token_for_pr(pr_id)
+            self._manager_client.verify_token_for_pr(pr_id)
         except PreflightVerificationError as exc:
             raise ReviewPublishError(
-                f"Owner token preflight failed for {pr_id}: {exc}",
+                f"Manager token preflight failed for {pr_id}: {exc}",
             ) from exc
 
     # -- item counting ------------------------------------------------------
@@ -167,7 +167,7 @@ class ReviewPublishingService:
             if diff is not None and diff.head_sha is not None:
                 payload["commit_id"] = str(diff.head_sha)
             else:
-                pr_info = self._owner_client.get(
+                pr_info = self._manager_client.get(
                     f"/repos/{pr_id.repository}/pulls/{pr_id.number}",
                     repo=pr_id.repository,
                 )
@@ -181,7 +181,7 @@ class ReviewPublishingService:
             if diff is not None and diff.diff_content is not None:
                 diff_text = diff.diff_content
             else:
-                diff_text = self._owner_client.get_raw(
+                diff_text = self._manager_client.get_raw(
                     f"/repos/{pr_id.repository}/pulls/{pr_id.number}.diff",
                     headers=diff_headers or {},
                     repo=pr_id.repository,

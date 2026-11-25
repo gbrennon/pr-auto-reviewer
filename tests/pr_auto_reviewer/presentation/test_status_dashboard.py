@@ -1,0 +1,443 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+from textual.app import ComposeResult
+from textual.screen import Screen
+from textual.widgets import Button, Input, Select
+
+from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
+    DaemonStatusSnapshot,
+)
+from pr_auto_reviewer.domain.entities.api_access_capability import (
+    ApiAccessCapability,
+)
+from pr_auto_reviewer.domain.value_objects.active_review_progress import (
+    ActiveReviewProgress,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
+    DaemonRuntimeStatus,
+)
+from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
+from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
+from pr_auto_reviewer.presentation.navigation import NavigationMode
+from pr_auto_reviewer.presentation.general_settings_screen import GeneralSettingsScreen
+from pr_auto_reviewer.presentation.settings_models import RepositoryCredentialStatus
+from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
+
+
+class FocusNavigationScreen(Screen[None]):
+    def compose(self) -> ComposeResult:
+        yield Button("First", id="first")
+        yield Button("Second", id="second")
+
+
+class FakeSettings:
+    def __init__(self) -> None:
+        self.writes: list[tuple[str, str]] = []
+        self.global_error: str | None = None
+        self.global_credentials: list[tuple[str, str, str]] = []
+        self.repository_credentials: list[tuple[str, str, str]] = []
+        self.repositories: list[str] = []
+        self.repository_statuses: tuple[RepositoryCredentialStatus, ...] = ()
+        self.snapshot_value = SettingsSnapshot(
+            values=(("poll_interval", "60"),),
+            secret_names=("GITHUB_TOKEN",),
+        )
+
+    def snapshot(self) -> SettingsSnapshot:
+        return self.snapshot_value
+
+    def write(self, name: str, raw_value: str) -> None:
+        self.writes.append((name, raw_value))
+
+    def unset(self, name: str) -> None:
+        self.writes.append((name, ""))
+
+    def save_global_credential(self, platform: str, role: str, token: str) -> None:
+        if self.global_error is not None:
+            raise ValueError(self.global_error)
+        self.global_credentials.append((platform, role, token))
+
+    def save_repository_credentials(
+        self, repository: str, manager_token: str, reviewer_token: str,
+    ) -> None:
+        self.repository_credentials.append((repository, manager_token, reviewer_token))
+
+    def list_repositories(self) -> tuple[RepositoryCredentialStatus, ...]:
+        if self.repository_statuses:
+            return self.repository_statuses
+        return tuple(
+            RepositoryCredentialStatus(repository, "missing", "missing")
+            for repository in self.repositories
+        )
+
+    def add_repository(self, repository: str) -> None:
+        self.repositories.append(repository)
+
+    def remove_repository(self, repository: str) -> None:
+        self.repositories.remove(repository)
+
+class TestStatusDashboard:
+    @pytest.mark.asyncio
+    async def test_renders_grouped_status_items_in_one_table(self) -> None:
+        review = ActiveReviewProgress(
+            repository="forgejo:owner/repo",
+            pr_number=42,
+            pr_title="PR Title",
+            head_sha="abc1234",
+            started_at="2026-11-09T18:00:00Z",
+            phase_name="Architecture",
+            current_turn=2,
+            max_turns=5,
+        )
+        status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.REVIEWING,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=(
+                "forgejo:owner/repo",
+                "github:other/project",
+            ),
+            current_cycle=2,
+            current_review=review,
+        )
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=status,
+            daemon_alive=True,
+            allowed_repositories=status.allowed_repositories,
+            capabilities=(
+                ApiAccessCapability(
+                    platform="github",
+                    role="reviewer",
+                    source_name="GITHUB_TOKEN",
+                    scope="other/project",
+                ),
+                ApiAccessCapability(
+                    platform="github",
+                    role="reviewer",
+                    source_name="GITHUB_TOKEN",
+                    scope="another/project",
+                ),
+            ),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            table = pilot.app.query_one("#items")
+            assert table.row_count == 5
+            assert "REVIEWING" in str(pilot.app.query_one("#state").render())
+            assert "Sort: platform" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("q")
+
+
+    @pytest.mark.asyncio
+    async def test_duplicate_allowed_repositories_do_not_crash_refresh(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(
+                "forgejo:gbrennon/ephact",
+                "forgejo:gbrennon/ephact",
+            ),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            table = pilot.app.query_one("#items")
+            assert table.row_count == 1
+            await pilot.press("q")
+    @pytest.mark.asyncio
+    async def test_cycles_user_selected_sorting(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=("github:owner/repo",),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            assert "Sort: platform" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("s")
+            assert "Sort: repository" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("s")
+            assert "Sort: status" in str(pilot.app.query_one("#sort").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_settings_panel_shows_secret_storage_setup_error(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+        settings.snapshot_value = SettingsSnapshot(
+            values=(("poll_interval", "60"),),
+            secret_names=(),
+            secret_error="PR_AUTO_REVIEWER_ENCRYPTION_KEY is required",
+        )
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
+            await pilot.press("e")
+            await pilot.click("#general-settings")
+            screen = pilot.app.screen
+            assert isinstance(screen, GeneralSettingsScreen)
+            rendered = str(screen.query_one("#settings-list").render())
+            assert "Secret storage unavailable" in rendered
+            assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required" in rendered
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_changes_navigation_mode_from_settings_panel(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
+            await pilot.press("e")
+            await pilot.click("#general-settings")
+            screen = pilot.app.screen
+            assert isinstance(screen, GeneralSettingsScreen)
+            screen.query_one("#navigation-mode").value = "vim"
+            await pilot.pause()
+            assert ("TUI_NAVIGATION_MODE", "vim") in settings.writes
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_supports_refresh_pause_and_settings_actions(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test(size=(120, 40)) as pilot:
+            await pilot.press("p")
+            assert "paused" in str(pilot.app.query_one("#action-status").render()).lower()
+            await pilot.press("p")
+            assert "live" in str(pilot.app.query_one("#action-status").render()).lower()
+            await pilot.press("e")
+            await pilot.click("#general-settings")
+            screen = pilot.app.screen
+            assert isinstance(screen, GeneralSettingsScreen)
+            screen.query_one("#setting-key", Select).value = "poll_interval"
+            screen.query_one("#setting-value", Input).value = "new-secret"
+            save = screen.query_one("#save-setting", Button)
+            save.focus()
+            await pilot.press("enter")
+            assert settings.writes == [
+                ("TUI_NAVIGATION_MODE", "arrows"),
+                ("poll_interval", "new-secret"),
+            ]
+            assert "new-secret" not in str(screen.render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_refresh_updates_changed_cells_without_resetting_cursor(self) -> None:
+        initial_review = ActiveReviewProgress(
+            repository="forgejo:owner/repo",
+            pr_number=42,
+            pr_title="PR Title",
+            head_sha="abc1234",
+            started_at="2026-11-09T18:00:00Z",
+            phase_name="Architecture",
+            current_turn=1,
+            max_turns=5,
+        )
+        updated_review = replace(initial_review, current_turn=2)
+        initial_status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.REVIEWING,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=("forgejo:owner/repo",),
+            current_cycle=2,
+            current_review=initial_review,
+        )
+        updated_status = replace(initial_status, current_review=updated_review)
+        initial = DaemonStatusSnapshot(
+            runtime_status=initial_status,
+            daemon_alive=True,
+            allowed_repositories=initial_status.allowed_repositories,
+            capabilities=(),
+        )
+        updated = replace(initial, runtime_status=updated_status)
+        snapshots = iter((initial, updated))
+
+        async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
+            table = pilot.app.query_one("#items")
+            table.move_cursor(row=1)
+            cursor_key = list(table.rows)[table.cursor_row]
+            pilot.app.refresh_status()
+
+            assert table.cursor_row == 1
+            assert list(table.rows)[table.cursor_row] == cursor_key
+            assert "turn 2/5" in " ".join(str(cell) for cell in table.get_row(cursor_key))
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_renders_provider_error_without_crashing(self) -> None:
+        def failing_provider() -> DaemonStatusSnapshot:
+            raise RuntimeError("status store unavailable")
+
+        async with StatusDashboard(failing_provider).run_test() as pilot:
+            assert "status store unavailable" in str(pilot.app.query_one("#error").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_automatically_refreshes_from_provider_on_timer(self) -> None:
+        initial = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        updated_status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.IDLE,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=(),
+            current_cycle=1,
+        )
+        updated = replace(initial, runtime_status=updated_status, daemon_alive=True)
+        snapshots = iter((initial, updated, updated))
+
+        async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
+            await pilot.pause(delay=1.1)
+            assert "IDLE / WAITING" in str(pilot.app.query_one("#state").render())
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_refreshes_widget_content_from_new_snapshot(self) -> None:
+        initial = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        updated_status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.IDLE,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=17,
+            allowed_repositories=(),
+            current_cycle=3,
+        )
+        updated = replace(initial, runtime_status=updated_status, daemon_alive=True)
+        snapshots = iter((initial, updated))
+
+        async with StatusDashboard(lambda: next(snapshots)).run_test() as pilot:
+            assert "STOPPED" in str(pilot.app.query_one("#state").render())
+            assert "Poll interval: unavailable" in str(
+                pilot.app.query_one("#poll-interval").render()
+            )
+            pilot.app.refresh_status()
+            assert "IDLE / WAITING" in str(pilot.app.query_one("#state").render())
+            assert "Poll interval: 17s" in str(
+                pilot.app.query_one("#poll-interval").render()
+            )
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    async def test_renders_live_error_status_and_message(self) -> None:
+        status = DaemonRuntimeStatus(
+            pid=1234,
+            daemon_mode=True,
+            state=DaemonState.ERROR,
+            updated_at="2026-11-09T18:00:00Z",
+            poll_interval_seconds=60,
+            allowed_repositories=(),
+            current_cycle=2,
+            last_error="repository fetch failed",
+        )
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=status,
+            daemon_alive=True,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(lambda: snapshot).run_test() as pilot:
+            state_text = str(pilot.app.query_one("#state").render())
+            error_text = str(pilot.app.query_one("#error").render())
+            assert "ERROR / RETRYING" in state_text
+            assert "IDLE / WAITING" not in state_text
+            assert "repository fetch failed" in error_text
+            await pilot.press("q")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("mode", "next_key", "previous_key"),
+        (
+            (NavigationMode.VIM, "j", "k"),
+            (NavigationMode.EMACS, "ctrl+n", "ctrl+p"),
+        ),
+    )
+    async def test_global_navigation_moves_focus_on_active_screen(
+        self,
+        mode: NavigationMode,
+        next_key: str,
+        previous_key: str,
+    ) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            navigation_mode=mode,
+        ).run_test() as pilot:
+            pilot.app.push_screen(FocusNavigationScreen())
+            await pilot.pause()
+            screen = pilot.app.screen
+            first = screen.query_one("#first", Button)
+            second = screen.query_one("#second", Button)
+            first.focus()
+
+            await pilot.press(next_key)
+            assert pilot.app.focused is second
+            await pilot.press(previous_key)
+            assert pilot.app.focused is first
+
+    @pytest.mark.asyncio
+    async def test_arrows_mode_preserves_standard_focus_navigation(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+
+        async with StatusDashboard(
+            lambda: snapshot,
+            navigation_mode=NavigationMode.ARROWS,
+        ).run_test() as pilot:
+            pilot.app.push_screen(FocusNavigationScreen())
+            await pilot.pause()
+            screen = pilot.app.screen
+            first = screen.query_one("#first", Button)
+            second = screen.query_one("#second", Button)
+            first.focus()
+
+            await pilot.press("j")
+            assert pilot.app.focused is first
+            await pilot.press("tab")
+            assert pilot.app.focused is second

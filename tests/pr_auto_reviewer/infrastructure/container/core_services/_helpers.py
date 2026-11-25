@@ -41,12 +41,12 @@ from pr_auto_reviewer.infrastructure.local_repository.local_git_repository impor
 from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
     LinuxNotifier,
 )
-from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
-    JsonFilePullRequestRepository,
+from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+    SqlitePullRequestRepository,
 )
 
 CORE_SERVICES_INSTANCE_TYPES = [
-    ("pr_repository", JsonFilePullRequestRepository),
+    ("pr_repository", SqlitePullRequestRepository),
     ("command_bus", InMemoryCommandBus),
     ("notifier", LinuxNotifier),
     ("fragment_repository", FileSystemFragmentRepository),
@@ -61,7 +61,7 @@ def forgejo_config() -> Config:
     return Config(
         env="test",
         platform_mode=GitProvider.FORGEJO,
-        forgejo_owner_token="fj-own",
+        forgejo_manager_token="fj-own",
         forgejo_reviewer_token="fj-rev",
         forgejo_reviewer_username="fj-bot",
     )
@@ -82,4 +82,4 @@ def repo_context(forgejo_config: Config, local_repository):
     return adapters.repository_context
 
 
-__all__ = ['CORE_SERVICES_INSTANCE_TYPES', 'AdvisorGranularity', 'Config', 'CoreServices', 'FileSystemFragmentRepository', 'GitProvider', 'InMemoryCommandBus', 'Jinja2Renderer', 'JsonFilePullRequestRepository', 'LinuxNotifier', 'LocalGitRepository', 'RepositoryContextPort', 'ReviewContextFactory', 'ReviewPlan', 'annotations', 'forgejo_config', 'local_repository', 'pytest', 'repo_context', 'wire_core_services', 'wire_platform_adapters', 'wire_platform_clients']
+__all__ = ['CORE_SERVICES_INSTANCE_TYPES', 'AdvisorGranularity', 'Config', 'CoreServices', 'FileSystemFragmentRepository', 'GitProvider', 'InMemoryCommandBus', 'Jinja2Renderer', 'SqlitePullRequestRepository', 'LinuxNotifier', 'LocalGitRepository', 'RepositoryContextPort', 'ReviewContextFactory', 'ReviewPlan', 'annotations', 'forgejo_config', 'local_repository', 'pytest', 'repo_context', 'wire_core_services', 'wire_platform_adapters', 'wire_platform_clients']

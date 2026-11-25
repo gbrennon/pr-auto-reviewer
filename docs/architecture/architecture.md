@@ -3,7 +3,7 @@
 Durable architecture reference for the pr-auto-reviewer application.
 This document describes *rules* — layer responsibilities, dependency
 direction, and invariants that hold regardless of feature details.
-Companion documents: `review-flow-architecture.md` (runtime flow and
+Companion documents: `review-flow/review-flow-architecture.md` (runtime flow and
 adapter wiring) and `verdict-event-mapping.md` (verdict-to-platform
 event mapping).
 
@@ -166,21 +166,21 @@ never replays a failed prompt.
 
 The **teacher** role is the coaching layer formed by those manager tasks
 and advisor feedback plus this documentation set; see
-[sub-agents/teacher.md](sub-agents/teacher.md).
+[teacher.md](../sub-agents/teacher.md).
 
 To change what a sub-agent does, edit the phase fragment or the role's
 page in `docs/sub-agents/`; to change which phase produces what, edit
 the plan builder in `infrastructure/container/_core_services.py`.
 
-The role team is documented per page in [docs/sub-agents/](sub-agents/README.md):
+The role team is documented per page in [docs/sub-agents/](../sub-agents/README.md):
 
-- [manager](sub-agents/manager.md) — plans, assigns, owns technical context
-- [advisor](sub-agents/advisor.md) — watches every turn, grades S/A/B/C/D/F,
+- [manager](../sub-agents/manager.md) — plans, assigns, owns technical context
+- [advisor](../sub-agents/advisor.md) — watches every turn, grades S/A/B/C/D/F,
   hands blockers to the manager
-- [engineer](sub-agents/engineer.md) — principal-engineer bug/security review
+- [engineer](../sub-agents/engineer.md) — principal-engineer bug/security review
   incl. indirect callers; audits tests for bias
-- [architect](sub-agents/architect.md) — structure, coupling, anti-patterns
-- [teacher](sub-agents/teacher.md) — the coaching tone; expressed through
+- [architect](../sub-agents/architect.md) — structure, coupling, anti-patterns
+- [teacher](../sub-agents/teacher.md) — the coaching tone; expressed through
   manager tasks, advisor feedback, and transcripts
 
 ---
@@ -213,7 +213,7 @@ The role team is documented per page in [docs/sub-agents/](sub-agents/README.md)
 9. **External contracts are verified upstream.** Platform API behavior
    (endpoints, headers, review payloads, rate-limit headers) matches the
    official docs; quirks the hosts actually exhibit are preserved, not
-   "fixed" — documented in `review-flow-architecture.md`.
+   "fixed" — documented in `review-flow/review-flow-architecture.md`.
 
 ---
 

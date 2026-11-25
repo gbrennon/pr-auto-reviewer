@@ -32,6 +32,12 @@ class SomeCommand:
     def __init__(self, data: str) -> None:
         self.data = data
 
+class SomeEvent:
+    """Test event class."""
+
+    def __init__(self, data: str) -> None:
+        self.data = data
+
 class OtherCommand:
     """Another test command class."""
 
@@ -77,6 +83,18 @@ class TestInMemoryCommandBus:
         bus.register(SomeCommand, handler1)
         bus.register(SomeCommand, handler2)
         assert bus._handlers[SomeCommand] is handler2
+
+    def test_event_registration_dispatches_all_event_handlers(self, bus: InMemoryCommandBus) -> None:
+        first = _RecordingHandler()
+        second = _RecordingHandler()
+        bus.register(SomeEvent, first)
+        bus.register(SomeEvent, second)
+
+        event = SomeEvent(data="event")
+        bus.dispatch(event)
+
+        first.assert_called_once_with(event)
+        second.assert_called_once_with(event)
 
     def test_dispatch_calls_registered_handler(self, bus: InMemoryCommandBus) -> None:
         """Dispatch calls the handler for the command type."""

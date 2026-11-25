@@ -57,6 +57,10 @@ from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from pr_auto_reviewer.infrastructure.config import Config, load_config
 from pr_auto_reviewer.infrastructure.container._core_services import wire_core_services
 from pr_auto_reviewer.infrastructure.container._platform_adapters import (
@@ -173,6 +177,10 @@ class Container:
         return self._token_verifier
 
     @property
+    def remote_host_backoff(self) -> RemoteHostBackoff:
+        return self._remote_host_backoff
+
+    @property
     def fragment_renderer(self) -> PromptRendererPort:
         return self._fragment_renderer
 
@@ -191,12 +199,26 @@ class Container:
     
     def _wire(self) -> None:
         is_terminal = self._config.output_mode == "terminal"
-        clients = wire_platform_clients(self._config)
+        self._remote_host_backoff = RemoteHostBackoff(
+            threshold=self._config.remote_failure_threshold,
+            interval_seconds=self._config.remote_failure_interval_seconds,
+            interval_increment_seconds=(
+                self._config.remote_failure_interval_increment_seconds
+            ),
+            quarantine_seconds=self._config.remote_failure_quarantine_seconds,
+        )
+        clients = wire_platform_clients(
+            self._config,
+            remote_host_backoff=self._remote_host_backoff,
+        )
         self._http_client = clients.http_client
         self._reviewer_client = clients.reviewer_client
         self._token_verifier = clients.token_verifier
 
-        self._local_repository = LocalGitRepository(Path(self._config.local_clone_base_dir))
+        self._local_repository = LocalGitRepository(
+            Path(self._config.local_clone_base_dir),
+            remote_host_backoff=self._remote_host_backoff,
+        )
         local_repository = self._local_repository
         adapters = wire_platform_adapters(
             self._config, clients, is_terminal, local_repository=local_repository

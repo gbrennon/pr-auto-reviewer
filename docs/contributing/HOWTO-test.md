@@ -158,13 +158,13 @@ cat ~/.local/state/pr-auto-reviewer/state.json | python3 -m json.tool
 ```bash
 # Auth check
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
-  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  -H "Authorization: Bearer $GITHUB_MANAGER_TOKEN" \
   https://api.github.com/user
 
 # Write access check
 curl -s -w "HTTP %{http_code}\n" -o /dev/null \
   -X POST \
-  -H "Authorization: Bearer $GITHUB_OWNER_TOKEN" \
+  -H "Authorization: Bearer $GITHUB_MANAGER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"reviewers":[]}' \
   https://api.github.com/repos/OWNER/REPO/pulls/PR/requested_reviewers

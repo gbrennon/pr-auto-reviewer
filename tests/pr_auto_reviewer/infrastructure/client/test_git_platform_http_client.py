@@ -13,6 +13,25 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
 
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.value = 100.0
+        self.sleeps: list[float] = []
+
+    def now(self) -> float:
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.value += seconds
+
+
+
 
 class _FakeResponse:
     """Reusable fake requests.Response for monkeypatch injection."""
@@ -31,7 +50,7 @@ class _FakeResponse:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise requests_lib.exceptions.HTTPError(response=self)
+            raise requests_lib.exceptions.HTTPError()
 
 
 class TestGitPlatformHttpClient:
@@ -166,9 +185,7 @@ class TestGitPlatformHttpClient:
         caplog.set_level(logging.ERROR)
 
         def fake_post(url: str, *, headers: Any, json: Any, timeout: int) -> _FakeResponse:
-            raise requests_lib.exceptions.HTTPError(
-                response=_FakeResponse(status_code=422, text='{"error": "gone"}', content=b'{"error": "gone"}')
-            )
+            raise requests_lib.exceptions.HTTPError()
 
         monkeypatch.setattr(requests_lib, "post", fake_post)
         client = GitPlatformHttpClient("https://x", "t")
@@ -184,3 +201,154 @@ class TestGitPlatformHttpClient:
         client = GitPlatformHttpClient("https://codeberg.org/api/v1", "t")
 
         assert client._verified_cache_path == tmp_path / "pr-auto-reviewer" / "verified-tokens.json"
+
+    def test_retryable_failures_wait_before_fourth_request(self, monkeypatch) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        attempts = 0
+
+        def fake_get(*args: Any, **kwargs: Any) -> _FakeResponse:
+            nonlocal attempts
+            attempts += 1
+            if attempts <= 3:
+                raise requests_lib.ConnectionError("connection refused")
+            return _FakeResponse(json_data={"ok": True})
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "token",
+            remote_host_backoff=backoff,
+        )
+
+        for _ in range(3):
+            with pytest.raises(requests_lib.ConnectionError):
+                client.get("/user")
+
+        client.get("/user")
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]
+
+    def test_manager_and_reviewer_clients_share_backoff(self, monkeypatch) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        attempts = 0
+
+        def fake_get(*args: Any, **kwargs: Any) -> _FakeResponse:
+            nonlocal attempts
+            attempts += 1
+            if attempts <= 3:
+                raise requests_lib.ConnectionError("connection refused")
+            return _FakeResponse(json_data={"ok": True})
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        manager = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "manager-token",
+            client_label="manager",
+            remote_host_backoff=backoff,
+        )
+        reviewer = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "reviewer-token",
+            client_label="reviewer",
+            remote_host_backoff=backoff,
+        )
+
+        for client in (manager, reviewer, manager):
+            with pytest.raises(requests_lib.ConnectionError):
+                client.get("/user")
+
+        reviewer.get("/user")
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]
+
+    @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 422])
+    def test_non_transient_http_errors_do_not_trigger_backoff(
+        self, monkeypatch, status_code: int,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(clock=clock.now, sleeper=clock.sleep)
+        responses = [_FakeResponse(status_code=status_code), _FakeResponse()]
+
+        def fake_get(*args: Any, **kwargs: Any) -> _FakeResponse:
+            return responses.pop(0)
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "token",
+            remote_host_backoff=backoff,
+        )
+
+        with pytest.raises(requests_lib.HTTPError):
+            client.get("/user")
+        client.get("/user")
+
+        assert clock.sleeps == []
+
+    def test_non_retryable_response_resets_mixed_retryable_streak(
+        self, monkeypatch,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(clock=clock.now, sleeper=clock.sleep)
+        responses = [
+            _FakeResponse(status_code=500),
+            _FakeResponse(status_code=500),
+            _FakeResponse(status_code=401),
+            _FakeResponse(status_code=500),
+            _FakeResponse(status_code=200, json_data={"ok": True}),
+        ]
+
+        def fake_get(*args: Any, **kwargs: Any) -> _FakeResponse:
+            return responses.pop(0)
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "token",
+            remote_host_backoff=backoff,
+        )
+
+        for _ in range(2):
+            with pytest.raises(requests_lib.HTTPError):
+                client.get("/user")
+        with pytest.raises(requests_lib.HTTPError):
+            client.get("/user")
+        with pytest.raises(requests_lib.HTTPError):
+            client.get("/user")
+        client.get("/user")
+
+        assert clock.sleeps == [60.0, 120.0, 60.0]
+
+    @pytest.mark.parametrize("status_code", [429, 500])
+    def test_retryable_http_errors_count_toward_backoff(
+        self, monkeypatch, status_code: int,
+    ) -> None:
+        clock = _Clock()
+        backoff = RemoteHostBackoff(
+            threshold=4, clock=clock.now, sleeper=clock.sleep,
+        )
+        responses = [_FakeResponse(status_code=status_code) for _ in range(3)]
+        responses.append(_FakeResponse())
+
+        def fake_get(*args: Any, **kwargs: Any) -> _FakeResponse:
+            return responses.pop(0)
+
+        monkeypatch.setattr(requests_lib, "get", fake_get)
+        client = GitPlatformHttpClient(
+            "https://codeberg.org/api/v1",
+            "token",
+            remote_host_backoff=backoff,
+        )
+
+        for _ in range(3):
+            with pytest.raises(requests_lib.HTTPError):
+                client.get("/user")
+        client.get("/user")
+
+        assert clock.sleeps == [60.0, 120.0, 180.0]

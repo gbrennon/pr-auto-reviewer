@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
+    DaemonStatusSnapshot,
+)
 from pr_auto_reviewer.application.ports.inbound.process_issue_commands_port import (
     ProcessIssueCommandsPort,
 )
@@ -74,10 +77,16 @@ def run_daemon(components: ApplicationComponents | None = None) -> None:
     root.run_daemon(components=components)
 
 
+def status_snapshot() -> DaemonStatusSnapshot:
+    """Return structured runtime telemetry from the daemon state store."""
+    root = CompositionRoot()
+    return root.status_snapshot()
+
+
 def show_status() -> str:
     """Render human-readable runtime telemetry from the daemon state store."""
     root = CompositionRoot()
     return root.show_status()
 
 
-__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'ListAllowedRepositories', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon', 'show_status']
+__all__ = ['CliRunner', 'Container', 'ConversationLoggerPort', 'InMemoryCommandBus', 'IssueBodyBuilder', 'IssueCommandParser', 'ListAllowedRepositories', 'NotifierPort', 'PollingDaemon', 'PollingDaemonConfig', 'PrListerPort', 'ProcessIssueCommandsPort', 'ProcessIssueCommandsService', 'RepoListerPort', 'RepoUpdateTracker', 'ReviewItemParser', 'ReviewPullRequestPort', 'ReviewPullRequestService', 'ReviewReaderPort', 'TokenVerifierPort', 'annotations', 'bootstrap', 'clean_temp_files', 'dataclass', 'load_config', 'logger', 'logging', 'run_daemon', 'show_status', 'status_snapshot']

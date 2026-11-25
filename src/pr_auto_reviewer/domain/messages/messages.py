@@ -11,7 +11,7 @@ def invalid_items_message(
 ) -> str:
     invalid_list = ", ".join(f"#{n}" for n in invalid)
     available_list = "\n".join(
-        f"- #{item.id}: {item.description[:60]}..."
+        f"- {_command_item_label(item)}: {item.description[:60]}..."
         for item in available
     )
     return (
@@ -56,9 +56,8 @@ def rejected_command_items_message(
     )
     items_by_id = {item.id: item for item in review_items}
     details = ", ".join(
-        _command_item_label(items_by_id[item_id])
+        _command_item_label_for_id(item_id, items_by_id)
         for item_id in item_ids
-        if item_id in items_by_id
     )
     return (
         f"Cannot {action_name} for: {details}. "
@@ -66,14 +65,41 @@ def rejected_command_items_message(
         "blocking findings must be handled through code changes and formal review."
     )
 
+def issue_creation_failed_message(
+    item_ids: Sequence[str],
+    review_items: Sequence[ReviewItem],
+    *,
+    reason: str = "tracker issue creation failed",
+) -> str:
+    """Explain that a tracker issue command was finalized after failure."""
+    items_by_id = {item.id: item for item in review_items}
+    details = ", ".join(
+        _command_item_label_for_id(item_id, items_by_id)
+        for item_id in item_ids
+    )
+    return (
+        f"Could not create tracker issue(s) for: {details}.\n\n"
+        f"Reason: {reason}.\n\n"
+        "The command was recorded and will not be retried automatically. "
+        "Create the issue manually after resolving the tracker problem."
+    )
+
 
 def _command_item_label(item: ReviewItem) -> str:
     """Format an item ID with severity, category, and blocking classification."""
-    blocking_label = "blocking" if item.is_blocking else "non-blocking"
+    classification = "[BLOCKING]" if item.is_blocking else "[NON-BLOCKING]"
     return (
-        f"`{item.id}` ({item.severity.value} {item.category.value}, "
-        f"{blocking_label}; status: {item.status.value})"
+        f"`{item.id}` {classification} ({item.severity.value} "
+        f"{item.category.value}; status: {item.status.value})"
     )
+
+def _command_item_label_for_id(
+    item_id: str, items_by_id: dict[str, ReviewItem],
+) -> str:
+    item = items_by_id.get(item_id)
+    if item is None:
+        return f"`{item_id}` [UNKNOWN] (classification unavailable)"
+    return _command_item_label(item)
 
 
 def _created_issue_line(issue: Issue, item: ReviewItem | None) -> str:
@@ -82,14 +108,14 @@ def _created_issue_line(issue: Issue, item: ReviewItem | None) -> str:
     if item is None:
         return (
             f"{header}\n"
-            f"  - review item `{issue.source_item_id}` "
+            f"  - review item `{issue.source_item_id}` [UNKNOWN] "
             "— status: unknown (no longer in the latest review)"
         )
-    blocking_label = "blocking" if item.is_blocking else "non-blocking"
+    classification = "[BLOCKING]" if item.is_blocking else "[NON-BLOCKING]"
     relevance = "still relevant" if item.is_open else "no longer relevant"
     return (
         f"{header}\n"
-        f"  - review item `{issue.source_item_id}` "
-        f"({item.severity.value} {item.category.value}, {blocking_label}) "
+        f"  - review item `{issue.source_item_id}` {classification} "
+        f"({item.severity.value} {item.category.value}) "
         f"— status: {item.status.value} ({relevance})"
     )

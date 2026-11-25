@@ -4,7 +4,7 @@ Navigation hub for all project documentation.
 
 ---
 
-## 📁 By Category
+## By Category
 
 ### Architecture & Design
 | Document | Purpose |
@@ -26,6 +26,7 @@ Navigation hub for all project documentation.
 | Document | Purpose |
 |---|---|
 | [features/features.md](features/features.md) | Implemented features, planned work, platform support |
+| [features/status-tui.md](features/status-tui.md) | Live Textual status dashboard, settings screen, and navigation modes |
 
 ### Operations (Running the App)
 | Document | Purpose |
@@ -66,11 +67,12 @@ Navigation hub for all project documentation.
 
 ---
 
-## 🎯 Quick Start Paths
+## Quick Start Paths
 
 | Goal | Start Here |
 |---|---|
 | Run a review | [operations/HOWTO-single-review.md](operations/HOWTO-single-review.md) |
+| Use the status TUI | [features/status-tui.md](features/status-tui.md) |
 | Configure the app | [configuration/configuration.md](configuration/configuration.md) |
 | Understand architecture | [architecture/structure.md](architecture/structure.md) → [architecture/diagrams/deep-architecture.md](architecture/diagrams/deep-architecture.md) |
 | Set up tokens | [tokens/README.md](tokens/README.md) |
@@ -79,9 +81,9 @@ Navigation hub for all project documentation.
 
 ---
 
-## 🔗 Cross-References
+## Cross-References
 
 - **README.md** → [Project README](../README.md) (entry point, quick start)
 - **AGENTS.md** → [Agent Rules](../AGENTS.md) (coding conventions, test rules)
-- **CLAUDE.md** → [Claude Context](../CLAUDE.md) (project context for AI)
+
 - **Makefile** → [Makefile](../Makefile) (available commands: `make help`)

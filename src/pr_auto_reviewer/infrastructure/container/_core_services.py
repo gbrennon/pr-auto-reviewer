@@ -27,9 +27,6 @@ from pr_auto_reviewer.application.services.finding_deduplicator_service import (
 from pr_auto_reviewer.application.services.finding_verifier_service import (
     FindingVerifierService,
 )
-from pr_auto_reviewer.application.services.remediation_audit_service import (
-    RemediationAuditService,
-)
 from pr_auto_reviewer.application.services.multi_phase_review_orchestrator_service import (
     MultiPhaseReviewOrchestratorService,
 )
@@ -38,6 +35,9 @@ from pr_auto_reviewer.application.services.phase_advisor_service import (
 )
 from pr_auto_reviewer.application.services.phase_manager_service import (
     PhaseManagerService,
+)
+from pr_auto_reviewer.application.services.remediation_audit_service import (
+    RemediationAuditService,
 )
 from pr_auto_reviewer.application.services.turn_parser_service import TurnParserService
 from pr_auto_reviewer.domain.entities.advisor_agent import AdvisorAgent
@@ -90,6 +90,9 @@ from pr_auto_reviewer.infrastructure.config.advisor_granularity import (
 from pr_auto_reviewer.infrastructure.config.app_paths import (
     AppPaths,
 )
+from pr_auto_reviewer.infrastructure.container.chat_client_factory import (
+    ChatClientFactory,
+)
 from pr_auto_reviewer.infrastructure.context.review_context_factory import (
     ReviewContextFactory,
 )
@@ -111,17 +114,16 @@ from pr_auto_reviewer.infrastructure.llm.exploration_tool_service import (
 from pr_auto_reviewer.infrastructure.llm.llm_agent_adapter import (
     LlmAgentAdapter,
 )
-from pr_auto_reviewer.infrastructure.container.chat_client_factory import (
-    ChatClientFactory,
-)
 from pr_auto_reviewer.infrastructure.llm.review_response_parser import (
     ReviewResponseParser,
 )
 from pr_auto_reviewer.infrastructure.notifier.linux_notifier import (
     LinuxNotifier,
 )
-from pr_auto_reviewer.infrastructure.persistence.json_file_pr_repository import (
-    JsonFilePullRequestRepository,
+from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+    LEGACY_STORAGE_ENCRYPTION_KEY,
+    SqlitePullRequestRepository,
+    SqliteStorageKeyMigrator,
 )
 from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
     ReasonFactory,
@@ -263,8 +265,15 @@ def wire_core_services(
     else:
         artifact_root = AppPaths.state_dir()
     os.makedirs(artifact_root, exist_ok=True)
-    pr_repository = JsonFilePullRequestRepository(
-        artifact_root / "state.json"
+    encryption_key = config.storage_encryption_key or LEGACY_STORAGE_ENCRYPTION_KEY
+    if config.storage_encryption_key:
+        SqliteStorageKeyMigrator(
+            artifact_root / "state.sqlite3",
+            config.storage_encryption_key,
+            LEGACY_STORAGE_ENCRYPTION_KEY,
+        ).migrate()
+    pr_repository = SqlitePullRequestRepository(
+        artifact_root / "state.sqlite3", encryption_key
     )
     chat_client = ChatClientFactory.create(config)
     command_bus = InMemoryCommandBus()
