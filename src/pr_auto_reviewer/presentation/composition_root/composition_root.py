@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 from pr_auto_reviewer.application.ports.outbound.git_credential_provider_port import (
@@ -20,6 +19,7 @@ from pr_auto_reviewer.application.services.register_issue_service import (
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
 )
+from pr_auto_reviewer.application.dtos.show_status_request import ShowStatusRequest
 from pr_auto_reviewer.application.services.show_status_service import (
     ShowStatusService,
 )
@@ -53,11 +53,26 @@ from pr_auto_reviewer.infrastructure.git_credentials import (
     InteractiveGitCredentialPrompter,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+from pr_auto_reviewer.infrastructure.process_liveness import SystemProcessLiveness
+from pr_auto_reviewer.presentation.status_text_formatter import StatusTextFormatter
 from pr_auto_reviewer.infrastructure.persistence.json_daemon_runtime_state_store import (
     JsonDaemonRuntimeStateStore,
 )
 
-from ._shared import *
+from ._shared import (
+    CliRunner,
+    Container,
+    IssueBodyBuilder,
+    IssueCommandParser,
+    NotifierPort,
+    PollingDaemon,
+    PollingDaemonConfig,
+    ProcessIssueCommandsService,
+    RepoUpdateTracker,
+    ReviewItemParser,
+    ReviewPullRequestService,
+    load_config,
+)
 from .application_components import ApplicationComponents
 
 logger = logging.getLogger(__name__)
@@ -136,6 +151,7 @@ class CompositionRoot:
             pr_repository=self._container.pr_repository,
             runtime_state=runtime_state,
             config_reloader=config_reloader,
+            command_failure_backoff=self._container.remote_host_backoff,
         )
 
         self._authenticate_for_git_host(config)
@@ -144,34 +160,27 @@ class CompositionRoot:
     def _status_service(self) -> ShowStatusService:
         state_path = AppPaths.state_dir() / "daemon-status.json"
         runtime_state = JsonDaemonRuntimeStateStore(state_path)
-        config = self._container.config if hasattr(self, '_container') else load_config()
+        config = self._container.config if hasattr(self, "_container") else load_config()
         capability_state = ApiAccessCapabilityState(
             ApiAccessCapabilityStore(AppPaths.state_dir() / "api-capabilities.json")
         )
         return ShowStatusService(
             runtime_state=runtime_state,
-            process_checker=self._is_pid_alive,
+            process_liveness=SystemProcessLiveness(),
             allowed_repositories=config.repos_allow_list,
+            poll_interval_seconds=config.poll_interval,
             capability_query=capability_state,
         )
 
     def status_snapshot(self) -> DaemonStatusSnapshot:
-        """Return structured runtime telemetry from the daemon state store."""
-        return self._status_service().snapshot()
+        """Return structured runtime telemetry from the daemon status store."""
+        response = self._status_service().execute(ShowStatusRequest())
+        return response.snapshot
 
     def show_status(self) -> str:
-        """Render human-readable runtime telemetry from the daemon state store."""
-        return self._status_service().show_status()
+        """Render runtime telemetry as presentation-layer text."""
+        return StatusTextFormatter().format(self.status_snapshot())
 
-    @staticmethod
-    def _is_pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-            return True
-        except (OSError, ProcessLookupError):
-            return False
 
     def _setup_logging(self, debug: bool) -> None:
         log_level = logging.DEBUG if debug else logging.INFO

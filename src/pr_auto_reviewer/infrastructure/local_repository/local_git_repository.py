@@ -11,6 +11,11 @@ from pathlib import Path
 from pr_auto_reviewer.application.ports.outbound.local_repository_port import (
     LocalRepositoryPort,
 )
+
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
+
 from pr_auto_reviewer.domain.exceptions.repository_fetch_error import (
     RepositoryFetchError,
 )
@@ -28,9 +33,15 @@ class LocalGitRepository(LocalRepositoryPort):
         self,
         temp_base_dir: Path,
         credentials: GitCredentials | None = None,
+        remote_host_backoff: RemoteHostBackoff | None = None,
     ) -> None:
         self._temp_base_dir = temp_base_dir
         self._credentials = credentials
+        self._remote_host_backoff = (
+            remote_host_backoff
+            if remote_host_backoff is not None
+            else RemoteHostBackoff()
+        )
         self._last_clone_path: Path | None = None
         self._pr_refs: dict[Path, str] = {}
 
@@ -84,18 +95,27 @@ class LocalGitRepository(LocalRepositoryPort):
     def clone(self, pr_id: PullRequestId, clone_url: str) -> Path:
         dir_name = f"{pr_id.repository.replace('/', '_')}_{pr_id.number}"
         dest = self._temp_base_dir / dir_name
+        remote_host = RemoteHostBackoff.host_from_url(clone_url)
 
         if dest.exists():
             logger.info("Repository already cloned at %s, updating fetch", dest)
+            self._remote_host_backoff.before_operation(remote_host)
             try:
                 self._run_git(dest, "fetch", "--all", "--prune")
-            except RuntimeError as exc:
+            except (RuntimeError, subprocess.TimeoutExpired) as exc:
+                self._remote_host_backoff.record_failure(remote_host)
                 raise RepositoryFetchError(
                     f"Could not update existing clone at {dest}: {exc}"
                 ) from exc
+            self._remote_host_backoff.record_success(remote_host)
         else:
-            logger.info("Cloning %s into %s (full clone for merge-base)", clone_url, dest)
+            logger.info(
+                "Cloning repository from %s into %s (full clone for merge-base)",
+                remote_host or "local source",
+                dest,
+            )
             self._temp_base_dir.mkdir(parents=True, exist_ok=True)
+            self._remote_host_backoff.before_operation(remote_host)
             try:
                 subprocess.run(
                     ["git", "clone", clone_url, str(dest)],
@@ -106,16 +126,24 @@ class LocalGitRepository(LocalRepositoryPort):
                     timeout=300,
                     env=self._auth_env(),
                 )
-            except subprocess.CalledProcessError as exc:
+            except Exception as exc:
+                self._remote_host_backoff.record_failure(remote_host)
+                detail = (
+                    exc.stderr.strip()
+                    if isinstance(exc, subprocess.CalledProcessError)
+                    else str(exc)
+                )
                 logger.error(
-                    "git clone failed for %s: %s", clone_url, exc.stderr.strip()
+                    "git clone failed for %s: %s", remote_host or "local source", detail,
                 )
                 raise RepositoryFetchError(
-                    f"git clone {clone_url} failed: {exc.stderr.strip()}"
+                    f"git clone {remote_host or 'local source'} failed: {detail}"
                 ) from exc
+            self._remote_host_backoff.record_success(remote_host)
 
         pr_ref = f"pull/{pr_id.number}/head"
         pr_branch = f"pr-{pr_id.number}"
+        self._remote_host_backoff.before_operation(remote_host)
         try:
             self._run_git(
                 dest,
@@ -123,14 +151,30 @@ class LocalGitRepository(LocalRepositoryPort):
                 "origin",
                 "+" + pr_ref + f":{pr_branch}",
             )
-            self._pr_refs[dest] = pr_branch
-            self._run_git(dest, "checkout", pr_branch)
+        except subprocess.TimeoutExpired:
+            self._remote_host_backoff.record_failure(remote_host)
+            logger.warning(
+                "Could not fetch PR ref %s — PR may be from a fork. "
+                "Falling back to diff against origin/HEAD.",
+                pr_ref,
+            )
         except RuntimeError:
             logger.warning(
                 "Could not fetch PR ref %s — PR may be from a fork. "
                 "Falling back to diff against origin/HEAD.",
                 pr_ref,
             )
+        else:
+            self._remote_host_backoff.record_success(remote_host)
+            self._pr_refs[dest] = pr_branch
+            try:
+                self._run_git(dest, "checkout", pr_branch)
+            except RuntimeError:
+                logger.warning(
+                    "Could not fetch PR ref %s — PR may be from a fork. "
+                    "Falling back to diff against origin/HEAD.",
+                    pr_ref,
+                )
         self._last_clone_path = dest
         return dest
 

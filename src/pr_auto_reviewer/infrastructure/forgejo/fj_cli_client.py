@@ -9,6 +9,9 @@ from typing import Any
 from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
     GitPlatformHttpClient,
 )
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from .command_runner import CommandRunner
 from .subprocess_command_runner import SubprocessCommandRunner
 
@@ -21,19 +24,23 @@ class FjCliClient(GitPlatformHttpClient):
         *,
         client_label: str = "",
         runner: CommandRunner | None = None,
+        remote_host_backoff: RemoteHostBackoff | None = None,
     ) -> None:
         super().__init__(
             "https://codeberg.org/api/v1",
             "",
             platform_mode="forgejo",
             client_label=client_label,
+            remote_host_backoff=remote_host_backoff,
         )
         self._runner = runner or SubprocessCommandRunner()
 
     def get(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None, **params: Any) -> Any:
         """Read a supported Forgejo resource through ``fj``."""
         del headers, repo, params
-        output = self._runner.run(self._view_command(path))
+        output = self._run_remote_command(
+            self._runner, self._view_command(path),
+        )
         try:
             return json.loads(output)
         except json.JSONDecodeError as exc:
@@ -44,23 +51,28 @@ class FjCliClient(GitPlatformHttpClient):
     def get_raw(self, path: str, headers: dict[str, str] | None = None, *, repo: str | None = None) -> str:
         """Read a pull-request diff through ``fj pr view ... diff``."""
         del headers, repo
-        return self._runner.run(self._view_command(path))
+        return self._run_remote_command(self._runner, self._view_command(path))
 
     def post(self, path: str, body: dict[str, Any], *, repo: str | None = None) -> dict[str, Any]:
         """Publish comments or issues through supported ``fj`` commands."""
         match = re.match(r"/repos/([^/]+/[^/]+)/issues/(\d+)/comments$", path)
         if match:
             repository, number = match.groups()
-            self._runner.run(
-                ["fj", "pr", "comment", f"{repository}#{number}", str(body.get("body", ""))]
+            self._run_remote_command(
+                self._runner,
+                [
+                    "fj", "pr", "comment", f"{repository}#{number}",
+                    str(body.get("body", "")),
+                ],
             )
             return {}
         if path.endswith("/issues") and repo:
-            self._runner.run(
+            self._run_remote_command(
+                self._runner,
                 [
                     "fj", "issue", "create", "--repo", repo, "--no-template",
                     str(body.get("title", "")), "--body", str(body.get("body", "")),
-                ]
+                ],
             )
             return {}
         raise RuntimeError(f"fj CLI does not expose a command for POST {path}")

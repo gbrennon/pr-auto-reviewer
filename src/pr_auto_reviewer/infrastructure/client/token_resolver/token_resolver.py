@@ -1,13 +1,13 @@
-"""TokenResolver — resolves per-org platform tokens from env vars.
+"""TokenResolver — resolves per-repository and per-org platform tokens.
 
 Scans environment variables matching ``{PREFIX}_TOKEN_{ORG}_{ROLE}`` and
-falls back to default tokens when no org-specific override exists.
+falls back to default tokens when no scoped override exists.
 
     GITHUB_TOKEN_my-org_MANAGER=ghp_...
     GITHUB_TOKEN_my-org_REVIEWER=ghp_...
     GITHUB_TOKEN_my-org_REVIEWER_USERNAME=my-bot
 
-Resolution order per role: org override → default → "".
+Resolution order per role: repository override → org override → default → "".
 
 Org names may contain underscores — the role is identified by suffix-matching
 against known roles (``REVIEWER_USERNAME``, ``REVIEWER``, ``MANAGER``) in
@@ -32,6 +32,7 @@ from pr_auto_reviewer.infrastructure.client.token_resolver.token_role_defaults i
 from pr_auto_reviewer.infrastructure.config.org_token_entry import OrgTokenEntry
 from pr_auto_reviewer.infrastructure.config.org_token_overrides import (
     OrgTokenOverrides,
+    encode_repository_key,
 )
 
 
@@ -95,6 +96,10 @@ class TokenResolver:
         if not org:
             return self._defaults.reviewer_username()
 
+        repository_entry = self._repository_entry(repo)
+        if repository_entry and repository_entry.reviewer_username:
+            return repository_entry.reviewer_username
+
         entry = self._org_entry(org)
         if entry and entry.reviewer_username:
             return entry.reviewer_username
@@ -117,6 +122,14 @@ class TokenResolver:
         )
         return platform_overrides.get(org)
 
+    def _repository_entry(self, repo: str) -> OrgTokenEntry | None:
+        if not self._overrides:
+            return None
+        platform = self._PLATFORM_KEY.get(self._prefix, "")
+        if not platform:
+            return None
+        return self._overrides.repositories.get(f"{platform}:{repo}")
+
     def _resolve_from_overrides(self, org: str, role_upper: str) -> str | None:
         entry = self._org_entry(org)
         if entry is None:
@@ -127,6 +140,23 @@ class TokenResolver:
             return entry.reviewer_token or None
         return None
 
+    def _resolve_from_repository(self, repo: str, role_upper: str) -> str | None:
+        entry = self._repository_entry(repo)
+        if entry is None:
+            return None
+        if role_upper == "MANAGER":
+            return entry.manager_token or None
+        if role_upper == "REVIEWER":
+            return entry.reviewer_token or None
+        return None
+
+    def _repository_source_key(self, repo: str, role_upper: str) -> str:
+        platform = self._PLATFORM_KEY.get(self._prefix, self._prefix.lower())
+        return (
+            f"{self._prefix}_TOKEN_"
+            f"{encode_repository_key(f'{platform}:{repo}')}_{role_upper}"
+        )
+
     def _overrides_source_key(self, org: str, role_upper: str) -> str:
         return f"{self._prefix}_TOKEN_{org}_{role_upper}"
 
@@ -136,6 +166,10 @@ class TokenResolver:
             return self._defaults.token_for(role), self._defaults.source_key_for(role)
 
         role_upper = role.upper()
+        token = self._resolve_from_repository(repo, role_upper)
+        if token is not None:
+            return token, self._repository_source_key(repo, role_upper)
+
         token = self._resolve_from_overrides(org, role_upper)
         if token is not None:
             return token, self._overrides_source_key(org, role_upper)

@@ -8,6 +8,7 @@ import pytest
 from pr_auto_reviewer.domain import CommitSha, PullRequest, PullRequestId
 from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
     EncryptedSqliteSecretStore,
+    EncryptionKeyError,
     SqlitePullRequestRepository,
 )
 
@@ -63,12 +64,30 @@ class TestSqlitePersistence:
         assert b"replacement-token" not in raw
         assert b"secret-token" not in raw
 
-    def test_wrong_encryption_key_fails_closed(self, tmp_path: Path) -> None:
+    def test_wrong_encryption_key_identifies_persisted_data_mismatch(
+        self, tmp_path: Path,
+    ) -> None:
         database = tmp_path / "secrets.sqlite3"
         EncryptedSqliteSecretStore(database, "test-key").set("TOKEN", "value")
 
-        with pytest.raises(ValueError, match="decrypt"):
+        with pytest.raises(
+            EncryptionKeyError,
+            match="Configured encryption key could not decrypt persisted data",
+        ):
             EncryptedSqliteSecretStore(database, "wrong-key").get("TOKEN")
+
+    def test_secret_store_validates_key_against_persisted_data(
+        self, tmp_path: Path,
+    ) -> None:
+        database = tmp_path / "secrets.sqlite3"
+        store = EncryptedSqliteSecretStore(database, "test-key")
+
+        assert store.validate_key() is False
+        store.set("TOKEN", "value")
+        assert store.validate_key() is True
+
+        with pytest.raises(EncryptionKeyError):
+            EncryptedSqliteSecretStore(database, "wrong-key").validate_key()
 
     def test_storage_key_migration_reencrypts_state_and_secrets(
         self, tmp_path: Path,

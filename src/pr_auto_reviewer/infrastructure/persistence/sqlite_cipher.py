@@ -7,6 +7,8 @@ import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .encryption_key_error import EncryptionKeyError
+
 
 class SqliteCipher:
     """Encrypt and decrypt application data with a caller-provided key."""
@@ -26,4 +28,7 @@ class SqliteCipher:
         try:
             return self._fernet.decrypt(value).decode("utf-8")
         except (InvalidToken, UnicodeDecodeError) as exc:
-            raise ValueError("Unable to decrypt persisted data") from exc
+            raise EncryptionKeyError(
+                "Configured encryption key could not decrypt persisted data; "
+                "verify the key or check for corrupted storage",
+            ) from exc

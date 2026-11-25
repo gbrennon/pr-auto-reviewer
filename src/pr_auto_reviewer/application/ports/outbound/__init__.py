@@ -12,6 +12,7 @@ from .issue_tracker_port import IssueTrackerPort
 from .llm_review_port import LlmReviewPort
 from .local_repository_port import LocalRepositoryPort
 from .notifier_port import NotifierPort
+from .process_liveness_port import ProcessLivenessPort
 from .prompt_renderer_port import PromptRendererPort
 from .pull_request_repository_port import PullRequestRepositoryPort
 from .reason_factory_port import ReasonFactoryPort
@@ -37,8 +38,9 @@ __all__ = [
     "LlmReviewPort",
     "LocalRepositoryPort",
     "NotifierPort",
-    "PromptRendererPort",
     "PullRequestRepositoryPort",
+    "PromptRendererPort",
+    "ProcessLivenessPort",
     "ReasonFactoryPort",
     "RepositoryContextPort",
     "ResponseParserPort",

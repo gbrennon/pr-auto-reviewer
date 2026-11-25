@@ -41,6 +41,10 @@ class ConfigBuilder:
         llm_call_budget: int = 300,
         advisor_granularity: AdvisorGranularity = AdvisorGranularity.PHASE,
         auth_configuration: AuthConfiguration | None = None,
+        remote_failure_threshold: int = 3,
+        remote_failure_interval_seconds: float = 60.0,
+        remote_failure_interval_increment_seconds: float = 60.0,
+        remote_failure_quarantine_seconds: float = 3600.0,
     ) -> Config:
         """Build immutable configuration data from environment values."""
         platform = self._platform_parser.parse(source)
@@ -85,6 +89,12 @@ class ConfigBuilder:
             llm_call_budget=llm.call_budget,
             advisor_granularity=review.advisor_granularity,
             poll_interval=review.poll_interval,
+            remote_failure_threshold=remote_failure_threshold,
+            remote_failure_interval_seconds=remote_failure_interval_seconds,
+            remote_failure_interval_increment_seconds=(
+                remote_failure_interval_increment_seconds
+            ),
+            remote_failure_quarantine_seconds=remote_failure_quarantine_seconds,
             run_once=review.run_once,
             repos_filter=repository.repos_filter,
             repos_allow_list=repository.repos_allow_list,

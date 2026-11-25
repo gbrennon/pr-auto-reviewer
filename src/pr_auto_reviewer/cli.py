@@ -40,7 +40,8 @@ class CommandLineInterface:
     def _add_service_parsers(self, subparsers: Any) -> None:
         subparsers.add_parser("start", help="Start the systemd service")
         subparsers.add_parser("stop", help="Stop the systemd service")
-        subparsers.add_parser("status", help="Show live daemon status")
+        subparsers.add_parser("status", help="Show plain daemon status")
+        subparsers.add_parser("dashboard", help="Open the live status dashboard")
         subparsers.add_parser("logs", help="Follow service logs")
         subparsers.add_parser("restart", help="Restart the service")
         subparsers.add_parser("bootstrap", help="Bootstrap the application")
@@ -92,16 +93,8 @@ class CommandLineInterface:
         if command in {"start", "stop", "restart"}:
             self._run_systemctl(command)
             return True
-        if command == "status":
-            if sys.stdout.isatty():
-                settings = SettingsCli()
-                StatusDashboard(
-                    status_snapshot,
-                    settings=settings,
-                    navigation_mode=NavigationMode.parse(settings.navigation_mode()),
-                ).run()
-            else:
-                print(show_status())
+        if command in {"status", "dashboard"}:
+            self._run_status_interface(command)
             return True
         if command == "logs":
             self._run_journalctl()
@@ -163,6 +156,18 @@ class CommandLineInterface:
     @staticmethod
     def _run_journalctl() -> None:
         subprocess.run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
+
+    @staticmethod
+    def _run_status_interface(command: str) -> None:
+        if command == "status":
+            print(show_status())
+            return
+        settings = SettingsCli()
+        StatusDashboard(
+            status_snapshot,
+            settings=settings,
+            navigation_mode=NavigationMode.parse(settings.navigation_mode()),
+        ).run()
 
 
 def main() -> None:

@@ -117,6 +117,19 @@ class TestContainer:
         )
         assert source.startswith("FORGEJO_")
 
+
+    def test_container_shares_one_remote_backoff_with_repository_and_clients(
+        self, _container,
+    ) -> None:
+        backoff = _container.http_client._remote_host_backoff
+
+        assert _container.reviewer_client._remote_host_backoff is backoff
+        assert _container.local_repository._remote_host_backoff is backoff
+        assert (
+            _container.http_client._preflight_verifier._http._remote_host_backoff
+            is backoff
+        )
+
     @pytest.fixture(autouse=True)
     def _redirect_config_dir(self, tmp_path: Path, monkeypatch) -> None:
         config_root = tmp_path / ".config" / "pr-auto-reviewer"

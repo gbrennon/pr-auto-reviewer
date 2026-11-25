@@ -16,6 +16,7 @@ from .ports import (
     ReviewPublisherPort,
     ReviewPullRequestPort,
     ReviewReaderPort,
+    ShowStatusPort,
 )
 from .serializers import IssueBodyBuilder
 from .services import ProcessIssueCommandsService, ReviewPullRequestService
@@ -38,4 +39,5 @@ __all__ = [
     "ReviewPullRequestPort",
     "ReviewPullRequestService",
     "ReviewReaderPort",
+    "ShowStatusPort",
 ]

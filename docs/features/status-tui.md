@@ -18,6 +18,10 @@ The dashboard displays daemon state, allowed repositories, API capabilities, act
 
 Press `e` to open the full-screen settings editor. Press `q` or `Escape` to return to the dashboard.
 
+On short terminals, the settings screen scrolls vertically instead of clipping the settings
+list. Focus navigation automatically brings controls such as Save and Unset into the visible
+viewport.
+
 Settings values are displayed without exposing secret values. Tokens and other secret settings are write-only: they can be entered or replaced, but never read back into the interface.
 
 The settings screen supports:
@@ -37,26 +41,34 @@ The default mode is `arrows`. Set the mode from the settings screen or with:
 pr-auto-reviewer config set TUI_NAVIGATION_MODE arrows
 ```
 
-Supported modes:
+Supported modes apply to the active control on every screen, including the dashboard,
+settings screen, and future screens pushed by the app. Arrow-key behavior remains the
+standard Textual behavior.
 
 ### Arrows
 
-The standard Textual input behavior. Arrow keys move the cursor, and Tab/Shift-Tab move focus between controls.
+The standard Textual input behavior. Arrow keys move the cursor, and Tab/Shift-Tab
+move focus between controls.
 
 ### Vim
 
-- Normal mode: `h`/`l` move the text cursor; `j`/`k` move focus between controls.
+- Normal mode: `h`/`l` move the text cursor; `j`/`k` move focus between controls
+  on the active screen.
 - Press `i` to enter insert mode.
 - Press `Escape` to leave insert mode.
 - Arrow keys do not move the cursor in Vim mode.
 - `j`/`k` can reach buttons such as Save and Unset.
+- While a `NavigationInput` is in insert mode, `j`/`k` are inserted as text and
+  do not move focus.
 
 ### Emacs
 
 - `ArrowLeft`/`ArrowRight` and `Ctrl-b`/`Ctrl-f` move by character.
-- `ArrowUp`/`ArrowDown` and `Ctrl-p`/`Ctrl-n` move between controls.
+- `ArrowUp`/`ArrowDown` and `Ctrl-p`/`Ctrl-n` move between controls on the active
+  screen.
 - Text objects and word motions are not implemented.
-- `Ctrl-p` is reserved for previous-control movement; the command palette is available with `Ctrl-Shift-p`.
+- `Ctrl-p` is reserved for previous-control movement; the command palette is
+  available with `Ctrl-Shift-p`.
 
 ## Live review progress
 

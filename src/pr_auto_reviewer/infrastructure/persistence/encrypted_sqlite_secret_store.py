@@ -37,6 +37,23 @@ class EncryptedSqliteSecretStore:
             ).fetchone()
         return None if row is None else self._cipher.decrypt(row[0])
 
+
+    def validate_key(self) -> bool:
+        """Validate the key against all stored ciphertexts.
+
+        Return ``False`` when the store has no encrypted records, because an
+        empty store cannot prove that the key matches persisted data.
+        """
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT ciphertext FROM secrets"
+            ).fetchall()
+        if not rows:
+            return False
+        for (ciphertext,) in rows:
+            self._cipher.decrypt(ciphertext)
+        return True
+
     def names(self) -> tuple[str, ...]:
         """Return secret names without returning secret values."""
         with self._database.connect() as connection:

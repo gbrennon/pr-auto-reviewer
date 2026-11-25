@@ -12,6 +12,9 @@ import requests
 from pr_auto_reviewer.domain.entities.api_access_capability import (
     ApiAccessCapability,
 )
+from pr_auto_reviewer.domain.exceptions.preflight_verification_error import (
+    PreflightVerificationError,
+)
 from pr_auto_reviewer.domain.value_objects.capability_suspension import (
     CapabilitySuspension,
 )
@@ -23,6 +26,9 @@ from pr_auto_reviewer.infrastructure.client.api_access_capability_store import (
 )
 from pr_auto_reviewer.infrastructure.client.http_request_counter import (
     HttpRequestCounter,
+)
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
 )
 from pr_auto_reviewer.infrastructure.client.rate_limit_snapshot import (
     RateLimitSnapshot,
@@ -54,8 +60,15 @@ class GitPlatformHttpClient:
         preflight_verifier: PreflightVerifier | None = None,
         _verified_cache_path: Path | None = None,
         capability_state: ApiAccessCapabilityState | None = None,
+        remote_host_backoff: RemoteHostBackoff | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
+        self._remote_host_backoff = (
+            remote_host_backoff
+            if remote_host_backoff is not None
+            else RemoteHostBackoff()
+        )
+        self._remote_host = RemoteHostBackoff.host_from_url(self._base_url)
         self._token = token
         self._platform_mode = platform_mode
         self._role = client_label
@@ -80,7 +93,16 @@ class GitPlatformHttpClient:
         if headers:
             request_headers.update(headers)
 
-        response = requests.get(url, headers=request_headers, params=params, timeout=30)
+        keys = self._operation_keys(url, capability)
+        self._remote_host_backoff.before_operation(*keys)
+        try:
+            response = requests.get(
+                url, headers=request_headers, params=params, timeout=30,
+            )
+        except requests.exceptions.RequestException as exc:
+            self._record_request_exception(exc, keys)
+            raise
+        self._record_remote_response(response, keys)
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
@@ -99,7 +121,14 @@ class GitPlatformHttpClient:
         if headers:
             request_headers.update(headers)
 
-        response = requests.get(url, headers=request_headers, timeout=30)
+        keys = self._operation_keys(url, capability)
+        self._remote_host_backoff.before_operation(*keys)
+        try:
+            response = requests.get(url, headers=request_headers, timeout=30)
+        except requests.exceptions.RequestException as exc:
+            self._record_request_exception(exc, keys)
+            raise
+        self._record_remote_response(response, keys)
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
@@ -114,16 +143,23 @@ class GitPlatformHttpClient:
         token, capability = self._request_credentials(repo)
         url = f"{self._base_url}{path}"
         label = self._label("write")
-        response = requests.post(
-            url,
-            headers={
-                **self._auth_header(token),
-                "Content-Type": "application/json",
-                "User-Agent": "pr-auto-reviewer",
-            },
-            json=body,
-            timeout=30,
-        )
+        keys = self._operation_keys(url, capability)
+        self._remote_host_backoff.before_operation(*keys)
+        try:
+            response = requests.post(
+                url,
+                headers={
+                    **self._auth_header(token),
+                    "Content-Type": "application/json",
+                    "User-Agent": "pr-auto-reviewer",
+                },
+                json=body,
+                timeout=30,
+            )
+        except requests.exceptions.RequestException as exc:
+            self._record_request_exception(exc, keys)
+            raise
+        self._record_remote_response(response, keys)
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError:
@@ -170,14 +206,26 @@ class GitPlatformHttpClient:
         if not token:
             return
         self._save_verified_cache(cache_key)
-        self._preflight_verifier.verify(
-            token=token,
-            org=org,
-            repo=pr_id.repository.split("/", 1)[1] if "/" in pr_id.repository else pr_id.repository,
-            pr_number=pr_id.number,
-            role=role,
-            token_source=source_key,
+        capability_key = (
+            f"capability:{self._platform_mode}:"
+            f"{self._role or 'default'}:{source_key}"
         )
+        self._remote_host_backoff.before_operation(
+            self._remote_host, capability_key,
+        )
+        try:
+            self._preflight_verifier.verify(
+                token=token,
+                org=org,
+                repo=pr_id.repository.split("/", 1)[1] if "/" in pr_id.repository else pr_id.repository,
+                pr_number=pr_id.number,
+                role=role,
+                token_source=source_key,
+            )
+        except PreflightVerificationError:
+            self._remote_host_backoff.record_failure(capability_key)
+            raise
+        self._remote_host_backoff.record_success(capability_key)
 
     def _capture_rate_limit(
         self,
@@ -225,6 +273,12 @@ class GitPlatformHttpClient:
     def _label(self, action: str) -> str:
         return f" [{self._role}/{action}]" if self._role else ""
 
+    def _operation_keys(
+        self, url: str, capability: ApiAccessCapability,
+    ) -> tuple[str | None, str, str]:
+        capability_key = "capability:" + ":".join(capability.global_key)
+        return self._remote_host, capability_key, f"operation:{url}"
+
     def _load_verified_cache(self) -> set[tuple[str, str]]:
         """Load verified (org, role) pairs from the persisted cache file.
 
@@ -239,6 +293,49 @@ class GitPlatformHttpClient:
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load verified token cache: %s", exc)
             return set()
+
+    def _record_remote_response(
+        self,
+        response: Any,
+        keys: tuple[str | None, str, str],
+    ) -> None:
+        host_key, _, _ = keys
+        status_code = getattr(response, "status_code", 0)
+        if status_code == 429 or status_code >= 500:
+            self._remote_host_backoff.record_failure(host_key)
+            return
+        if 400 <= status_code < 500:
+            self._remote_host_backoff.record_success(host_key)
+            return
+        self._remote_host_backoff.record_success(host_key)
+
+    def _record_request_exception(
+        self,
+        exc: requests.exceptions.RequestException,
+        keys: tuple[str | None, str, str],
+    ) -> None:
+        host_key, _, _ = keys
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code is not None and 400 <= status_code < 500:
+            self._remote_host_backoff.record_success(host_key)
+            return
+        self._remote_host_backoff.record_failure(host_key)
+
+    def _run_remote_command(
+        self,
+        runner: Any,
+        command: list[str],
+        input_text: str | None = None,
+    ) -> str:
+        """Run a CLI command while applying host backoff bookkeeping."""
+        self._remote_host_backoff.before_operation(self._remote_host)
+        try:
+            output = runner.run(command, input_text)
+        except Exception:
+            self._remote_host_backoff.record_failure(self._remote_host)
+            raise
+        self._remote_host_backoff.record_success(self._remote_host)
+        return output
 
     def _log_response_detail(
         self,

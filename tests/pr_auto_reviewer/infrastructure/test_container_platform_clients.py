@@ -27,6 +27,10 @@ from pr_auto_reviewer.infrastructure.container._platform_clients import (
     wire_platform_clients,
 )
 from pr_auto_reviewer.infrastructure.git_platform.git_provider import GitProvider
+
+from pr_auto_reviewer.infrastructure.client.remote_host_backoff import (
+    RemoteHostBackoff,
+)
 from pr_auto_reviewer.infrastructure.token_verifier import TokenVerifier
 
 # ── defaults for every config value not being varied ──────────────────────
@@ -570,3 +574,48 @@ class TestWirePlatformClients:
             result.forgejo_reviewer.base_url
             == "https://git.internal.example.com/fj-api/v1"
         )
+
+    def test_all_http_and_preflight_clients_share_remote_backoff(
+        self, both_config: Config,
+    ) -> None:
+        result = wire_platform_clients(both_config)
+        clients = [
+            result.http_client,
+            result.reviewer_client,
+            result.forgejo_manager,
+            result.forgejo_reviewer,
+        ]
+        backoff = result.http_client._remote_host_backoff
+
+        assert all(client._remote_host_backoff is backoff for client in clients)
+        assert (
+            self._preflight_verifier(result.http_client)._http._remote_host_backoff
+            is backoff
+        )
+        assert (
+            self._preflight_verifier(result.forgejo_manager)._http._remote_host_backoff
+            is backoff
+        )
+
+    @pytest.mark.parametrize(
+        "platform_mode",
+        [GitProvider.FORGEJO, GitProvider.GITHUB, GitProvider.BOTH],
+    )
+    def test_cli_clients_share_supplied_remote_backoff(
+        self, platform_mode: GitProvider,
+    ) -> None:
+        config = Config(
+            env="test",
+            platform_mode=platform_mode,
+            platform_transport="cli",
+        )
+        backoff = RemoteHostBackoff()
+
+        result = wire_platform_clients(config, remote_host_backoff=backoff)
+
+        clients = [result.http_client, result.reviewer_client]
+        if platform_mode == GitProvider.BOTH:
+            assert result.forgejo_manager is not None
+            assert result.forgejo_reviewer is not None
+            clients.extend([result.forgejo_manager, result.forgejo_reviewer])
+        assert all(client._remote_host_backoff is backoff for client in clients)

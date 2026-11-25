@@ -1,7 +1,7 @@
 """CompositionRoot wiring tests."""
 
+from types import SimpleNamespace
 from unittest.mock import patch
-
 import pytest
 
 from pr_auto_reviewer.application.dtos.list_allowed_repositories_request import (
@@ -289,6 +289,38 @@ class TestCompositionRoot:
         assert result == 0
         assert recording_pr_lister.queried_repos == ["owner/not-allowed"]
         assert len(recording_review.commands) == 1
+
+    def test_status_service_receives_configured_poll_interval(
+        self, monkeypatch, _fake_config
+    ):
+        captured: dict[str, object] = {}
+
+        class RecordingStatusService:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def execute(self, request):
+                _ = request
+                return SimpleNamespace(snapshot=None)
+
+        _fake_config.poll_interval = 600
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.composition_root.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.container._container.load_config",
+            lambda: _fake_config,
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.presentation.composition_root.composition_root.ShowStatusService",
+            RecordingStatusService,
+        )
+        root = CompositionRoot(notifier=FakeNotifier())
+
+        root.status_snapshot()
+
+        assert captured["poll_interval_seconds"] == 600
 
     @pytest.fixture
     def _fake_config(self) -> Config:
