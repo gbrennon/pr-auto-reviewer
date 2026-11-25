@@ -19,6 +19,7 @@ _MAX_FILE_BYTES = 100 * 1024
 _MAX_READ_PREVIEW_CHARS = 12 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
+_SHELL_SYNTAX_PATTERN = re.compile(r"(?:[|;&<>`]|\$\(|[\r\n])")
 _ARGUMENT_KEY_ALIASES = (
     "args",
     "arg",
@@ -300,6 +301,14 @@ class ExplorationToolService:
         reflects the PR's changes instead of the (clean) checked-out
         working tree.
         """
+        if _SHELL_SYNTAX_PATTERN.search(args):
+            return {
+                "status": "error",
+                "error": (
+                    "Shell operators are not supported in run_git; use a "
+                    "direct read-only git command or read_file instead"
+                ),
+            }
         tokens = args.strip().split()
         if not tokens:
             return {"status": "error", "error": "Empty git args"}
