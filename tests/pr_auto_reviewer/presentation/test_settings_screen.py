@@ -193,4 +193,3 @@ class TestSettingsScreen:
             rendered = str(screen.query_one("#repository-list").render())
             assert "manager: error — encryption key is invalid" in rendered
             assert "reviewer: error — secret storage unavailable" in rendered
-
