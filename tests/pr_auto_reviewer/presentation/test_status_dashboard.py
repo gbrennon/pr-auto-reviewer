@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Button
+from textual.widgets import Button, Input, Select
 
 from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
     DaemonStatusSnapshot,
@@ -22,7 +22,8 @@ from pr_auto_reviewer.domain.value_objects.daemon_runtime_status import (
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.presentation.cli.settings_cli import SettingsSnapshot
 from pr_auto_reviewer.presentation.navigation import NavigationMode
-from pr_auto_reviewer.presentation.settings_screen import SettingsScreen
+from pr_auto_reviewer.presentation.general_settings_screen import GeneralSettingsScreen
+from pr_auto_reviewer.presentation.settings_models import RepositoryCredentialStatus
 from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
 
 
@@ -35,6 +36,11 @@ class FocusNavigationScreen(Screen[None]):
 class FakeSettings:
     def __init__(self) -> None:
         self.writes: list[tuple[str, str]] = []
+        self.global_error: str | None = None
+        self.global_credentials: list[tuple[str, str, str]] = []
+        self.repository_credentials: list[tuple[str, str, str]] = []
+        self.repositories: list[str] = []
+        self.repository_statuses: tuple[RepositoryCredentialStatus, ...] = ()
         self.snapshot_value = SettingsSnapshot(
             values=(("poll_interval", "60"),),
             secret_names=("GITHUB_TOKEN",),
@@ -43,17 +49,35 @@ class FakeSettings:
     def snapshot(self) -> SettingsSnapshot:
         return self.snapshot_value
 
-    def write(self, name: str, value: str) -> None:
-        self.writes.append((name, value))
+    def write(self, name: str, raw_value: str) -> None:
+        self.writes.append((name, raw_value))
 
     def unset(self, name: str) -> None:
         self.writes.append((name, ""))
 
-    def add_repository(self, repository: str, manager_token: str, reviewer_token: str) -> None:
-        self.writes.append((repository, manager_token + reviewer_token))
+    def save_global_credential(self, platform: str, role: str, token: str) -> None:
+        if self.global_error is not None:
+            raise ValueError(self.global_error)
+        self.global_credentials.append((platform, role, token))
+
+    def save_repository_credentials(
+        self, repository: str, manager_token: str, reviewer_token: str,
+    ) -> None:
+        self.repository_credentials.append((repository, manager_token, reviewer_token))
+
+    def list_repositories(self) -> tuple[RepositoryCredentialStatus, ...]:
+        if self.repository_statuses:
+            return self.repository_statuses
+        return tuple(
+            RepositoryCredentialStatus(repository, "missing", "missing")
+            for repository in self.repositories
+        )
+
+    def add_repository(self, repository: str) -> None:
+        self.repositories.append(repository)
 
     def remove_repository(self, repository: str) -> None:
-        self.writes.append((repository, ""))
+        self.repositories.remove(repository)
 
 class TestStatusDashboard:
     @pytest.mark.asyncio
@@ -160,13 +184,14 @@ class TestStatusDashboard:
 
         async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
             await pilot.press("e")
-            assert isinstance(pilot.app.screen, SettingsScreen)
-            rendered = str(pilot.app.screen.query_one("#settings-list").render())
+            await pilot.click("#general-settings")
+            screen = pilot.app.screen
+            assert isinstance(screen, GeneralSettingsScreen)
+            rendered = str(screen.query_one("#settings-list").render())
             assert "Secret storage unavailable" in rendered
             assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required" in rendered
             await pilot.press("q")
 
-    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_changes_navigation_mode_from_settings_panel(self) -> None:
         snapshot = DaemonStatusSnapshot(
@@ -179,8 +204,10 @@ class TestStatusDashboard:
 
         async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
             await pilot.press("e")
-            assert isinstance(pilot.app.screen, SettingsScreen)
-            pilot.app.screen.query_one("#navigation-mode").value = "vim"
+            await pilot.click("#general-settings")
+            screen = pilot.app.screen
+            assert isinstance(screen, GeneralSettingsScreen)
+            screen.query_one("#navigation-mode").value = "vim"
             await pilot.pause()
             assert ("TUI_NAVIGATION_MODE", "vim") in settings.writes
             await pilot.press("q")
@@ -201,14 +228,18 @@ class TestStatusDashboard:
             await pilot.press("p")
             assert "live" in str(pilot.app.query_one("#action-status").render()).lower()
             await pilot.press("e")
-            assert isinstance(pilot.app.screen, SettingsScreen)
+            await pilot.click("#general-settings")
             screen = pilot.app.screen
-            screen.query_one("#setting-name").value = "GITHUB_TOKEN"
-            screen.query_one("#setting-value").value = "new-secret"
-            screen.on_button_pressed(
-                Button.Pressed(screen.query_one("#save-setting"))
-            )
-            assert settings.writes == [("GITHUB_TOKEN", "new-secret")]
+            assert isinstance(screen, GeneralSettingsScreen)
+            screen.query_one("#setting-key", Select).value = "poll_interval"
+            screen.query_one("#setting-value", Input).value = "new-secret"
+            save = screen.query_one("#save-setting", Button)
+            save.focus()
+            await pilot.press("enter")
+            assert settings.writes == [
+                ("TUI_NAVIGATION_MODE", "arrows"),
+                ("poll_interval", "new-secret"),
+            ]
             assert "new-secret" not in str(screen.render())
             await pilot.press("q")
 

@@ -19,15 +19,19 @@ from pr_auto_reviewer.infrastructure.config.settings_key_mapping import (
 
 TomlValue: TypeAlias = str | int | float | bool | list[object] | dict[str, object]
 
-_SECRET_SETTING_NAMES = frozenset({
-    "GITHUB_MANAGER_TOKEN",
-    "GITHUB_REVIEWER_TOKEN",
-    "GITHUB_REVIEWER_USERNAME",
-    "FORGEJO_MANAGER_TOKEN",
-    "FORGEJO_REVIEWER_TOKEN",
-    "FORGEJO_REVIEWER_USERNAME",
-    "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
-})
+_SECRET_SETTING_NAMES = frozenset(
+    {
+        "GITHUB_MANAGER_TOKEN",
+        "GITHUB_OWNER_TOKEN",
+        "GITHUB_REVIEWER_TOKEN",
+        "GITHUB_REVIEWER_USERNAME",
+        "FORGEJO_MANAGER_TOKEN",
+        "FORGEJO_OWNER_TOKEN",
+        "FORGEJO_REVIEWER_TOKEN",
+        "FORGEJO_REVIEWER_USERNAME",
+        "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
+    }
+)
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 

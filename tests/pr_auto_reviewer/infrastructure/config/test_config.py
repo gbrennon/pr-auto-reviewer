@@ -387,6 +387,37 @@ class TestLoadConfig:
             state_dir / "secrets.sqlite3", "configured-key",
         ).get("FORGEJO_MANAGER_TOKEN") == "legacy-token"
 
+
+    def test_runtime_encryption_key_wins_over_dotenv_key(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        from pr_auto_reviewer.infrastructure.config.app_paths import AppPaths
+        from pr_auto_reviewer.infrastructure.config.config import load_config
+        from pr_auto_reviewer.infrastructure.persistence.sqlite_persistence import (
+            EncryptedSqliteSecretStore,
+        )
+
+        config_dir = tmp_path / "config"
+        state_dir = tmp_path / "state"
+        config_dir.mkdir()
+        state_dir.mkdir()
+        monkeypatch.setattr(
+            AppPaths, "config_dir", classmethod(lambda cls: config_dir)
+        )
+        monkeypatch.setattr(
+            AppPaths, "state_dir", classmethod(lambda cls: state_dir)
+        )
+        monkeypatch.setattr(
+            "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
+            lambda path: {"PR_AUTO_REVIEWER_ENCRYPTION_KEY": "dotenv-key"},
+        )
+        monkeypatch.setenv("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "runtime-key")
+        EncryptedSqliteSecretStore(
+            state_dir / "secrets.sqlite3", "runtime-key"
+        ).set("FORGEJO_MANAGER_TOKEN", "runtime-token")
+        cfg = load_config()
+        assert cfg.storage_encryption_key == "runtime-key"
+        assert cfg.forgejo_manager_token == "runtime-token"
     @pytest.fixture(autouse=True)
     def _clean_env(self, monkeypatch, tmp_path: Path):
         """Prevent real configuration and environment from leaking into tests."""
@@ -575,6 +606,15 @@ class TestLoadConfig:
 
         with pytest.raises(ValueError):
             RepositoryEntriesParser().parse(raw)
+
+    def test_repository_entries_parser_rejects_malformed_json_array(self):
+        from pr_auto_reviewer.infrastructure.config.repository_entries_parser import (
+            RepositoryEntriesParser,
+        )
+
+        with pytest.raises(ValueError):
+            RepositoryEntriesParser().parse('["github:owner/repo"')
+
 
     def test_repos_allow_list_parsed_from_json_array_source(self):
         from pr_auto_reviewer.infrastructure.config.config_builder_composition import (

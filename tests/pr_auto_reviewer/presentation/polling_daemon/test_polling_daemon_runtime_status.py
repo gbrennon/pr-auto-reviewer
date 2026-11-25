@@ -382,7 +382,8 @@ class TestPollingDaemonRuntimeStatus:
 
         assert not review_service.execute.called
         assert any(
-            repository in record.message
+            record.levelno == logging.DEBUG
+            and repository in record.message
             and "no new head" in record.message
             and "review-request event" in record.message
             and "dismissed platform review" in record.message

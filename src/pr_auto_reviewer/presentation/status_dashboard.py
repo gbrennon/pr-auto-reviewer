@@ -13,7 +13,8 @@ from pr_auto_reviewer.application.dtos.daemon_status_snapshot import (
 )
 from pr_auto_reviewer.domain.value_objects.daemon_state import DaemonState
 from pr_auto_reviewer.presentation.navigation import NavigationInput, NavigationMode
-from pr_auto_reviewer.presentation.settings_screen import SettingsPort, SettingsScreen
+from pr_auto_reviewer.presentation.settings_screen import SettingsScreen
+from pr_auto_reviewer.presentation.settings_services_port import SettingsServicesPort
 
 
 class StatusDashboard(App[None]):
@@ -40,7 +41,7 @@ class StatusDashboard(App[None]):
     def __init__(
         self,
         status_provider: Callable[[], DaemonStatusSnapshot],
-        settings: SettingsPort | None = None,
+        settings: SettingsServicesPort | None = None,
         navigation_mode: NavigationMode = NavigationMode.ARROWS,
     ) -> None:
         super().__init__()

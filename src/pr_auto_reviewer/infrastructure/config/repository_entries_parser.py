@@ -32,7 +32,9 @@ class RepositoryEntriesParser:
     def _decode_json_array(raw: str) -> list[object] | None:
         try:
             decoded = json.loads(raw)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as error:
+            if raw.startswith("["):
+                raise ValueError("Repository entries contain malformed JSON") from error
             return None
         return decoded if isinstance(decoded, list) else None
 

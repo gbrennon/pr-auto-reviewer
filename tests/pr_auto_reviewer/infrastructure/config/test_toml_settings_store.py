@@ -77,9 +77,16 @@ class TestTomlSettingsStore:
         with pytest.raises(ValueError, match="secret"):
             store.set("GITHUB_MANAGER_TOKEN", "secret")
 
+
+    @pytest.mark.parametrize("name", ["GITHUB_OWNER_TOKEN", "FORGEJO_OWNER_TOKEN"])
+    def test_owner_tokens_are_rejected(self, tmp_path: Path, name: str) -> None:
+        store = TomlSettingsStore(tmp_path / "settings.toml")
+
+        with pytest.raises(ValueError, match="secret"):
+            store.set(name, "secret")
+
     def test_setting_can_be_deleted(self, tmp_path: Path) -> None:
         store = TomlSettingsStore(tmp_path / "settings.toml")
-        store.set("debug", True)
 
         store.delete("debug")
 

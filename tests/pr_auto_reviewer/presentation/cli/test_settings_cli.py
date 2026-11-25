@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from pr_auto_reviewer.presentation.cli.settings_cli import SettingsCli
+from pr_auto_reviewer.infrastructure.config.org_token_overrides import encode_repository_key
 
 
 class TestSettingsCli:
@@ -34,8 +35,25 @@ class TestSettingsCli:
         snapshot = cli.snapshot()
 
         assert snapshot.values == (("daemon.poll_interval", "30"),)
-        assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
+        assert snapshot.secret_names == (
+            "GITHUB_MANAGER_TOKEN",
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
+        )
         assert "secret-value" not in repr(snapshot)
+
+    def test_snapshot_uses_declared_form_fill_order(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.write("llm.host", "http://localhost")
+        cli.write("daemon.debug", "1")
+        cli.write("platform.mode", "both")
+
+        assert tuple(name for name, _value in cli.snapshot().values) == (
+            "platform.mode",
+            "llm.host",
+            "daemon.debug",
+        )
 
     def test_snapshot_without_encryption_key_keeps_non_secret_settings_available(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -49,8 +67,7 @@ class TestSettingsCli:
         snapshot = cli.snapshot()
 
         assert snapshot.values == (("daemon.poll_interval", "30"),)
-        assert snapshot.secret_names == ()
-        assert snapshot.secret_error == "PR_AUTO_REVIEWER_ENCRYPTION_KEY is required"
+        assert snapshot.secret_names == ("PR_AUTO_REVIEWER_ENCRYPTION_KEY",)
 
     def test_snapshot_reports_key_that_cannot_decrypt_persisted_secrets(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
@@ -61,7 +78,7 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
 
-        assert snapshot.secret_names == ()
+        assert snapshot.secret_names == ("PR_AUTO_REVIEWER_ENCRYPTION_KEY",)
         assert snapshot.secret_error == (
             "Configured encryption key could not decrypt persisted data; "
             "verify the key or check for corrupted storage"
@@ -78,8 +95,23 @@ class TestSettingsCli:
 
         snapshot = cli.snapshot()
         assert snapshot.values == ()
-        assert snapshot.secret_names == ("GITHUB_MANAGER_TOKEN",)
+        assert snapshot.secret_names == (
+            "GITHUB_MANAGER_TOKEN",
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
+        )
 
+
+    def test_unset_encryption_key_removes_config_override(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.write("PR_AUTO_REVIEWER_ENCRYPTION_KEY", "override-key")
+        config_path = tmp_path / "config" / "pr-auto-reviewer" / "config"
+        assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY=override-key" in config_path.read_text()
+
+        cli.unset("PR_AUTO_REVIEWER_ENCRYPTION_KEY")
+
+        assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY=" not in config_path.read_text()
     @staticmethod
     def _cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SettingsCli:
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
@@ -114,13 +146,19 @@ class TestSettingsCli:
     ) -> None:
         cli = self._cli(monkeypatch, tmp_path)
 
-        cli.add_repository("github:acme/widget", "manager", "reviewer")
+        cli.add_repository("github:acme/widget")
+        cli.save_repository_credentials("github:acme/widget", "manager", "reviewer")
 
+        encoded = encode_repository_key("github:acme/widget")
         assert cli._settings().get("REPOS_ALLOW_LIST") == ["github:acme/widget"]
         assert cli.snapshot().secret_names == (
-            "GITHUB_TOKEN_acme_MANAGER",
-            "GITHUB_TOKEN_acme_REVIEWER",
+            f"GITHUB_TOKEN_{encoded}_MANAGER",
+            f"GITHUB_TOKEN_{encoded}_REVIEWER",
+            "PR_AUTO_REVIEWER_ENCRYPTION_KEY",
         )
+        status = cli.list_repositories()[0]
+        assert status.manager_source == "specific"
+        assert status.reviewer_source == "specific"
         cli.remove_repository("github:acme/widget")
         assert cli._settings().get("REPOS_ALLOW_LIST") == []
 
@@ -140,6 +178,24 @@ class TestSettingsCli:
         assert cli._settings().get("REPOS_ALLOW_LIST") == ["forgejo:acme/widget"]
         assert "Added repository forgejo:acme/widget" in capsys.readouterr().out
 
+    def test_repository_status_reports_credential_store_errors(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ) -> None:
+        cli = self._cli(monkeypatch, tmp_path)
+        cli.add_repository("github:acme/widget")
+
+        def fail_secret_store() -> object:
+            raise ValueError("secret store unavailable")
+
+        monkeypatch.setattr(cli, "_secrets", fail_secret_store)
+
+        status = cli.list_repositories()[0]
+
+        assert status.manager_source == "error"
+        assert status.reviewer_source == "error"
+        assert status.manager_error == "secret store unavailable"
+        assert status.reviewer_error == "secret store unavailable"
+
     def test_secret_can_be_overwritten_but_not_read(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -156,7 +212,7 @@ class TestSettingsCli:
     ) -> None:
         cli = self._cli(monkeypatch, tmp_path)
         cli.run(["set", "debug", "true"])
-        cli.run(["set", "FORGEJO_MANAGER_TOKEN", "secret"])
+        cli.run(["set", "FORGEJO_MANAGER_TOKEN", "actual-forgejo-token"])
         capsys.readouterr()
 
         assert cli.run(["list"]) == 0
@@ -164,7 +220,8 @@ class TestSettingsCli:
         output = capsys.readouterr().out
         assert "daemon.debug = true" in output
         assert "FORGEJO_MANAGER_TOKEN = <secret>" in output
-        assert "secret" not in output.replace("FORGEJO_MANAGER_TOKEN = <secret>", "")
+        assert "PR_AUTO_REVIEWER_ENCRYPTION_KEY = <secret>" in output
+        assert "actual-forgejo-token" not in output
 
     def test_list_reports_key_that_cannot_decrypt_persisted_secrets(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
