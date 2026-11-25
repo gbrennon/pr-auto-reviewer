@@ -92,13 +92,14 @@ class LlmAgentAdapter(LlmReviewPort):
 
     def _resolve_model(self) -> str:
         """Resolve the model name from explicit config or chat client attributes."""
-        if self._model:
-            return self._model
-        return (
-            self._model_from_attribute("_model")
+        model = (
+            self._model
+            or self._model_from_attribute("_model")
             or self._model_from_attribute("model")
-            or "default"
         )
+        if not model or not model.strip():
+            raise ValueError("A configured LLM model is required.")
+        return model.strip()
 
     def _extract_file_listing(self, composed_content: str) -> list[str]:
         """Extract changed file paths from the rendered prompt diff section."""

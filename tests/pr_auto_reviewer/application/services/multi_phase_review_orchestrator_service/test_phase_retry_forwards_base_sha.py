@@ -15,8 +15,14 @@ class TestPhaseRetryForwardsBaseSha:
 
         def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
             seen["phase_name"] = command.phase_name
-            return PhaseResult(items=[], llm_verdict="approved")
-
+            return PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No blocking issues.",
+                llm_summary="The change is safe.",
+                llm_suggestions=[],
+                llm_praise=[],
+            )
         bus.register(RunAgentConversationCommand, _phase_stub)
         orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=bus, tool_factory=_factory,
@@ -26,6 +32,7 @@ class TestPhaseRetryForwardsBaseSha:
             phase_prompt="EEP",
             repo_path=Path("."),
             changed_files=["src/a.py"],
+            model="test-model",
             base_sha="d896687cafc093f113ade5444f02df98fcfc9042",
             review_session="test-session",
         )

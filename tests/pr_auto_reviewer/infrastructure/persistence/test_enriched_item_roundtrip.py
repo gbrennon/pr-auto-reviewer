@@ -9,6 +9,7 @@ from pr_auto_reviewer.infrastructure.persistence import json_file_pr_repository 
 class TestEnrichedItemRoundtrip:
     def test_enriched_fields_survive_roundtrip(self) -> None:
         item = ReviewItem(
+            id="item-1",
             severity="major",
             category="correctness",
             file_path="src/a.py",
@@ -28,6 +29,7 @@ class TestEnrichedItemRoundtrip:
 
     def test_legacy_payload_without_new_fields_loads_empty(self) -> None:
         legacy = {
+            "id": "legacy-1",
             "severity": "minor",
             "category": "general",
             "file_path": "src/a.py",

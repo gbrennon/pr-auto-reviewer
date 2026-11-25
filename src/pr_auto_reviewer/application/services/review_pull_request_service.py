@@ -338,12 +338,18 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             command.pr_id,
             ", ".join(changed_files) or "(none)",
         )
+        resolve_model = getattr(self._llm_review, "_resolve_model", None)
+        model = resolve_model() if callable(resolve_model) else ""
+        if not isinstance(model, str) or not model.strip():
+            raise ReviewVerdictError(
+                "A configured LLM model is required for multi-phase review."
+            )
         return self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=self._plan,
                 repo_path=diff.clone_path,
                 changed_files=changed_files,
-                model="code-review:latest",
+                model=model.strip(),
                 review_session=datetime.now(UTC).strftime("%Y%m%d_%H%M%S"),
                 base_sha=base_sha,
                 existing_item_ids=existing_item_ids,
@@ -756,33 +762,14 @@ class ReviewPullRequestService(ReviewPullRequestPort):
         ]
         merged_items = merged_items[:8]
 
-        summary = review.summary or (
-            "The PR adds diagnostic logging that would be visible during normal "
-            "runs. Request/response and internal workflow details should stay "
-            "behind debug or verbose logging."
-        )
-        praise = review.praise or [
-            ReviewItem(
-                severity=ItemSeverity.INFO,
-                category=IssueCategory.GENERAL,
-                file_path="",
-                description=(
-                    "The logging additions are consistently placed around the "
-                    "operations they observe."
-                ),
-                line="",
-                id="",
-                current_code="",
-                suggested_fix="",
-            )
-        ]
+        summary = review.summary
         return CodeReview(
             verdict=review.verdict,
             reason=review.reason,
             summary=summary,
             items=merged_items,
             suggestions=review.suggestions,
-            praise=praise,
+            praise=review.praise,
             model_used=review.model_used,
         )
 

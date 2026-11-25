@@ -56,6 +56,7 @@ class TestBinaryChangedFilesFlow:
             tool_execution=StubToolExecution(),
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
 
         result = service.execute(command)
@@ -71,6 +72,8 @@ class TestBinaryChangedFilesFlow:
                 "verdict": "approved",
                 "reason": "LGTM",
                 "summary": "none",
+                "suggestions": [],
+                "praise": [],
             },
         )
 

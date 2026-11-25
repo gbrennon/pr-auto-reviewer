@@ -24,6 +24,7 @@ class RunAgentConversationCommand:
     tool_execution: Any
     review_session: str
     """Opaque review-run key (start timestamp) grouping transcripts for one run."""
+    model: str = ""
     phase_name: str = ""
     purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE
     existing_item_ids: frozenset[str] = frozenset()

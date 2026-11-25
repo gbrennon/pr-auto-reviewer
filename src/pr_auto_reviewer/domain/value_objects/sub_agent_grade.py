@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
 
 
 class SubAgentGrade(StrEnum):
@@ -27,15 +30,11 @@ class SubAgentGrade(StrEnum):
 
     @classmethod
     def from_phrase(cls, phrase: str) -> SubAgentGrade:
-        """Return the grade matching a grade phrase, or ``OKOK`` when unknown.
-
-        Tolerant parse: an unrecognizable advisor response resolves to
-        ``OKOK`` so an off-format reply never blocks the pipeline.
-        """
+        """Return the grade matching a supplied grade phrase."""
         try:
             return cls(phrase.strip().lower())
-        except ValueError:
-            return cls.OKOK
+        except (AttributeError, ValueError) as exc:
+            raise LlmResponseMalformedError(str(phrase)) from exc
 
     @property
     def blocks(self) -> bool:

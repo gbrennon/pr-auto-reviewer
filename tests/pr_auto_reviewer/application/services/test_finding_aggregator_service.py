@@ -1,5 +1,6 @@
 """Tests for FindingAggregatorService application service."""
 
+import pytest
 from pr_auto_reviewer.application.services.finding_aggregator_service import (
     FindingAggregatorService,
 )
@@ -13,6 +14,7 @@ from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 
 
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
 def _review_item(
     description: str,
     *,
@@ -30,12 +32,29 @@ def _review_item(
     )
 
 
+def _phase_result(
+    *,
+    verdict: str = "approved",
+    reason: str = "Explicit review reason",
+    summary: str = "Explicit review summary",
+    items: list[ReviewItem] | None = None,
+    suggestions: list[dict[str, str]] | None = None,
+    praise: list[dict[str, str]] | None = None,
+) -> PhaseResult:
+    return PhaseResult(
+        items=items or [],
+        llm_verdict=verdict,
+        llm_reason=reason,
+        llm_summary=summary,
+        llm_suggestions=suggestions or [],
+        llm_praise=praise or [],
+    )
+
+
 class TestFindingAggregator:
     """Behaviour of FindingAggregatorService.execute(command) -> CodeReview."""
 
-    def test_execute_generates_summary_from_merged_items(
-        self, mock_reason_factory,
-    ) -> None:
+    def test_execute_requires_explicit_phase_result(self, mock_reason_factory) -> None:
         items = [
             _review_item(
                 "Off-by-one in loop",
@@ -44,18 +63,12 @@ class TestFindingAggregator:
             ),
             _review_item("Use f-strings", file_path="src/main.py"),
         ]
-        mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
-        review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, model_used="m")
-        )
-
-        assert review.summary == (
-            "Found 2 issue(s) (1 blocking across 2 file(s)). "
-            "Files: src/main.py, src/utils.py"
-        )
-        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
+        with pytest.raises(ReviewVerdictError):
+            aggregator.execute(
+                AggregateReviewFindingsCommand(items=items, model_used="m")
+            )
 
     def test_execute_deduplicates_identical_items(
         self, mock_reason_factory,
@@ -68,7 +81,11 @@ class TestFindingAggregator:
         aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, model_used="test model")
+            AggregateReviewFindingsCommand(
+                items=items,
+                phase_result=_phase_result(),
+                model_used="test model",
+            )
         )
 
         assert len(review.items) == 1
@@ -88,58 +105,84 @@ class TestFindingAggregator:
         aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, model_used="test model")
+            AggregateReviewFindingsCommand(
+                items=items,
+                phase_result=_phase_result(),
+                model_used="test model",
+            )
         )
 
         assert len(review.items) == 1
 
-    def test_blocking_item_forces_changes_requested(
+    def test_blocking_items_require_explicit_phase_result(
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("SQL injection", category=IssueCategory.SECURITY)]
-        mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
-        review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, model_used="test model")
-        )
+        with pytest.raises(ReviewVerdictError):
+            aggregator.execute(
+                AggregateReviewFindingsCommand(
+                    items=items, model_used="test model",
+                )
+            )
 
-        assert review.verdict == ReviewVerdict.CHANGES_REQUESTED
-
-    def test_non_blocking_items_yield_approved(
+    def test_non_blocking_items_require_explicit_phase_result(
         self, mock_reason_factory,
     ) -> None:
         items = [
-            _review_item("Use f-strings", severity=ItemSeverity.INFO, category=IssueCategory.STYLE),
+            _review_item(
+                "Use f-strings",
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.STYLE,
+            ),
         ]
-        mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
-        review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=items, model_used="test model")
-        )
+        with pytest.raises(ReviewVerdictError):
+            aggregator.execute(
+                AggregateReviewFindingsCommand(
+                    items=items, model_used="test model",
+                )
+            )
 
-        assert review.verdict == ReviewVerdict.APPROVED
-
-    def test_empty_items_yield_approved_with_populated_summary(
+    def test_explicit_clean_phase_preserves_empty_collections(
         self, mock_reason_factory,
     ) -> None:
-        mock_reason_factory.make.return_value = "Stub reason"
+        phase_result = _phase_result(
+            reason="No blocking issues identified.",
+            summary="The changed code is safe.",
+        )
         aggregator = FindingAggregatorService(mock_reason_factory)
 
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=[], model_used="test model")
+            AggregateReviewFindingsCommand(
+                items=[],
+                phase_result=phase_result,
+                model_used="test model",
+            )
         )
 
         assert review.verdict == ReviewVerdict.APPROVED
-        assert review.summary == "Found 0 issue(s) (0 blocking across 0 file(s))."
+        assert review.reason == "No blocking issues identified."
+        assert review.summary == "The changed code is safe."
         assert review.items == []
+        assert review.suggestions == []
+        assert review.praise == []
+
+    def test_missing_phase_result_is_rejected(self, mock_reason_factory) -> None:
+        aggregator = FindingAggregatorService(mock_reason_factory)
+
+        with pytest.raises(ReviewVerdictError):
+            aggregator.execute(
+                AggregateReviewFindingsCommand(items=[], model_used="test model")
+            )
 
     def test_phase_result_summary_takes_precedence(
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(items=items, llm_summary="LLM summary")
+        phase_result = _phase_result(items=items, summary="LLM summary")
         mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
@@ -153,7 +196,9 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("Use f-strings")]
-        phase_result = PhaseResult(items=items, llm_verdict="changes requested")
+        phase_result = _phase_result(
+            items=items, verdict="changes requested",
+        )
         mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
@@ -167,10 +212,12 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(
+        phase_result = _phase_result(
             items=items,
-            llm_suggestions=[{"file": "x.py", "line": "3", "description": "Add bounds check"}],
-            llm_praise=[{"file": "x.py", "description": "Clean structure"}],
+            suggestions=[
+                {"file": "x.py", "line": "3", "description": "Add bounds check"},
+            ],
+            praise=[{"file": "x.py", "description": "Clean structure"}],
         )
         mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
@@ -194,16 +241,16 @@ class TestFindingAggregator:
         source_file.write_text("x = 1\n")
         absolute_path = "/cache/clones/repo/src/main.py"
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(
+        phase_result = _phase_result(
             items=items,
-            llm_suggestions=[
+            suggestions=[
                 {
                     "file": absolute_path,
                     "line": "1",
                     "description": "Add bounds check",
                 },
             ],
-            llm_praise=[
+            praise=[
                 {
                     "file": absolute_path,
                     "description": "Clean structure",
@@ -230,7 +277,7 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(items=items, llm_reason="LLM reason")
+        phase_result = _phase_result(items=items, reason="LLM reason")
         mock_reason_factory.make.return_value = ""
         aggregator = FindingAggregatorService(mock_reason_factory)
 
@@ -245,15 +292,14 @@ class TestFindingAggregator:
     ) -> None:
         """suggestions_phase_result feeds suggestions; verdict/reason/summary/praise stay on phase_result."""
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(
+        phase_result = _phase_result(
             items=items,
-            llm_verdict="approved",
-            llm_summary="From last phase",
-            llm_suggestions=[{"description": "last phase suggestion"}],
-            llm_praise=[{"description": "last phase praise"}],
+            summary="From last phase",
+            suggestions=[{"description": "last phase suggestion"}],
+            praise=[{"description": "last phase praise"}],
         )
-        architect_result = PhaseResult(
-            llm_suggestions=[{"description": "architect suggestion"}],
+        architect_result = _phase_result(
+            suggestions=[{"description": "architect suggestion"}],
         )
         mock_reason_factory.make.return_value = "Stub reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
@@ -278,7 +324,10 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         items = [_review_item("Off-by-one in loop")]
-        phase_result = PhaseResult(items=items, llm_reason="Deep model explanation")
+        phase_result = _phase_result(
+            items=items,
+            reason="Deep model explanation",
+        )
         mock_reason_factory.make.return_value = "Generic count reason"
         aggregator = FindingAggregatorService(mock_reason_factory)
 
@@ -314,7 +363,11 @@ class TestFindingAggregator:
         )
         aggregator = FindingAggregatorService(mock_reason_factory)
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=[item1, item2], model_used="test model")
+            AggregateReviewFindingsCommand(
+                items=[item1, item2],
+                phase_result=_phase_result(),
+                model_used="test model",
+            )
         )
 
         assert len(review.items) == 1
@@ -343,7 +396,11 @@ class TestFindingAggregator:
         )
         aggregator = FindingAggregatorService(mock_reason_factory)
         review = aggregator.execute(
-            AggregateReviewFindingsCommand(items=[item1, item2], model_used="test model")
+            AggregateReviewFindingsCommand(
+                items=[item1, item2],
+                phase_result=_phase_result(),
+                model_used="test model",
+            )
         )
 
         assert len(review.items) == 1
@@ -353,10 +410,8 @@ class TestFindingAggregator:
         self, mock_reason_factory,
     ) -> None:
         mock_reason_factory.make.return_value = "Stub reason"
-        phase_result = PhaseResult(
-            items=[],
-            llm_verdict="approved",
-            llm_praise=[
+        phase_result = _phase_result(
+            praise=[
                 {
                     "file": "src/validator.py",
                     "description": "Clear error messages and explicit validation.",
@@ -372,7 +427,7 @@ class TestFindingAggregator:
         assert review.praise[0].description == "Clear error messages and explicit validation."
         assert review.praise[0].suggested_fix == ""
 
-    def test_multi_phase_summary_synthesizes_all_blocking_and_categories(
+    def test_multi_phase_preserves_explicit_phase_summary_and_reason(
         self, mock_reason_factory,
     ) -> None:
         item1 = ReviewItem(
@@ -389,10 +444,11 @@ class TestFindingAggregator:
             file_path="src/helper.py",
             description="Minor maintainability in helper",
         )
-        last_phase = PhaseResult(
+        last_phase = _phase_result(
+            verdict="changes_requested",
             items=[item2],
-            llm_summary="Identified 1 non-blocking finding(s) (maintainability) across 1 file(s).",
-            llm_reason="Minor maintainability issue.",
+            summary="The model identified a maintainability issue.",
+            reason="The helper needs a clearer boundary.",
         )
         aggregator = FindingAggregatorService(mock_reason_factory)
         review = aggregator.execute(
@@ -404,7 +460,6 @@ class TestFindingAggregator:
         )
 
         assert len(review.items) == 2
-        assert "1 blocking across 2 file(s)" in review.summary
-        assert "Files: src/helper.py, src/validator.py" in review.summary
-        assert "Identified critical issue" in review.reason
+        assert review.summary == "The model identified a maintainability issue."
+        assert review.reason == "The helper needs a clearer boundary."
         assert review.verdict == ReviewVerdict.CHANGES_REQUESTED

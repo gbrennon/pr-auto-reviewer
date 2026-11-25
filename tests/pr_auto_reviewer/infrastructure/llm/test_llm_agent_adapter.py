@@ -154,5 +154,6 @@ class TestLlmAgentAdapter:
         assert adapter_attr._resolve_model() == "named-model"
 
         chat_bare: Any = SimpleNamespace()
-        adapter_default = LlmAgentAdapter(chat_bare, orchestrator, plan)
-        assert adapter_default._resolve_model() == "default"
+        adapter_missing = LlmAgentAdapter(chat_bare, orchestrator, plan)
+        with pytest.raises(ValueError, match="model"):
+            adapter_missing._resolve_model()

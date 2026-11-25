@@ -2,24 +2,33 @@ from ._helpers import *
 
 
 class TestItemDictExtraction:
-    """Exercises item-dict extraction and the parse_items pipeline."""
+    """Exercises strict item-dict extraction and the parse_items pipeline."""
 
     def test_extract_item_dicts_when_json_block_then_normalized(self) -> None:
-        raw = '```json\n{"items": [{"file": "a.py", "severity": "high", "description": "d"}]}\n```'
+        raw = (
+            '```json\n{"items": [{"file": "a.py", "severity": "high", '
+            '"category": "bug", "description": "d"}]}\n```'
+        )
 
         result = ReviewResponseParser()._extract_item_dicts(raw)
 
         assert result[0]["severity"] == "major"
 
     def test_extract_item_dicts_when_nested_then_found(self) -> None:
-        raw = '{"top": {"issues": [{"file": "a.py", "description": "d"}]}}'
+        raw = (
+            '{"top": {"issues": [{"file": "a.py", "severity": "minor", '
+            '"category": "bug", "description": "d"}]}}'
+        )
 
         result = ReviewResponseParser()._extract_item_dicts(raw)
 
         assert result[0]["file"] == "a.py"
 
     def test_extract_item_dicts_when_list_then_normalized(self) -> None:
-        raw = '[{"file": "a.py", "severity": "low", "description": "d"}]'
+        raw = (
+            '[{"file": "a.py", "severity": "low", "category": "quality", '
+            '"description": "d"}]'
+        )
 
         result = ReviewResponseParser()._extract_item_dicts(raw)
 
@@ -29,21 +38,32 @@ class TestItemDictExtraction:
         assert ReviewResponseParser()._extract_item_dicts("not json at all") == []
 
     def test_parse_items_when_json_list_then_concrete(self) -> None:
-        raw = '[{"file": "a.py", "severity": "major", "description": "d", "current_code": "x", "suggested_fix": "y"}]'
+        raw = (
+            '[{"file": "a.py", "severity": "major", "category": "bug", '
+            '"description": "d", "current_code": "x", "suggested_fix": "y"}]'
+        )
 
         result = ReviewResponseParser().parse_items(raw)
 
         assert result[0]["file"] == "a.py"
 
     def test_parse_items_when_nested_dict_then_concrete(self) -> None:
-        raw = '{"analysis": {"findings": [{"file": "a.py", "description": "d", "current_code": "x", "suggested_fix": "y"}]}}'
+        raw = (
+            '{"analysis": {"findings": [{"file": "a.py", "severity": "major", '
+            '"category": "bug", "description": "d", "current_code": "x", '
+            '"suggested_fix": "y"}]}}'
+        )
 
         result = ReviewResponseParser().parse_items(raw)
 
         assert result[0]["file"] == "a.py"
 
     def test_parse_items_when_outermost_json_then_concrete(self) -> None:
-        raw = 'preamble text {"items": [{"file": "a.py", "description": "d", "current_code": "x", "suggested_fix": "y"}]} tail'
+        raw = (
+            'preamble text {"items": [{"file": "a.py", "severity": "major", '
+            '"category": "bug", "description": "d", "current_code": "x", '
+            '"suggested_fix": "y"}]} tail'
+        )
 
         result = ReviewResponseParser().parse_items(raw)
 
@@ -65,14 +85,26 @@ class TestItemDictExtraction:
         assert ReviewResponseParser().parse_items("*?* unparseable garbage") == []
 
     def test_parse_item_observations_when_fixless_then_observations(self) -> None:
-        raw = '{"items": [{"file": "a.py", "current_code": "x"}]}'
+        raw = (
+            '{"items": [{"file": "a.py", "severity": "minor", '
+            '"category": "quality", "description": "Explicit concern.", '
+            '"current_code": "x"}]}'
+        )
 
         result = ReviewResponseParser().parse_item_observations(raw)
 
-        assert result == [{"file": "a.py", "line": "", "description": "Review the identified concern."}]
+        assert result == [{
+            "file": "a.py",
+            "line": "",
+            "description": "Explicit concern.",
+        }]
 
     def test_parse_item_observations_when_concrete_then_skipped(self) -> None:
-        raw = '{"items": [{"file": "a.py", "description": "d", "current_code": "x", "suggested_fix": "y"}]}'
+        raw = (
+            '{"items": [{"file": "a.py", "severity": "major", '
+            '"category": "bug", "description": "d", "current_code": "x", '
+            '"suggested_fix": "y"}]}'
+        )
 
         assert ReviewResponseParser().parse_item_observations(raw) == []
 
