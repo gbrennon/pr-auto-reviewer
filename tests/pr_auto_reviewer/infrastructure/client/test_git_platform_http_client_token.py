@@ -213,8 +213,8 @@ class TestGitPlatformHttpClientTokens:
     def test_verify_token_for_pr_cache_hit_after_save_and_restart(
         self, tmp_path,
     ) -> None:
-        """Preflight runs on first client, persists, then second client
-        (restart simulation) loads from disk and skips verification."""
+        """Preflight runs on first client, persists token identity, then the
+        second client skips verification for the same token."""
         cache_path = tmp_path / "verified-tokens.json"
 
         verifier1 = FakeVerifier()

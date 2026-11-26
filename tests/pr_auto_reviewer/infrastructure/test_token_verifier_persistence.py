@@ -46,10 +46,12 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "manager"] in data
-        assert ["o", "reviewer"] in data
+        assert {(entry["org"], entry["role"]) for entry in data} == {
+            ("o", "manager"),
+            ("o", "reviewer"),
+        }
 
-    def test_verify_loads_persisted_pairs_and_skips_preflight(
+    def test_verify_rechecks_legacy_pair_cache_entries(
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
@@ -67,8 +69,8 @@ class TestTokenVerifierPersistence:
 
         verifier.verify(pr_id)
 
-        assert len(getattr(owner, "_preflight_verifier").calls) == 0
-        assert len(getattr(reviewer, "_preflight_verifier").calls) == 0
+        assert len(getattr(owner, "_preflight_verifier").calls) == 1
+        assert len(getattr(reviewer, "_preflight_verifier").calls) == 1
 
     def test_verify_does_not_persist_when_persist_is_false(
         self, tmp_path: Path
@@ -85,8 +87,10 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "manager"] in data
-        assert ["o", "reviewer"] in data
+        assert {(entry["org"], entry["role"]) for entry in data} == {
+            ("o", "manager"),
+            ("o", "reviewer"),
+        }
 
     def test_load_handles_corrupt_json(self, tmp_path: Path) -> None:
         store = tmp_path / "verified-tokens.json"

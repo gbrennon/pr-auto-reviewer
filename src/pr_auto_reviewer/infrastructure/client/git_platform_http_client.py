@@ -184,8 +184,8 @@ class GitPlatformHttpClient:
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for the per-org token this client
         would use for *pr_id*.  No-op when no ``preflight_verifier`` is set,
-        no per-org token is resolved, or the (org, role) pair has already
-        been verified this session.
+        no per-org token is resolved, or the token identity is already
+        verified in the persisted cache.
 
         Raises ``PreflightVerificationError`` on the first failure.
         """
