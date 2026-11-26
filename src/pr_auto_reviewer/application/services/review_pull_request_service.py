@@ -339,11 +339,8 @@ class ReviewPullRequestService(ReviewPullRequestPort):
             ", ".join(changed_files) or "(none)",
         )
         resolve_model = getattr(self._llm_review, "_resolve_model", None)
-        model = resolve_model() if callable(resolve_model) else ""
-        if not isinstance(model, str) or not model.strip():
-            raise ReviewVerdictError(
-                "A configured LLM model is required for multi-phase review."
-            )
+        raw_model = resolve_model() if callable(resolve_model) else ""
+        model = raw_model.strip() if isinstance(raw_model, str) else ""
         return self._command_bus.dispatch(
             RunMultiPhaseReviewCommand(
                 plan=self._plan,
