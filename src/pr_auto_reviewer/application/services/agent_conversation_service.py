@@ -146,10 +146,6 @@ class AgentConversationService(RunAgentConversationPort):
     def execute(
         self, command: RunAgentConversationCommand
     ) -> PhaseResult:
-        if not isinstance(command.model, str) or not command.model.strip():
-            raise ReviewVerdictError(
-                "Configured model is required for an agent conversation."
-            )
         return self._run(
             system_prompt=command.system_prompt,
             repo_path=command.repo_path,
