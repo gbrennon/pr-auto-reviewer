@@ -43,8 +43,10 @@ the stale approval for an earlier commit.
 ## Resolution
 
 The OpenAI-compatible client now permits an empty model identity and omits the
-`model` field from the request payload. This supports single-model llama.cpp
-servers while retaining configured model identities when they are available.
+`model` field from the request payload. The review service also forwards the
+empty identity without rejecting the multi-phase dispatch. This supports
+single-model llama.cpp servers while retaining configured model identities when
+they are available.
 
 The installed package and service must be refreshed before the daemon can retry
 the review.
