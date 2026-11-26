@@ -54,14 +54,16 @@ class OpenAiCompatibleChatClient(BaseChatClient):
         self, messages: list[ConversationMessage]
     ) -> dict[str, Any]:
         """Format conversation messages as an OpenAI chat completion request."""
-        return {
-            "model": self._model,
+        payload: dict[str, Any] = {
             "messages": [
                 {"role": message.role, "content": message.content}
                 for message in messages
             ],
             "stream": True,
         }
+        if self._model:
+            payload["model"] = self._model
+        return payload
 
     def _decode_line(self, line: str | bytes) -> str:
         """Return a streamed line as text regardless of transport encoding."""
