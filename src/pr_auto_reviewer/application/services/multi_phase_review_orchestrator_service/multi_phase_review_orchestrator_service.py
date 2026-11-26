@@ -833,8 +833,6 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
     ) -> PhaseResult:
         """Run a single phase with per-phase retry on exhaustion."""
-        if not isinstance(model, str) or not model.strip():
-            raise ReviewVerdictError("Configured model is required.")
         tool_service = self._tool_factory(
             repo_path, changed_files, base_sha
         )
