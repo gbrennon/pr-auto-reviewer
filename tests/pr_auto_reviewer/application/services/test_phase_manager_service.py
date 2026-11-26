@@ -11,6 +11,9 @@ from pr_auto_reviewer.application.services.phase_manager_service import (
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
 from pr_auto_reviewer.domain.entities.architect_agent import ArchitectAgent
 from pr_auto_reviewer.domain.value_objects.review_phase import ReviewPhase
 
@@ -41,33 +44,29 @@ class TestPhaseManager:
         assert any("architect" in m.content for m in messages)
         assert any("src/a.py" in m.content for m in messages)
 
-    def test_brief_empty_reply_returns_empty(self) -> None:
+    def test_brief_empty_reply_raises_malformed_error(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "   "
         manager = PhaseManagerService(chat_port=chat)
 
-        brief = manager.brief(
-            ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
-            "",
+        with pytest.raises(LlmResponseMalformedError):
+            manager.brief(
+                ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
+                "",
+                review_session="test-session",
+            )
 
-            review_session="test-session",
-        )
-
-        assert brief == ""
-
-    def test_brief_chat_failure_returns_empty(self) -> None:
+    def test_brief_chat_failure_is_not_silently_accepted(self) -> None:
         chat = MagicMock()
         chat.send.side_effect = RuntimeError("parse error")
         manager = PhaseManagerService(chat_port=chat)
 
-        brief = manager.brief(
-            ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
-            "findings",
-
-            review_session="test-session",
-        )
-
-        assert brief == ""
+        with pytest.raises(RuntimeError, match="parse error"):
+            manager.brief(
+                ReviewPhase(phase_id="x", phase_name="X", system_prompt=""),
+                "findings",
+                review_session="test-session",
+            )
 
     def test_brief_raises_llm_unavailable_error(self) -> None:
         chat = MagicMock()

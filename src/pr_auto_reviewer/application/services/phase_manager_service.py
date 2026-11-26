@@ -16,6 +16,9 @@ from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
 from pr_auto_reviewer.application.services.identifier_grounding_filter_service import (
     IdentifierGroundingFilterService,
 )
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
 from pr_auto_reviewer.domain.entities.manager_agent import ManagerAgent
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
@@ -67,14 +70,14 @@ class PhaseManagerService(BriefNextPhasePort):
         review_session: str,
         pr_identifier_service: str = "",
     ) -> str:
-        """Return the assignment text for *next_phase*, or empty when none."""
+        """Return the validated assignment text for *next_phase*."""
         messages = self._build_messages(next_phase, findings_summary)
         raw = self._send_brief(
             messages, next_phase.phase_name, review_session,
         )
+        if not isinstance(raw, str) or not raw.strip():
+            raise LlmResponseMalformedError(str(raw))
         brief = raw.strip()
-        if not brief:
-            return ""
         evidence = self._grounding_evidence(next_phase, findings_summary)
         grounded = self._identifier_filter.strip_unobserved(brief, evidence)
         if grounded != brief:
@@ -109,11 +112,11 @@ class PhaseManagerService(BriefNextPhasePort):
             raise
         except Exception:
             logger.warning(
-                "Manager briefing failed for phase %s; continuing without",
+                "Manager briefing failed for phase %s",
                 phase_name,
                 exc_info=True,
             )
-            return ""
+            raise
 
     def _grounding_evidence(
         self, next_phase: ReviewPhase, findings_summary: str,

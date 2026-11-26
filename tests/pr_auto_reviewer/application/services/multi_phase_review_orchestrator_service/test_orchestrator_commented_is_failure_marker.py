@@ -27,9 +27,11 @@ class TestOrchestratorCommentedIsFailureMarker:
                 items=[],
                 llm_verdict="approved",
                 llm_reason="No critical bugs identified.",
+                llm_summary="The change is safe.",
                 llm_suggestions=[
                     {"file": "", "line": "", "description": "Add rate limiting."}
                 ],
+                llm_praise=[],
             )
 
         bus.register(RunAgentConversationCommand, _run_phase)
@@ -43,7 +45,7 @@ class TestOrchestratorCommentedIsFailureMarker:
             plan=plan,
             repo_path=Path("."),
             changed_files=[],
-            model="code-review:latest",
+            model="test-model",
             review_session="test-session",
         )
         assert review.verdict == ReviewVerdict.APPROVED
@@ -70,7 +72,7 @@ class TestOrchestratorCommentedIsFailureMarker:
                 plan=plan,
                 repo_path=Path("."),
                 changed_files=[],
-                model="code-review:latest",
+                model="test-model",
             review_session="test-session",
         )
 
@@ -101,15 +103,15 @@ class TestOrchestratorCommentedIsFailureMarker:
                     suggested_fix="Add handling.",
                 ),
             ],
-            model_used="code-review:latest",
+            model_used="test-model",
         )
         rebuilt = orchestrator._rebuild_after_verification(
-            [], "code-review:latest", previous=previous
+            [], "test-model", previous=previous
         )
         assert rebuilt.items == []
         assert "did not survive verification" in rebuilt.reason
         assert "Missing validation" in rebuilt.reason
-        assert "assessed as correct" in rebuilt.summary
+        assert "refuted during source-code verification" in rebuilt.summary
 
     def test_manager_briefs_first_phase_before_it_starts(self) -> None:
         """The opening phase runs on a manager-planned task, not a static prompt."""
@@ -121,7 +123,14 @@ class TestOrchestratorCommentedIsFailureMarker:
 
         def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
             seen_prompts.append(command.system_prompt)
-            return PhaseResult(items=[], llm_verdict="approved")
+            return PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No blocking issues.",
+                llm_summary="The change is safe.",
+                llm_suggestions=[],
+                llm_praise=[],
+            )
 
         bus.register(RunAgentConversationCommand, _phase_stub)
         orchestrator = MultiPhaseReviewOrchestratorService(
@@ -157,7 +166,14 @@ class TestOrchestratorCommentedIsFailureMarker:
         bus = InMemoryCommandBus()
 
         def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
-            return PhaseResult(items=[], llm_verdict="approved")
+            return PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No blocking issues.",
+                llm_summary="The change is safe.",
+                llm_suggestions=[],
+                llm_praise=[],
+            )
 
         bus.register(RunAgentConversationCommand, _phase_stub)
         orchestrator = MultiPhaseReviewOrchestratorService(
@@ -190,7 +206,14 @@ class TestOrchestratorCommentedIsFailureMarker:
 
         def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
             runs.append(command.system_prompt)
-            return PhaseResult(items=[], llm_verdict="approved")
+            return PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No blocking issues.",
+                llm_summary="The change is safe.",
+                llm_suggestions=[],
+                llm_praise=[],
+            )
 
         bus.register(RunAgentConversationCommand, _phase_stub)
         orchestrator = MultiPhaseReviewOrchestratorService(
@@ -230,7 +253,12 @@ class TestOrchestratorCommentedIsFailureMarker:
         def _phase_stub(command: RunAgentConversationCommand) -> PhaseResult:
             runs.append(command.system_prompt)
             return PhaseResult(
-                items=[observed_item], llm_verdict="approved",
+                items=[observed_item],
+                llm_verdict="approved",
+                llm_reason="The observed item is correct.",
+                llm_summary="The phase found one verified item.",
+                llm_suggestions=[],
+                llm_praise=[],
             )
 
         def _aggregate_stub(command: AggregateReviewFindingsCommand):
@@ -269,8 +297,22 @@ class TestOrchestratorCommentedIsFailureMarker:
             description="Broken validation",
         )
         phase_results = iter([
-            PhaseResult(items=[blocking_item], llm_verdict="changes_requested"),
-            PhaseResult(items=[], llm_verdict="approved"),
+            PhaseResult(
+                items=[blocking_item],
+                llm_verdict="changes_requested",
+                llm_reason="Blocking issue found.",
+                llm_summary="The change needs correction.",
+                llm_suggestions=[],
+                llm_praise=[],
+            ),
+            PhaseResult(
+                items=[],
+                llm_verdict="approved",
+                llm_reason="No blocking issues.",
+                llm_summary="The change is safe.",
+                llm_suggestions=[],
+                llm_praise=[],
+            ),
         ])
         bus = InMemoryCommandBus()
         bus.register(

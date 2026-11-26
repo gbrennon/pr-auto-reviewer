@@ -407,7 +407,9 @@ class TestJsonFilePullRequestRepository:
         assert loaded_review.suggestions[0].id == "sugg-1"
         assert loaded_review.suggestions[0].description == "Design suggestion"
 
-    def test_deserializes_review_without_suggestions_key(self, tmp_path: Path) -> None:
+    def test_deserializes_review_without_suggestions_key_as_corruption(
+        self, tmp_path: Path
+    ) -> None:
         state_file = tmp_path / "state.json"
         old_raw = {
             "reviewed": {
@@ -440,11 +442,9 @@ class TestJsonFilePullRequestRepository:
         }
         state_file.write_text(json.dumps(old_raw))
         repo = self._repo(tmp_path)
-        loaded = repo.find(PullRequestId(repository="owner/repo", number=42))
-        assert loaded is not None
-        assert len(loaded.reviews) == 1
-        assert loaded.reviews[0].suggestions == []
-        assert len(loaded.reviews[0].items) == 1
+
+        with pytest.raises(RepositoryCorruptedError):
+            repo.find(PullRequestId(repository="owner/repo", number=42))
 
     def test_dismissal_state_round_trips_without_mutating_review_history(
         self, tmp_path: Path

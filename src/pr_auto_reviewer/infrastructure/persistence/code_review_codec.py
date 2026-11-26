@@ -6,16 +6,11 @@ with atomic writes and structured deserialization.
 
 from __future__ import annotations
 
-import logging
-
 from ...domain.entities.review_item import ReviewItem
+from ...domain.exceptions import RepositoryCorruptedError
 from ...domain.value_objects.code_review import CodeReview
 from ...domain.value_objects.review_verdict import ReviewVerdict
 from .review_item_codec import ReviewItemCodec
-
-logger = logging.getLogger(__name__)
-
-_STATE_KEY_SEPARATOR = "/"
 
 
 class CodeReviewCodec:
@@ -37,39 +32,56 @@ class CodeReviewCodec:
 
     @classmethod
     def deserialize(cls, raw: dict) -> CodeReview:
-        items = [ReviewItemCodec.deserialize(i) for i in raw.get("items", [])]
-        suggestions = [
-            ReviewItemCodec.deserialize(s) for s in raw.get("suggestions", [])
-        ]
-        praise = [ReviewItemCodec.deserialize(p) for p in raw.get("praise", [])]
-        verdict = cls._resolve_verdict(str(raw.get("verdict", "")), items)
-        summary, reason, model_used = cls._resolve_strings(raw, items)
-        return CodeReview(
-            verdict=verdict,
-            reason=reason,
-            summary=summary,
-            model_used=model_used,
-            items=items,
-            suggestions=suggestions,
-            praise=praise,
-        )
+        try:
+            if not isinstance(raw, dict):
+                raise ValueError("review payload must be an object")
+            verdict = cls._resolve_verdict(raw["verdict"])
+            reason = cls._required_text(raw, "reason")
+            summary = cls._required_text(raw, "summary")
+            model_used = cls._required_text(raw, "model_used")
+            items = cls._deserialize_collection(raw, "items")
+            suggestions = cls._deserialize_collection(raw, "suggestions")
+            praise = cls._deserialize_collection(raw, "praise")
+            return CodeReview(
+                verdict=verdict,
+                reason=reason,
+                summary=summary,
+                model_used=model_used,
+                items=items,
+                suggestions=suggestions,
+                praise=praise,
+            )
+        except RepositoryCorruptedError:
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RepositoryCorruptedError(
+                f"Persisted review is malformed: {exc}"
+            ) from exc
 
     @staticmethod
-    def _resolve_verdict(raw_verdict: str, items: list[ReviewItem]) -> ReviewVerdict:
-        verdict = ReviewVerdict(raw_verdict.strip().lower())
+    def _required_text(raw: dict, field: str) -> str:
+        value = raw[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field} must be a non-empty string")
+        return value
+
+    @staticmethod
+    def _resolve_verdict(raw_verdict: object) -> ReviewVerdict:
+        if not isinstance(raw_verdict, str) or not raw_verdict.strip():
+            raise ValueError("verdict must be a non-empty string")
+        try:
+            verdict = ReviewVerdict(raw_verdict.strip().lower())
+        except ValueError as exc:
+            raise ValueError(f"unknown verdict: {raw_verdict}") from exc
         if verdict is ReviewVerdict.COMMENTED:
-            return (
-                ReviewVerdict.CHANGES_REQUESTED if items else ReviewVerdict.APPROVED
-            )
+            raise ValueError("commented is not a persisted review verdict")
         return verdict
 
     @staticmethod
-    def _resolve_strings(raw: dict, items: list[ReviewItem]) -> tuple[str, str, str]:
-        summary = (
-            raw.get("summary", "")
-            or f"Found {len(items)} issue(s) in persisted review."
-        )
-        reason = raw.get("reason", "") or summary
-        model_used = raw.get("model_used", "") or "unknown"
-        return summary, reason, model_used
-
+    def _deserialize_collection(
+        raw: dict, field: str
+    ) -> list[ReviewItem]:
+        collection = raw[field]
+        if not isinstance(collection, list):
+            raise ValueError(f"{field} must be a list")
+        return [ReviewItemCodec.deserialize(item) for item in collection]

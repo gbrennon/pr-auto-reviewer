@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError
+from typing import cast
 
 import pytest
 
@@ -29,6 +30,42 @@ class TestIssue:
         assert issue.source_pr_id == pr_id
         assert issue.source_item_id == "id-3"
 
+    @pytest.mark.parametrize("issue_id", (0, -1, "1", True))
+    def test_rejects_non_positive_issue_id(self, issue_id: object) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            Issue(
+                id=cast(int, issue_id),
+                repository="owner/repo",
+                title="Title",
+                body="Body",
+                source_pr_id=PullRequestId(repository="owner/repo", number=42),
+                source_item_id="item-1",
+            )
+
+    def test_rejects_invalid_source_pr_identity(self) -> None:
+        with pytest.raises(ValueError, match="source_pr_id"):
+            Issue(
+                id=1,
+                repository="owner/repo",
+                title="Title",
+                body="Body",
+                source_pr_id=cast(PullRequestId, "owner/repo#42"),
+                source_item_id="item-1",
+            )
+
+    @pytest.mark.parametrize("source_item_id", ("", " "))
+    def test_rejects_blank_source_item_identity(
+        self, source_item_id: str
+    ) -> None:
+        with pytest.raises(ValueError, match="source_item_id"):
+            Issue(
+                id=1,
+                repository="owner/repo",
+                title="Title",
+                body="Body",
+                source_pr_id=PullRequestId(repository="owner/repo", number=42),
+                source_item_id=source_item_id,
+            )
     def test_identity_by_id(self) -> None:
         pr_id = PullRequestId(repository="r", number=1)
         a = Issue(

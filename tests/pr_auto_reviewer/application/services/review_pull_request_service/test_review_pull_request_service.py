@@ -10,6 +10,7 @@ from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdic
 from pr_auto_reviewer.domain.value_objects.review_audit_result import ReviewAuditResult
 from dataclasses import replace
 from pathlib import Path
+from pr_auto_reviewer.domain.value_objects.review_plan import ReviewPlan
 
 _REVIEW_SERVICE_LOGGER = (
     "pr_auto_reviewer.application.services.review_pull_request_service"
@@ -1149,3 +1150,40 @@ class TestReviewPullRequestService:
             duration_seconds=None,
         )
         clock.assert_not_called()
+
+    def test_multi_phase_review_allows_empty_model(self, mock_pr_repository,
+        mock_changeset_fetcher, mock_review_context_factory, mock_llm_review,
+        mock_review_publisher,
+    ):
+        cmd = _cmd()
+        diff = replace(_diff_fixture(cmd.pr_id, cmd.head_sha), clone_path=Path("/repo"))
+        command_bus = MagicMock()
+        expected = _review()
+        command_bus.dispatch.return_value = expected
+        mock_llm_review._resolve_model.return_value = ""
+        service = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            command_bus=command_bus,
+            plan=ReviewPlan(phases=(), methodology="test"),
+        )
+
+        result = service._run_multi_phase_review(
+            ComposedPrompt(
+                content="review",
+                total_tokens=1,
+                fragments_used=[],
+                repo_path="/repo",
+            ),
+            cmd,
+            diff,
+            _pr(cmd.pr_id, cmd.head_sha),
+            ReviewAuditResult(items=(), suggestions=(), lifecycles=()),
+        )
+
+        assert result is expected
+        dispatched = command_bus.dispatch.call_args.args[0]
+        assert dispatched.model == ""

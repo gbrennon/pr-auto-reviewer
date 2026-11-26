@@ -62,6 +62,8 @@ def _verdict_parse() -> TurnParseResult:
             "verdict": "approved",
             "reason": "LGTM",
             "summary": "none",
+            "suggestions": [],
+            "praise": [],
         },
     )
 
@@ -85,6 +87,7 @@ def _command(tool_execution: Any) -> RunAgentConversationCommand:
         tool_execution=tool_execution,
         phase_name="phase",
         review_session="test-session",
+        model="test-model",
     )
 
 

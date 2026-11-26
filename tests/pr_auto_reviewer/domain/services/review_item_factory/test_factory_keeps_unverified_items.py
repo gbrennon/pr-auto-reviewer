@@ -18,6 +18,7 @@ class TestFactoryKeepsUnverifiedItems:
             "file": "src/multi_phase_review_orchestrator_service.py",
             "issue": "Missing validation for phase dependencies.",
             "severity": "high",
+            "category": "correctness",
         })
         items, _skips = factory.create(
             [normalized],

@@ -1,3 +1,9 @@
+import pytest
+
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
+
 from ._helpers import *
 
 
@@ -18,9 +24,11 @@ class TestSubAgentGrade:
             SubAgentGrade.DONT_DO_THIS
         )
 
-    def test_from_phrase_unknown_falls_back_to_okok(self) -> None:
-        assert SubAgentGrade.from_phrase("excellent") is SubAgentGrade.OKOK
-        assert SubAgentGrade.from_phrase("") is SubAgentGrade.OKOK
+    def test_from_phrase_rejects_unknown_or_empty_grade(self) -> None:
+        with pytest.raises(LlmResponseMalformedError):
+            SubAgentGrade.from_phrase("excellent")
+        with pytest.raises(LlmResponseMalformedError):
+            SubAgentGrade.from_phrase("")
 
     def test_only_f_blocks(self) -> None:
         assert SubAgentGrade.IMPRESSIVE.blocks is False

@@ -134,7 +134,13 @@ it_fix = {}
 s = scenarios[0]
 repo = s["repo"]
 try:
-    issue = it.create(repository=repo, title="Test issue from capture script", body="Please ignore.")
+    issue = it.create(
+        repository=repo,
+        title="Test issue from capture script",
+        body="Please ignore.",
+        source_pr_id=pid,
+        source_item_id="capture-item",
+    )
     it_fix["private"] = {"repo": repo, "issue_number": issue.id, "title": issue.title}
     print(f"  private: created #{issue.id} OK")
 except requests.RequestException as e:

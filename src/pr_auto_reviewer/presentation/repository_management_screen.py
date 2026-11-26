@@ -9,6 +9,7 @@ from pr_auto_reviewer.presentation.navigation import NavigationInput, Navigation
 from pr_auto_reviewer.presentation.repository_credential_port import RepositoryCredentialPort
 from pr_auto_reviewer.presentation.repository_management_port import RepositoryManagementPort
 from pr_auto_reviewer.presentation.repository_credentials_screen import RepositoryCredentialsScreen
+from pr_auto_reviewer.presentation.repository_removal_screen import RepositoryRemovalScreen
 
 
 class RepositoryManagementScreen(Screen[None]):
@@ -79,15 +80,13 @@ class RepositoryManagementScreen(Screen[None]):
                     )
                 )
                 return
+            if event.button.id == "remove":
+                self.app.push_screen(RepositoryRemovalScreen(self._settings))
+                return
             repository = self._repository()
-            if event.button.id == "register":
-                self._settings.add_repository(repository)
-                message = f"Registered {repository}"
-            else:
-                self._settings.remove_repository(repository)
-                message = f"Removed {repository}"
+            self._settings.add_repository(repository)
             self._render_repositories()
-            self.query_one("#status", Static).update(message)
+            self.query_one("#status", Static).update(f"Registered {repository}")
             self.query_one("#error", Static).update("")
         except Exception as error:
             self.query_one("#error", Static).update(f"Repository error: {error}")

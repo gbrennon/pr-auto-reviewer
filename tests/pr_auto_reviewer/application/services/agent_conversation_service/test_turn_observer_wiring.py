@@ -27,7 +27,8 @@ class TestTurnObserverWiring:
         chat = MagicMock()
         chat.send.side_effect = [
             '{"action": "run_git", "args": "log --oneline -1"}',
-            '{"verdict": "approved", "reason": "clean", "items": []}',
+            '{"verdict": "approved", "reason": "clean", "summary": "Clean review", '
+            '"items": [], "suggestions": [], "praise": []}',
         ]
         bus = InMemoryCommandBus()
         bus.register(
@@ -68,7 +69,8 @@ class TestTurnObserverWiring:
         chat = MagicMock()
         chat.send.side_effect = [
             '{"action": "run_git", "args": "log --oneline -1"}',
-            '{"verdict": "approved", "reason": "clean", "items": []}',
+            '{"verdict": "approved", "reason": "clean", "summary": "Clean review", '
+            '"items": [], "suggestions": [], "praise": []}',
         ]
         bus = InMemoryCommandBus()
         bus.register(

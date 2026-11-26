@@ -31,6 +31,10 @@ class TestCitationGrounding:
     ) -> None:
         result = self._result_with_citations({
             "verdict": "approved",
+            "reason": "Explicit review reason",
+            "summary": "Explicit review summary",
+            "items": [],
+            "suggestions": [],
             "praise": [
                 {
                     "file": "adapters/shallow_inbound.py",
@@ -46,6 +50,10 @@ class TestCitationGrounding:
         (tmp_path / "src" / "a.py").write_text("x = 1\n")
         result = self._result_with_citations({
             "verdict": "approved",
+            "reason": "Explicit review reason",
+            "summary": "Explicit review summary",
+            "items": [],
+            "suggestions": [],
             "praise": [
                 {
                     "file": "src/a.py",
@@ -62,12 +70,16 @@ class TestCitationGrounding:
     ) -> None:
         result = self._result_with_citations({
             "verdict": "approved",
+            "reason": "Explicit review reason",
+            "summary": "Explicit review summary",
+            "items": [],
             "suggestions": [
                 {
                     "file": "ports/app_inbound.py",
                     "description": "add explicit interface definitions",
                 },
             ],
+            "praise": [],
         }, repo_path=tmp_path)
 
         assert result.llm_suggestions == []
@@ -83,6 +95,10 @@ class TestCitationGrounding:
 
         result = self._result_with_citations({
             "verdict": "approved",
+            "reason": "Explicit review reason",
+            "summary": "Explicit review summary",
+            "items": [],
+            "suggestions": [],
             "praise": [
                 {
                     "file": str(outside / "secret.py"),
@@ -100,6 +116,10 @@ class TestCitationGrounding:
 
         result = self._result_with_citations({
             "verdict": "approved",
+            "reason": "Explicit review reason",
+            "summary": "Explicit review summary",
+            "items": [],
+            "suggestions": [],
             "praise": [
                 {
                     "file": "../escape-target.py",
