@@ -13,6 +13,9 @@ from pr_auto_reviewer.presentation.repository_credentials_screen import (
 from pr_auto_reviewer.presentation.repository_management_screen import (
     RepositoryManagementScreen,
 )
+from pr_auto_reviewer.presentation.repository_removal_screen import (
+    RepositoryRemovalScreen,
+)
 from pr_auto_reviewer.presentation.settings_models import RepositoryCredentialStatus
 from pr_auto_reviewer.presentation.settings_screen import SettingsScreen
 from pr_auto_reviewer.presentation.status_dashboard import StatusDashboard
@@ -193,3 +196,34 @@ class TestSettingsScreen:
             rendered = str(screen.query_one("#repository-list").render())
             assert "manager: error — encryption key is invalid" in rendered
             assert "reviewer: error — secret storage unavailable" in rendered
+
+    @pytest.mark.asyncio
+    async def test_remove_repository_opens_selection_screen(self) -> None:
+        snapshot = DaemonStatusSnapshot(
+            runtime_status=None,
+            daemon_alive=False,
+            allowed_repositories=(),
+            capabilities=(),
+        )
+        settings = FakeSettings()
+        settings.repositories = ["forgejo:owner/repo", "github:acme/widget"]
+
+        async with StatusDashboard(lambda: snapshot, settings=settings).run_test() as pilot:
+            await pilot.press("e")
+            await pilot.click("#repository-management")
+            await pilot.click("#remove")
+
+            screen = pilot.app.screen
+            assert isinstance(screen, RepositoryRemovalScreen)
+            repository = screen.query_one("#repository", Select)
+            assert repository.value == "forgejo:owner/repo"
+            repository.value = "github:acme/widget"
+
+            remove = screen.query_one("#remove", Button)
+            remove.focus()
+            await pilot.press("enter")
+
+            assert settings.repositories == ["forgejo:owner/repo"]
+            assert "Removed github:acme/widget" in str(
+                screen.query_one("#status").render()
+            )
