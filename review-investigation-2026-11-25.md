@@ -36,12 +36,15 @@ the application is using the configured user-file fallback instead.
 
 ## Impact
 
-No current-head review can complete until a valid LLM model is configured. PR #247
-should not be treated as reviewed based on the stale approval for an earlier
-commit.
+Before the resolution below, no current-head review could complete until a
+valid LLM model was configured. PR #247 was not treated as reviewed based on
+the stale approval for an earlier commit.
 
-## Required action
+## Resolution
 
-Set `llm.model` to the model served by the configured LLM endpoint, restart the
-user service, and verify that a review reaches an LLM chat call before continuing
-PR review triage.
+The OpenAI-compatible client now permits an empty model identity and omits the
+`model` field from the request payload. This supports single-model llama.cpp
+servers while retaining configured model identities when they are available.
+
+The installed package and service must be refreshed before the daemon can retry
+the review.
