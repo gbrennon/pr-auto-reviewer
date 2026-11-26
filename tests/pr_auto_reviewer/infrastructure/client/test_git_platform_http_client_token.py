@@ -160,11 +160,10 @@ class TestGitPlatformHttpClientTokens:
     # verify_token_for_pr -- disk cache persistence
     # ------------------------------------------------------------------
 
-    def test_verify_token_for_pr_loads_persisted_cache(
+    def test_verify_token_for_pr_ignores_legacy_pair_cache(
         self, tmp_path,
     ) -> None:
-        """A client loads persisted (org, role) pairs on init and skips
-        verification for already-cached pairs (restart simulation)."""
+        """Legacy pair-only cache entries do not bypass current verification."""
         cache_path = tmp_path / "verified-tokens.json"
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps([["my-org", "reviewer"]]))
@@ -181,13 +180,12 @@ class TestGitPlatformHttpClientTokens:
         pr_id = PullRequestId(repository="my-org/repo", number=1)
         client.verify_token_for_pr(pr_id)
 
-        assert len(verifier.calls) == 0
+        assert len(verifier.calls) == 1
 
-    def test_verify_token_for_pr_persists_after_first_verify(
+    def test_verify_token_for_pr_persists_token_identity_after_first_verify(
         self, tmp_path,
     ) -> None:
-        """After the first verify_token_for_pr call, the cache file contains
-        the verified (org, role) pair."""
+        """The cache records the token source and a one-way token fingerprint."""
         cache_path = tmp_path / "verified-tokens.json"
 
         verifier = FakeVerifier()
@@ -196,6 +194,7 @@ class TestGitPlatformHttpClientTokens:
             "https://api.example.com",
             "default-token",
             token_resolver=resolver,
+            client_label="reviewer",
             preflight_verifier=verifier,  # pyright: ignore[reportArgumentType]
             _verified_cache_path=cache_path,
         )
@@ -204,7 +203,12 @@ class TestGitPlatformHttpClientTokens:
 
         assert len(verifier.calls) == 1
         data = json.loads(cache_path.read_text())
-        assert ["my-org", "reviewer"] in data
+        assert data == [{
+            "fingerprint": "335192bb4235e7cc52d092bae1bc88b6f89c5d0d8000bbc4156adc070a8d79dc",
+            "org": "my-org",
+            "role": "reviewer",
+            "source": "FAKE_TOKEN_REVIEWER",
+        }]
 
     def test_verify_token_for_pr_cache_hit_after_save_and_restart(
         self, tmp_path,
@@ -238,6 +242,35 @@ class TestGitPlatformHttpClientTokens:
         )
         client2.verify_token_for_pr(pr_id)
         assert len(verifier2.calls) == 0
+    def test_verify_token_for_pr_reverifies_changed_token(
+        self, tmp_path,
+    ) -> None:
+        """A changed token fingerprint cannot reuse an older cache entry."""
+        cache_path = tmp_path / "verified-tokens.json"
+        pr_id = PullRequestId(repository="my-org/repo", number=1)
+
+        verifier1 = FakeVerifier()
+        client1 = GitPlatformHttpClient(
+            "https://api.example.com",
+            "default-token",
+            token_resolver=FakeTokenResolver({"my-org/repo": "old-token"}),
+            preflight_verifier=verifier1,  # pyright: ignore[reportArgumentType]
+            _verified_cache_path=cache_path,
+        )
+        client1.verify_token_for_pr(pr_id)
+
+        verifier2 = FakeVerifier()
+        client2 = GitPlatformHttpClient(
+            "https://api.example.com",
+            "default-token",
+            token_resolver=FakeTokenResolver({"my-org/repo": "new-token"}),
+            preflight_verifier=verifier2,  # pyright: ignore[reportArgumentType]
+            _verified_cache_path=cache_path,
+        )
+        client2.verify_token_for_pr(pr_id)
+
+        assert len(verifier2.calls) == 1
+
 
     def test_verify_token_for_pr_merge_across_clients(
         self, tmp_path,
@@ -279,8 +312,10 @@ class TestGitPlatformHttpClientTokens:
 
         # Both entries persisted (no overwrite).
         data = json.loads(cache_path.read_text())
-        assert ["my-org", "manager"] in data
-        assert ["my-org", "reviewer"] in data
+        assert {(entry["org"], entry["role"]) for entry in data} == {
+            ("my-org", "manager"),
+            ("my-org", "reviewer"),
+        }
 
     def test_verify_token_for_pr_loads_corrupt_cache(
         self, tmp_path,
@@ -306,7 +341,8 @@ class TestGitPlatformHttpClientTokens:
         assert len(verifier.calls) == 1
         # The save should overwrite the corrupt file with valid JSON.
         data = json.loads(cache_path.read_text())
-        assert ["my-org", "reviewer"] in data
+        assert data[0]["org"] == "my-org"
+        assert data[0]["role"] == "reviewer"
 
     def test_verify_token_for_pr_creates_parent_dirs_on_save(
         self, tmp_path,
@@ -329,15 +365,14 @@ class TestGitPlatformHttpClientTokens:
 
         assert cache_path.exists()
         data = json.loads(cache_path.read_text())
-        assert ["my-org", "reviewer"] in data
+        assert data[0]["org"] == "my-org"
+        assert data[0]["role"] == "reviewer"
 
 
-    def test_verify_token_for_pr_persists_even_on_verification_failure(
+    def test_verify_token_for_pr_does_not_cache_failed_verification(
         self, tmp_path,
     ) -> None:
-        """The (org, role) pair is written to disk *before* preflight (TOCTOU
-        fix).  When preflight raises ``PreflightVerificationError`` the entry
-        is still persisted so a subsequent restart skips re-verification."""
+        """A failed preflight must be retried after a client restart."""
         cache_path = tmp_path / "verified-tokens.json"
 
         failing_verifier = FakeVerifier(should_fail=True)
@@ -354,12 +389,8 @@ class TestGitPlatformHttpClientTokens:
         with pytest.raises(PreflightVerificationError):
             client.verify_token_for_pr(pr_id)
 
-        # Cache persisted despite the verification failure.
-        assert cache_path.exists()
-        data = json.loads(cache_path.read_text())
-        assert ["my-org", "reviewer"] in data
+        assert not cache_path.exists()
 
-        # A new client (restart simulation) skips verification.
         verifier2 = FakeVerifier()
         resolver2 = FakeTokenResolver({"my-org/repo": "org-token"})
         client2 = GitPlatformHttpClient(
@@ -370,7 +401,7 @@ class TestGitPlatformHttpClientTokens:
             _verified_cache_path=cache_path,
         )
         client2.verify_token_for_pr(pr_id)
-        assert len(verifier2.calls) == 0
+        assert len(verifier2.calls) == 1
     # ------------------------------------------------------------------
     # _get_auth_header — repo propagation
     # ------------------------------------------------------------------
