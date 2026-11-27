@@ -809,19 +809,11 @@ class AgentConversationService(RunAgentConversationPort):
         """Request one tool-free verdict as a last resort after exhaustion.
 
         The turn budget is spent and no verdict was accepted in-loop. Ask
-        once for a verdict-only response only after the phase satisfied its
-        coverage target; partial first-phase coverage is not publishable.
+        once for a verdict-only response after the phase exhausts its turn
+        budget. Incomplete coverage may produce findings, but cannot produce
+        an approval.
         """
         if guardrails.tool_calls <= 0:
-            return None
-        missing_coverage = (
-            set(context.readable_coverage_files) - context.read_file_paths
-        )
-        if missing_coverage:
-            logger.warning(
-                "Refusing final verdict with %d unread coverage files",
-                len(missing_coverage),
-            )
             return None
         messages.append(
             ConversationMessage(
@@ -831,8 +823,10 @@ class AgentConversationService(RunAgentConversationPort):
                     "files you have already inspected, do not call any "
                     "tools. Respond now with only the final review verdict "
                     "in the required JSON format. The verdict must be "
-                    "decisive: use \"approved\" when you found no blocking "
-                    "issues, or \"changes_requested\" when you did. Do not "
+                    "decisive: use \"changes_requested\" only for grounded "
+                    "items from inspected files. Use \"approved\" only when "
+                    "the required coverage is complete and no issues remain. "
+                    "Do not "
                     "answer \"commented\" \u2014 a commented verdict is "
                     "treated as inconclusive and will be rejected."
                 ),
@@ -851,6 +845,17 @@ class AgentConversationService(RunAgentConversationPort):
             ParseReviewTurnCommand(content=final_content)
         )
         if final_parsed.kind is not TurnKind.VERDICT:
+            return None
+        verdict = (final_parsed.metadata or {}).get("verdict")
+        coverage_complete = self._coverage_complete(
+            guardrails,
+            context.readable_coverage_files,
+            context.read_file_paths,
+        )
+        if verdict == "approved" and not coverage_complete:
+            logger.warning(
+                "Refusing approval after exhaustion with incomplete coverage"
+            )
             return None
         messages.append(
             ConversationMessage(role="assistant", content=final_content)
