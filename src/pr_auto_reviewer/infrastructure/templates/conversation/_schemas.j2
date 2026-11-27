@@ -10,17 +10,17 @@
 {% endmacro %}
 
 {% macro verdict_schema() %}When you complete your review for this phase, respond with a single JSON
-object containing these keys:
+object containing this strict envelope:
 ```json
 {
-  "verdict": "approved" | "changes_requested" | "commented",
-  "reason": "a short rationale for the verdict",
-  "summary": "a two-to-three sentence overall assessment",
+  "verdict": "APPROVED" | "CHANGES_REQUESTED",
+  "reason": "a non-empty rationale for the verdict",
+  "summary": "a non-empty two-to-three sentence overall assessment",
   "items": [
     {
       "file": "path/to/file",
       "line": "12",
-      "severity": "critical" | "major" | "minor",
+      "severity": "critical" | "major" | "minor" | "info",
       "category": "<issue category>",
       "description": "specific description of the issue",
       "current_code": "the problematic code snippet",
@@ -41,7 +41,11 @@ object containing these keys:
   ]
 }
 ```
-If there are no actionable issues, suggestions, or praise, emit empty arrays: "items": [], "suggestions": [], "praise": []. Never include placeholder paths (e.g. path/to/file, src/main.py). Only include findings you can confirm from the files you actually read.
+`verdict` must be exactly `APPROVED` or `CHANGES_REQUESTED`. `reason` and
+`summary` must be non-empty. Every response must include explicit list-valued
+`items`, `suggestions`, and `praise` fields. For a clean review, use
+`"items": []`, `"suggestions": []`, and `"praise": []`. Never include
+placeholder paths; only include findings confirmed from files you read.
 {% endmacro %}
 
 {% macro advisor_turn_grade_schema() %}Respond with a single JSON object:

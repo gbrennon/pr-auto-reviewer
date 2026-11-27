@@ -39,43 +39,58 @@ class TestJsonHelpers:
 
     def test_normalize_item_dict_when_type_key_then_category(self) -> None:
         item = ReviewResponseParser.normalize_item_dict(
-            {"file": "a.py", "type": "security", "description": "d"}
+            {"file": "a.py", "type": "security", "severity": "major", "description": "d"}
         )
 
         assert item["category"] == "security"
 
-    def test_normalize_item_dict_when_unknown_category_then_default(self) -> None:
-        item = ReviewResponseParser.normalize_item_dict(
-            {"file": "a.py", "category": "weird", "description": "d"}
-        )
+    def test_normalize_item_dict_when_unknown_category_then_rejected(self) -> None:
+        with pytest.raises(ReviewVerdictError):
+            ReviewResponseParser.normalize_item_dict({
+                "file": "a.py",
+                "category": "weird",
+                "severity": "major",
+                "description": "d",
+            })
 
-        assert item["category"] == "maintainability"
+    def test_normalize_item_dict_when_no_fix_then_empty(self) -> None:
+        item = ReviewResponseParser.normalize_item_dict({
+            "file": "a.py",
+            "category": "bug",
+            "severity": "major",
+            "description": "found a bug",
+        })
 
-    def test_normalize_item_dict_when_no_fix_then_synthesized(self) -> None:
-        item = ReviewResponseParser.normalize_item_dict(
-            {"file": "a.py", "description": "found a bug"}
-        )
-
-        assert "found a bug" in item["suggested_fix"]
+        assert item["suggested_fix"] == ""
 
     def test_normalize_item_dict_when_issue_title_message_then_description(self) -> None:
-        item = ReviewResponseParser.normalize_item_dict(
-            {"issue": "issue text", "title": "title text", "message": "msg"}
-        )
+        item = ReviewResponseParser.normalize_item_dict({
+            "issue": "issue text",
+            "category": "bug",
+            "severity": "minor",
+        })
 
         assert item["description"] == "issue text"
 
     def test_normalize_item_dict_when_code_aliases_then_mapped(self) -> None:
-        item = ReviewResponseParser.normalize_item_dict(
-            {"file_path": "b.py", "code": "x", "fix": "y", "description": "d"}
-        )
+        item = ReviewResponseParser.normalize_item_dict({
+            "file_path": "b.py",
+            "code": "x",
+            "fix": "y",
+            "category": "bug",
+            "severity": "major",
+            "description": "d",
+        })
 
         assert item["file"] == "b.py"
         assert item["current_code"] == "x"
         assert item["suggested_fix"] == "y"
 
     def test_is_concrete_when_both_then_true(self) -> None:
-        assert ReviewResponseParser._is_concrete({"current_code": "x", "suggested_fix": "y"}) is True
+        assert ReviewResponseParser._is_concrete({
+            "current_code": "x",
+            "suggested_fix": "y",
+        }) is True
 
     def test_is_concrete_when_missing_fix_then_false(self) -> None:
         assert ReviewResponseParser._is_concrete({"current_code": "x"}) is False

@@ -114,8 +114,8 @@ def _code_review(
 
 def _phase_result(
     verdict="approved",
-    reason="",
-    summary="",
+    reason="test reason",
+    summary="test summary",
     items=None,
     suggestions=None,
     praise=None,

@@ -73,14 +73,23 @@ Emit exactly ONE JSON object per message. Each tool call gets a result back. Exp
 When you have done sufficient exploration to form a complete review, emit your verdict as a JSON object — no surrounding text:
 
 ```json
-{"verdict": "...", "summary": "...", "issues": [...], "suggestions": [...], "praise": [...]}
+{
+  "verdict": "APPROVED",
+  "reason": "A non-empty rationale.",
+  "summary": "A non-empty assessment.",
+  "issues": [],
+  "suggestions": [],
+  "praise": []
+}
 ```
 
 The verdict is ALWAYS the final message in the conversation. The expanded JSON format with all fields:
 
 ```json
 {
-  "verdict": "APPROVED | CHANGES_REQUESTED | COMMENTED",
+  "verdict": "APPROVED | CHANGES_REQUESTED",
+  "reason": "A non-empty rationale for the verdict",
+  "summary": "A non-empty, two-to-three sentence overall assessment",
   "issues": [
     {
       "file": "path/to/file.py",
@@ -92,32 +101,44 @@ The verdict is ALWAYS the final message in the conversation. The expanded JSON f
     }
   ],
   "suggestions": [
-    {"file": "path/to/file.py", "line": "optional line", "description": "Non-blocking improvement suggestion"}
+    {"file": "path/to/file.py", "line": "optional line",
+     "description": "Non-blocking improvement suggestion"}
   ],
   "praise": [
     {"file": "path/to/file.py", "description": "What was done well"}
-  ],
-  "summary": "2-3 sentence overall assessment of the PR"
+  ]
 }
 ```
 
-## VERDICT RULES
+Include all three list fields in every response. A clean review MUST use explicit
+empty arrays: `"issues": []`, `"suggestions": []`, and `"praise": []`.
 
-0. `verdict` MUST be one of [APPROVED, CHANGES_REQUESTED, COMMENTED]:
+## VERDICT RULES
+1. `verdict` MUST be exactly `APPROVED` or `CHANGES_REQUESTED`:
    - APPROVED: No critical or major issues found
    - CHANGES_REQUESTED: One or more critical or major issues found
-   - COMMENTED: General feedback without a strong block/approve status
-1. `issues` MUST contain every change worth noting. Each entry MUST have `file`, `category`, `severity`, `description`, `current_code`, and `suggested_fix`
-2. category: {{ issue_category_values | replace("/", ", ") }}
-3. severity: critical = must fix (security, data loss, crashes), major = should fix (architecture, correctness), minor = consider fixing (style, clarity), info = suggestion
-4. `current_code`: Copy the actual `+` lines from the diff verbatim. Never use placeholders
-5. `suggested_fix`: Concrete, real code. Never abstract text or descriptions
-6. Do NOT suggest removing code. Suggest changing it (current_code → suggested_fix)
-7. When outputting findings as narrative prose instead of JSON, include the problematic code in a fenced code block (```) immediately after the finding description, followed by the suggested fix in a second fenced code block
-8. `praise` MUST always have at least 1-2 praise items for genuinely good patterns
-9. `summary` always include 2-3 sentences
-10. NEVER use keys called `changes` or `files`. Put everything in `issues`, `praise`, or `summary`
-11. Do NOT flag `-` lines as problems — they're already deleted
+2. `reason` MUST be a non-empty explanation of the verdict.
+3. `summary` MUST be a non-empty two-to-three sentence overall assessment.
+4. `issues` MUST be an explicit list containing every change worth noting. Each
+   entry MUST have `file`, `category`, `severity`, `description`, `current_code`,
+   and `suggested_fix`. Use `[]` when there are no issues.
+5. `suggestions` MUST be an explicit list of non-blocking improvement
+   suggestions. Use `[]` when there are none.
+6. `praise` MUST be an explicit list of specific strengths. Use `[]` when there is none.
+7. category: {{ issue_category_values | replace("/", ", ") }}
+8. severity: critical = must fix (security, data loss, crashes), major = should
+   fix (architecture, correctness), minor = consider fixing (style, clarity),
+   info = suggestion
+9. `current_code`: Copy the actual `+` lines from the diff verbatim. Never use placeholders
+10. `suggested_fix`: Concrete, real code. Never abstract text or descriptions
+11. Do NOT suggest removing code. Suggest changing it (current_code → suggested_fix)
+12. When outputting findings as narrative prose instead of JSON, include the
+    problematic code in a fenced code block (```) immediately after the finding
+    description, followed by the suggested fix in a second fenced code block
+13. NEVER use keys called `changes` or `files`. Put everything in `issues`,
+    `praise`, or `summary`
+14. Do NOT flag `-` lines as problems — they're already deleted
+
 
 ## WHAT TO LOOK FOR
 

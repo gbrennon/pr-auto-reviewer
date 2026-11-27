@@ -54,7 +54,9 @@ def mock_review_context_factory() -> MagicMock:
 @pytest.fixture
 def mock_llm_review() -> MagicMock:
     """Mock LlmReviewPort."""
-    return MagicMock()
+    llm_review = MagicMock()
+    llm_review._resolve_model.return_value = "test-model"
+    return llm_review
 
 
 @pytest.fixture

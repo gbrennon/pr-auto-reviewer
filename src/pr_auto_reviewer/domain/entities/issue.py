@@ -27,6 +27,22 @@ class Issue:
     source_item_id: str
     _is_closed: bool = False
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.id, int)
+            or isinstance(self.id, bool)
+            or self.id <= 0
+        ):
+            raise ValueError("issue id must be a positive integer")
+        if not isinstance(self.source_pr_id, PullRequestId):
+            raise ValueError("source_pr_id must be a PullRequestId")
+        if (
+            not isinstance(self.source_item_id, str)
+            or not self.source_item_id.strip()
+        ):
+            raise ValueError("source_item_id must be a non-empty string")
+
+
     def close(self) -> Issue:
         """Marks this issue as closed. Returns a new Issue."""
         return replace(self, _is_closed=True)

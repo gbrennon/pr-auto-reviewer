@@ -155,40 +155,19 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 )
 
         if result is None:
-            if best_attempt_items:
-                logger.info(
-                    "Returning review with %d accumulated items after "
-                    "%d full retries",
-                    len(best_attempt_items),
-                    self._max_retries,
-                )
-                result = cast(
-                    CodeReview,
-                    self._command_bus.dispatch(
-                        AggregateReviewFindingsCommand(
-                            items=best_attempt_items,
-                            model_used=model,
-                            repo_name=repo_name,
-                            pr_id=pr_id_str,
-                            repo_path=repo_path,
-                            changed_files=changed_files,
-                        )
-                    ),
-                )
-            else:
-                logger.error(
-                    "All %d full-review attempts exhausted with no "
-                    "structured verdict and no accumulated items "
-                    "(repo=%s pr=%s model=%s); refusing to publish a "
-                    "COMMENTED review. Last failure: %s",
-                    self._max_retries, repo_name, pr_id_str, model,
-                    last_failure,
-                )
-                raise ReviewVerdictError(
-                    "All full-review attempts exhausted without a structured "
-                    "verdict or items; refusing to publish a default "
-                    "COMMENTED review."
-                ) from last_failure
+            logger.error(
+                "All %d full-review attempts exhausted without a validated "
+                "phase result (repo=%s pr=%s model=%s): %s",
+                self._max_retries,
+                repo_name,
+                pr_id_str,
+                model,
+                last_failure,
+            )
+            raise ReviewVerdictError(
+                "All full-review attempts exhausted without a validated "
+                "review result."
+            ) from last_failure
 
         if not result.items and dropped_findings > 0:
             result = self._run_feedback_loop(
@@ -472,17 +451,26 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 item.id for item in all_items if item.id
             ) | existing_item_ids
             coverage_files = tuple(changed_files) if idx == 0 else ()
-            phase_result = self._run_phase_with_retry(
-                phase_name=phase.phase_name,
-                phase_prompt=phase_prompt,
-                repo_path=repo_path,
-                changed_files=changed_files,
-                coverage_files=coverage_files,
-                base_sha=base_sha,
-                review_session=review_session,
-                existing_item_ids=existing_ids,
-                purpose=self._purpose_for_phase(phase),
-            )
+            try:
+                phase_result = self._run_phase_with_retry(
+                    phase_name=phase.phase_name,
+                    phase_prompt=phase_prompt,
+                    repo_path=repo_path,
+                    changed_files=changed_files,
+                    coverage_files=coverage_files,
+                    model=model,
+                    base_sha=base_sha,
+                    review_session=review_session,
+                    existing_item_ids=existing_ids,
+                    purpose=self._purpose_for_phase(phase),
+                )
+            except ReviewBudgetExhaustedError:
+                logger.warning(
+                    "Conversation budget exhausted before phase %s; "
+                    "preserving validated results from prior phases",
+                    phase.phase_name,
+                )
+                break
             phase_result = self._adjudicate_phase(
                 phase=phase,
                 phase_prompt=phase_prompt,
@@ -495,6 +483,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 changed_files=changed_files,
                 coverage_files=coverage_files,
                 existing_item_ids=existing_ids,
+                model=model,
             )
             phase_results[phase.phase_id] = phase_result
             existing_keys = {
@@ -560,53 +549,58 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         ) or last_phase_result
 
         if not all_items:
-            reason = ""
-            summary = ""
+            if last_phase_result is None:
+                raise ReviewVerdictError(
+                    "No phase produced a validated review result."
+                )
+            verdict = ReviewVerdict.coerce(last_phase_result.llm_verdict)
+            if verdict is None or verdict not in (
+                ReviewVerdict.APPROVED,
+                ReviewVerdict.CHANGES_REQUESTED,
+            ):
+                raise ReviewVerdictError(
+                    "No review phase produced a supported verdict."
+                )
+            reason = last_phase_result.llm_reason
+            summary = last_phase_result.llm_summary
+            if not reason.strip() or not summary.strip():
+                raise ReviewVerdictError(
+                    "No-item review results require reason and summary."
+                )
             suggestions: list[ReviewItem] = []
             praise_list: list[ReviewItem] = []
 
-            coerced = (
-                ReviewVerdict.coerce(last_phase_result.llm_verdict)
-                if last_phase_result is not None
-                else None
-            )
-
-            if last_phase_result is not None:
-                if last_phase_result.llm_reason:
-                    reason = last_phase_result.llm_reason
-                if last_phase_result.llm_summary:
-                    summary = last_phase_result.llm_summary
-                if suggestions_source is not None:
-                    for s in suggestions_source.llm_suggestions:
-                        normalized_path = ReviewItemFactory._normalize_file_path(
-                            s.get("file", ""), repo_path, changed_files,
-                        ) or ""
-                        suggestions.append(ReviewItem(
-                            severity=ItemSeverity.INFO,
-                            category=IssueCategory.GENERAL,
-                            file_path=normalized_path,
-                            description=s.get("description", ""),
-                            line=s.get("line", ""),
-                            id=s.get("id", ""),
-                            current_code=s.get("current_code", ""),
-                            suggested_fix=s.get("suggested_fix", ""),
-                        ))
-                praise_entries: list[dict[str, str]] = []
-                for pr in phase_results.values():
-                    for p in pr.llm_praise:
-                        if p not in praise_entries:
-                            praise_entries.append(p)
-                for p in praise_entries:
+            if suggestions_source is not None:
+                for suggestion in suggestions_source.llm_suggestions:
                     normalized_path = ReviewItemFactory._normalize_file_path(
-                        p.get("file", ""), repo_path, changed_files,
+                        suggestion.get("file", ""), repo_path, changed_files,
+                    ) or ""
+                    suggestions.append(ReviewItem(
+                        severity=ItemSeverity.INFO,
+                        category=IssueCategory.GENERAL,
+                        file_path=normalized_path,
+                        description=suggestion.get("description", ""),
+                        line=suggestion.get("line", ""),
+                        id=suggestion.get("id", ""),
+                        current_code=suggestion.get("current_code", ""),
+                        suggested_fix=suggestion.get("suggested_fix", ""),
+                    ))
+                praise_entries: list[dict[str, str]] = []
+                for phase_result in phase_results.values():
+                    for praise_entry in phase_result.llm_praise:
+                        if praise_entry not in praise_entries:
+                            praise_entries.append(praise_entry)
+                for praise_entry in praise_entries:
+                    normalized_path = ReviewItemFactory._normalize_file_path(
+                        praise_entry.get("file", ""), repo_path, changed_files,
                     ) or ""
                     praise_list.append(ReviewItem(
                         severity=ItemSeverity.INFO,
                         category=IssueCategory.GENERAL,
                         file_path=normalized_path,
-                        description=p.get("description", ""),
+                        description=praise_entry.get("description", ""),
                         line="",
-                        id="",
+                        id=praise_entry.get("id", ""),
                         current_code="",
                         suggested_fix="",
                     ))
@@ -616,13 +610,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 for phase_result in phase_results.values()
                 for skip_reason in phase_result.skip_reasons
             ]
-            model_reported_findings = bool(skipped)
-
-            # The application automates PR interaction: it must never
-            # publish a hollow COMMENTED outcome. Every zero-items review
-            # resolves to a real verdict from the model's evidence — or
-            # the pipeline failure raises instead of defaulting.
-            if model_reported_findings:
+            if skipped:
                 verdict = ReviewVerdict.CHANGES_REQUESTED
                 dropped_list = "; ".join(skipped[:3])
                 reason = (
@@ -632,22 +620,8 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 summary = (
                     f"Reviewed {len(plan.phases)} phases over model {model}; "
                     f"the model reported {len(skipped)} finding(s) that were "
-                    "dropped during source verification and were not "
+                    f"dropped during source verification and were not "
                     f"published. {dropped_list}"
-                )
-            elif coerced is not None and coerced is not ReviewVerdict.COMMENTED:
-                # A real, non-blank model verdict with zero kept items is a
-                # clean approval: nothing survived to flag.
-                verdict = ReviewVerdict.APPROVED
-                if not reason:
-                    reason = "Review completed without action items."
-                if not summary:
-                    summary = reason
-            else:
-                raise ReviewVerdictError(
-                    "No review phase produced a structured verdict and no "
-                    "findings survived verification; refusing to publish a "
-                    "default COMMENTED review."
                 )
 
             historical_review = self._merge_prior_records(
@@ -773,68 +747,42 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         previous: CodeReview | None = None,
     ) -> CodeReview:
         """Rebuild a CodeReview after verification dropped some items."""
-        previous_items = len(previous.items) if previous is not None else 0
-
+        if previous is None:
+            raise ReviewVerdictError(
+                "Verification rebuild requires a validated prior review."
+            )
+        previous_items = len(previous.items)
         review_items = [
             item for item in verified_items if isinstance(item, ReviewItem)
         ]
-        verdict = SubReviewGuardrails().verdict_for(review_items)
-
         dropped = previous_items - len(review_items)
+        verdict = previous.verdict
+        reason = previous.reason
+        summary = previous.summary
         if dropped and not review_items:
-            reported_findings = (
-                list(previous.items) if previous is not None else []
-            )
-            described = self._describe_dropped_findings(reported_findings)
+            described = self._describe_dropped_findings(previous.items)
+            verdict = ReviewVerdict.CHANGES_REQUESTED
             reason = (
                 "The reported issues did not survive verification against "
-                "the actual source: reading the affected files showed they "
-                f"do not correspond to a real defect — {described}. No "
-                "actionable change is required."
+                f"the actual source: {described}. No actionable change is "
+                "required."
             )
             summary = (
-                "The review examined the diff and cross-checked each "
-                "reported concern against the source as written. "
-                f"{described} These were refuted during source-code "
-                "verification, so the change is assessed as correct with "
-                "no actionable findings."
+                "The review cross-checked each reported concern against the "
+                f"source as written. {described} These were refuted during "
+                "source-code verification and were not published."
             )
-        elif dropped and review_items:
-            blocking = [item for item in review_items if item.is_blocking]
-            target = blocking[0] if blocking else review_items[0]
-            desc = target.description.strip()
-            sev = str(target.severity).lower()
-            file_path = (target.file_path or "").strip()
-            file_str = f" in {file_path}" if file_path else ""
-            reason = f"Identified {sev} issue{file_str}: {desc}" if desc else "Findings verified against source code."
-            cat_list = sorted({str(item.category) for item in review_items if item.category})
-            cat_str = f" ({', '.join(cat_list)})" if cat_list else ""
-            if blocking:
-                summary = (
-                    f"Verified {len(review_items)} finding(s){cat_str} with {len(blocking)} blocking issue(s) "
-                    f"({dropped} dropped during verification)."
-                )
-            else:
-                summary = (
-                    f"Verified {len(review_items)} non-blocking finding(s){cat_str} "
-                    f"({dropped} dropped during verification)."
-                )
-        else:
+        elif dropped:
             summary = (
-                previous.summary
-                if previous is not None and previous.summary
-                else (
-                    f"Reviewed the diff over model {model}; "
-                    "no actionable findings remained after verification."
-                )
+                f"{summary} ({dropped} finding(s) dropped during source "
+                "verification.)"
             )
-            reason = (
-                previous.reason
-                if previous is not None and previous.reason
-                else "Findings verified against source code."
-            )
-        suggestions = (previous.suggestions if previous is not None else [])
-        praise = (previous.praise if previous is not None else [])
+        if not isinstance(reason, str) or not reason.strip():
+            raise ReviewVerdictError("Verified review reason is required.")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ReviewVerdictError("Verified review summary is required.")
+        suggestions = previous.suggestions
+        praise = previous.praise
 
         return CodeReview(
             verdict=verdict,
@@ -878,6 +826,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         phase_prompt: str,
         repo_path: Path,
         changed_files: list[str],
+        model: str = "",
         coverage_files: tuple[str, ...] | None = None,
         review_session: str = "",
         base_sha: str = "",
@@ -906,6 +855,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                         repo_path=repo_path,
                         changed_files=changed_files,
                         coverage_files=coverage_files,
+                        model=model.strip(),
                         tool_execution=tool_service,
                         phase_name=phase_name,
                         existing_item_ids=existing_item_ids,
@@ -939,6 +889,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         changed_files: list[str],
         coverage_files: tuple[str, ...] | None,
         existing_item_ids: frozenset[str],
+        model: str = "",
         pr_identifier_service: str = "",
         review_session: str = "",
         base_sha: str = "",
@@ -985,6 +936,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
         )
         return self._run_phase_with_retry(
             phase_name=phase.phase_name,
+            model=model,
             phase_prompt=corrected_prompt,
             repo_path=repo_path,
             changed_files=changed_files,

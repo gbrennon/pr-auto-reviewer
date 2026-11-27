@@ -212,6 +212,29 @@ class TestOpenAiCompatibleChatClient:
         assert calls[0][1]["model"] == "qwen3"
         assert calls[0][2] is True
 
+    def test_send_omits_model_when_not_configured(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def fake_post(*_args: Any, **kwargs: Any) -> _FakeStreamingResponse:
+            payloads.append(kwargs["json"])
+            return _FakeStreamingResponse(["data: [DONE]"])
+
+        client = OpenAiCompatibleChatClient(
+            ChatClientSettings(
+                model="",
+                host="http://localhost:11434",
+                timeout=120,
+                max_retries=1,
+                max_llm_calls=None,
+                max_context_tokens=24_000,
+            ),
+            http_post=fake_post,
+        )
+
+        client.send([ConversationMessage(role="user", content="hi")])
+
+        assert "model" not in payloads[0]
+
     def test_streaming_response_has_a_total_deadline(self) -> None:
         def fake_post(*_args: Any, **_kwargs: Any) -> _FakeStreamingResponse:
             return _FakeStreamingResponse(

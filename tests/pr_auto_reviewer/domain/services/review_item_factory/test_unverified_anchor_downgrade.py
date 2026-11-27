@@ -20,6 +20,7 @@ class TestUnverifiedAnchorDowngrade:
             "file": "src/mod.py",
             "issue": "Variable x is reassigned unsafely.",
             "severity": "high",
+            "category": "correctness",
             "current_code": "this line does not exist anywhere",
             "line": "1",
         })
@@ -42,6 +43,7 @@ class TestUnverifiedAnchorDowngrade:
             "file": "src/mod.py",
             "issue": "Unsafe operation on x.",
             "severity": "major",
+            "category": "correctness",
             "current_code": "y = unsafe_operation(x)",
             "line": "2",
         })
@@ -64,6 +66,7 @@ class TestUnverifiedAnchorDowngrade:
             "file": "src/mod.py",
             "issue": "Variable x is reassigned unsafely.",
             "severity": "critical",
+            "category": "correctness",
             "current_code": "fabricated snippet text",
             "line": "1",
         })

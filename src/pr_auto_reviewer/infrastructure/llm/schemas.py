@@ -2,18 +2,17 @@
 
 from pydantic import BaseModel, field_validator
 
+from ...domain.value_objects.issue_category import IssueCategory
+from ...domain.value_objects.item_severity import ItemSeverity
+
 
 class ReviewItemSchema(BaseModel):
-    """Schema for a single review finding extracted from LLM output.
-
-    Validates and coerces fields from both JSON and prose-parsed dicts
-    before they enter the domain layer via ReviewItemFactory.
-    """
+    """Schema for a single review finding extracted from LLM output."""
 
     file: str = ""
-    severity: str = "info"
-    category: str = "maintainability"
-    description: str = ""
+    severity: str
+    category: str
+    description: str
     line: str = ""
     current_code: str = ""
     suggested_fix: str = ""
@@ -21,23 +20,42 @@ class ReviewItemSchema(BaseModel):
     @field_validator("severity", mode="before")
     @classmethod
     def _normalize_severity(cls, v: object) -> str:
-        if not isinstance(v, str):
-            return "info"
-        lowered = v.strip().lower()
-        valid = {"critical", "major", "minor", "info"}
-        if lowered in valid:
-            return lowered
-        for candidate in valid:
-            if candidate in lowered:
-                return candidate
-        return "info"
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("severity must be a non-empty string")
+        normalized = v.strip().lower()
+        if not ItemSeverity.accepts(normalized):
+            raise ValueError(f"invalid severity: {v}")
+        return ItemSeverity.from_value(normalized).value
 
     @field_validator("category", mode="before")
     @classmethod
     def _normalize_category(cls, v: object) -> str:
-        if not isinstance(v, str):
-            return "maintainability"
-        return v.strip().lower()
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("category must be a non-empty string")
+        normalized = v.strip().lower()
+        aliases = {
+            "architecture": "design",
+            "solid": "design",
+            "doc": "docs",
+            "tests": "test",
+            "correctness": "bug",
+            "safety": "security",
+            "best-practices": "quality",
+            "error-handling": "bug",
+            "concurrency": "bug",
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        if normalized not in {category.value for category in IssueCategory}:
+            raise ValueError(f"invalid category: {v}")
+        return normalized
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _validate_description(cls, v: object) -> str:
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("description must be a non-empty string")
+        return v
 
     @field_validator("line", mode="before")
     @classmethod
@@ -48,13 +66,13 @@ class ReviewItemSchema(BaseModel):
 
     @classmethod
     def from_parser_dict(cls, data: dict[str, object]) -> ReviewItemSchema:
-        """Construct from a parser-produced dict, tolerating missing keys."""
+        """Construct from a parser-produced dict."""
         return cls(
-            file=str(data.get("file", "")),
-            severity=str(data.get("severity", "info")),
-            category=str(data.get("category", "maintainability")),
-            description=str(data.get("description", "")),
-            line=str(data.get("line", "")),
-            current_code=str(data.get("current_code", "")),
-            suggested_fix=str(data.get("suggested_fix", "")),
+            file=data.get("file", ""),
+            severity=data.get("severity"),
+            category=data.get("category"),
+            description=data.get("description"),
+            line=data.get("line", ""),
+            current_code=data.get("current_code", ""),
+            suggested_fix=data.get("suggested_fix", ""),
         )

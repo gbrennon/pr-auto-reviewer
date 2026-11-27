@@ -17,9 +17,6 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.issue_category import IssueCategory
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
-from pr_auto_reviewer.infrastructure.review_publishers.reason_factory import (
-    ReasonFactory,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -138,109 +135,39 @@ class ReviewResponseParser:
         match = pattern.search(text)
         return match.group(1).strip() if match else ""
 
-    def _derive_summary(self, items: list[ReviewItem]) -> str:
-        """Build a summary from the items when the LLM omitted one."""
-        files = sorted({item.file_path for item in items if item.file_path})
-        blocking = sum(1 for item in items if item.is_blocking)
-        base = (
-            f"Found {len(items)} issue(s)"
-            f" ({blocking} blocking"
-            f" across {len(files)} file(s))."
-        )
-        if files:
-            base += " Files: " + ", ".join(files[:5])
-        return base
-
-    def _try_parse_markdown_fallback(
-        self, content: str, model: str,
-    ) -> CodeReview | None:
-        """Parse markdown supplementally, or return None when there is none."""
-        try:
-            return self._parse_markdown_fallback(content, model)
-        except ReviewVerdictError:
-            return None
 
     def _parse_markdown_fallback(self, content: str, model: str) -> CodeReview:
+        required_sections = (
+            r"(?im)^##\s+(?:Items|Issues|Findings)\b",
+            r"(?im)^##\s+Suggestions\b",
+            r"(?im)^##\s+Praise\b",
+        )
+        if any(re.search(section, content) is None for section in required_sections):
+            raise ReviewVerdictError(
+                "Markdown review output must contain explicit items, suggestions, "
+                "and praise sections."
+            )
         verdict = self.extract_verdict_md(content)
-        reason = self._extract_reason_md(content)
-        summary = self._extract_summary_md(content)
-        if not summary:
-            first_para = self._extract_first_paragraph(content)
-            summary = first_para if first_para else content.strip()[:500]
+        reason = self._extract_reason_md(content).strip()
+        summary = self._extract_summary_md(content).strip()
+        if not reason or not summary:
+            raise ReviewVerdictError(
+                "Markdown review output must contain a non-empty reason and summary."
+            )
         items_data = self._parse_markdown_items(content)
-        if not reason and items_data:
-            reason = ReasonFactory().make(items_data)
-        if not reason and summary:
-            reason = summary
-        if not summary and items_data:
-            summary = self._derive_summary(items_data)
-        suggestions = [
-            ReviewItem(
-                severity=ItemSeverity.INFO,
-                category=IssueCategory.GENERAL,
-                file_path=str(s.get("file", "")),
-                description=str(s.get("description", "")),
-                line=str(s.get("line", "")),
-                id=self._new_suggestion_id(),
-                current_code=s.get("current_code", ""),
-                suggested_fix=s.get("suggested_code", ""),
-            )
-            for s in self._extract_suggestions_md(content)
-        ]
-        praise = [
-            ReviewItem(
-                severity=ItemSeverity.INFO,
-                category=IssueCategory.GENERAL,
-                file_path=str(p.get("file", "")),
-                description=str(p.get("description", "")),
-                line="",
-                id="",
-                current_code="",
-                suggested_fix=str(p.get("description", "")),
-            )
-            for p in self._extract_praise_md(content)
-        ]
+        suggestions = self._review_items_from_collection(
+            self._extract_suggestions_md(content),
+            "suggestions",
+        )
+        praise = self._review_items_from_collection(
+            self._extract_praise_md(content),
+            "praise",
+        )
         return CodeReview(
             verdict=verdict,
             reason=reason,
             summary=summary,
             items=items_data,
-            suggestions=suggestions,
-            praise=praise,
-            model_used=model,
-        )
-
-    def _merge_json_markdown(
-        self, json_result: CodeReview, markdown_result: CodeReview, model: str
-    ) -> CodeReview:
-        summary_is_string = isinstance(json_result.summary, str)
-        summary_empty = (not summary_is_string or not json_result.summary.strip())
-        summary = (
-            markdown_result.summary
-            if summary_empty and isinstance(markdown_result.summary, str) and markdown_result.summary.strip()
-            else json_result.summary
-        )
-        praise_is_list = isinstance(json_result.praise, list)
-        praise_empty = (not praise_is_list or not json_result.praise)
-        praise = (
-            markdown_result.praise
-            if praise_empty and isinstance(markdown_result.praise, list) and markdown_result.praise
-            else json_result.praise
-        )
-        suggestions_is_list = isinstance(json_result.suggestions, list)
-        suggestions_empty = (not suggestions_is_list or not json_result.suggestions)
-        suggestions = (
-            markdown_result.suggestions
-            if suggestions_empty and isinstance(markdown_result.suggestions, list) and markdown_result.suggestions
-            else json_result.suggestions
-        )
-        verdict_is_string = isinstance(json_result.verdict, str)
-        reason_is_string = isinstance(json_result.reason, str)
-        return CodeReview(
-            verdict=(markdown_result.verdict if (not verdict_is_string and isinstance(markdown_result.verdict, str) and markdown_result.verdict.strip()) else json_result.verdict),
-            reason=(markdown_result.reason if (not reason_is_string and isinstance(markdown_result.reason, str) and markdown_result.reason.strip()) else json_result.reason),
-            summary=summary,
-            items=json_result.items,
             suggestions=suggestions,
             praise=praise,
             model_used=model,
@@ -254,17 +181,22 @@ class ReviewResponseParser:
         items: list[ReviewItem] = []
         for match in pattern.finditer(content):
             severity_raw, category_raw, file_path, description = match.groups()
-            item_id = format(_uuid.uuid7().int, "04x")[:4]
+            normalized = self.normalize_item_dict({
+                "file": file_path.strip(),
+                "severity": severity_raw,
+                "category": category_raw,
+                "description": description.strip(),
+            })
             items.append(
                 ReviewItem(
-                    severity=ItemSeverity.from_value(severity_raw),
-                    category=IssueCategory.from_value(category_raw),
-                    file_path=file_path.strip(),
-                    description=description.strip(),
-                    line="",
-                    current_code="",
-                    suggested_fix="",
-                    id=item_id,
+                    severity=normalized["severity"],
+                    category=normalized["category"],
+                    file_path=normalized["file"],
+                    description=normalized["description"],
+                    line=normalized["line"],
+                    current_code=normalized["current_code"],
+                    suggested_fix=normalized["suggested_fix"],
+                    id=format(_uuid.uuid7().int, "04x")[:4],
                 )
             )
         return items
@@ -659,45 +591,28 @@ class ReviewResponseParser:
             return para if len(para) > 20 else None
         return None
 
-    def _empty_review(self, model: str, *, reason: str) -> CodeReview:
-        raise ReviewVerdictError(
-            "No structured review data was obtained from the LLM output; "
-            "refusing to return a default COMMENTED review."
-        )
 
-    def _resolve_verdict(self, 
-        explicit: str | None, items: list[ReviewItem],
+    def _resolve_verdict(
+        self, explicit: object, items: list[ReviewItem],
     ) -> ReviewVerdict:
-        if explicit:
-            value = explicit.strip().lower()
-            if "changes" in value or "request" in value:
-                return ReviewVerdict.CHANGES_REQUESTED
-            if "approved" in value or value == "approve":
-                return ReviewVerdict.APPROVED
-            raise ReviewVerdictError(
-                f"LLM returned an unrecognized verdict {explicit!r}; "
-                "refusing to default to COMMENTED."
-            )
-        return self._determine_verdict(items)
+        verdict = ReviewVerdict.coerce(explicit)
+        if verdict is ReviewVerdict.APPROVED:
+            return ReviewVerdict.APPROVED
+        if verdict is ReviewVerdict.CHANGES_REQUESTED:
+            return ReviewVerdict.CHANGES_REQUESTED
+        raise ReviewVerdictError(
+            f"LLM returned an unrecognized verdict {explicit!r}; "
+            "an explicit APPROVED or CHANGES_REQUESTED verdict is required."
+        )
 
     def _resolve_reason(self, data: dict[str, Any]) -> str:
         reason_value = data.get("reason")
-        if isinstance(reason_value, str) and reason_value:
-            return reason_value
-        reasons_value = data.get("reasons")
-        if isinstance(reasons_value, list):
-            return " ".join(str(r) for r in reasons_value)
-        if isinstance(reasons_value, str) and reasons_value:
-            return reasons_value
-        return ""
+        if isinstance(reason_value, str) and reason_value.strip():
+            return reason_value.strip()
+        raise ReviewVerdictError(
+            "Review output must contain a non-empty explicit reason."
+        )
 
-    def _determine_verdict(self, items: list[ReviewItem]) -> ReviewVerdict:
-        for item in items:
-            if item.severity in (ItemSeverity.CRITICAL, ItemSeverity.MAJOR):
-                return ReviewVerdict.CHANGES_REQUESTED
-        if items:
-            return ReviewVerdict.CHANGES_REQUESTED
-        return ReviewVerdict.APPROVED
 
     @staticmethod
     def extract_outermost_json(text: str) -> str | None:
@@ -715,12 +630,13 @@ class ReviewResponseParser:
         return None
 
     def _find_items_in_dict(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        items_key = (
-            data.get("items")
-            or data.get("findings")
-            or data.get("issues")
-        )
-        if isinstance(items_key, list):
+        supplied = [key for key in ("items", "findings", "issues") if key in data]
+        if supplied:
+            items_key = self._provided_collection(
+                data,
+                ("items", "findings", "issues"),
+                "findings",
+            )
             return [
                 item for item in items_key
                 if isinstance(item, dict)
@@ -848,12 +764,13 @@ class ReviewResponseParser:
             if key in concrete_keys or key in seen:
                 continue
             seen.add(key)
+            description = str(i.get("description") or "").strip()
+            if not description:
+                continue
             observations.append({
                 "file": str(i.get("file") or ""),
                 "line": str(i.get("line") or ""),
-                "description": str(
-                    i.get("description") or "Review the identified concern."
-                ),
+                "description": description,
             })
         return observations
 
@@ -872,30 +789,36 @@ class ReviewResponseParser:
         for source in (cleaned,):
             try:
                 data = json.loads(self.sanitize_json_literals(source))
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if isinstance(data, dict):
-                candidates = (
-                    data.get("items") or data.get("issues") or data.get("findings")
-                )
-                if isinstance(candidates, list):
+                if isinstance(data, dict):
+                    direct_keys = [
+                        key for key in ("items", "issues", "findings")
+                        if key in data
+                    ]
+                    if direct_keys:
+                        candidates = self._provided_collection(
+                            data,
+                            ("items", "issues", "findings"),
+                            "findings",
+                        )
+                        return [
+                            self.normalize_item_dict(item)
+                            for item in candidates
+                            if isinstance(item, dict)
+                        ]
+                    fallback = self._find_items_in_dict(data)
+                    if fallback:
+                        return [
+                            self.normalize_item_dict(item)
+                            for item in fallback
+                        ]
+                elif isinstance(data, list):
                     return [
                         self.normalize_item_dict(item)
-                        for item in candidates
+                        for item in data
                         if isinstance(item, dict)
                     ]
-                fallback = self._find_items_in_dict(data)
-                if fallback:
-                    return [
-                        self.normalize_item_dict(item)
-                        for item in fallback
-                    ]
-            elif isinstance(data, list):
-                return [
-                    self.normalize_item_dict(item)
-                    for item in data
-                    if isinstance(item, dict)
-                ]
+            except (json.JSONDecodeError, ValueError):
+                continue
         return []
 
     def parse_items(self, raw_text: str) -> list[dict[str, Any]]:
@@ -1003,45 +926,139 @@ class ReviewResponseParser:
         return cleaned[second + 3:].strip()
 
     @staticmethod
+    def _provided_collection(
+        data: dict[str, Any], keys: tuple[str, ...], label: str,
+    ) -> list[Any]:
+        supplied = [key for key in keys if key in data]
+        if len(supplied) != 1:
+            raise ReviewVerdictError(
+                f"Review output must supply exactly one {label} collection."
+            )
+        value = data[supplied[0]]
+        if not isinstance(value, list):
+            raise ReviewVerdictError(f"Review {label} collection must be a list.")
+        return value
+
+    def _review_items_from_collection(
+        self, raw: list[Any], label: str,
+    ) -> list[ReviewItem]:
+        result: list[ReviewItem] = []
+        for entry in raw:
+            if isinstance(entry, str):
+                description = entry.strip()
+                values: dict[str, Any] = {}
+            elif isinstance(entry, dict):
+                description_value = entry.get("description")
+                if not isinstance(description_value, str):
+                    raise ReviewVerdictError(
+                        f"Each {label} entry must supply a string description."
+                    )
+                description = description_value.strip()
+                values = entry
+            else:
+                raise ReviewVerdictError(
+                    f"Each {label} entry must be a string or object."
+                )
+            if not description:
+                raise ReviewVerdictError(
+                    f"Each {label} entry must have a non-empty description."
+                )
+            suggested_fix = values.get(
+                "suggested_fix", values.get("suggested_code", "")
+            )
+            if not isinstance(suggested_fix, str):
+                raise ReviewVerdictError(
+                    f"Each {label} suggested_fix must be a string."
+                )
+            result.append(
+                ReviewItem(
+                    severity=ItemSeverity.INFO,
+                    category=IssueCategory.GENERAL,
+                    file_path=str(values.get("file") or values.get("file_path") or ""),
+                    description=description,
+                    line=str(values.get("line") or ""),
+                    id=self._new_suggestion_id() if label == "suggestions" else "",
+                    current_code=str(
+                        values.get("current_code")
+                        or values.get("current")
+                        or ""
+                    ),
+                    suggested_fix=suggested_fix,
+                )
+            )
+        return result
+
+    @staticmethod
     def normalize_item_dict(item: dict[str, Any]) -> dict[str, Any]:
         """Map LLM JSON item fields onto the canonical parser schema."""
-        severity_raw = str(item.get("severity") or "minor").lower().strip()
-        severity_map = {
-            "high": "major", "medium": "minor", "low": "minor",
-            "critical": "critical", "major": "major", "minor": "minor",
+        if not isinstance(item, dict):
+            raise ReviewVerdictError("Each review item must be an object.")
+
+        severity_value = item.get("severity")
+        if not isinstance(severity_value, str):
+            raise ReviewVerdictError("Each review item must supply severity.")
+        severity_aliases = {
+            "high": "major",
+            "medium": "minor",
+            "low": "minor",
+            "critical": "critical",
+            "major": "major",
+            "minor": "minor",
             "info": "info",
         }
-        category_default = "maintainability"
-        category_raw = str(
-            item.get("category") or item.get("type") or ""
-        ).lower().strip()
-        category = {
-            "bug": "bug", "security": "security",
-            "performance": "performance", "maintainability": "maintainability",
-            "style": "style", "quality": "quality",
-            "architecture": "architecture", "solid": "design",
-            "design": "design", "convention": "maintainability",
-        }.get(category_raw, category_default)
-        description = str(
-            item.get("description")
-            or item.get("issue")
-            or item.get("title")
-            or item.get("message")
-            or ""
+        severity = severity_aliases.get(severity_value.strip().lower())
+        if severity is None:
+            raise ReviewVerdictError(
+                f"Review item has invalid severity {severity_value!r}."
+            )
+
+        category_value = (
+            item.get("category") if "category" in item else item.get("type")
         )
-        current_code = str(item.get("current_code") or item.get("code") or "")
-        suggested_fix = str(item.get("suggested_fix") or item.get("fix") or "")
-        category_raw_lower = category_raw
-        if suggested_fix == "" and description:
-            suggested_fix = (
-                f"Resolve the reported {category_raw_lower or 'issue'}: {description}"
+        if not isinstance(category_value, str):
+            raise ReviewVerdictError("Each review item must supply category.")
+        category_aliases = {
+            category.value: category.value for category in IssueCategory
+        }
+        category_aliases.update({
+            "architecture": "design",
+            "solid": "design",
+            "doc": "docs",
+            "tests": "test",
+            "correctness": "bug",
+            "safety": "security",
+            "best-practices": "quality",
+            "error-handling": "bug",
+            "concurrency": "bug",
+        })
+        category = category_aliases.get(category_value.strip().lower())
+        if category is None:
+            raise ReviewVerdictError(
+                f"Review item has invalid category {category_value!r}."
+            )
+
+        description_key = next(
+            (key for key in ("description", "issue", "title", "message") if key in item),
+            None,
+        )
+        description_value = item.get(description_key) if description_key else None
+        if not isinstance(description_value, str) or not description_value.strip():
+            raise ReviewVerdictError(
+                "Each review item must supply a non-empty description."
+            )
+
+        current_code = item.get("current_code", item.get("code", ""))
+        suggested_fix = item.get("suggested_fix", item.get("fix", ""))
+        if not isinstance(current_code, str) or not isinstance(suggested_fix, str):
+            raise ReviewVerdictError(
+                "Review item code fields must be strings when supplied."
             )
         return {
             "file": str(item.get("file") or item.get("file_path") or ""),
             "line": str(item.get("line") or ""),
-            "severity": severity_map.get(severity_raw, severity_raw),
+            "severity": severity,
             "category": category,
-            "description": description,
+            "description": description_value.strip(),
             "current_code": current_code,
             "suggested_fix": suggested_fix,
             "root_cause": str(item.get("root_cause") or ""),
@@ -1092,32 +1109,17 @@ class ReviewResponseParser:
         cleaned = self._clean_response(content)
         try:
             data = json.loads(self.sanitize_json_literals(cleaned))
-            result = self._code_review_from_dict(data, model)
-            summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
-            praise_empty = (not isinstance(result.praise, list) or not result.praise)
-            if summary_empty or praise_empty:
-                markdown_result = self._try_parse_markdown_fallback(content, model)
-                if markdown_result is not None:
-                    result = self._merge_json_markdown(result, markdown_result, model)
-            return result
+            return self._code_review_from_dict(data, model)
         except (json.JSONDecodeError, ValueError):
             logger.debug("parse: JSON decode failed, trying text extraction")
         extracted = self.extract_outermost_json(cleaned)
         if extracted is not None:
             try:
                 data = json.loads(self.sanitize_json_literals(extracted))
-                result = self._code_review_from_dict(data, model)
-                summary_empty = (not isinstance(result.summary, str) or not result.summary.strip())
-                praise_empty = (not isinstance(result.praise, list) or not result.praise)
-                if summary_empty or praise_empty:
-                    markdown_result = self._try_parse_markdown_fallback(content, model)
-                    if markdown_result is not None:
-                        result = self._merge_json_markdown(result, markdown_result, model)
-                return result
+                return self._code_review_from_dict(data, model)
             except (json.JSONDecodeError, ValueError):
                 logger.debug("parse: extracted JSON decode also failed")
-        markdown_result = self._parse_markdown_fallback(content, model)
-        return markdown_result
+        return self._parse_markdown_fallback(content, model)
 
     def _clean_response(self, content: str) -> str:
         cleaned = content.strip()
@@ -1135,86 +1137,67 @@ class ReviewResponseParser:
         return cleaned
 
     def _code_review_from_dict(self, data: dict[str, Any], model: str) -> CodeReview:
-        items_data = data.get("items") or data.get("findings") or data.get("issues") or []
-        if not isinstance(items_data, list):
-            items_data = []
+        if not isinstance(data, dict):
+            raise ReviewVerdictError("Structured review output must be an object.")
+        target: dict[str, Any] = data
+        nested = data.get("data")
+        if isinstance(nested, dict):
+            target = nested
+        items_data = self._provided_collection(
+            target,
+            ("items", "issues", "findings"),
+            "findings",
+        )
         items: list[ReviewItem] = []
-        for i, item_dict in enumerate(items_data, 1):
+        for item_dict in items_data:
             if not isinstance(item_dict, dict):
-                continue
-            raw_desc = item_dict.get("description", "")
-            if isinstance(raw_desc, dict):
-                description = ", ".join(f"{k}={v}" for k, v in raw_desc.items())
-            else:
-                description = str(raw_desc)
-            raw_severity = str(item_dict.get("severity", "info"))
-            if ItemSeverity.accepts(raw_severity):
-                severity_value = raw_severity
-            else:
-                _, severity_value = self._infer_severity(description)
-            raw_category = item_dict.get("category") or item_dict.get("type")
-            if raw_category:
-                category_value = str(raw_category)
-            else:
-                category_value = self._infer_type(description, severity_value)
-            review_item = ReviewItem(
-                severity=ItemSeverity.from_value(severity_value),
-                category=IssueCategory.from_value(category_value),
-                file_path=str(item_dict.get("file", "")),
-                description=description,
-                line=str(item_dict.get("line", "")),
-                current_code=str(item_dict.get("current_code", "")),
-                suggested_fix=str(item_dict.get("suggested_fix", "")),
-                id=format(_uuid.uuid7().int, "04x")[:4],
+                raise ReviewVerdictError("Each review item must be an object.")
+            normalized = self.normalize_item_dict(item_dict)
+            items.append(
+                ReviewItem(
+                    severity=normalized["severity"],
+                    category=normalized["category"],
+                    file_path=normalized["file"],
+                    description=normalized["description"],
+                    line=normalized["line"],
+                    current_code=normalized["current_code"],
+                    suggested_fix=normalized["suggested_fix"],
+                    root_cause=normalized["root_cause"],
+                    reproduction=normalized["reproduction"],
+                    acceptance_criteria=normalized["acceptance_criteria"],
+                    detection_method=normalized["detection_method"],
+                    id=format(_uuid.uuid7().int, "04x")[:4],
+                )
             )
-            if not review_item.file_path and not review_item.description:
-                continue
-            items.append(review_item)
-        verdict = self._resolve_verdict(data.get("verdict"), items)
-        reason = self._resolve_reason(data)
-        summary = str(data.get("summary", ""))
-        if not reason and items:
-            reason = ReasonFactory().make(items)
-        if not reason and summary:
-            reason = summary
-        if not summary and items:
-            summary = self._derive_summary(items)
-        if not reason:
-            reason = f"Review resolved as {verdict.value}."
-        if not summary:
-            summary = reason
+        verdict = self._resolve_verdict(target.get("verdict"), items)
+        reason = self._resolve_reason(target)
+        summary_value = target.get("summary")
+        if not isinstance(summary_value, str) or not summary_value.strip():
+            raise ReviewVerdictError(
+                "Review output must contain a non-empty explicit summary."
+            )
+        suggestions = self._review_items_from_collection(
+            self._provided_collection(
+                target,
+                ("suggestions", "recommendations", "improvements", "recommended"),
+                "suggestions",
+            ),
+            "suggestions",
+        )
+        praise = self._review_items_from_collection(
+            self._provided_collection(
+                target,
+                ("praise", "strengths", "positives"),
+                "praise",
+            ),
+            "praise",
+        )
         return CodeReview(
             verdict=verdict,
             reason=reason,
-            summary=summary,
+            summary=summary_value.strip(),
             items=items,
-            suggestions=[
-                ReviewItem(
-                    severity=ItemSeverity.INFO,
-                    category=IssueCategory.GENERAL,
-                    file_path=str(s.get("file", "") if isinstance(s, dict) else ""),
-                    description=str(s.get("description", "") if isinstance(s, dict) else s),
-                    line=str(s.get("line", "") if isinstance(s, dict) else ""),
-                    id=self._new_suggestion_id(),
-                    current_code=str(s.get("current_code", "")) if isinstance(s, dict) else "",
-                    suggested_fix=str(s.get("suggested_code", "")) if isinstance(s, dict) else "",
-                )
-                for s in data.get("suggestions", [])
-                if isinstance(s, (str, dict))
-            ],
-            praise=[
-                ReviewItem(
-                    severity=ItemSeverity.INFO,
-                    category=IssueCategory.GENERAL,
-                    file_path=str(p.get("file", "") if isinstance(p, dict) else ""),
-                    description=str(p.get("description", "") if isinstance(p, dict) else p),
-                    line="",
-                    id="",
-                    current_code="",
-                    suggested_fix="",
-                )
-                for p in data.get("praise", [])
-                if isinstance(p, (str, dict))
-            ],
+            suggestions=suggestions,
+            praise=praise,
             model_used=model,
         )

@@ -36,12 +36,16 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "pyproject.toml",
                         "description": "Keep the project metadata in this file.",
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -59,6 +63,9 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "src/config.py",
@@ -68,6 +75,7 @@ class TestSuggestionScopeGrounding:
                         ),
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -87,12 +95,16 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "src/config.py",
                         "description": "Centralize the settings boundary.",
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -106,6 +118,9 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "",
@@ -114,6 +129,7 @@ class TestSuggestionScopeGrounding:
                         ),
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -125,12 +141,16 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "src/missing.py",
                         "description": "The pyproject.toml configuration is related.",
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -147,12 +167,16 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": str(outside_file),
                         "description": "The pyproject.toml configuration is related.",
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],
@@ -167,12 +191,16 @@ class TestSuggestionScopeGrounding:
         result = self._result_with_suggestions(
             {
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "suggestions": [
                     {
                         "file": "../escape-target.py",
                         "description": "The pyproject.toml configuration is related.",
                     },
                 ],
+                "praise": [],
             },
             tmp_path,
             ["pyproject.toml"],

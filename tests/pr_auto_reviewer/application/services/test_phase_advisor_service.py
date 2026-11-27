@@ -13,6 +13,9 @@ from pr_auto_reviewer.domain.entities.engineer_agent import EngineerAgent
 from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
     LlmUnavailableError,
 )
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
 from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
     ConversationPurpose,
 )
@@ -37,6 +40,19 @@ def _phase() -> ReviewPhase:
     )
 
 
+def _phase_result(**overrides) -> PhaseResult:
+    values = {
+        "items": [],
+        "llm_verdict": "approved",
+        "llm_reason": "Explicit review reason",
+        "llm_summary": "Explicit review summary",
+        "llm_suggestions": [],
+        "llm_praise": [],
+    }
+    values.update(overrides)
+    return PhaseResult(**values)
+
+
 class TestPhaseAdvisor:
     """The advisor grades a finished phase against its assignment."""
 
@@ -51,7 +67,7 @@ class TestPhaseAdvisor:
         directive = advisor.assess(
             _phase(),
             "find bugs in the diff",
-            PhaseResult(llm_verdict="approved", items=[]),
+            _phase_result(),
 
             review_session="test-session",
         )
@@ -74,9 +90,7 @@ class TestPhaseAdvisor:
 
         advisor.assess(
             _phase(), "assignment",
-            PhaseResult(
-                llm_verdict="approved", items=[], run_snippet_calls=1,
-            ),
+            _phase_result(run_snippet_calls=1),
             review_session="test-session",
         )
 
@@ -135,7 +149,7 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
-            _phase(), "assignment", PhaseResult(),
+            _phase(), "assignment", _phase_result(),
 
             review_session="test-session",
         )
@@ -145,33 +159,27 @@ class TestPhaseAdvisor:
         assert directive.improved_prompt == "re-explain the task"
         assert directive.blocks_output is True
 
-    def test_assess_unparseable_accepts_output(self) -> None:
+    def test_assess_unparseable_reply_raises_malformed_error(self) -> None:
         chat = MagicMock()
         chat.send.return_value = "the phase was great"
         advisor = PhaseAdvisorService(chat_port=chat)
 
-        directive = advisor.assess(
-            _phase(), "assignment", PhaseResult(llm_verdict="approved"),
+        with pytest.raises(LlmResponseMalformedError):
+            advisor.assess(
+                _phase(), "assignment", _phase_result(),
+                review_session="test-session",
+            )
 
-            review_session="test-session",
-        )
-
-        assert directive.grade is SubAgentGrade.OKOK
-        assert directive.blocks_output is False
-
-    def test_assess_chat_failure_accepts_output(self) -> None:
+    def test_assess_chat_failure_is_not_silently_accepted(self) -> None:
         chat = MagicMock()
         chat.send.side_effect = RuntimeError("ollama down")
         advisor = PhaseAdvisorService(chat_port=chat)
 
-        directive = advisor.assess(
-            _phase(), "assignment", PhaseResult(),
-
-            review_session="test-session",
-        )
-
-        assert directive.grade is SubAgentGrade.OKOK
-        assert directive.blocks_output is False
+        with pytest.raises(RuntimeError, match="ollama down"):
+            advisor.assess(
+                _phase(), "assignment", _phase_result(),
+                review_session="test-session",
+            )
 
 
     def test_assess_raises_llm_unavailable_error(self) -> None:
@@ -181,7 +189,7 @@ class TestPhaseAdvisor:
 
         with pytest.raises(LlmUnavailableError, match="host unreachable"):
             advisor.assess(
-                _phase(), "assignment", PhaseResult(),
+            _phase(), "assignment", _phase_result(),
                 review_session="test-session",
             )
 
@@ -205,7 +213,7 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat)
 
         advisor.assess(
-            _phase(), "find bugs", PhaseResult(),
+            _phase(), "find bugs", _phase_result(),
 
             review_session="test-session",
         )
@@ -224,54 +232,46 @@ class TestPhaseAdvisor:
         advisor = PhaseAdvisorService(chat_port=chat)
 
         directive = advisor.assess(
-            _phase(), "assignment", PhaseResult(),
+            _phase(), "assignment", _phase_result(),
             review_session="test-session",
         )
 
         assert directive.grade is SubAgentGrade.WHATEVER
         assert directive.feedback == "drifted"
 
-    def test_assess_never_treats_a_verdict_key_as_a_grade(self) -> None:
+    def test_assess_rejects_a_verdict_key_as_a_grade(self) -> None:
         chat = MagicMock()
         chat.send.return_value = (
             '{"verdict": "changes_requested", "reason": "found bugs"}'
         )
         advisor = PhaseAdvisorService(chat_port=chat)
 
-        directive = advisor.assess(
-            _phase(), "assignment", PhaseResult(),
-            review_session="test-session",
-        )
+        with pytest.raises(LlmResponseMalformedError):
+            advisor.assess(
+                _phase(), "assignment", _phase_result(),
+                review_session="test-session",
+            )
 
-        assert directive.grade is SubAgentGrade.OKOK
-        assert directive.feedback == ""
-        assert directive.blocks_output is False
-
-    def test_observe_never_treats_a_verdict_key_as_a_grade(self) -> None:
+    def test_observe_rejects_a_verdict_key_as_a_grade(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"verdict": "approved"}'
         advisor = PhaseAdvisorService(chat_port=chat)
 
-        directive = advisor.observe(
-            AdvisorTurnEvidence(
-                phase_name="Bug Hunt — Diff",
-                turn_kind=TurnKind.TOOL_CALL,
-            ),
-            review_session="test-session",
-        )
-
-        assert directive.grade is SubAgentGrade.OKOK
-        assert directive.blocks_output is False
+        with pytest.raises(LlmResponseMalformedError):
+            advisor.observe(
+                AdvisorTurnEvidence(
+                    phase_name="Bug Hunt — Diff",
+                    turn_kind=TurnKind.TOOL_CALL,
+                ),
+                review_session="test-session",
+            )
 
     def test_grade_prompt_carries_tool_evidence_counts(self) -> None:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "okok"}'
         advisor = PhaseAdvisorService(chat_port=chat)
-        result = PhaseResult(
-            llm_verdict="approved",
-            turn_count=6,
-            read_file_calls=3,
-            run_snippet_calls=1,
+        result = _phase_result(
+            turn_count=6, read_file_calls=3, run_snippet_calls=1,
         )
 
         advisor.assess(
@@ -293,9 +293,7 @@ class TestPhaseAdvisor:
         chat.send.return_value = '{"grade": "impressive"}'
         bus = MagicMock()
         advisor = PhaseAdvisorService(chat_port=chat, command_bus=bus)
-        result = PhaseResult(
-            llm_verdict="approved", turn_count=4, run_snippet_calls=0,
-        )
+        result = _phase_result(turn_count=4)
 
         directive = advisor.assess(
             _phase(), "find bugs", result,
@@ -310,9 +308,7 @@ class TestPhaseAdvisor:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "impressive"}'
         advisor = PhaseAdvisorService(chat_port=chat)
-        result = PhaseResult(
-            llm_verdict="approved", turn_count=6, run_snippet_calls=2,
-        )
+        result = _phase_result(turn_count=6, run_snippet_calls=2)
 
         directive = advisor.assess(
             _phase(), "find bugs", result,
@@ -325,7 +321,7 @@ class TestPhaseAdvisor:
         chat = MagicMock()
         chat.send.return_value = '{"grade": "whatever"}'
         advisor = PhaseAdvisorService(chat_port=chat)
-        result = PhaseResult(llm_verdict="approved", run_snippet_calls=0)
+        result = _phase_result()
 
         directive = advisor.assess(
             _phase(), "find bugs", result,

@@ -19,6 +19,7 @@ _MAX_FILE_BYTES = 100 * 1024
 _MAX_READ_PREVIEW_CHARS = 24 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
+_SHELL_SYNTAX_PATTERN = re.compile(r"(?:[|;&<>`]|\$\(|[\r\n])")
 _ARGUMENT_KEY_ALIASES = (
     "args",
     "arg",
@@ -303,16 +304,15 @@ class ExplorationToolService:
         reflects the PR's changes instead of the (clean) checked-out
         working tree.
         """
-        raw_args = args.strip()
-        if any(character in raw_args for character in "|;&><`$"):
+        if _SHELL_SYNTAX_PATTERN.search(args):
             return {
                 "status": "error",
                 "error": (
-                    "Shell syntax is not supported. Pass only raw git "
-                    "subcommand arguments without pipes or redirects."
+                    "Shell operators are not supported in run_git; use a "
+                    "direct read-only git command or read_file instead"
                 ),
             }
-        tokens = raw_args.split()
+        tokens = args.strip().split()
         if not tokens:
             return {"status": "error", "error": "Empty git args"}
         subcommand = tokens[0]

@@ -19,6 +19,7 @@ class _FinalVerdictContext:
     repo_path: Path
     changed_files: list[str]
     review_session: str
+    model: str
     readable_changed_files: tuple[str, ...]
     readable_coverage_files: tuple[str, ...]
     read_file_paths: set[str]

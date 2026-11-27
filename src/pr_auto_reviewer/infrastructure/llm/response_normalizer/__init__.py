@@ -9,7 +9,6 @@ from ._shared import (
     logger,
     logging,
 )
-from .response_field_normalizer import ResponseFieldNormalizer
 from .retry_prompt_builder import RetryPromptBuilder
 
-__all__ = ['Any', 'CodeReview', 'IssueCategory', 'ItemSeverity', 'ResponseFieldNormalizer', 'RetryPromptBuilder', 'annotations', 'logger', 'logging']
+__all__ = ['Any', 'CodeReview', 'IssueCategory', 'ItemSeverity', 'RetryPromptBuilder', 'annotations', 'logger', 'logging']
