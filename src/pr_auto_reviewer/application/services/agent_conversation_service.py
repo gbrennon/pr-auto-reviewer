@@ -844,6 +844,29 @@ class AgentConversationService(RunAgentConversationPort):
             logger.debug("Final verdict attempt failed: %s", error)
             return None
         if not final_content:
+            retry_messages = [
+                compact_messages[0],
+                ConversationMessage(
+                    role="user",
+                    content=(
+                        "Return only one JSON object with verdict, reason, "
+                        "summary, items, suggestions, and praise. Use "
+                        "changes_requested only for verified issues."
+                    ),
+                ),
+            ]
+            try:
+                final_content = self._chat_port.send(
+                    retry_messages,
+                    purpose=purpose,
+                    session_id=self._budget_session_id(
+                        context.review_session, context.phase_name, purpose,
+                    ),
+                )
+            except (StopIteration, LlmUnavailableError) as error:
+                logger.debug("Final verdict retry failed: %s", error)
+                return None
+        if not final_content:
             return None
         final_parsed = self._command_bus.dispatch(
             ParseReviewTurnCommand(content=final_content)
