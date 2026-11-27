@@ -80,6 +80,23 @@ class TestExecute:
 
         assert result.status == "ok"
 
+    def test_execute_tool_when_line_range_then_reads_requested_lines(
+        self, repo,
+    ) -> None:
+        tool = ToolCall(
+            tool_name="read_file",
+            arguments={
+                "args": "src/app.py",
+                "line_range": [2, 3],
+            },
+        )
+
+        result = _service(repo).execute_tool(tool)
+
+        assert result.status == "ok"
+        assert result.data is not None
+        assert result.data["content"] == "line2\nline3"
+
     def test_execute_tool_when_single_unknown_key_then_fallback(
         self, repo,
     ) -> None:

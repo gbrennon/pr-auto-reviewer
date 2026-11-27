@@ -219,6 +219,43 @@ class TestTurnParserService:
         assert result.kind is TurnKind.TOOL_CALL
         assert self._tool_call(result).tool_name == "read_file"
 
+    def test_verdict_after_tool_call_json_is_not_discarded(self) -> None:
+        content = (
+            '```json\n{"action": "read_file", "args": "src/app.py"}\n```\n'
+            '```json\n{"verdict": "approved", "reason": "clean", '
+            '"summary": "No issues", "items": [], "suggestions": [], '
+            '"praise": []}\n```'
+        )
+        parser = make_parser(extracted_json=None)
+        result = TurnParserService(parser).execute(
+            ParseReviewTurnCommand(content=content)
+        )
+
+        assert result.kind is TurnKind.VERDICT
+        assert result.metadata is not None
+        assert result.metadata["verdict"] == "approved"
+
+    def test_read_file_tool_call_preserves_line_range(self) -> None:
+        content = (
+            '```json\n{"action": "read_file", "args": "src/app.py", '
+            '"line_range": [2, 3]}\n```'
+        )
+        extracted = (
+            '{"action": "read_file", "args": "src/app.py", '
+            '"line_range": [2, 3]}'
+        )
+        parser = make_parser(extracted_json=extracted)
+        result = TurnParserService(parser).execute(
+            ParseReviewTurnCommand(content=content)
+        )
+
+        assert result.kind is TurnKind.TOOL_CALL
+        assert result.tool_call is not None
+        assert result.tool_call.arguments == {
+            "args": "src/app.py",
+            "line_range": [2, 3],
+        }
+
     def test_tool_call_with_list_args_joined(self) -> None:
         content = '```json\n{"action": "cmd", "args": ["arg1", "arg2"]}\n```'
 

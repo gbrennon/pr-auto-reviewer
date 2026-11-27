@@ -163,6 +163,17 @@ class AgentConversationService(RunAgentConversationPort):
         return PRIdentifierService.derive(repo_path)
 
     @staticmethod
+    def _budget_session_id(
+        review_session: str,
+        phase_name: str,
+        purpose: ConversationPurpose,
+    ) -> str:
+        """Scope reviewer budgets to a phase without changing transcript IDs."""
+        if purpose is not ConversationPurpose.REVIEWER_PHASE:
+            return review_session
+        return f"{review_session}:phase:{phase_name}"
+
+    @staticmethod
     def _advisor_turn_evidence(
         parsed: TurnParseResult, phase_name: str,
     ) -> AdvisorTurnEvidence:
@@ -187,12 +198,17 @@ class AgentConversationService(RunAgentConversationPort):
         """Scale exploration budgets to the readable changed-file set."""
         readable_files = self._readable_changed_files(repo_path, changed_files)
         required_reads = len(readable_files)
+        minimum_turns = max(self._guardrails.min_turns, required_reads + 6)
+        maximum_turns = max(
+            self._guardrails.max_turns, required_reads * 2 + 12,
+        )
         return replace(
             self._guardrails,
+            min_turns=minimum_turns,
+            max_turns=maximum_turns,
             max_tool_calls=max(
-                self._guardrails.max_tool_calls, required_reads + 3,
+                self._guardrails.max_tool_calls, required_reads + 8,
             ),
-            max_turns=max(self._guardrails.max_turns, required_reads + 5),
         )
 
     @classmethod
@@ -453,7 +469,9 @@ class AgentConversationService(RunAgentConversationPort):
         messages: list[ConversationMessage] = [
             ConversationMessage(role="system", content=system_prompt),
             self._initial_message.render(
-                file_listing=file_listing, repo_path=repo_path
+                file_listing=file_listing,
+                repo_path=repo_path,
+                exploration_budget=(0, self._guardrails.max_turns),
             ),
         ]
 
@@ -461,6 +479,11 @@ class AgentConversationService(RunAgentConversationPort):
             changed_files if coverage_files is None else list(coverage_files)
         )
         guardrails = self._guardrails_for_files(repo_path, coverage_targets)
+        messages[1] = self._initial_message.render(
+            file_listing=file_listing,
+            repo_path=repo_path,
+            exploration_budget=guardrails.exploration_budget_range(),
+        )
         readable_changed_files = self._readable_changed_files(
             repo_path, changed_files,
         )
@@ -483,7 +506,11 @@ class AgentConversationService(RunAgentConversationPort):
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
             content = self._chat_port.send(
-                messages, purpose=purpose, session_id=review_session
+                messages,
+                purpose=purpose,
+                session_id=self._budget_session_id(
+                    review_session, phase_name, purpose,
+                ),
             )
             guardrails = guardrails.advance_turn()
             if not content:
@@ -547,6 +574,8 @@ class AgentConversationService(RunAgentConversationPort):
                             )
                         )
 
+            if parsed.kind is not TurnKind.TOOL_CALL:
+                repeated_tool_call_streak = 0
             if parsed.kind is TurnKind.UNPARSEABLE:
                 decision, guardrails = guardrails.record_unparseable_response()
                 if decision is ConversationDecision.EXCEEDED_UNPARSEABLE:
@@ -638,7 +667,18 @@ class AgentConversationService(RunAgentConversationPort):
                     content=result_json,
                     tool_result=result,
                 ))
-                if guardrails.should_force_verdict() and not verdict_nudged:
+                if (
+                    guardrails.should_force_verdict()
+                    and not verdict_nudged
+                    and (
+                        guardrails.turn >= guardrails.min_turns
+                        or self._coverage_complete(
+                            guardrails,
+                            readable_coverage_files,
+                            read_file_paths,
+                        )
+                    )
+                ):
                     verdict_nudged = True
                     logger.debug(
                         "Tool budget reached (%d); nudging verdict",
@@ -665,7 +705,9 @@ class AgentConversationService(RunAgentConversationPort):
                             sp_content = self._chat_port.send(
                                 messages,
                                 purpose=purpose,
-                                session_id=review_session,
+                                session_id=self._budget_session_id(
+                                    review_session, phase_name, purpose,
+                                ),
                             )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
@@ -794,44 +836,79 @@ class AgentConversationService(RunAgentConversationPort):
     ) -> PhaseResult | None:
         """Request one tool-free verdict as a last resort after exhaustion.
 
-        The turn budget is spent and no verdict was accepted in-loop. When the
-        agent explored the repository at all, ask once for a verdict-only
-        response rather than discarding the whole review. Full changed-file
-        coverage is not required here because reviews must still land; the
-        anti-hallucination invariant is preserved downstream by
-        ``ReviewItemFactory``, which drops findings that reference files the
-        agent never read or that do not exist on disk.
+        The turn budget is spent and no verdict was accepted in-loop. Ask
+        once for a verdict-only response after the phase exhausts its turn
+        budget. Incomplete coverage may produce findings, but cannot produce
+        an approval.
         """
         if guardrails.tool_calls <= 0:
             return None
-        messages.append(
+        compact_messages = [
+            *messages[:2],
             ConversationMessage(
                 role="user",
                 content=(
-                    "The review turn budget is exhausted. Based only on the "
-                    "files you have already inspected, do not call any "
-                    "tools. Respond now with only the final review verdict "
-                    "in the required JSON format. The verdict must be "
-                    "decisive: use \"approved\" when you found no blocking "
-                    "issues, or \"changes_requested\" when you did. Do not "
-                    "answer \"commented\" \u2014 a commented verdict is "
-                    "treated as inconclusive and will be rejected."
+                    "The review turn budget is exhausted. You inspected these "
+                    f"files: {', '.join(sorted(context.read_file_paths))}. "
+                    "Do not call tools. Respond with only final review JSON. "
+                    "Use changes_requested only for grounded items from "
+                    "inspected files. Use approved only when coverage is "
+                    "complete and no issues remain. Do not use commented."
                 ),
-            )
-        )
+            ),
+        ]
+        messages.append(compact_messages[-1])
         try:
             final_content = self._chat_port.send(
-                messages, purpose=purpose, session_id=context.review_session
+                compact_messages,
+                purpose=purpose,
+                session_id=self._budget_session_id(
+                    context.review_session, context.phase_name, purpose,
+                ),
             )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
             return None
+        if not final_content:
+            retry_messages = [
+                compact_messages[0],
+                ConversationMessage(
+                    role="user",
+                    content=(
+                        "Return only one JSON object with verdict, reason, "
+                        "summary, items, suggestions, and praise. Use "
+                        "changes_requested only for verified issues."
+                    ),
+                ),
+            ]
+            try:
+                final_content = self._chat_port.send(
+                    retry_messages,
+                    purpose=purpose,
+                    session_id=self._budget_session_id(
+                        context.review_session, context.phase_name, purpose,
+                    ),
+                )
+            except (StopIteration, LlmUnavailableError) as error:
+                logger.debug("Final verdict retry failed: %s", error)
+                return None
         if not final_content:
             return None
         final_parsed = self._command_bus.dispatch(
             ParseReviewTurnCommand(content=final_content)
         )
         if final_parsed.kind is not TurnKind.VERDICT:
+            return None
+        verdict = (final_parsed.metadata or {}).get("verdict")
+        coverage_complete = self._coverage_complete(
+            guardrails,
+            context.readable_coverage_files,
+            context.read_file_paths,
+        )
+        if verdict == "approved" and not coverage_complete:
+            logger.warning(
+                "Refusing approval after exhaustion with incomplete coverage"
+            )
             return None
         messages.append(
             ConversationMessage(role="assistant", content=final_content)

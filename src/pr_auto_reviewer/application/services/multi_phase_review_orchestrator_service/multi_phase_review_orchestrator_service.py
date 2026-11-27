@@ -169,7 +169,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                 "review result."
             ) from last_failure
 
-        if not result.items:
+        if not result.items and dropped_findings > 0:
             result = self._run_feedback_loop(
                 plan, repo_path, changed_files, model, result,
                 base_sha=base_sha,
@@ -629,6 +629,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     verdict=verdict,
                     reason=reason,
                     summary=summary,
+                    items=[],
                     suggestions=suggestions,
                     praise=praise_list,
                     model_used=model,

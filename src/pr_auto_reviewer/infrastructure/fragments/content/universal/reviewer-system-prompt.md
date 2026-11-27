@@ -37,10 +37,23 @@ To read a file:
 {"action": "read_file", "args": "<relative/path>"}
 {"action": "read_file", "args": "<relative/path> L10-L50"}
 ```
+Line ranges may be embedded in the `args` string as `L10-L50`, or supplied
+as a JSON `line_range` array when reading a file:
+```json
+{"action": "read_file", "args": "<relative/path>", "line_range": [10, 50]}
+```
+Use a range when the tool reports truncated content.
+```
 
 To search for a pattern (function name, class, import):
 ```json
 {"action": "search_codebase", "args": "<pattern>"}
+```
+
+To run a read-only Git command, pass only the Git subcommand and arguments.
+Do not use shell pipes, redirects, `grep`, `sed`, or other shell syntax:
+```json
+{"action": "run_git", "args": "diff -- path/to/file"}
 ```
 
 To list a directory:

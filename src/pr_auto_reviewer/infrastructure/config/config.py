@@ -203,8 +203,8 @@ class ConfigLoader:
                 "Production config not found at %s; using defaults.",
                 config_path,
             )
-        values.update(self._load_encrypted_secret_values(configured_values))
         values.update(configured_values)
+        values.update(self._load_encrypted_secret_values(configured_values))
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))
@@ -263,8 +263,8 @@ class ConfigLoader:
             logger.info("Loading dev .env from %s", repo_env_path)
             configured_values.update(self._load_values(repo_env_path))
 
-        values.update(self._load_encrypted_secret_values(configured_values))
         values.update(configured_values)
+        values.update(self._load_encrypted_secret_values(configured_values))
         self._merge_command_line_env(values)
         self._apply_runtime_environment(values)
         llm_max_retries = int(values.pop("LLM_MAX_RETRIES", 5))

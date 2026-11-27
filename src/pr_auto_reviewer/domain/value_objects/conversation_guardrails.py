@@ -16,6 +16,7 @@ class ConversationGuardrails:
     new instance rather than mutating the current one.
     """
 
+    min_turns: int = 0
     max_turns: int = 10
     max_empty_responses: int = 3
     max_unparseable_responses: int = 3
@@ -28,6 +29,10 @@ class ConversationGuardrails:
     consecutive_empty: int = 0
     consecutive_unparseable: int = 0
     tool_calls: int = 0
+
+    def exploration_budget_range(self) -> tuple[int, int]:
+        """Return the minimum and maximum turn budget for exploration."""
+        return self.min_turns, self.max_turns
 
     def has_turns_remaining(self) -> bool:
         """Return whether the conversation may issue another turn."""
@@ -74,12 +79,11 @@ class ConversationGuardrails:
         return replace(self, tool_calls=self.tool_calls + 1)
 
     def should_force_verdict(self) -> bool:
-        """Return whether the model reached the soft tool-call budget.
-
-        The conversation loop uses this result to nudge the model toward a
-        verdict. File-level coverage is enforced separately by ``judge_verdict``.
-        """
-        return self.tool_calls >= self.max_tool_calls
+        """Return whether the model reached the lower exploration bound."""
+        return (
+            self.turn >= self.min_turns
+            or self.tool_calls >= self.max_tool_calls
+        )
 
     def judge_verdict(
         self, exploration_complete: bool | None = None,
