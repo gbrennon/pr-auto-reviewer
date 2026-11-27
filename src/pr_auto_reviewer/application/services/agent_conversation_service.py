@@ -682,7 +682,9 @@ class AgentConversationService(RunAgentConversationPort):
                             sp_content = self._chat_port.send(
                                 messages,
                                 purpose=purpose,
-                                session_id=review_session,
+                                session_id=self._budget_session_id(
+                                    review_session, phase_name, purpose,
+                                ),
                             )
                         except (StopIteration, LlmUnavailableError) as error:
                             logger.debug(
@@ -834,7 +836,11 @@ class AgentConversationService(RunAgentConversationPort):
         )
         try:
             final_content = self._chat_port.send(
-                messages, purpose=purpose, session_id=context.review_session
+                messages,
+                purpose=purpose,
+                session_id=self._budget_session_id(
+                    context.review_session, context.phase_name, purpose,
+                ),
             )
         except (StopIteration, LlmUnavailableError) as error:
             logger.debug("Final verdict attempt failed: %s", error)
