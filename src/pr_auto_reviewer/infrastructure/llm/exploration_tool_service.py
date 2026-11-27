@@ -136,25 +136,28 @@ class ExplorationToolService:
 
     @staticmethod
     def _extract_arguments(arguments: dict[str, Any]) -> str:
-        """Return the argument payload from common LLM arg-key shapes.
-
-        Models emit the payload under ``args`` but also drift to alias
-        keys (``file_path``, ``path``, ...) observed in live runs, where
-        a strict read produced empty-argument tool errors.  The first
-        non-empty alias wins; a single non-empty string under any other
-        key is accepted as an unambiguous fallback.
-        """
-        for key in _ARGUMENT_KEY_ALIASES:
-            value = arguments.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-        strings = [
-            v for v in arguments.values()
-            if isinstance(v, str) and v.strip()
-        ]
-        if len(strings) == 1:
-            return strings[0]
-        return ""
+        """Return the normalized argument payload from common LLM shapes."""
+        path = next(
+            (
+                value.strip()
+                for key in _ARGUMENT_KEY_ALIASES
+                if isinstance(value := arguments.get(key), str)
+                and value.strip()
+            ),
+            "",
+        )
+        if not path:
+            strings = [
+                value for value in arguments.values()
+                if isinstance(value, str) and value.strip()
+            ]
+            path = strings[0] if len(strings) == 1 else ""
+        line_range = arguments.get("line_range")
+        if path and isinstance(line_range, (list, tuple)) and len(line_range) == 2:
+            start, end = line_range
+            if isinstance(start, int) and isinstance(end, int):
+                return f"{path} L{start}-L{end}"
+        return path
 
     @staticmethod
     def _read_content(
