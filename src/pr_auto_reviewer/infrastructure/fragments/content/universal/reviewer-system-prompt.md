@@ -37,10 +37,19 @@ To read a file:
 {"action": "read_file", "args": "<relative/path>"}
 {"action": "read_file", "args": "<relative/path> L10-L50"}
 ```
+Line ranges must be embedded in the `args` string as `L10-L50`; do not add
+JSON fields such as `line_range`.
+```
 
 To search for a pattern (function name, class, import):
 ```json
 {"action": "search_codebase", "args": "<pattern>"}
+```
+
+To run a read-only Git command, pass only the Git subcommand and arguments.
+Do not use shell pipes, redirects, `grep`, `sed`, or other shell syntax:
+```json
+{"action": "run_git", "args": "diff -- path/to/file"}
 ```
 
 To list a directory:

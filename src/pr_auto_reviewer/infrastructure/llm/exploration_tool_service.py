@@ -300,7 +300,16 @@ class ExplorationToolService:
         reflects the PR's changes instead of the (clean) checked-out
         working tree.
         """
-        tokens = args.strip().split()
+        raw_args = args.strip()
+        if any(character in raw_args for character in "|;&><`$"):
+            return {
+                "status": "error",
+                "error": (
+                    "Shell syntax is not supported. Pass only raw git "
+                    "subcommand arguments without pipes or redirects."
+                ),
+            }
+        tokens = raw_args.split()
         if not tokens:
             return {"status": "error", "error": "Empty git args"}
         subcommand = tokens[0]
