@@ -16,6 +16,7 @@ class ConversationGuardrails:
     new instance rather than mutating the current one.
     """
 
+    min_turns: int = 0
     max_turns: int = 10
     max_empty_responses: int = 3
     max_unparseable_responses: int = 3
@@ -28,6 +29,10 @@ class ConversationGuardrails:
     consecutive_empty: int = 0
     consecutive_unparseable: int = 0
     tool_calls: int = 0
+
+    def exploration_budget_range(self) -> tuple[int, int]:
+        """Return the minimum and maximum turn budget for exploration."""
+        return self.min_turns, self.max_turns
 
     def has_turns_remaining(self) -> bool:
         """Return whether the conversation may issue another turn."""

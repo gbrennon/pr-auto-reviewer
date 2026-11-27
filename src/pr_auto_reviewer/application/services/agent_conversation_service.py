@@ -194,12 +194,17 @@ class AgentConversationService(RunAgentConversationPort):
         """Scale exploration budgets to the readable changed-file set."""
         readable_files = self._readable_changed_files(repo_path, changed_files)
         required_reads = len(readable_files)
+        minimum_turns = max(self._guardrails.min_turns, required_reads + 6)
+        maximum_turns = max(
+            self._guardrails.max_turns, required_reads * 2 + 12,
+        )
         return replace(
             self._guardrails,
+            min_turns=minimum_turns,
+            max_turns=maximum_turns,
             max_tool_calls=max(
                 self._guardrails.max_tool_calls, required_reads + 8,
             ),
-            max_turns=max(self._guardrails.max_turns, required_reads + 10),
         )
 
     @classmethod
@@ -459,7 +464,9 @@ class AgentConversationService(RunAgentConversationPort):
         messages: list[ConversationMessage] = [
             ConversationMessage(role="system", content=system_prompt),
             self._initial_message.render(
-                file_listing=file_listing, repo_path=repo_path
+                file_listing=file_listing,
+                repo_path=repo_path,
+                exploration_budget=(0, self._guardrails.max_turns),
             ),
         ]
 
@@ -467,6 +474,11 @@ class AgentConversationService(RunAgentConversationPort):
             changed_files if coverage_files is None else list(coverage_files)
         )
         guardrails = self._guardrails_for_files(repo_path, coverage_targets)
+        messages[1] = self._initial_message.render(
+            file_listing=file_listing,
+            repo_path=repo_path,
+            exploration_budget=guardrails.exploration_budget_range(),
+        )
         readable_changed_files = self._readable_changed_files(
             repo_path, changed_files,
         )

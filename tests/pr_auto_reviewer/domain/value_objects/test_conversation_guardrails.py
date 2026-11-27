@@ -15,6 +15,7 @@ class TestConversationGuardrails:
 
     def test_default_limit_preferences(self) -> None:
         guardrails = ConversationGuardrails()
+        assert guardrails.min_turns == 0
         assert guardrails.max_turns == 10
         assert guardrails.max_empty_responses == 3
         assert guardrails.max_unparseable_responses == 3
@@ -24,6 +25,11 @@ class TestConversationGuardrails:
         assert guardrails.turn == 0
         assert guardrails.consecutive_empty == 0
         assert guardrails.consecutive_unparseable == 0
+
+    def test_exploration_budget_range_returns_bounds(self) -> None:
+        guardrails = ConversationGuardrails(min_turns=12, max_turns=24)
+
+        assert guardrails.exploration_budget_range() == (12, 24)
 
     def test_has_turns_remaining_is_true_before_budget_exhausted(self) -> None:
         assert ConversationGuardrails(turn=0).has_turns_remaining() is True
