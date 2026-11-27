@@ -16,7 +16,7 @@ from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
-_MAX_READ_PREVIEW_CHARS = 12 * 1024
+_MAX_READ_PREVIEW_CHARS = 24 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
 _ARGUMENT_KEY_ALIASES = (

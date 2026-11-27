@@ -49,6 +49,16 @@ class TestReadFile:
         assert result["status"] == "error"
         assert "out of range" in result["error"]
 
+    def test_read_when_medium_file_then_returns_complete_content(self, repo) -> None:
+        content = "x" * 20_000
+        (repo / "medium.py").write_text(content)
+
+        result = _service(repo).read_file("medium.py")
+
+        assert result["status"] == "ok"
+        assert result["truncated"] is False
+        assert result["content"] == content
+
     def test_read_when_full_file_is_large_then_returns_bounded_preview(self, repo) -> None:
         content = "\n".join(f"line{i}" for i in range(1, 5000))
         (repo / "large.py").write_text(content)
