@@ -655,6 +655,7 @@ class MultiPhaseReviewOrchestratorService(RunMultiPhaseReviewPort):
                     verdict=verdict,
                     reason=reason,
                     summary=summary,
+                    items=[],
                     suggestions=suggestions,
                     praise=praise_list,
                     model_used=model,

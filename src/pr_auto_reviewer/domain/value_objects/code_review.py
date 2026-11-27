@@ -24,7 +24,7 @@ class CodeReview:
     verdict: ReviewVerdict
     reason: str
     summary: str
-    items: list[ReviewItem] = field(default_factory=list)
+    items: list[ReviewItem]
     suggestions: list[ReviewItem] = field(default_factory=list)
     praise: list[ReviewItem] = field(default_factory=list)
     model_used: str = ""
