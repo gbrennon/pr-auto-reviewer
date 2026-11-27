@@ -46,7 +46,7 @@ class TestFeedbackRefusalGuard:
         assert len(result.items) == 1
         assert result.verdict == ReviewVerdict.CHANGES_REQUESTED.value
 
-    def test_genuinely_empty_result_also_enters_feedback_loop(
+    def test_genuinely_empty_result_completes_without_feedback_rerun(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
         plan = ReviewPlan(
@@ -58,13 +58,11 @@ class TestFeedbackRefusalGuard:
             reason="No issues found",
         )
         orchestrator._run_phases = lambda *args, **kwargs: genuinely_empty
-        recovered = _code_review(
-            verdict=ReviewVerdict.CHANGES_REQUESTED,
-            items=[_make_review_item("src/main.py", "found later")],
-        )
-        orchestrator._run_feedback_loop = (
-            lambda *args, **kwargs: recovered
-        )
+
+        def _feedback_must_not_run(*args, **kwargs):
+            raise AssertionError("clean approval must not rerun")
+
+        orchestrator._run_feedback_loop = _feedback_must_not_run
 
         result = orchestrator._run_phases_full_retry(
             plan=plan,
@@ -74,7 +72,9 @@ class TestFeedbackRefusalGuard:
             review_session="test-session",
         )
 
-        assert len(result.items) == 1
+        assert len(result.items) == 0
+        assert result.verdict == ReviewVerdict.APPROVED.value
+        assert result.reason == "No issues found"
 
     def test_feedback_context_contains_no_escalation_pressure(self) -> None:
         bus = InMemoryCommandBus()
