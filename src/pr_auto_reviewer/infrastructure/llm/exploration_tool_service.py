@@ -228,7 +228,7 @@ class ExplorationToolService:
             return {"status": "error", "error": "Empty search pattern"}
         try:
             result = subprocess.run(
-                ["grep", "-rn", "-e", pattern, "."],
+                ["grep", "-Ern", "-e", pattern, "."],
                 capture_output=True,
                 text=True,
                 cwd=str(self._repo_root),
