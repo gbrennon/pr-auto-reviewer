@@ -397,10 +397,9 @@ class TestMultiPhaseReviewOrchestrator:
         assert len(result.items) == 1
         assert result.items[0].description == "kept item"
 
-    def test__rebuild_after_verification_derives_verdict_from_survivors(
+    def test_rebuild_after_verification_preserves_dropped_finding_disposition(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        """Verdict comes from surviving items only, never from the previous review."""
         orchestrator = MultiPhaseReviewOrchestratorService(
             command_bus=mock_command_bus,
             tool_factory=mock_tool_factory,
@@ -417,8 +416,9 @@ class TestMultiPhaseReviewOrchestrator:
             previous=previous,
         )
 
-        assert result.verdict == ReviewVerdict.APPROVED.value
+        assert result.verdict is ReviewVerdict.CHANGES_REQUESTED
         assert result.items == []
+        assert "did not survive verification" in result.reason
 
     def test__is_max_turns_exceeded(self, mock_command_bus, mock_tool_factory) -> None:
         """Only MaxTurnsExceededError counts as turn exhaustion."""
@@ -470,9 +470,12 @@ class TestMultiPhaseReviewOrchestrator:
         assert len(result.items) == 1
 
     def test_execute_respects_conversation_budget(
-        self, mock_command_bus, mock_tool_factory,
+        self, mock_command_bus, mock_tool_factory, tmp_path,
     ) -> None:
         """A conversation budget caps the total peer conversations per review."""
+        source_file = tmp_path / "src" / "main.py"
+        source_file.parent.mkdir()
+        source_file.write_text("print('ok')\n")
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -494,7 +497,15 @@ class TestMultiPhaseReviewOrchestrator:
         )
         engineer_result = _phase_result(
             verdict="approved",
-            items=[_make_review_item("src/main.py", "budget item")],
+            items=[ReviewItem(
+                file_path="src/main.py",
+                line="1",
+                severity="minor",
+                category="style",
+                description="budget item",
+                current_code="print('ok')",
+                suggested_fix="print('fixed')",
+            )],
         )
         # The first conversation consumes the budget; the second phase must
         # never start one. Event publishes are satisfied ad hoc so they don't
@@ -502,6 +513,8 @@ class TestMultiPhaseReviewOrchestrator:
         def dispatch(command):
             if isinstance(command, RunAgentConversationCommand):
                 return engineer_result
+            if isinstance(command, VerifyFindingsCommand):
+                return command.items
             if isinstance(command, AggregateReviewFindingsCommand):
                 return _code_review(items=list(command.items))
             return MagicMock()
@@ -511,7 +524,7 @@ class TestMultiPhaseReviewOrchestrator:
         result = orchestrator.execute(
             RunMultiPhaseReviewCommand(
                 plan=plan,
-                repo_path=Path("/tmp"),
+                repo_path=tmp_path,
                 changed_files=["src/main.py"],
                 model="test",
                 review_session="test-session",
@@ -576,14 +589,9 @@ class TestMultiPhaseReviewOrchestrator:
         assert len(result.praise) == 1
         assert result.praise[0].description == "clean architecture"
 
-    def test_zero_items_never_publishes_changes_requested(
+    def test_explicit_changes_requested_without_items_is_preserved(
         self, mock_command_bus, mock_tool_factory,
     ) -> None:
-        """A CHANGES_REQUESTED LLM verdict with no items reads as a clean approval.
-
-        Nothing was flagged, so a blocking CHANGES_REQUESTED is incoherent;
-        the empty review resolves to APPROVED instead.
-        """
         plan = ReviewPlan(
             phases=(
                 ReviewPhase(
@@ -612,7 +620,7 @@ class TestMultiPhaseReviewOrchestrator:
             plan, Path("/tmp"), ["src/main.py"], "test",
         ).review
 
-        assert result.verdict == ReviewVerdict.APPROVED
+        assert result.verdict == ReviewVerdict.CHANGES_REQUESTED
         assert result.items == []
         assert result.reason == "the code is wrong"
 

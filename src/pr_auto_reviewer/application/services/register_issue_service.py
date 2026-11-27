@@ -72,6 +72,7 @@ class RegisterIssueService(RegisterIssuePort):
             repository=pr.id.repository,
             title=content.title,
             body=content.body,
+            source_pr_id=pr.id,
             source_item_id=item.id,
         )
 

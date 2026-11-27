@@ -34,6 +34,9 @@ from pr_auto_reviewer.domain.exceptions.llm_unavailable_error import (
 from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
     MaxTurnsExceededError,
 )
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
     ReviewBudgetExhaustedError,
 )
@@ -73,6 +76,7 @@ from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
     ConversationPurpose,
 )
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
+from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.domain.value_objects.sub_agent_grade import SubAgentGrade
 from pr_auto_reviewer.domain.value_objects.turn_kind import TurnKind
 from pr_auto_reviewer.domain.value_objects.turn_parse_result import TurnParseResult
@@ -142,7 +146,6 @@ class AgentConversationService(RunAgentConversationPort):
     def execute(
         self, command: RunAgentConversationCommand
     ) -> PhaseResult:
-        """Run a single-phase multi-turn conversation."""
         return self._run(
             system_prompt=command.system_prompt,
             repo_path=command.repo_path,
@@ -153,6 +156,7 @@ class AgentConversationService(RunAgentConversationPort):
             review_session=command.review_session,
             existing_item_ids=command.existing_item_ids,
             purpose=command.purpose,
+            model=command.model.strip(),
         )
 
     def _derive_pr_identifier(self, repo_path: Path | None) -> str:
@@ -432,6 +436,7 @@ class AgentConversationService(RunAgentConversationPort):
         coverage_files: tuple[str, ...] | None,
         tool_execution: Any,
         review_session: str,
+        model: str,
         phase_name: str = "",
         existing_item_ids: frozenset[str] = frozenset(),
         purpose: ConversationPurpose = ConversationPurpose.REVIEWER_PHASE,
@@ -524,6 +529,7 @@ class AgentConversationService(RunAgentConversationPort):
                     if consecutive_blocks >= self._max_advisor_blocks:
                         self._log_conversation(
                             phase_name, messages, guardrails.turn, None,
+                            model=model,
                             repo_path=repo_path, review_session=review_session,
                         )
                         raise AdvisorBlockedError(
@@ -699,6 +705,7 @@ class AgentConversationService(RunAgentConversationPort):
                     )
                     self._log_conversation(
                         phase_name, messages, guardrails.turn, phase_result,
+                        model=model,
                         repo_path=repo_path, review_session=review_session,
                     )
                     self._publish(ConversationCompletedEvent(
@@ -742,6 +749,7 @@ class AgentConversationService(RunAgentConversationPort):
                 repo_path=repo_path,
                 changed_files=changed_files,
                 review_session=review_session,
+                model=model,
                 readable_changed_files=readable_changed_files,
                 readable_coverage_files=readable_coverage_files,
                 read_file_paths=read_file_paths,
@@ -758,6 +766,7 @@ class AgentConversationService(RunAgentConversationPort):
 
         self._log_conversation(
             phase_name, messages, guardrails.turn, None,
+            model=model,
             repo_path=repo_path, review_session=review_session,
         )
         fd, dump_path = tempfile.mkstemp(
@@ -827,9 +836,13 @@ class AgentConversationService(RunAgentConversationPort):
         messages.append(
             ConversationMessage(role="assistant", content=final_content)
         )
-        return self._finish_final_verdict(
-            final_parsed, messages, guardrails, context,
-        )
+        try:
+            return self._finish_final_verdict(
+                final_parsed, messages, guardrails, context,
+            )
+        except ReviewVerdictError as error:
+            logger.debug("Final verdict validation failed: %s", error)
+            return None
 
     def _finish_final_verdict(
         self,
@@ -857,6 +870,7 @@ class AgentConversationService(RunAgentConversationPort):
         )
         self._log_conversation(
             context.phase_name, messages, guardrails.turn, phase_result,
+            model=context.model,
             repo_path=context.repo_path, review_session=context.review_session,
         )
         self._publish(ConversationCompletedEvent(phase_result=phase_result))
@@ -902,40 +916,71 @@ class AgentConversationService(RunAgentConversationPort):
         accumulated_suggestions: list[dict[str, Any]] | None = None,
     ) -> PhaseResult:
         """Build a ``PhaseResult`` from parsed turn data, validating against disk."""
-        raw_items = parsed.raw_items or []
-        metadata = parsed.metadata or {}
+        raw_items = parsed.raw_items
+        metadata = parsed.metadata
+        if not isinstance(raw_items, list) or not isinstance(metadata, dict):
+            raise ReviewVerdictError("Phase verdict metadata is incomplete.")
+        verdict = ReviewVerdict.coerce(metadata.get("verdict"))
+        if verdict is None or verdict not in (
+            ReviewVerdict.APPROVED,
+            ReviewVerdict.CHANGES_REQUESTED,
+        ):
+            raise ReviewVerdictError("Phase verdict is missing or unsupported.")
+        reason = metadata.get("reason")
+        summary = metadata.get("summary")
+        if (
+            not isinstance(reason, str)
+            or not reason.strip()
+            or not isinstance(summary, str)
+            or not summary.strip()
+        ):
+            raise ReviewVerdictError(
+                "Phase verdict reason and summary are required."
+            )
+        if "suggestions" in metadata:
+            raw_suggestions = self._merge_metadata_items(
+                accumulated_suggestions or [],
+                metadata["suggestions"],
+            )
+        elif accumulated_suggestions is not None:
+            raw_suggestions = accumulated_suggestions
+        else:
+            raise ReviewVerdictError("Phase suggestions are required.")
+        if "praise" in metadata:
+            raw_praise = self._merge_metadata_items(
+                accumulated_praise or [],
+                metadata["praise"],
+            )
+        elif accumulated_praise is not None:
+            raw_praise = accumulated_praise
+        else:
+            raise ReviewVerdictError("Phase praise is required.")
+        if (
+            not isinstance(raw_suggestions, list)
+            or not isinstance(raw_praise, list)
+        ):
+            raise ReviewVerdictError("Phase collections must be lists.")
 
         review_items, skip_reasons = ReviewItemFactory().create(
             raw_items, repo_path, changed_files, existing_ids=existing_ids
         )
-        raw_suggestions = (
-            metadata.get("suggestions")
-            or accumulated_suggestions
-            or []
-        )
         suggestions = list(raw_suggestions)
-        for s in suggestions:
-            if not str(s.get("file", "")).strip():
-                s["file"] = self._find_mentioned_file(
-                    str(s.get("description", "")), changed_files
+        for suggestion in suggestions:
+            if not str(suggestion.get("file", "")).strip():
+                suggestion["file"] = self._find_mentioned_file(
+                    str(suggestion.get("description", "")), changed_files
                 )
         suggestions = self._ground_cited_paths(
             suggestions, "suggestion", repo_path, changed_files,
         )
-        raw_praise = (
-            metadata.get("praise")
-            or accumulated_praise
-            or []
-        )
         praise = self._ground_cited_paths(
-            list(raw_praise), "praise",
-            repo_path, changed_files,
+            list(raw_praise), "praise", repo_path, changed_files,
         )
         return PhaseResult(
             items=review_items,
-            llm_verdict=metadata.get("verdict") or None,
-            llm_reason=metadata.get("reason", ""),
-            llm_summary=metadata.get("summary", ""),
+            llm_verdict=verdict.value,
+            llm_reason=reason,
+            llm_summary=summary,
             llm_suggestions=suggestions,
             llm_praise=praise,
             turn_count=turn_count,
@@ -955,6 +1000,7 @@ class AgentConversationService(RunAgentConversationPort):
         messages: list[ConversationMessage],
         turns: int,
         phase_result: PhaseResult | None,
+        model: str = "",
         repo_path: Path | None = None,
         review_session: str = "",
     ) -> None:
@@ -971,7 +1017,7 @@ class AgentConversationService(RunAgentConversationPort):
         )
 
         metadata: dict[str, Any] = {
-            "model": "code-review:latest",
+            "model": model,
             "turns": turns,
             "verdict": (
                 phase_result.llm_verdict if phase_result else "exhausted"

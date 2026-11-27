@@ -5,26 +5,29 @@ from pr_auto_reviewer.domain.value_objects.code_review import CodeReview
 from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.review_verdict import ReviewVerdict
 from pr_auto_reviewer.infrastructure.llm.response_normalizer import RetryPromptBuilder
-from tests.fixtures.response_normalizer_fixtures import ResponseNormalizerFixtures as F
+
+RETRY_FAILURES_SINGLE = ["missing_severity"]
+RETRY_FAILURES_MULTIPLE = ["missing_severity", "invalid_category"]
+RETRY_FAILURES_UNKNOWN = ["unknown_key"]
 
 
 class TestRetryPromptBuilder:
     def test_build_correction_prompt_single_failure(self):
         builder = RetryPromptBuilder()
         result = builder.build_correction_prompt(
-            "original prompt", F.retry_failures_single
+            "original prompt", RETRY_FAILURES_SINGLE
         )
         assert "original prompt" in result
         assert len(result) > len("original prompt")
 
     def test_build_correction_prompt_multiple_failures(self):
         builder = RetryPromptBuilder()
-        result = builder.build_correction_prompt("prompt", F.retry_failures_multiple)
+        result = builder.build_correction_prompt("prompt", RETRY_FAILURES_MULTIPLE)
         assert "prompt" in result
 
     def test_build_correction_prompt_unknown_failure(self):
         builder = RetryPromptBuilder()
-        result = builder.build_correction_prompt("prompt", F.retry_failures_unknown)
+        result = builder.build_correction_prompt("prompt", RETRY_FAILURES_UNKNOWN)
         assert isinstance(result, str)
 
     def test_diagnose_failures_reports_incomplete_items(self):

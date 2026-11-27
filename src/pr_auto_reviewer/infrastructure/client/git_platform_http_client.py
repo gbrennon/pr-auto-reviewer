@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 
@@ -183,8 +184,8 @@ class GitPlatformHttpClient:
     def verify_token_for_pr(self, pr_id: PullRequestId) -> None:
         """Run preflight verification for the per-org token this client
         would use for *pr_id*.  No-op when no ``preflight_verifier`` is set,
-        no per-org token is resolved, or the (org, role) pair has already
-        been verified this session.
+        no per-org token is resolved, or the token identity is already
+        verified in the persisted cache.
 
         Raises ``PreflightVerificationError`` on the first failure.
         """
@@ -197,15 +198,15 @@ class GitPlatformHttpClient:
         if ":" in org:
             org = org.split(":", 1)[1]
         role = "manager" if self._role == "manager" else "reviewer"
-        cache_key = (org, role)
-        if cache_key in self._load_verified_cache():
-            return
         token, source_key = self._token_resolver.resolve_source(
             self._role, pr_id.repository
         )
         if not token:
             return
-        self._save_verified_cache(cache_key)
+        fingerprint = hashlib.sha256(token.encode()).hexdigest()
+        cache_key = (org, role, source_key, fingerprint)
+        if cache_key in self._load_verified_cache():
+            return
         capability_key = (
             f"capability:{self._platform_mode}:"
             f"{self._role or 'default'}:{source_key}"
@@ -226,6 +227,7 @@ class GitPlatformHttpClient:
             self._remote_host_backoff.record_failure(capability_key)
             raise
         self._remote_host_backoff.record_success(capability_key)
+        self._save_verified_cache(cache_key)
 
     def _capture_rate_limit(
         self,
@@ -279,17 +281,44 @@ class GitPlatformHttpClient:
         capability_key = "capability:" + ":".join(capability.global_key)
         return self._remote_host, capability_key, f"operation:{url}"
 
-    def _load_verified_cache(self) -> set[tuple[str, str]]:
-        """Load verified (org, role) pairs from the persisted cache file.
+    @staticmethod
+    def _cache_key_from_entry(
+        entry: dict[str, Any],
+    ) -> tuple[str, str, str, str] | None:
+        org = entry.get("org")
+        role = entry.get("role")
+        source = entry.get("source")
+        fingerprint = entry.get("fingerprint")
+        if not all(
+            isinstance(value, str)
+            for value in (org, role, source, fingerprint)
+        ):
+            return None
+        return cast(
+            tuple[str, str, str, str],
+            (org, role, source, fingerprint),
+        )
 
-        Returns an empty set when the file is missing or malformed -- the
-        cache is best-effort and must never prevent the client from working.
+    def _load_verified_cache(self) -> set[tuple[str, str, str, str]]:
+        """Load verified token identities from the persisted cache file.
+
+        Returns an empty set when the file is missing, malformed, or contains
+        legacy pair-only entries.
         """
         if not self._verified_cache_path.exists():
             return set()
         try:
             data = json.loads(self._verified_cache_path.read_text())
-            return {tuple(pair) for pair in data}
+            if not isinstance(data, list):
+                return set()
+            return {
+                cache_key
+                for entry in data
+                if isinstance(entry, dict)
+                and (
+                    cache_key := self._cache_key_from_entry(entry)
+                ) is not None
+            }
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to load verified token cache: %s", exc)
             return set()
@@ -368,22 +397,24 @@ class GitPlatformHttpClient:
         role = self._role.upper() if self._role else "DEFAULT"
         return self._token, f"{self._platform_mode.upper()}_{role}_TOKEN"
 
-    def _save_verified_cache(self, cache_key: tuple[str, str]) -> None:
-        """Persist the current ``_verified_orgs`` set to disk, merged with
-        existing file contents so that writes from different client instances
-        (manager/reviewer) accumulate rather than overwrite each other.
-
-        Best-effort -- write failures are logged but never raised so that
-        a transient disk issue does not block the review pipeline.
-        """
-
+    def _save_verified_cache(
+        self, cache_key: tuple[str, str, str, str],
+    ) -> None:
+        """Persist verified token identities to disk."""
         try:
             existing = self._load_verified_cache()
             merged = existing | {cache_key}
+            records = [
+                {
+                    "fingerprint": fingerprint,
+                    "org": org,
+                    "role": role,
+                    "source": source,
+                }
+                for org, role, source, fingerprint in sorted(merged)
+            ]
             self._verified_cache_path.parent.mkdir(parents=True, exist_ok=True)
-            self._verified_cache_path.write_text(
-                json.dumps(sorted(merged))
-            )
+            self._verified_cache_path.write_text(json.dumps(records))
         except OSError as exc:
             logger.warning("Failed to save verified token cache: %s", exc)
 

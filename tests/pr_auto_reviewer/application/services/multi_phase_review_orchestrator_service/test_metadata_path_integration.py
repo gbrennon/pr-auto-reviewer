@@ -39,6 +39,8 @@ class TestMetadataPathIntegration:
         phase_result = PhaseResult(
             items=[],
             llm_verdict="approved",
+            llm_reason="Explicit review reason",
+            llm_summary="Explicit review summary",
             llm_suggestions=[
                 {"file": str(absolute_path), "description": "suggestion"},
             ],

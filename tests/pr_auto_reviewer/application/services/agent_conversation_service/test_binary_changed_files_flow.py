@@ -28,7 +28,7 @@ class StubToolExecution:
 class TestBinaryChangedFilesFlow:
     """End-to-end conversation flow when PR includes binary files."""
 
-    def test_verdict_accepted_when_binary_file_unread(
+    def test_verdict_accepted_when_binary_file_unread_and_model_empty(
         self, mock_chat_port, mock_command_bus, tmp_path: Path,
     ) -> None:
         src_dir = tmp_path / "src"
@@ -56,6 +56,7 @@ class TestBinaryChangedFilesFlow:
             tool_execution=StubToolExecution(),
             phase_name="phase",
             review_session="test-session",
+            model="",
         )
 
         result = service.execute(command)
@@ -71,6 +72,8 @@ class TestBinaryChangedFilesFlow:
                 "verdict": "approved",
                 "reason": "LGTM",
                 "summary": "none",
+                "suggestions": [],
+                "praise": [],
             },
         )
 

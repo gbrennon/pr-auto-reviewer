@@ -74,6 +74,7 @@ class TestRegisterIssueService:
             repository="owner/repo",
             title="Prepared Title",
             body="Prepared Body",
+            source_pr_id=_pr_id,
             source_item_id=_item.id,
         )
 
