@@ -817,26 +817,24 @@ class AgentConversationService(RunAgentConversationPort):
         """
         if guardrails.tool_calls <= 0:
             return None
-        messages.append(
+        compact_messages = [
+            *messages[:2],
             ConversationMessage(
                 role="user",
                 content=(
-                    "The review turn budget is exhausted. Based only on the "
-                    "files you have already inspected, do not call any "
-                    "tools. Respond now with only the final review verdict "
-                    "in the required JSON format. The verdict must be "
-                    "decisive: use \"changes_requested\" only for grounded "
-                    "items from inspected files. Use \"approved\" only when "
-                    "the required coverage is complete and no issues remain. "
-                    "Do not "
-                    "answer \"commented\" \u2014 a commented verdict is "
-                    "treated as inconclusive and will be rejected."
+                    "The review turn budget is exhausted. You inspected these "
+                    f"files: {', '.join(sorted(context.read_file_paths))}. "
+                    "Do not call tools. Respond with only final review JSON. "
+                    "Use changes_requested only for grounded items from "
+                    "inspected files. Use approved only when coverage is "
+                    "complete and no issues remain. Do not use commented."
                 ),
-            )
-        )
+            ),
+        ]
+        messages.append(compact_messages[-1])
         try:
             final_content = self._chat_port.send(
-                messages,
+                compact_messages,
                 purpose=purpose,
                 session_id=self._budget_session_id(
                     context.review_session, context.phase_name, purpose,
