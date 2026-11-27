@@ -16,9 +16,10 @@ from pr_auto_reviewer.domain.value_objects.tool_result import ToolResult
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 100 * 1024
-_MAX_READ_PREVIEW_CHARS = 12 * 1024
+_MAX_READ_PREVIEW_CHARS = 24 * 1024
 _MAX_SEARCH_HITS = 50
 _MAX_DIR_ENTRIES = 200
+_SHELL_SYNTAX_PATTERN = re.compile(r"(?:[|;&<>`]|\$\(|[\r\n])")
 _ARGUMENT_KEY_ALIASES = (
     "args",
     "arg",
@@ -136,25 +137,28 @@ class ExplorationToolService:
 
     @staticmethod
     def _extract_arguments(arguments: dict[str, Any]) -> str:
-        """Return the argument payload from common LLM arg-key shapes.
-
-        Models emit the payload under ``args`` but also drift to alias
-        keys (``file_path``, ``path``, ...) observed in live runs, where
-        a strict read produced empty-argument tool errors.  The first
-        non-empty alias wins; a single non-empty string under any other
-        key is accepted as an unambiguous fallback.
-        """
-        for key in _ARGUMENT_KEY_ALIASES:
-            value = arguments.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-        strings = [
-            v for v in arguments.values()
-            if isinstance(v, str) and v.strip()
-        ]
-        if len(strings) == 1:
-            return strings[0]
-        return ""
+        """Return the normalized argument payload from common LLM shapes."""
+        path = next(
+            (
+                value.strip()
+                for key in _ARGUMENT_KEY_ALIASES
+                if isinstance(value := arguments.get(key), str)
+                and value.strip()
+            ),
+            "",
+        )
+        if not path:
+            strings = [
+                value for value in arguments.values()
+                if isinstance(value, str) and value.strip()
+            ]
+            path = strings[0] if len(strings) == 1 else ""
+        line_range = arguments.get("line_range")
+        if path and isinstance(line_range, (list, tuple)) and len(line_range) == 2:
+            start, end = line_range
+            if isinstance(start, int) and isinstance(end, int):
+                return f"{path} L{start}-L{end}"
+        return path
 
     @staticmethod
     def _read_content(
@@ -228,7 +232,7 @@ class ExplorationToolService:
             return {"status": "error", "error": "Empty search pattern"}
         try:
             result = subprocess.run(
-                ["grep", "-rn", "-e", pattern, "."],
+                ["grep", "-Ern", "-e", pattern, "."],
                 capture_output=True,
                 text=True,
                 cwd=str(self._repo_root),
@@ -300,6 +304,14 @@ class ExplorationToolService:
         reflects the PR's changes instead of the (clean) checked-out
         working tree.
         """
+        if _SHELL_SYNTAX_PATTERN.search(args):
+            return {
+                "status": "error",
+                "error": (
+                    "Shell operators are not supported in run_git; use a "
+                    "direct read-only git command or read_file instead"
+                ),
+            }
         tokens = args.strip().split()
         if not tokens:
             return {"status": "error", "error": "Empty git args"}

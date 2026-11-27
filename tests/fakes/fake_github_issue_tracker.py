@@ -14,20 +14,29 @@ class FakeGithubIssueTracker(IssueTrackerPort):
 
     def __init__(self) -> None:
         self._issues: list[Issue] = []
-        self.create_calls: list[tuple[str, str, str, str]] = []
+        self.create_calls: list[
+            tuple[str, str, str, PullRequestId, str]
+        ] = []
 
     def create(
-        self, repository: str, title: str, body: str, source_item_id: str = ""
+        self,
+        repository: str,
+        title: str,
+        body: str,
+        source_pr_id: PullRequestId,
+        source_item_id: str,
     ) -> Issue:
         """Store fake issue without making HTTP calls."""
-        self.create_calls.append((repository, title, body, source_item_id))
+        self.create_calls.append(
+            (repository, title, body, source_pr_id, source_item_id)
+        )
         issue_number = len(self._issues) + 1
         issue = Issue(
             id=issue_number,
             repository=repository,
             title=title,
             body=body,
-            source_pr_id=PullRequestId(repository=repository, number=1),
+            source_pr_id=source_pr_id,
             source_item_id=source_item_id,
         )
         self._issues.append(issue)

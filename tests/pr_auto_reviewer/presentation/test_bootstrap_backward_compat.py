@@ -13,8 +13,9 @@ from pr_auto_reviewer.presentation.composition_root import (
 class TestBootstrapBackwardCompat:
 
     def test_bootstrap_function_returns_application_components(
-        self, monkeypatch, _fake_config,
+        self, monkeypatch, _fake_config, tmp_path,
     ):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
         monkeypatch.setattr(
             "pr_auto_reviewer.presentation.composition_root.load_config",
             lambda: _fake_config,
@@ -27,8 +28,9 @@ class TestBootstrapBackwardCompat:
         assert isinstance(components, ApplicationComponents)
 
     def test_run_daemon_function_exists_and_accepts_components(
-        self, monkeypatch, _fake_config,
+        self, monkeypatch, _fake_config, tmp_path,
     ):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
         monkeypatch.setattr(
             "pr_auto_reviewer.presentation.composition_root.load_config",
             lambda: _fake_config,

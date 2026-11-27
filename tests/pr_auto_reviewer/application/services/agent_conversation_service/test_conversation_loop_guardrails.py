@@ -1,9 +1,16 @@
 import pytest
 
+from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
+    MaxTurnsExceededError,
+)
 from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
     ReviewBudgetExhaustedError,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import ReviewVerdictError
 from ._helpers import *
 
 _CONVERSATION_LOGGER = (
@@ -12,6 +19,20 @@ _CONVERSATION_LOGGER = (
 
 class TestConversationLoopGuardrails:
     """Guardrail behaviour of the AgentConversationService loop."""
+
+    def test_reviewer_budget_session_is_scoped_to_phase(self) -> None:
+        session_id = AgentConversationService._budget_session_id(
+            "review-1", "bug-hunt-diff", ConversationPurpose.REVIEWER_PHASE,
+        )
+
+        assert session_id == "review-1:phase:bug-hunt-diff"
+
+    def test_advisor_budget_session_keeps_review_scope(self) -> None:
+        session_id = AgentConversationService._budget_session_id(
+            "review-1", "bug-hunt-diff", ConversationPurpose.ADVISOR_TURN,
+        )
+
+        assert session_id == "review-1"
 
     def test_verdict_without_tools_is_demanded_then_accepted_after_tool_call(
         self, mock_chat_port, mock_command_bus,
@@ -54,6 +75,7 @@ class TestConversationLoopGuardrails:
             tool_execution=MagicMock(),
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
         first_tool = ToolCall(
             tool_name="read_file", arguments={"file": "first.py"}
@@ -109,6 +131,7 @@ class TestConversationLoopGuardrails:
             tool_execution=MagicMock(),
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
         first_tool = ToolCall(
             tool_name="read_file", arguments={"file": "first.py"}
@@ -290,7 +313,14 @@ class TestConversationLoopGuardrails:
             conversation_logger=None,
             max_turns=10,
         )
-        phase_result = PhaseResult(items=[], llm_verdict="approved")
+        phase_result = PhaseResult(
+            items=[],
+            llm_verdict="approved",
+            llm_reason="LGTM",
+            llm_summary="none",
+            llm_suggestions=[],
+            llm_praise=[],
+        )
         messages = [
             ConversationMessage(role="user", content="test") for _ in range(2)
         ]
@@ -308,7 +338,14 @@ class TestConversationLoopGuardrails:
             conversation_logger=None,
             max_turns=10,
         )
-        phase_result = PhaseResult(items=[], llm_verdict="approved")
+        phase_result = PhaseResult(
+            items=[],
+            llm_verdict="approved",
+            llm_reason="LGTM",
+            llm_summary="none",
+            llm_suggestions=[],
+            llm_praise=[],
+        )
         messages = [
             ConversationMessage(role="user", content="test") for _ in range(2)
         ]
@@ -410,7 +447,14 @@ class TestConversationLoopGuardrails:
             raw_items=[
                 {"description": "issue", "file": "src/a.py", "line": "10", "current_code": "x"},
             ],
-            metadata={"verdict": "approved", "reason": "LGTM"},
+            metadata={
+                "verdict": "approved",
+                "reason": "LGTM",
+                "summary": "No blocking issue",
+                "items": [],
+                "suggestions": [],
+                "praise": [],
+            },
         )
         service = AgentConversationService(
             chat_port=mock_chat_port, command_bus=mock_command_bus,
@@ -424,6 +468,21 @@ class TestConversationLoopGuardrails:
             assert result.items == []
         finally:
             ReviewItemFactory.create = original_create
+    def test_build_phase_result_rejects_incomplete_review_metadata(
+        self, mock_chat_port, mock_command_bus,
+    ) -> None:
+        parsed = TurnParseResult(
+            kind=TurnKind.VERDICT,
+            raw_items=[],
+            metadata={"verdict": "approved", "reason": "LGTM"},
+        )
+        service = AgentConversationService(
+            chat_port=mock_chat_port, command_bus=mock_command_bus,
+            max_turns=10,
+        )
+
+        with pytest.raises(ReviewVerdictError):
+            service._build_phase_result(parsed, Path("/tmp"), [])
 
     def test_build_phase_result_does_not_demote_rejected_items_to_suggestions(
         self, mock_chat_port, mock_command_bus,
@@ -437,7 +496,9 @@ class TestConversationLoopGuardrails:
             metadata={
                 "verdict": "approved",
                 "reason": "LGTM",
+                "summary": "No blocking issue",
                 "suggestions": [{"description": "real suggestion"}],
+                "praise": [],
             },
         )
         service = AgentConversationService(
@@ -474,7 +535,14 @@ class TestConversationLoopGuardrails:
             conversation_logger=MagicMock(),
             max_turns=10,
         )
-        phase_result = PhaseResult(items=[], llm_verdict="approved")
+        phase_result = PhaseResult(
+            items=[],
+            llm_verdict="approved",
+            llm_reason="LGTM",
+            llm_summary="none",
+            llm_suggestions=[],
+            llm_praise=[],
+        )
         messages = [ConversationMessage(role="user", content="test")]
         with caplog.at_level("INFO"):
             service._log_conversation(
@@ -590,6 +658,7 @@ class TestConversationLoopGuardrails:
             tool_execution=tool_execution,
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
 
         result = AgentConversationService(
@@ -632,6 +701,7 @@ class TestConversationLoopGuardrails:
             tool_execution=tool_execution,
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
 
         result = AgentConversationService(
@@ -642,7 +712,7 @@ class TestConversationLoopGuardrails:
         assert result.llm_verdict == "approved"
         assert mock_chat_port.send.call_count == 6
 
-    def test_exhaustion_without_full_coverage_still_lands_verdict(
+    def test_exhaustion_without_full_coverage_rejects_final_verdict(
         self, mock_chat_port, mock_command_bus,
     ) -> None:
         import itertools
@@ -690,18 +760,16 @@ class TestConversationLoopGuardrails:
             tool_execution=tool_execution,
             phase_name="phase",
             review_session="test-session",
+            model="test-model",
         )
 
-        result = AgentConversationService(
-            chat_port=mock_chat_port, command_bus=mock_command_bus,
-            max_turns=1,
-        ).execute(command)
+        with pytest.raises(MaxTurnsExceededError):
+            AgentConversationService(
+                chat_port=mock_chat_port, command_bus=mock_command_bus,
+                max_turns=1,
+            ).execute(command)
 
-        assert result.llm_verdict == "approved"
-        assert final_requests, "expected a final tool-free verdict request"
-        decisive_request = final_requests[-1].lower()
-        assert "commented" in decisive_request
-        assert "every changed file" not in decisive_request
+        assert not final_requests
 
     def test_verdict_nudged_once_after_tool_budget(
         self, mock_chat_port, mock_command_bus,
@@ -757,9 +825,13 @@ class TestConversationLoopGuardrails:
             max_turns=6,
         )
         early_verdict = TurnParseResult(
+            raw_items=[],
             kind=TurnKind.VERDICT,
             metadata={
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "praise": [{"file": "src/a.py", "description": "Good structure"}],
                 "suggestions": [{"file": "src/a.py", "description": "Add docstrings"}],
             },
@@ -772,9 +844,13 @@ class TestConversationLoopGuardrails:
             ),
         )
         final_verdict = TurnParseResult(
+            raw_items=[],
             kind=TurnKind.VERDICT,
             metadata={
                 "verdict": "approved",
+                "reason": "Explicit review reason",
+                "summary": "Explicit review summary",
+                "items": [],
                 "praise": [],
                 "suggestions": [],
             },

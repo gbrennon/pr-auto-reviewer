@@ -317,7 +317,9 @@ class TestLoadConfig:
         )
         monkeypatch.setattr(
             "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
-            lambda path: {"PR_AUTO_REVIEWER_ENCRYPTION_KEY": "test-key"},
+            lambda path: {
+                "PR_AUTO_REVIEWER_ENCRYPTION_KEY": "test-key",
+            },
         )
         monkeypatch.setattr(
             AppPaths,

@@ -3,6 +3,10 @@
 
 Repository path: {{ repo_path }}
 
+Estimated exploration budget: {{ exploration_budget[0] }}-{{ exploration_budget[1] }} turns.
+Use the lower bound to begin concluding once required evidence is collected;
+do not spend the entire upper bound repeating exploration.
+
 Inspect the changed files listed above using exploration tools (read_file,
 search_codebase, list_directory, run_git). For multi-file reviews, inspect the
 core implementation files and their corresponding tests before concluding.

@@ -18,25 +18,31 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "manager"] in data
-        assert ["o", "reviewer"] in data
+        assert {(entry["org"], entry["role"]) for entry in data} == {
+            ("o", "manager"),
+            ("o", "reviewer"),
+        }
 
-    def test_verify_loads_persisted_pairs_and_skips_preflight(
+    def test_verify_rechecks_legacy_pair_cache_entries(
         self, tmp_path: Path
     ) -> None:
         store = tmp_path / "verified-tokens.json"
         store.parent.mkdir(parents=True, exist_ok=True)
         store.write_text(json.dumps([["o", "manager"], ["o", "reviewer"]]))
 
-        owner = TestTokenVerifierDelegatesToClients._client("manager", verified_cache_path=store)
-        reviewer = TestTokenVerifierDelegatesToClients._client("reviewer", verified_cache_path=store)
+        owner = TestTokenVerifierDelegatesToClients._client(
+            "manager", verified_cache_path=store,
+        )
+        reviewer = TestTokenVerifierDelegatesToClients._client(
+            "reviewer", verified_cache_path=store,
+        )
         verifier = TokenVerifier(owner, reviewer, persist=True, _store_path=store)
         pr_id = PullRequestId(repository="o/r", number=1)
 
         verifier.verify(pr_id)
 
-        assert len(getattr(owner, "_preflight_verifier").calls) == 0
-        assert len(getattr(reviewer, "_preflight_verifier").calls) == 0
+        assert len(getattr(owner, "_preflight_verifier").calls) == 1
+        assert len(getattr(reviewer, "_preflight_verifier").calls) == 1
 
     def test_verify_does_not_persist_when_persist_is_false(
         self, tmp_path: Path
@@ -51,8 +57,10 @@ class TestTokenVerifierPersistence:
 
         assert store.exists()
         data = json.loads(store.read_text())
-        assert ["o", "manager"] in data
-        assert ["o", "reviewer"] in data
+        assert {(entry["org"], entry["role"]) for entry in data} == {
+            ("o", "manager"),
+            ("o", "reviewer"),
+        }
 
     def test_load_handles_corrupt_json(self, tmp_path: Path) -> None:
         store = tmp_path / "verified-tokens.json"

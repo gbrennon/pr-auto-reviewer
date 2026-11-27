@@ -16,6 +16,9 @@ from pr_auto_reviewer.application.ports.outbound.agent_chat_port import (
 from pr_auto_reviewer.application.ports.outbound.command_bus_port import (
     CommandBusPort,
 )
+from pr_auto_reviewer.domain.exceptions.llm_response_malformed_error import (
+    LlmResponseMalformedError,
+)
 from pr_auto_reviewer.application.ports.outbound.conversation_logger_port import (
     TranscriptMetadata,
 )
@@ -103,11 +106,11 @@ class PhaseAdvisorService(AssessPhasePort):
             raise
         except Exception:
             logger.warning(
-                "Advisor grading failed for phase %s; accepting output",
+                "Advisor grading failed for phase %s",
                 phase.phase_name,
                 exc_info=True,
             )
-            return AdvisorDirective(grade=SubAgentGrade.OKOK)
+            raise
         directive = self._cap_unevidenced_grade(
             self._parse_directive(raw), phase_result,
         )
@@ -141,11 +144,11 @@ class PhaseAdvisorService(AssessPhasePort):
             raise
         except Exception:
             logger.warning(
-                "Advisor turn observation failed for %s; continuing",
+                "Advisor turn observation failed for %s",
                 evidence.phase_name,
                 exc_info=True,
             )
-            return AdvisorDirective(grade=SubAgentGrade.OKOK)
+            raise
         directive = self._parse_directive(raw)
         self._publish_exchange(
             evidence.phase_name,
@@ -276,41 +279,28 @@ class PhaseAdvisorService(AssessPhasePort):
 
     @classmethod
     def _parse_directive(cls, raw: str) -> AdvisorDirective:
-        """Parse an advisor JSON reply into a directive, tolerantly."""
-        if not raw or not raw.strip():
-            return AdvisorDirective(grade=SubAgentGrade.OKOK)
+        """Parse an advisor JSON reply into a validated directive."""
+        if not isinstance(raw, str) or not raw.strip():
+            raise LlmResponseMalformedError(str(raw))
         cleaned = raw.strip()
         fence = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.DOTALL)
         if fence:
             cleaned = fence.group(1).strip()
         try:
             payload = json.loads(cleaned)
-            if not isinstance(payload, dict):
-                return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        except json.JSONDecodeError:
-            logger.debug(
-                "Advisor reply was not JSON; accepting phase output"
-            )
-            return AdvisorDirective(grade=SubAgentGrade.OKOK)
-        grade_values = [
-            value
-            for key in cls._GRADE_KEYS
-            if isinstance(value := payload.get(key), str) and value.strip()
-        ]
-        if len(grade_values) > 1:
-            logger.warning(
-                "Advisor reply contained %d grade directives (%r); "
-                "using the first and logging the raw reply",
-                len(grade_values), grade_values,
-            )
-            logger.debug("Raw advisor reply: %s", raw[:500])
-        grade_text = cls._first_value(payload, cls._GRADE_KEYS) or ""
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise LlmResponseMalformedError(raw) from exc
+        if not isinstance(payload, dict):
+            raise LlmResponseMalformedError(raw)
+        grade_text = cls._first_value(payload, cls._GRADE_KEYS)
+        if grade_text is None:
+            raise LlmResponseMalformedError(raw)
         feedback = cls._first_value(payload, cls._FEEDBACK_KEYS) or ""
         improved = cls._first_value(payload, cls._PROMPT_KEYS) or ""
         return AdvisorDirective(
-            grade=SubAgentGrade.from_phrase(str(grade_text)),
-            feedback=str(feedback),
-            improved_prompt=str(improved),
+            grade=SubAgentGrade.from_phrase(grade_text),
+            feedback=feedback,
+            improved_prompt=improved,
         )
 
     @staticmethod

@@ -34,24 +34,23 @@ class TestCodeReview:
         assert len(review.items) == 1
         assert review.model_used == "llama3"
 
-    def test_creation_minimal(self) -> None:
-        review = CodeReview(
-            verdict=ReviewVerdict.APPROVED,
-            summary="LGTM",
-            reason="test reason",
-            model_used="test model",
-        )
-        assert review.items == []
-        assert review.model_used == "test model"
+    def test_items_are_required(self) -> None:
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'items'"):
+            CodeReview(
+                verdict=ReviewVerdict.APPROVED,
+                summary="LGTM",
+                reason="test reason",
+                model_used="test model",
+            )
 
     def test_equality_same(self) -> None:
-        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
-        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
+        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
+        b = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
         assert a == b
 
     def test_equality_different_verdict(self) -> None:
-        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
-        b = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="OK", reason="test reason", model_used="test model")
+        a = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
+        b = CodeReview(verdict=ReviewVerdict.CHANGES_REQUESTED, summary="OK", items=[], reason="test reason", model_used="test model")
         assert a != b
 
     def test_equality_different_items(self) -> None:
@@ -66,11 +65,11 @@ class TestCodeReview:
         assert a != b
 
     def test_immutability(self) -> None:
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
         with pytest.raises(FrozenInstanceError):
             setattr(review, "summary", "changed")
 
     def test_hash_consistency(self) -> None:
-        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", reason="test reason", model_used="test model")
+        review = CodeReview(verdict=ReviewVerdict.APPROVED, summary="OK", items=[], reason="test reason", model_used="test model")
         with pytest.raises(TypeError, match="unhashable"):
             hash(review)

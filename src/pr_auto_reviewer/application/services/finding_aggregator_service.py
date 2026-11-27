@@ -13,6 +13,9 @@ from pr_auto_reviewer.application.ports.outbound.reason_factory_port import (
 from pr_auto_reviewer.application.services.finding_deduplicator_service import (
     FindingDeduplicatorService,
 )
+from pr_auto_reviewer.domain.exceptions.review_verdict_error import (
+    ReviewVerdictError,
+)
 from pr_auto_reviewer.domain.entities.review_item import ReviewItem
 from pr_auto_reviewer.domain.messages.commands.aggregate_review_findings_command import (
     AggregateReviewFindingsCommand,
@@ -24,9 +27,6 @@ from pr_auto_reviewer.domain.value_objects.item_severity import ItemSeverity
 from pr_auto_reviewer.domain.value_objects.phase_result import PhaseResult
 from pr_auto_reviewer.domain.value_objects.review_verdict import (
     ReviewVerdict,
-)
-from pr_auto_reviewer.domain.value_objects.sub_review_guardrails import (
-    SubReviewGuardrails,
 )
 
 
@@ -73,31 +73,6 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
             return normalized
         return None if drop_unmapped else ""
 
-    def _build_summary(self, merged: list[ReviewItem]) -> str:
-        """Build a short human-readable summary from the merged items."""
-        files = sorted({item.file_path for item in merged if item.file_path})
-        blocking = sum(1 for item in merged if item.is_blocking)
-        base = (
-            f"Found {len(merged)} issue(s)"
-            f" ({blocking} blocking across {len(files)} file(s))."
-        )
-        if files:
-            base += " Files: " + ", ".join(files[:5])
-        return base
-
-    def _reason_for_merged(self, merged: list[ReviewItem]) -> str:
-        """Return a descriptive reason grounded in the merged findings."""
-        if not merged:
-            return "No issues found."
-        blocking = [item for item in merged if item.is_blocking]
-        target = blocking[0] if blocking else merged[0]
-        desc = target.description.strip()
-        sev = str(target.severity).lower()
-        file_path = (target.file_path or "").strip()
-        file_str = f" in {file_path}" if file_path else ""
-        if desc:
-            return f"Identified {sev} issue{file_str}: {desc}"
-        return self._reason_factory.make(merged)
 
     def _merge(
         self,
@@ -118,109 +93,82 @@ class FindingAggregatorService(AggregateReviewFindingsPort):
         are the suggestion source instead (praise, reason, summary, and
         verdict still come from ``phase_result``).
         """
+        if phase_result is None:
+            raise ReviewVerdictError(
+                "A validated phase result is required for aggregation."
+            )
+        verdict = ReviewVerdict.coerce(phase_result.llm_verdict)
+        if verdict is None or verdict not in (
+            ReviewVerdict.APPROVED,
+            ReviewVerdict.CHANGES_REQUESTED,
+        ):
+            raise ReviewVerdictError("Phase verdict is missing or unsupported.")
+        if (
+            not isinstance(phase_result.llm_reason, str)
+            or not phase_result.llm_reason.strip()
+            or not isinstance(phase_result.llm_summary, str)
+            or not phase_result.llm_summary.strip()
+        ):
+            raise ReviewVerdictError(
+                "Phase reason and summary are required for aggregation."
+            )
+        if (
+            not isinstance(phase_result.llm_suggestions, list)
+            or not isinstance(phase_result.llm_praise, list)
+        ):
+            raise ReviewVerdictError("Phase collections must be lists.")
+
         merged = self._deduplicator.deduplicate(items)
-        verdict = SubReviewGuardrails().verdict_for(merged)
-
-        phase_items_count = len(phase_result.items) if phase_result is not None else 0
-        phase_has_blocking = (
-            any(i.is_blocking for i in phase_result.items)
-            if phase_result is not None
-            else False
-        )
-        merged_has_blocking = any(i.is_blocking for i in merged)
-
-        if (
-            phase_result is not None
-            and phase_result.llm_summary
-            and len(merged) == phase_items_count
-            and merged_has_blocking == phase_has_blocking
-        ):
-            summary = phase_result.llm_summary
-        elif merged:
-            summary = self._build_summary(merged)
-        else:
-            summary = (
-                phase_result.llm_summary
-                if (phase_result is not None and phase_result.llm_summary)
-                else ""
-            )
-
-        if (
-            phase_result is not None
-            and phase_result.llm_reason
-            and (not merged_has_blocking or phase_has_blocking)
-            and (len(merged) == phase_items_count or not merged)
-        ):
-            reason = phase_result.llm_reason
-        elif merged:
-            reason = self._reason_for_merged(merged)
-        else:
-            reason = (
-                phase_result.llm_reason
-                if (phase_result is not None and phase_result.llm_reason)
-                else self._reason_factory.make(merged)
-            )
-
+        summary = phase_result.llm_summary
+        reason = phase_result.llm_reason
         suggestions: list[ReviewItem] = []
         praise: list[ReviewItem] = []
 
-        if phase_result is not None:
-            coerced = ReviewVerdict.coerce(phase_result.llm_verdict)
+        suggestion_source = suggestions_phase_result or phase_result
+        for suggestion in suggestion_source.llm_suggestions:
+            normalized_path = self._normalize_citation_path(
+                suggestion.get("file", ""),
+                repo_path,
+                changed_files,
+                drop_unmapped=False,
+            )
+            suggestions.append(ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=normalized_path or "",
+                description=suggestion.get("description", ""),
+                line=suggestion.get("line", ""),
+                id=suggestion.get("id", "") or ReviewItemFactory.generate_id(),
+                current_code=suggestion.get("current_code", ""),
+                suggested_fix=suggestion.get("suggested_fix", ""),
+            ))
 
-            if coerced is not None:
-                verdict = coerced
+        praise_source = suggestions_phase_result or phase_result
+        praise_entries = list(praise_source.llm_praise)
+        if phase_result is not praise_source:
+            for praise_entry in phase_result.llm_praise:
+                if praise_entry not in praise_entries:
+                    praise_entries.append(praise_entry)
 
-            suggestion_source = suggestions_phase_result or phase_result
-            for suggestion in suggestion_source.llm_suggestions:
-                normalized_path = self._normalize_citation_path(
-                    suggestion.get("file", ""),
-                    repo_path,
-                    changed_files,
-                    drop_unmapped=False,
-                )
-                suggestions.append(ReviewItem(
-                    severity=ItemSeverity.INFO,
-                    category=IssueCategory.GENERAL,
-                    file_path=normalized_path or "",
-                    description=suggestion.get("description", ""),
-                    line=suggestion.get("line", ""),
-                    id=suggestion.get("id", "") or ReviewItemFactory.generate_id(),
-                    current_code=suggestion.get("current_code", ""),
-                    suggested_fix=suggestion.get("suggested_fix", ""),
-                ))
-
-            praise_source = suggestions_phase_result or phase_result
-            praise_entries = list(praise_source.llm_praise)
-            if phase_result is not praise_source:
-                for praise_entry in phase_result.llm_praise:
-                    if praise_entry not in praise_entries:
-                        praise_entries.append(praise_entry)
-
-            for praise_entry in praise_entries:
-                normalized_path = self._normalize_citation_path(
-                    praise_entry.get("file", ""),
-                    repo_path,
-                    changed_files,
-                    drop_unmapped=True,
-                )
-                if normalized_path is None:
-                    continue
-                praise.append(ReviewItem(
-                    severity=ItemSeverity.INFO,
-                    category=IssueCategory.GENERAL,
-                    file_path=normalized_path,
-                    description=praise_entry.get("description", ""),
-                    line="",
-                    id=praise_entry.get("id", "") or ReviewItemFactory.generate_id(),
-                    current_code="",
-                    suggested_fix="",
-                ))
-
-
-        if not summary:
-            summary = self._build_summary(merged)
-        if not reason:
-            reason = self._reason_factory.make(merged)
+        for praise_entry in praise_entries:
+            normalized_path = self._normalize_citation_path(
+                praise_entry.get("file", ""),
+                repo_path,
+                changed_files,
+                drop_unmapped=True,
+            )
+            if normalized_path is None:
+                continue
+            praise.append(ReviewItem(
+                severity=ItemSeverity.INFO,
+                category=IssueCategory.GENERAL,
+                file_path=normalized_path,
+                description=praise_entry.get("description", ""),
+                line="",
+                id=praise_entry.get("id", "") or ReviewItemFactory.generate_id(),
+                current_code="",
+                suggested_fix="",
+            ))
         return CodeReview(
             verdict=verdict,
             reason=reason,

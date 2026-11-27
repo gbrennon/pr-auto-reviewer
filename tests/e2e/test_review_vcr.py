@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -111,8 +112,13 @@ class TestReviewFlowVCR:
         token_store = xdg_cache / "pr-auto-reviewer" / "verified-tokens.json"
         token_store.parent.mkdir(parents=True, exist_ok=True)
         token_store.write_text(json.dumps([
-            [scenario["manager"], "manager"],
-            [scenario["manager"], "reviewer"],
+            {
+                "fingerprint": hashlib.sha256(f"e2e-{role}-token".encode()).hexdigest(),
+                "org": scenario["manager"],
+                "role": role,
+                "source": f"GITHUB_{role.upper()}_TOKEN",
+            }
+            for role in ("manager", "reviewer")
         ]))
         monkeypatch.setenv("LLM_HOST", "http://localhost:11434")
         monkeypatch.setenv("LLM_MODEL", "code-review:latest")

@@ -96,6 +96,8 @@ class LlmReviewFake(LlmReviewPort):
 
     def review_prompt(self, prompt: ComposedPrompt):
         raise AssertionError("single-turn review should not run")
+    def _resolve_model(self) -> str:
+        return "test-model"
 
 
 class ReviewPublisherFake(ReviewPublisherPort):
@@ -139,6 +141,8 @@ class TestRelativeMetadataPathsE2E:
         phase_result = PhaseResult(
             items=[],
             llm_verdict="approved",
+            llm_reason="No actionable findings remained after review.",
+            llm_summary="Suggestions and praise retain only repository-relative paths.",
             llm_suggestions=[
                 {
                     "file": str(related_absolute_path),

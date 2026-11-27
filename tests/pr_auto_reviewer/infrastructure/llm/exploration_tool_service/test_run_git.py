@@ -27,6 +27,24 @@ class TestRunGit:
 
         assert result["status"] == "error"
         assert "Empty" in result["error"]
+    def test_git_when_shell_operator_then_rejects_without_execution(
+        self, git_repo
+    ) -> None:
+        result = _service(git_repo).run_git("status | touch marker")
+
+        assert result["status"] == "error"
+        assert "Shell operators are not supported" in result["error"]
+        assert not (git_repo / "marker").exists()
+
+    def test_git_when_shell_pipeline_then_error_explains_raw_arguments(
+        self, git_repo,
+    ) -> None:
+        result = _service(git_repo).run_git(
+            'diff --no-index /dev/null file.py | grep "needle"'
+        )
+
+        assert result["status"] == "error"
+        assert "shell" in result["error"].lower()
 
     def test_git_when_fails_then_error(self, repo) -> None:
         result = _service(repo).run_git("show HEAD")

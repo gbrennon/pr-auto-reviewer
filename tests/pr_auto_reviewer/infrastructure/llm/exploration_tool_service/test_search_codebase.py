@@ -17,6 +17,12 @@ class TestSearchCodebase:
         assert result["status"] == "ok"
         assert result["hits"] == []
 
+    def test_search_when_extended_regex_then_returns_matches(self, repo) -> None:
+        result = _service(repo).search_codebase("line1|line3")
+
+        assert result["status"] == "ok"
+        assert {hit["line"] for hit in result["hits"]} >= {1, 3}
+
     def test_search_when_empty_pattern_then_error(self, repo) -> None:
         result = _service(repo).search_codebase("  ")
 

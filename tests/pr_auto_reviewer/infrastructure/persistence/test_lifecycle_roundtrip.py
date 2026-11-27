@@ -100,6 +100,8 @@ def test_old_snapshot_without_lifecycles_derives_projection(tmp_path) -> None:
                                 "reason": "legacy reason",
                                 "summary": "legacy summary",
                                 "model_used": "legacy model",
+                                "suggestions": [],
+                                "praise": [],
                                 "items": [
                                     {
                                         "id": "item-1",

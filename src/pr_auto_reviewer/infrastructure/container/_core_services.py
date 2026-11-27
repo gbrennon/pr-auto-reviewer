@@ -361,6 +361,7 @@ def wire_core_services(
         chat_client=chat_client,
         orchestrator=orchestrator,
         plan=plan,
+        model=config.llm_model,
     )
     notifier = LinuxNotifier(run_command=subprocess.run)
 

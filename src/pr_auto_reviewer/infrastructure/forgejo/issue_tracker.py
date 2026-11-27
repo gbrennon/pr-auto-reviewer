@@ -18,6 +18,7 @@ from pr_auto_reviewer.infrastructure.client.git_platform_http_client import (
 
 logger = logging.getLogger(__name__)
 
+
 class ForgejoIssueTracker(IssueTrackerPort):
     """Creates tracker issues on the remote platform."""
 
@@ -25,7 +26,12 @@ class ForgejoIssueTracker(IssueTrackerPort):
         self._client = client
 
     def create(
-        self, repository: str, title: str, body: str, source_item_id: str = ""
+        self,
+        repository: str,
+        title: str,
+        body: str,
+        source_pr_id: PullRequestId,
+        source_item_id: str,
     ) -> Issue:
         """POST a new issue to *repository* and return the Issue entity."""
 
@@ -35,21 +41,33 @@ class ForgejoIssueTracker(IssueTrackerPort):
             repository, title[:80], len(body),
         )
         try:
-            response = self._client.post(path, {"title": title, "body": body}, repo=repository)
+            response = self._client.post(
+                path, {"title": title, "body": body}, repo=repository
+            )
         except Exception as exc:
             raise IssueCreationError(
                 repository=repository,
-                item_number=0,
+                item_number=source_pr_id.number,
                 reason=str(exc),
             ) from exc
 
-        issue_number = int(response.get("number", 0))
+        issue_number = response.get("number") if isinstance(response, dict) else None
+        if (
+            not isinstance(issue_number, int)
+            or isinstance(issue_number, bool)
+            or issue_number <= 0
+        ):
+            raise IssueCreationError(
+                repository=repository,
+                item_number=source_pr_id.number,
+                reason="response did not contain a positive integer number",
+            )
         logger.debug("Issue created: %s #%d", repository, issue_number)
         return Issue(
             id=issue_number,
             repository=repository,
             title=title,
             body=body,
-            source_pr_id=PullRequestId(repository=repository, number=1),
+            source_pr_id=source_pr_id,
             source_item_id=source_item_id,
         )

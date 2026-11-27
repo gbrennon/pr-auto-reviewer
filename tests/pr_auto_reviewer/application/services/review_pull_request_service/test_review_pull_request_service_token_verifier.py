@@ -305,9 +305,11 @@ diff --git a/src/a.py b/src/a.py
             _review(),
         ]
 
+        llm_review = MagicMock()
+        llm_review._resolve_model.return_value = "test-model"
         ReviewPullRequestService(
-            mock_pr_repository, mock_changeset_fetcher, MagicMock(), MagicMock(),
-            mock_review_publisher, command_bus=command_bus,
+            mock_pr_repository, mock_changeset_fetcher, MagicMock(),
+            llm_review, mock_review_publisher, command_bus=command_bus,
             plan=ReviewPlan(methodology="sub-agent-multi-phase", phases=()),
         ).execute(cmd)
 
