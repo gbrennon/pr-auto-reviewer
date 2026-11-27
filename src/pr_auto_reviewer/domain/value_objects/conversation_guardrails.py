@@ -79,12 +79,11 @@ class ConversationGuardrails:
         return replace(self, tool_calls=self.tool_calls + 1)
 
     def should_force_verdict(self) -> bool:
-        """Return whether the model reached the soft tool-call budget.
-
-        The conversation loop uses this result to nudge the model toward a
-        verdict. File-level coverage is enforced separately by ``judge_verdict``.
-        """
-        return self.tool_calls >= self.max_tool_calls
+        """Return whether the model reached the lower exploration bound."""
+        return (
+            self.turn >= self.min_turns
+            or self.tool_calls >= self.max_tool_calls
+        )
 
     def judge_verdict(
         self, exploration_complete: bool | None = None,

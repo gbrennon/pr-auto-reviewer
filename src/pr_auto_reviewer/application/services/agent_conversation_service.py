@@ -664,8 +664,13 @@ class AgentConversationService(RunAgentConversationPort):
                 if (
                     guardrails.should_force_verdict()
                     and not verdict_nudged
-                    and self._coverage_complete(
-                        guardrails, readable_coverage_files, read_file_paths,
+                    and (
+                        guardrails.turn >= guardrails.min_turns
+                        or self._coverage_complete(
+                            guardrails,
+                            readable_coverage_files,
+                            read_file_paths,
+                        )
                     )
                 ):
                     verdict_nudged = True
