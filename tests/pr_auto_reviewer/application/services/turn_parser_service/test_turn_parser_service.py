@@ -129,6 +129,27 @@ class TestTurnParserService:
         assert result.tool_call is not None
         assert result.tool_call.tool_name == "read_file"
 
+    def test_read_file_tool_call_preserves_line_range(self) -> None:
+        content = (
+            '```json\n{"action": "read_file", "args": "src/app.py", '
+            '"line_range": [2, 3]}\n```'
+        )
+        extracted = (
+            '{"action": "read_file", "args": "src/app.py", '
+            '"line_range": [2, 3]}'
+        )
+        parser = make_parser(extracted_json=extracted)
+        result = TurnParserService(parser).execute(
+            ParseReviewTurnCommand(content=content)
+        )
+
+        assert result.kind is TurnKind.TOOL_CALL
+        assert result.tool_call is not None
+        assert result.tool_call.arguments == {
+            "args": "src/app.py",
+            "line_range": [2, 3],
+        }
+
     def test_tool_call_with_list_args_joined(self) -> None:
         content = '```json\n{"action": "cmd", "args": ["arg1", "arg2"]}\n```'
         extracted = '{"action": "cmd", "args": ["arg1", "arg2"]}'

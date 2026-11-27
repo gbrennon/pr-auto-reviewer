@@ -142,11 +142,16 @@ class TurnParserService(ParseReviewTurnPort):
                 )
             else:
                 args_str = str(raw_args)
+            action = str(target["action"])
+            arguments: dict[str, Any] = {"args": args_str}
+            line_range = target.get("line_range")
+            if action == "read_file" and isinstance(line_range, list):
+                arguments["line_range"] = line_range
             return TurnParseResult(
                 kind=TurnKind.TOOL_CALL,
                 tool_call=ToolCall(
-                    tool_name=str(target["action"]),
-                    arguments={"args": args_str},
+                    tool_name=action,
+                    arguments=arguments,
                 ),
             )
 
