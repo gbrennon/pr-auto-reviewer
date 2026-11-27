@@ -359,19 +359,43 @@ class TurnParserService(ParseReviewTurnPort):
         return f"Identified {len(raw_items)} non-blocking finding(s){cat_str}{file_str}."
 
     def _parse_json(self, content: str) -> Any:
-        """Attempt to parse *content* as JSON, with markdown extraction fallback."""
+        """Parse the most relevant JSON object from a mixed model response."""
+        sanitized = self._parser.sanitize_json_literals(content)
         try:
-            return json.loads(self._parser.sanitize_json_literals(content))
+            return json.loads(sanitized)
         except json.JSONDecodeError:
-            extracted = self._parser.extract_outermost_json(content)
-            if extracted is not None:
-                try:
-                    return json.loads(
-                        self._parser.sanitize_json_literals(extracted)
-                    )
-                except json.JSONDecodeError:
-                    pass
+            candidates = self._json_objects(sanitized)
+            verdicts = [
+                candidate for candidate in candidates
+                if self._contains_verdict(candidate)
+            ]
+            if verdicts:
+                return verdicts[-1]
+            if candidates:
+                return candidates[0]
         return None
+
+    @staticmethod
+    def _json_objects(content: str) -> list[dict[str, Any]]:
+        decoder = json.JSONDecoder()
+        objects: list[dict[str, Any]] = []
+        for index, character in enumerate(content):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(content[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                objects.append(value)
+        return objects
+
+    @staticmethod
+    def _contains_verdict(candidate: dict[str, Any]) -> bool:
+        return any(
+            key in candidate
+            for key in ("verdict", "issues", "findings", "items")
+        )
 
     def _extract_dict_args(
         self, action: str, raw_args: dict[str, Any]
