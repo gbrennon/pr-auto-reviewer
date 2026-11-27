@@ -319,7 +319,6 @@ class TestLoadConfig:
             "pr_auto_reviewer.infrastructure.config.config.dotenv_values",
             lambda path: {
                 "PR_AUTO_REVIEWER_ENCRYPTION_KEY": "test-key",
-                "FORGEJO_REVIEWER_TOKEN": "stale-config-reviewer",
             },
         )
         monkeypatch.setattr(
