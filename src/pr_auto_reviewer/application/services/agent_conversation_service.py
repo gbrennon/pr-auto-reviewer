@@ -188,7 +188,7 @@ class AgentConversationService(RunAgentConversationPort):
             max_tool_calls=max(
                 self._guardrails.max_tool_calls, required_reads + 3,
             ),
-            max_turns=max(self._guardrails.max_turns, required_reads + 15),
+            max_turns=max(self._guardrails.max_turns, required_reads + 10),
         )
 
     @classmethod
@@ -634,7 +634,13 @@ class AgentConversationService(RunAgentConversationPort):
                     content=result_json,
                     tool_result=result,
                 ))
-                if guardrails.should_force_verdict() and not verdict_nudged:
+                if (
+                    guardrails.should_force_verdict()
+                    and not verdict_nudged
+                    and self._coverage_complete(
+                        guardrails, readable_coverage_files, read_file_paths,
+                    )
+                ):
                     verdict_nudged = True
                     logger.debug(
                         "Tool budget reached (%d); nudging verdict",
