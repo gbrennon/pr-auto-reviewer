@@ -37,8 +37,12 @@ To read a file:
 {"action": "read_file", "args": "<relative/path>"}
 {"action": "read_file", "args": "<relative/path> L10-L50"}
 ```
-Line ranges must be embedded in the `args` string as `L10-L50`; do not add
-JSON fields such as `line_range`.
+Line ranges may be embedded in the `args` string as `L10-L50`, or supplied
+as a JSON `line_range` array when reading a file:
+```json
+{"action": "read_file", "args": "<relative/path>", "line_range": [10, 50]}
+```
+Use a range when the tool reports truncated content.
 ```
 
 To search for a pattern (function name, class, import):

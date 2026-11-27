@@ -6,6 +6,9 @@ from pr_auto_reviewer.domain.exceptions.max_turns_exceeded_error import (
 from pr_auto_reviewer.domain.exceptions.review_budget_exhausted_error import (
     ReviewBudgetExhaustedError,
 )
+from pr_auto_reviewer.domain.value_objects.conversation_purpose import (
+    ConversationPurpose,
+)
 
 from ._helpers import *
 
@@ -15,6 +18,20 @@ _CONVERSATION_LOGGER = (
 
 class TestConversationLoopGuardrails:
     """Guardrail behaviour of the AgentConversationService loop."""
+
+    def test_reviewer_budget_session_is_scoped_to_phase(self) -> None:
+        session_id = AgentConversationService._budget_session_id(
+            "review-1", "bug-hunt-diff", ConversationPurpose.REVIEWER_PHASE,
+        )
+
+        assert session_id == "review-1:phase:bug-hunt-diff"
+
+    def test_advisor_budget_session_keeps_review_scope(self) -> None:
+        session_id = AgentConversationService._budget_session_id(
+            "review-1", "bug-hunt-diff", ConversationPurpose.ADVISOR_TURN,
+        )
+
+        assert session_id == "review-1"
 
     def test_verdict_without_tools_is_demanded_then_accepted_after_tool_call(
         self, mock_chat_port, mock_command_bus,

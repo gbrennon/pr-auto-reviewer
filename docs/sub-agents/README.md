@@ -21,6 +21,19 @@ historical finding and suggestion, including terminal records. The manager
 opens the review and the advisor watches every phase — both shape the
 composed prompts even though they do not run their own phases.
 
+## Context and budget isolation
+
+Each peer phase runs in its own conversation context. Engineer and architect
+phases do not receive one another's message history or tool results. Each peer
+phase also has its own LLM call-budget scope; exhausting one phase's budget
+must not consume another phase's budget.
+
+The advisor is not given the peer transcript. It receives only structured
+turn evidence needed to grade focus, such as the phase, turn kind, tool name,
+and observed path. The manager receives phase definitions and findings
+summaries, not peer conversation histories. These narrow inputs are the only
+cross-role context shared intentionally.
+
 ## Runtime rules
 
 These rules are enforced by the workflow code, not by convention:
@@ -38,9 +51,8 @@ These rules are enforced by the workflow code, not by convention:
    sub-agent's task and improves its prompt before the phase restarts —
    a restart never replays the same prompt that already failed.
 4. **Max turns is injected, never hardcoded.** The per-conversation
-   turn limit comes from configuration (`LLM_MAX_TURNS`, default 10)
-   through the composition root. Application services must not carry
-   their own turn-count constants.
+   turn limit comes from configuration through the composition root.
+   Application services must not carry their own turn-count constants.
 5. **Every LLM exchange leaves a transcript.** Peer conversations,
    advisor gradings, manager briefings, and verification runs are all
    persisted as markdown under `~/.local/state/pr-auto-reviewer/

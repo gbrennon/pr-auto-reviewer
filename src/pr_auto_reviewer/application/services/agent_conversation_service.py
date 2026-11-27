@@ -159,6 +159,17 @@ class AgentConversationService(RunAgentConversationPort):
         return PRIdentifierService.derive(repo_path)
 
     @staticmethod
+    def _budget_session_id(
+        review_session: str,
+        phase_name: str,
+        purpose: ConversationPurpose,
+    ) -> str:
+        """Scope reviewer budgets to a phase without changing transcript IDs."""
+        if purpose is not ConversationPurpose.REVIEWER_PHASE:
+            return review_session
+        return f"{review_session}:phase:{phase_name}"
+
+    @staticmethod
     def _advisor_turn_evidence(
         parsed: TurnParseResult, phase_name: str,
     ) -> AdvisorTurnEvidence:
@@ -478,7 +489,11 @@ class AgentConversationService(RunAgentConversationPort):
                 "Turn %d/%d", guardrails.turn + 1, guardrails.max_turns
             )
             content = self._chat_port.send(
-                messages, purpose=purpose, session_id=review_session
+                messages,
+                purpose=purpose,
+                session_id=self._budget_session_id(
+                    review_session, phase_name, purpose,
+                ),
             )
             guardrails = guardrails.advance_turn()
             if not content:
