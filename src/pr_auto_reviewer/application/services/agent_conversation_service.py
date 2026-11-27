@@ -188,7 +188,7 @@ class AgentConversationService(RunAgentConversationPort):
             max_tool_calls=max(
                 self._guardrails.max_tool_calls, required_reads + 3,
             ),
-            max_turns=max(self._guardrails.max_turns, required_reads + 5),
+            max_turns=max(self._guardrails.max_turns, required_reads + 10),
         )
 
     @classmethod
