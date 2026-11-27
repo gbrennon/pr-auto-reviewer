@@ -787,15 +787,20 @@ class AgentConversationService(RunAgentConversationPort):
     ) -> PhaseResult | None:
         """Request one tool-free verdict as a last resort after exhaustion.
 
-        The turn budget is spent and no verdict was accepted in-loop. When the
-        agent explored the repository at all, ask once for a verdict-only
-        response rather than discarding the whole review. Full changed-file
-        coverage is not required here because reviews must still land; the
-        anti-hallucination invariant is preserved downstream by
-        ``ReviewItemFactory``, which drops findings that reference files the
-        agent never read or that do not exist on disk.
+        The turn budget is spent and no verdict was accepted in-loop. Ask
+        once for a verdict-only response only after the phase satisfied its
+        coverage target; partial first-phase coverage is not publishable.
         """
         if guardrails.tool_calls <= 0:
+            return None
+        missing_coverage = (
+            set(context.readable_coverage_files) - context.read_file_paths
+        )
+        if missing_coverage:
+            logger.warning(
+                "Refusing final verdict with %d unread coverage files",
+                len(missing_coverage),
+            )
             return None
         messages.append(
             ConversationMessage(
