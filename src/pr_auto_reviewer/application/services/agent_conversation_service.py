@@ -541,6 +541,8 @@ class AgentConversationService(RunAgentConversationPort):
                             )
                         )
 
+            if parsed.kind is not TurnKind.TOOL_CALL:
+                repeated_tool_call_streak = 0
             if parsed.kind is TurnKind.UNPARSEABLE:
                 decision, guardrails = guardrails.record_unparseable_response()
                 if decision is ConversationDecision.EXCEEDED_UNPARSEABLE:
