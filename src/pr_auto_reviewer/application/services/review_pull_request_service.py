@@ -86,13 +86,6 @@ class ReviewPullRequestService(ReviewPullRequestPort):
     def execute(self, command: ReviewPullRequestCommand) -> ReviewExecutionResult:
         self._log_start(command)
 
-        if self._token_verifier and not self._token_verifier.can_review(command.pr_id):
-            logger.info(
-                "Skipping review for %s because a required API capability is suspended",
-                command.pr_id.repository,
-            )
-            return ReviewExecutionResult(reviewed=False, duration_seconds=None)
-
         pr = self._load_or_create_pull_request(command)
 
         if not self._needs_review(command, pr):
@@ -101,6 +94,13 @@ class ReviewPullRequestService(ReviewPullRequestPort):
                 reviewed=False,
                 duration_seconds=None,
             )
+
+        if self._token_verifier and not self._token_verifier.can_review(command.pr_id):
+            logger.info(
+                "Skipping review for %s because a required API capability is suspended",
+                command.pr_id.repository,
+            )
+            return ReviewExecutionResult(reviewed=False, duration_seconds=None)
 
         review_started_at = self._now()
 

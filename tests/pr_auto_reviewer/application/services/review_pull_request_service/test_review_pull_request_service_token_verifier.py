@@ -89,6 +89,8 @@ class TestReviewSuspension:
         mock_review_publisher = request.getfixturevalue("mock_review_publisher")
         mock_token_verifier.can_review.return_value = False
         cmd = _cmd()
+        mock_pr_repository.find.return_value = None
+
 
         service = ReviewPullRequestService(
             mock_pr_repository,
@@ -102,7 +104,7 @@ class TestReviewSuspension:
         result = service.execute(cmd)
 
         assert result.reviewed is False
-        mock_pr_repository.find.assert_not_called()
+        mock_pr_repository.find.assert_called_once_with(cmd.pr_id)
         mock_changeset_fetcher.fetch.assert_not_called()
         mock_llm_review.review_prompt.assert_not_called()
         mock_review_publisher.publish.assert_not_called()

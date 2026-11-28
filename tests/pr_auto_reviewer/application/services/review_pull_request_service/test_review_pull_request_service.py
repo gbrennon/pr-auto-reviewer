@@ -73,6 +73,35 @@ class TestReviewPullRequestService:
         mock_llm_review.review_prompt.assert_not_called()
         mock_review_publisher.publish.assert_not_called()
         mock_pr_repository.save.assert_called_once()
+    def test_already_reviewed_sha_skips_before_token_verifier_and_downstream(
+        self, mock_pr_repository, mock_changeset_fetcher,
+        mock_review_context_factory, mock_llm_review, mock_review_publisher,
+    ):
+        cmd = _cmd()
+        existing = _pr(cmd.pr_id, cmd.head_sha)
+        existing = existing.add_review(_review(), cmd.head_sha)
+        mock_pr_repository.find.return_value = existing
+        token_verifier = MagicMock()
+
+        reviewed = ReviewPullRequestService(
+            mock_pr_repository,
+            mock_changeset_fetcher,
+            mock_review_context_factory,
+            mock_llm_review,
+            mock_review_publisher,
+            token_verifier=token_verifier,
+        ).execute(cmd)
+
+        assert reviewed.reviewed is False
+        assert reviewed.duration_seconds is None
+        token_verifier.can_review.assert_not_called()
+        token_verifier.verify.assert_not_called()
+        mock_changeset_fetcher.fetch.assert_not_called()
+        mock_review_context_factory.build.assert_not_called()
+        mock_llm_review.review_prompt.assert_not_called()
+        mock_review_publisher.publish.assert_not_called()
+        mock_pr_repository.save.assert_called_once()
+
 
     def test_inconclusive_review_is_persisted_for_same_sha(
         self, mock_pr_repository, mock_changeset_fetcher,
